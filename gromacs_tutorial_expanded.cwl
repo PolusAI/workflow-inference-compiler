@@ -142,15 +142,17 @@ steps:
   step_17_grompp:
     in:
       config: step_17_grompp_config
+      output_tpr_path: step_17_grompp_output_tpr_path
       input_gro_path: step_15_mdrun/output_gro_path
       input_top_zip_path: step_7_genion/output_top_zip_path
     run: biobb/biobb_adapters/cwl/biobb_md/grompp.cwl
     out:
     - output_tpr_path
   step_18_mdrun:
-    run: biobb/biobb_adapters/cwl/biobb_md/mdrun.cwl
     in:
+      output_gro_path: step_18_mdrun_output_gro_path
       input_tpr_path: step_17_grompp/output_tpr_path
+    run: biobb/biobb_adapters/cwl/biobb_md/mdrun.cwl
     out:
     - output_trr_path
     - output_gro_path
@@ -172,7 +174,7 @@ steps:
     in:
       config: step_20_gmx_rms_config
       output_xvg_path: step_20_gmx_rms_output_xvg_path
-      input_structure_path: step_20_gmx_rms_input_structure_path
+      input_structure_path: step_8_grompp/output_tpr_path
       input_traj_path: step_18_mdrun/output_trr_path
     run: biobb/biobb_adapters/cwl/biobb_analysis/gmx_rms.cwl
     out:
@@ -180,7 +182,7 @@ steps:
   step_21_gmx_rgyr:
     in:
       config: step_21_gmx_rgyr_config
-      input_structure_path: step_21_gmx_rgyr_input_structure_path
+      input_structure_path: step_8_grompp/output_tpr_path
       input_traj_path: step_18_mdrun/output_trr_path
     run: biobb/biobb_adapters/cwl/biobb_analysis/gmx_rgyr.cwl
     out:
@@ -188,7 +190,7 @@ steps:
   step_22_gmx_image:
     in:
       config: step_22_gmx_image_config
-      input_top_path: step_22_gmx_image_input_top_path
+      input_top_path: step_17_grompp/output_tpr_path
       input_traj_path: step_18_mdrun/output_trr_path
     run: biobb/biobb_adapters/cwl/biobb_analysis/gmx_image.cwl
     out:
@@ -196,8 +198,8 @@ steps:
   step_23_gmx_trjconv_str:
     in:
       config: step_23_gmx_trjconv_str_config
-      input_top_path: step_23_gmx_trjconv_str_input_top_path
-      input_structure_path: step_23_gmx_trjconv_str_input_structure_path
+      input_top_path: step_17_grompp/output_tpr_path
+      input_structure_path: step_18_mdrun/output_gro_path
     run: biobb/biobb_adapters/cwl/biobb_analysis/gmx_trjconv_str.cwl
     out:
     - output_str_path
@@ -218,18 +220,15 @@ inputs:
   step_16_gmx_energy_config: string
   step_16_gmx_energy_output_xvg_path: string
   step_17_grompp_config: string
+  step_17_grompp_output_tpr_path: string
+  step_18_mdrun_output_gro_path: string
   step_19_gmx_rms_config: string
   step_19_gmx_rms_output_xvg_path: string
   step_20_gmx_rms_config: string
   step_20_gmx_rms_output_xvg_path: string
-  step_20_gmx_rms_input_structure_path: File
   step_21_gmx_rgyr_config: string
-  step_21_gmx_rgyr_input_structure_path: File
   step_22_gmx_image_config: string
-  step_22_gmx_image_input_top_path: File
   step_23_gmx_trjconv_str_config: string
-  step_23_gmx_trjconv_str_input_top_path: File
-  step_23_gmx_trjconv_str_input_structure_path: File
 outputs:
   step_1_pdb_output_pdb_path:
     type: File

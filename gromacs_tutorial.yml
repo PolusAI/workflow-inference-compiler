@@ -23,7 +23,7 @@ steps:
   - grompp:
       in:
         config: '{"mdp": {"integrator":"steep", "rvdw":"1.4", "rcoulomb":"1.4", "nsteps":"100", "emtol":"500", "nstenergy":"1"}}'
-        output_tpr_path: 'min.tpr'  # Explicitly specify filename for future reference.
+        output_tpr_path: '$min.tpr'  # Explicitly specify filename for future reference.
   - mdrun:
   - gmx_energy:
       in:
@@ -51,7 +51,10 @@ steps:
   - grompp:
       in:
         config: '{"mdp": {"integrator":"sd", "rvdw":"1.0", "rcoulomb":"1.0", "coulombtype":"pme", "nsteps":"1000", "dt":0.002, "tc-grps":"system", "ref-t":"300", "tau-t":"2", "constraints":"h-bonds", "nstxout":"1000", "pcoupl":"Berendsen", "tau-p":"1", "ref-p":"1", "compressibility":"4.5e-5"}}'
+        output_tpr_path: '$prod.tpr'  # Explicitly specify filename for future reference.
   - mdrun:
+      in:
+        output_gro_path: '$prod.gro'  # Explicitly specify filename for future reference.
 # Trajectory Analysis
   - gmx_rms:
       in:
@@ -61,17 +64,17 @@ steps:
       in:
         config: '{"selection": "Backbone"}'
         output_xvg_path: 'rmsd_exp.xvg'
-        input_structure_path: 'min.tpr'  # Use structure from a specific step in the pipeline, not just the most recent step.
+        input_structure_path: '$min.tpr'
   - gmx_rgyr:
       in:
         config: '{"selection": "Backbone"}'
-        input_structure_path: 'min.tpr'  # Use structure from a specific step in the pipeline, not just the most recent step.
+        input_structure_path: '$min.tpr'
   - gmx_image:
       in:
         config: '{"center_selection":"Protein","output_selection":"Protein","pbc":"mol"}'
-        input_top_path: 'system.tpr'  # Workaround renaming issue
+        input_top_path: '$prod.tpr'
   - gmx_trjconv_str:
       in:
         config: '{"selection": "Protein"}'
-        input_top_path: 'system.tpr'  # Workaround renaming issue
-        input_structure_path: 'system.gro'  # Workaround renaming issue
+        input_top_path: '$prod.tpr'
+        input_structure_path: '$prod.gro'

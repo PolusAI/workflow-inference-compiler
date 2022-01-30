@@ -65,6 +65,9 @@ if __name__ == '__main__':
     # Collect workflow input parameters
     inputs_workflow = {}
 
+    # Collect the internal workflow variables
+    vars_workflow = {}
+
     for i, key in enumerate(steps_keys):
         # Add run tag
         if steps[i][key]:
@@ -101,9 +104,21 @@ if __name__ == '__main__':
         for arg_key in args_provided:
             # Extract input value into separate yml file
             # Replace it here with a new variable name
-            var_name = f'{step_name}_{arg_key}'
-            inputs_workflow.update({var_name: steps[i][key]['in'][arg_key]})
-            steps[i][key]['in'][arg_key] = var_name
+            arg_val = steps[i][key]['in'][arg_key]
+            if arg_val[0] == '$':
+                print('arg_key, arg_val', arg_key, arg_val)
+                if not vars_workflow.get(arg_val[1:]):
+                    in_name = f'{step_name}_{arg_key}'
+                    inputs_workflow.update({in_name: arg_val[1:]})
+                    steps[i][key]['in'][arg_key] = in_name
+                    var_name = f'{step_name}/{arg_key}'
+                    vars_workflow.update({arg_val[1:]: var_name})
+                else:
+                    steps[i][key]['in'][arg_key] = vars_workflow[arg_val[1:]]
+            else:
+                in_name = f'{step_name}_{arg_key}'
+                inputs_workflow.update({in_name: arg_val})
+                steps[i][key]['in'][arg_key] = in_name
         
         for arg_key in args_required:
             #print('arg_key', arg_key)
@@ -192,7 +207,7 @@ if __name__ == '__main__':
     # Dump the workflow inputs to a separate yml file.
     for key, val in inputs_workflow.items():
         # TODO: Improve File type detection heuristics
-        if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_8' in key :
+        if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_8' in key:
             inputs_workflow.update({key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2033'}})
     dump_options = {'line_break': '\n', 'indent': 2}
     yaml_content = yaml.dump(inputs_workflow, sort_keys=False, **dump_options)
