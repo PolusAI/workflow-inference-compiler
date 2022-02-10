@@ -66,6 +66,7 @@ if __name__ == '__main__':
 
     # Collect workflow input parameters
     inputs_workflow = {}
+    inputs_file_workflow = {}
 
     # Collect the internal workflow input variables
     vars_workflow_input = {}
@@ -89,20 +90,44 @@ if __name__ == '__main__':
         # current step and previous steps, respectively, and then check again.
         # If there still isn't an exact match, explicit renaming may be required.
 
+        args_provided = []
+        if steps[i][key] and 'in' in steps[i][key]:
+            args_provided = list(steps[i][key]['in'])
+        #print(args_provided)
+
         in_tool = tools[i]['inputs']
         #print(list(in_tool.keys()))
-        args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or in_tool[arg]['type'][-1] == '?')]
+        if tools[i]['class'] == 'CommandLineTool':
+            args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or in_tool[arg]['type'][-1] == '?')]
+        elif tools[i]['class'] == 'Workflow':
+            args_required = [arg for arg in in_tool]
+            
+            # Add the inputs. For now, assume that all sub-workflows have been
+            # auto-generated from a previous application of this script, and
+            # thus that all of their transitive inputs have been satisfied.
+            # (i.e. simply combine the input yml files using the cat command.)
+            steps[i][key]['in'] = dict([(key, key) for key in args_required])
+            inputs_workflow.update(in_tool)
+            # Do not update inputs_file_workflow
+
+            # Add a SubworkflowFeatureRequirement
+            subworkreq = 'SubworkflowFeatureRequirement'
+            subworkreqdict = {subworkreq: {'class': subworkreq}}
+            if 'requirements' in yaml_tree:
+                if not subworkreq in yaml_tree['requirements']:
+                    new_reqs = dict(list(yaml_tree['requirements'].items()) + list(subworkreqdict))
+                    yaml_tree['requirements'].update(new_reqs)
+            else:
+                yaml_tree['requirements'] = subworkreqdict
+        else:
+            raise Exception(f'Unknown class', tools[i]['class'])
+        
         # Note: Some config tags are not required in the cwl files, but are in
         # fact required in the python source code! See check_mandatory_property
         # (Solution: refactor all required arguments out of config and list
         # them as explicit inputs in the cwl files, then modify the python
         # files accordingly.)
         #print(args_required)
-
-        args_provided = []
-        if steps[i][key] and 'in' in steps[i][key]:
-            args_provided = list(steps[i][key]['in'])
-        #print(args_provided)
         
         step_name = f'step_{i + 1}_{steps_keys[i]}'
         
@@ -111,10 +136,11 @@ if __name__ == '__main__':
             # Replace it here with a new variable name
             arg_val = steps[i][key]['in'][arg_key]
             if arg_val[0] == '$':
-                print('arg_key, arg_val', arg_key, arg_val)
+                #print('arg_key, arg_val', arg_key, arg_val)
                 if not vars_workflow_input.get(arg_val[1:]):
                     in_name = f'{step_name}_{arg_key}_input'
                     inputs_workflow.update({in_name: arg_val[1:]})
+                    inputs_file_workflow.update({in_name: arg_val[1:]})
                     steps[i][key]['in'][arg_key] = in_name
                     var_name = f'{step_name}/{arg_key}'
                     vars_workflow_input.update({arg_val[1:]: var_name})
@@ -123,6 +149,7 @@ if __name__ == '__main__':
             else:
                 in_name = f'{step_name}_{arg_key}_input'
                 inputs_workflow.update({in_name: arg_val})
+                inputs_file_workflow.update({in_name: arg_val})
                 steps[i][key]['in'][arg_key] = in_name
         
         for arg_key in args_required:
@@ -136,9 +163,9 @@ if __name__ == '__main__':
             # instead of figuring out how to replace('structure_', 'gro_') for
             # gmx_trjconv_str only, just require the user to specify filename.
             for j in range(0, i)[::-1]:  # Reverse order!
-                out_keys = list(tools[j]['outputs'])
+                out_keys = list(tools[j]['outputs'])[::-1] # Reverse order!
                 for out_key in out_keys:
-                    if out_key.replace('output_', '') == arg_key_noinput:
+                    if arg_key_noinput in out_key.replace('output_', ''): # ==
                         #print('match!', j)  # We found a match!
                         # Generate a new namespace for out_key using the step number and add to inputs
                         step_name_j = f'step_{j + 1}_{steps_keys[j]}'
@@ -163,7 +190,7 @@ if __name__ == '__main__':
                 if match:
                     break
             if not match:
-                print('Error! No match found for input arg', arg_key)
+                print('Error! No match found for input', i + 1, key, arg_key)
         
         # Add CommandLineTool outputs tags to workflow out tags.
         # Note: Add all output tags for now, but depending on config options,
@@ -184,7 +211,7 @@ if __name__ == '__main__':
         #print()
 
     # Add the provided inputs of each step to the workflow inputs
-    inputs_workflow_types = dict([(key, 'File' if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_8' in key else 'string') for key in inputs_workflow])
+    inputs_workflow_types = dict([(key, 'File' if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_2' in key and not 'step_8' in key else 'string') for key in inputs_workflow])
     yaml_tree.update({'inputs': inputs_workflow_types})
 
     # Add the outputs of each step to the workflow outputs
@@ -198,7 +225,7 @@ if __name__ == '__main__':
             if 'dhdl' in out_key or 'xtc' in out_key:
                 continue
             out_var = f'{step_name}/{out_key}'
-            out_name = f'{step_name}_{out_key}_output'
+            out_name = f'{step_name}_{out_key}'
             # Exclude intermediate 'output' files.
             if out_var in vars_workflow_output_internal and not args.output_intermediate_files:
                 continue
@@ -217,12 +244,12 @@ if __name__ == '__main__':
     yaml_tree.update({'steps': steps_dict})
     
     # Dump the workflow inputs to a separate yml file.
-    for key, val in inputs_workflow.items():
+    for key, val in inputs_file_workflow.items():
         # TODO: Improve File type detection heuristics
-        if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_8' in key:
-            inputs_workflow.update({key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2033'}})
+        if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_2' in key and not 'step_8' in key:
+            inputs_file_workflow.update({key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2033'}})
     dump_options = {'line_break': '\n', 'indent': 2}
-    yaml_content = yaml.dump(inputs_workflow, sort_keys=False, **dump_options)
+    yaml_content = yaml.dump(inputs_file_workflow, sort_keys=False, **dump_options)
     with open(f'{yaml_stem}_inputs.yml', 'w') as inp:
         inp.write(yaml_content)
 
@@ -230,7 +257,7 @@ if __name__ == '__main__':
     # Use sort_keys=False to preserve the order of the steps.
     dump_options = {'line_break': '\n', 'indent': 2}
     yaml_content = yaml.dump(yaml_tree, sort_keys=False, **dump_options)
-    with open(f'{yaml_stem}_expanded.cwl', 'w') as w:
+    with open(f'{yaml_stem}.cwl', 'w') as w:
         w.write('#!/usr/bin/env cwl-runner\n')
         w.write('cwlVersion: v1.0\n')
         w.write('class: Workflow\n')
@@ -238,5 +265,5 @@ if __name__ == '__main__':
     
     print('Finished expanding. Validating...')
     
-    cmd = ['cwltool', '--validate', f'{yaml_stem}_expanded.cwl']
+    cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
     sub.run(cmd)
