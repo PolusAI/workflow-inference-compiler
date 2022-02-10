@@ -13,6 +13,8 @@ if __name__ == '__main__':
                         help='Yaml workflow file')
     parser.add_argument('--clt_dir', type=str, required=False, default='biobb',
                         help='Directory which contains the CWL CommandLineTools')
+    parser.add_argument('--output_intermediate_files', type=bool, required=False, default=False,
+                        help='Output files which are used between steps (for debugging). Note that this will cause the CWL Preview in the Benten extension to fail!')
     args = parser.parse_args()
 
     # Load the high-level yaml workflow file.
@@ -65,8 +67,11 @@ if __name__ == '__main__':
     # Collect workflow input parameters
     inputs_workflow = {}
 
-    # Collect the internal workflow variables
-    vars_workflow = {}
+    # Collect the internal workflow input variables
+    vars_workflow_input = {}
+    
+    # Collect the internal workflow output variables
+    vars_workflow_output_internal = []
 
     for i, key in enumerate(steps_keys):
         # Add run tag
@@ -107,16 +112,16 @@ if __name__ == '__main__':
             arg_val = steps[i][key]['in'][arg_key]
             if arg_val[0] == '$':
                 print('arg_key, arg_val', arg_key, arg_val)
-                if not vars_workflow.get(arg_val[1:]):
-                    in_name = f'{step_name}_{arg_key}'
+                if not vars_workflow_input.get(arg_val[1:]):
+                    in_name = f'{step_name}_{arg_key}_input'
                     inputs_workflow.update({in_name: arg_val[1:]})
                     steps[i][key]['in'][arg_key] = in_name
                     var_name = f'{step_name}/{arg_key}'
-                    vars_workflow.update({arg_val[1:]: var_name})
+                    vars_workflow_input.update({arg_val[1:]: var_name})
                 else:
-                    steps[i][key]['in'][arg_key] = vars_workflow[arg_val[1:]]
+                    steps[i][key]['in'][arg_key] = vars_workflow_input[arg_val[1:]]
             else:
-                in_name = f'{step_name}_{arg_key}'
+                in_name = f'{step_name}_{arg_key}_input'
                 inputs_workflow.update({in_name: arg_val})
                 steps[i][key]['in'][arg_key] = in_name
         
@@ -149,6 +154,9 @@ if __name__ == '__main__':
                             steps[i][key].update(new_keyvals)
                         else:
                             steps[i] = {key: {'in': arg_keyval}}
+                        
+                        # We also need to keep track of the 'internal' output variables
+                        vars_workflow_output_internal.append(arg_val)
                 # Break out two levels, i.e. continue onto the next iteration of the outermost loop.
                         match = True
                         break
@@ -180,6 +188,7 @@ if __name__ == '__main__':
     yaml_tree.update({'inputs': inputs_workflow_types})
 
     # Add the outputs of each step to the workflow outputs
+    vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     outputs_workflow = {}
     for i, key in enumerate(steps_keys):
         step_name = f'step_{i + 1}_{steps_keys[i]}'
@@ -189,7 +198,10 @@ if __name__ == '__main__':
             if 'dhdl' in out_key or 'xtc' in out_key:
                 continue
             out_var = f'{step_name}/{out_key}'
-            out_name = f'{step_name}_{out_key}'
+            out_name = f'{step_name}_{out_key}_output'
+            # Exclude intermediate 'output' files.
+            if out_var in vars_workflow_output_internal and not args.output_intermediate_files:
+                continue
             #print('out_name', out_name)
             outputs_workflow.update({out_name: {'type': 'File', 'outputSource': out_var}})
         #print('outputs_workflow', outputs_workflow)
