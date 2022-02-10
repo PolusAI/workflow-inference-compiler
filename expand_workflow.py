@@ -5,16 +5,24 @@ import glob
 from pathlib import Path
 import subprocess as sub
 
+import graphviz
 import yaml
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
     parser.add_argument('--yaml', type=str, required=True,
                         help='Yaml workflow file')
-    parser.add_argument('--clt_dir', type=str, required=False, default='biobb',
+    parser.add_argument('--clt_dir', type=str, required=False, default='.',
                         help='Directory which contains the CWL CommandLineTools')
-    parser.add_argument('--output_intermediate_files', type=bool, required=False, default=False,
-                        help='Output files which are used between steps (for debugging). Note that this will cause the CWL Preview in the Benten extension to fail!')
+    parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=False,
+                        help='Enable output files which are used between steps (for debugging).')
+    parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
+                        help='Label the graph edges with the name of the intermediate input/output.')
+    parser.add_argument('--graph_show_inputs', type=bool, required=False, default=False,
+                        help='Add nodes to the graph representing the workflow inputs.')
+    parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
+                        help='Add nodes to the graph representing the workflow outputs.')
     args = parser.parse_args()
 
     # Load the high-level yaml workflow file.
@@ -74,6 +82,9 @@ if __name__ == '__main__':
     # Collect the internal workflow output variables
     vars_workflow_output_internal = []
 
+    dot = graphviz.Digraph(name=yaml_stem)
+    #dot.attr(rankdir='LR')
+
     for i, key in enumerate(steps_keys):
         # Add run tag
         if steps[i][key]:
@@ -130,11 +141,13 @@ if __name__ == '__main__':
         #print(args_required)
         
         step_name = f'step_{i + 1}_{steps_keys[i]}'
+        dot.node(step_name)
         
         for arg_key in args_provided:
             # Extract input value into separate yml file
             # Replace it here with a new variable name
             arg_val = steps[i][key]['in'][arg_key]
+            var_name = f'{step_name}/{arg_key}'
             if arg_val[0] == '$':
                 #print('arg_key, arg_val', arg_key, arg_val)
                 if not vars_workflow_input.get(arg_val[1:]):
@@ -142,15 +155,21 @@ if __name__ == '__main__':
                     inputs_workflow.update({in_name: arg_val[1:]})
                     inputs_file_workflow.update({in_name: arg_val[1:]})
                     steps[i][key]['in'][arg_key] = in_name
-                    var_name = f'{step_name}/{arg_key}'
                     vars_workflow_input.update({arg_val[1:]: var_name})
+                    if args.graph_show_inputs:
+                        dot.node(var_name, label=arg_key)
+                        dot.edge(var_name, step_name)
                 else:
                     steps[i][key]['in'][arg_key] = vars_workflow_input[arg_val[1:]]
+                    dot.edge(vars_workflow_input[arg_val[1:]].split('/')[0], step_name)
             else:
                 in_name = f'{step_name}_{arg_key}_input'
                 inputs_workflow.update({in_name: arg_val})
                 inputs_file_workflow.update({in_name: arg_val})
                 steps[i][key]['in'][arg_key] = in_name
+                if args.graph_show_inputs:
+                    dot.node(var_name, label=arg_key)
+                    dot.edge(var_name, step_name)
         
         for arg_key in args_required:
             #print('arg_key', arg_key)
@@ -184,6 +203,12 @@ if __name__ == '__main__':
                         
                         # We also need to keep track of the 'internal' output variables
                         vars_workflow_output_internal.append(arg_val)
+                        
+                        # Add an edge between steps to the graph
+                        if args.graph_label_edges:
+                            dot.edge(step_name_j, step_name, label=out_key)
+                        else:
+                            dot.edge(step_name_j, step_name)
                 # Break out two levels, i.e. continue onto the next iteration of the outermost loop.
                         match = True
                         break
@@ -194,7 +219,7 @@ if __name__ == '__main__':
         
         # Add CommandLineTool outputs tags to workflow out tags.
         # Note: Add all output tags for now, but depending on config options,
-        # not all output files will be genenerated. This may cause an error.
+        # not all output files will be generated. This may cause an error.
         out_keys = list(tools[i]['outputs'])
         #print('out_keys', out_keys)
         if steps[i][key]:
@@ -226,8 +251,12 @@ if __name__ == '__main__':
                 continue
             out_var = f'{step_name}/{out_key}'
             out_name = f'{step_name}_{out_key}'
+            # Avoid duplicating intermediate outputs in GraphViz
+            if not out_var in vars_workflow_output_internal and args.graph_show_outputs:
+                dot.node(out_name, label=out_key)
+                dot.edge(step_name, out_name)
             # Exclude intermediate 'output' files.
-            if out_var in vars_workflow_output_internal and not args.output_intermediate_files:
+            if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:
                 continue
             #print('out_name', out_name)
             outputs_workflow.update({out_name: {'type': 'File', 'outputSource': out_var}})
@@ -242,6 +271,10 @@ if __name__ == '__main__':
         #steps[i] = {step_name: steps[i][key]}
         steps_dict.update({step_name: steps[i][key]})
     yaml_tree.update({'steps': steps_dict})
+
+    # Render the GraphViz diagram
+    dot.render()
+    #dot.view() # viewing does not work on headless machines (and requires xdg-utils)
     
     # Dump the workflow inputs to a separate yml file.
     for key, val in inputs_file_workflow.items():
