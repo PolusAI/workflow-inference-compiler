@@ -29,14 +29,16 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     subworkflows = {}
     for key in subkeys:
         path = Path(key)
+        stem_no_ext = str(path.with_suffix(''))
         if not (path.exists() and path.suffix == '.yml'):
             # TODO: Once we have defined a yml DSL schema,
             # check that the file contents actually satisfies the schema.
             raise Exception(f'Error! {path} does not exists or is not a .yml file.')
         with dot.subgraph(name=f'cluster_{key}') as subdot:
+            subdot.attr(label=stem_no_ext)
             subworkflow_data = expand_workflow(args, subdot, tools_cwl, False, path)
         (sub_yaml_tree, sub_inputs_file_workflow, sub_vars_workflow_output_internal, is_root, sub_dot) = subworkflow_data
-        stem = str(path.with_suffix('')) + '.cwl'
+        stem = stem_no_ext + '.cwl'
         tools_yml[key] = (stem, sub_yaml_tree)
         subworkflows[key] = subworkflow_data
 
@@ -121,7 +123,9 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         
         step_name = f'step_{i + 1}_{steps_keys[i]}'
         if not tools[i]['class'] == 'Workflow':
-            dot.node(step_name)
+            dot.node(step_name, shape='box', style='rounded, filled', fillcolor='lightblue')
+        elif not steps_keys[i] in subkeys or (not args.graph_inline_subgraphs and args.graph_show_outputs):
+            dot.node(step_name, shape='box', style='rounded, filled', fillcolor='lightblue')
         
         for arg_key in args_provided:
             # Extract input value into separate yml file
@@ -137,18 +141,18 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                     steps[i][key]['in'][arg_key] = in_name
                     vars_workflow_input.update({arg_val[1:]: var_name})
                     if args.graph_show_inputs:
-                        dot.node(var_name, label=arg_key)
+                        dot.node(var_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
                         dot.edge(var_name, step_name)
                 else:
                     steps[i][key]['in'][arg_key] = vars_workflow_input[arg_val[1:]]
                     dot.edge(vars_workflow_input[arg_val[1:]].split('/')[0], step_name)
             else:
-                in_name = f'{step_name}_{arg_key}_input'
+                in_name = f'{step_name}_input___{arg_key}'  # Use triple underscore for namespacing so we can split later
                 inputs_workflow.update({in_name: arg_val})
                 inputs_file_workflow.update({in_name: arg_val})
                 steps[i][key]['in'][arg_key] = in_name
                 if args.graph_show_inputs:
-                    dot.node(var_name, label=arg_key)
+                    dot.node(var_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
                     dot.edge(var_name, step_name)
         
         for arg_key in args_required:
@@ -157,14 +161,16 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                 continue  # We already convered this case above.
             match = False
             # TODO: Figure out something better than replace
-            arg_key_noinput = arg_key.replace('input_', '').replace('solute_', '').replace('energy_', 'edr_').replace('structure_', 'tpr_').replace('traj_', 'trr_')
+            arg_key_no_namespace = arg_key.split('___')[-1]
+            arg_key_noinput = arg_key_no_namespace.replace('input_', '').replace('solute_', '').replace('energy_', 'edr_').replace('structure_', 'tpr_').replace('traj_', 'trr_')
             # gmx_trjconv_str assumes gro, but other tools assume tpr; For now,
             # instead of figuring out how to replace('structure_', 'gro_') for
             # gmx_trjconv_str only, just require the user to specify filename.
             for j in range(0, i)[::-1]:  # Reverse order!
                 out_keys = list(tools[j]['outputs'])[::-1] # Reverse order!
                 for out_key in out_keys:
-                    if arg_key_noinput in out_key.replace('output_', ''): # ==
+                    out_key_no_namespace = out_key.split('___')[-1]
+                    if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
                         #print('match!', j)  # We found a match!
                         # Generate a new namespace for out_key using the step number and add to inputs
                         step_name_j = f'step_{j + 1}_{steps_keys[j]}'
@@ -180,24 +186,30 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                             steps[i][key].update(new_keyvals)
                         else:
                             steps[i] = {key: {'in': arg_keyval}}
-                        
+
+                        # Determine which tail node to use for the new edge
+                        edge_node1 = step_name_j
+                        if tools[j]['class'] == 'Workflow' and steps_keys[j] in subkeys: # i.e. if we performed recursion
+                            if args.graph_show_outputs:
+                                if args.graph_inline_subgraphs:
+                                    edge_node1 = out_key.split('___')[0] # out_key
+                            else:
+                                edge_node1 = out_key.split('___')[0]
+
                         # We also need to keep track of the 'internal' output variables
                         if tools[j]['class'] == 'Workflow':
                             vars_workflow_output_internal.append(out_key)
                         else:
                             vars_workflow_output_internal.append(arg_val)
                         
-                        # Add an edge between steps to the graph
-                        if tools[j]['class'] == 'Workflow':
-                            if args.graph_label_edges:
-                                dot.edge(out_key, step_name, label=out_key)
+                        # Add an edge between two steps in the graph
+                        if args.graph_label_edges:
+                            if tools[j]['class'] == 'Workflow':
+                                dot.edge(edge_node1, step_name, label=out_key_no_namespace)
                             else:
-                                dot.edge(out_key, step_name)
+                                dot.edge(edge_node1, step_name, label=out_key)
                         else:
-                            if args.graph_label_edges:
-                                dot.edge(step_name_j, step_name, label=out_key)
-                            else:
-                                dot.edge(step_name_j, step_name)
+                            dot.edge(edge_node1, step_name)
                 # Break out two levels, i.e. continue onto the next iteration of the outermost loop.
                         match = True
                         break
@@ -242,16 +254,18 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
             if 'dhdl' in out_key or 'xtc' in out_key:
                 continue
             out_var = f'{step_name}/{out_key}'
-            out_name = f'{step_name}_{out_key}'
+            out_name = f'{step_name}___{out_key}'  # Use triple underscore for namespacing so we can split later
             # Avoid duplicating intermediate outputs in GraphViz
-            if tools[i]['class'] == 'Workflow':
-                if not out_key in [var.replace('/', '_') for var in vars_workflow_output_internal] and args.graph_show_outputs:
-                    dot.node(out_name, label=out_key)
-                    dot.edge(step_name, out_name)
-            else:
-                if not out_var in vars_workflow_output_internal and args.graph_show_outputs:
-                    dot.node(out_name, label=out_key)
-                    dot.edge(step_name, out_name)
+            out_key_no_namespace = out_key.split('___')[-1]
+            if args.graph_show_outputs:
+                case1 = (tools[i]['class'] == 'Workflow') and (not out_key in [var.replace('/', '___') for var in vars_workflow_output_internal])
+                case2 = (tools[i]['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
+                if case1 or case2:
+                    dot.node(out_name, label=out_key, shape='box', style='rounded, filled', fillcolor='lightyellow')
+                    if args.graph_label_edges:
+                        dot.edge(step_name, out_name, label=out_key_no_namespace)  # Is labeling necessary?
+                    else:
+                        dot.edge(step_name, out_name)
             # Exclude intermediate 'output' files.
             if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:
                 continue
@@ -308,6 +322,8 @@ def main():
                         help='Add nodes to the graph representing the workflow inputs.')
     parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
                         help='Add nodes to the graph representing the workflow outputs.')
+    parser.add_argument('--graph_inline_subgraphs', type=bool, required=False, default=False,
+                        help='Controls whether subgraphs are displayed separately or positioned within the main graph.')
     args = parser.parse_args()
 
     # Load ALL of the tools.
