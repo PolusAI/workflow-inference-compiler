@@ -9,68 +9,55 @@ import graphviz
 import yaml
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
-    parser.add_argument('--yaml', type=str, required=True,
-                        help='Yaml workflow file')
-    parser.add_argument('--clt_dir', type=str, required=False, default='.',
-                        help='Directory which contains the CWL CommandLineTools')
-    parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=False,
-                        help='Enable output files which are used between steps (for debugging).')
-    parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
-                        help='Label the graph edges with the name of the intermediate input/output.')
-    parser.add_argument('--graph_show_inputs', type=bool, required=False, default=False,
-                        help='Add nodes to the graph representing the workflow inputs.')
-    parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
-                        help='Add nodes to the graph representing the workflow outputs.')
-    args = parser.parse_args()
-
+def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     # Load the high-level yaml workflow file.
-    yaml_stem = Path(args.yaml).stem
-    with open(Path(args.yaml), 'r') as y:
+    yaml_stem = Path(yaml_path).stem
+    with open(Path(yaml_path), 'r') as y:
         yaml_tree = yaml.load(y.read(), Loader=yaml.SafeLoader)
 
-    #for x in yaml_tree:
-    #    print(x)
     steps = yaml_tree['steps']
-    #for step in steps:
-    #  print(step)
-    
+
+    # Get the dictionary key (i.e. the name) of each step.
     steps_keys = []
     for step in steps:
         steps_keys += list(step)
     #print(steps_keys)
+    
+    # Recursively expand subworkflows, if any.
+    subkeys = [key for key in steps_keys if key not in tools_cwl]
+    tools_yml = {}
+    subworkflows = {}
+    for key in subkeys:
+        path = Path(key)
+        if not (path.exists() and path.suffix == '.yml'):
+            # TODO: Once we have defined a yml DSL schema,
+            # check that the file contents actually satisfies the schema.
+            raise Exception(f'Error! {path} does not exists or is not a .yml file.')
+        with dot.subgraph(name=f'cluster_{key}') as subdot:
+            subworkflow_data = expand_workflow(args, subdot, tools_cwl, False, path)
+        (sub_yaml_tree, sub_inputs_file_workflow, sub_vars_workflow_output_internal, is_root, sub_dot) = subworkflow_data
+        stem = str(path.with_suffix('')) + '.cwl'
+        tools_yml[key] = (stem, sub_yaml_tree)
+        subworkflows[key] = subworkflow_data
 
-    # Load ALL of the tools.
-    tools_all = {}
-    pattern_cwl = str(Path(args.clt_dir) / '**/*.cwl')
-    #print(pattern_cwl)
-    # Note that there is a current and a legacy copy of each cwl file for each tool.
-    # The only difference appears to be that some legacy parameters are named 
-    # *_file as opposed to *_path. Since glob does NOT return the results in
-    # any particular order, and since we are using stem as our dict key, current
-    # files may be overwritten with legacy files (and vice versa), resulting in
-    # an inconsistent naming scheme. Since legacy files are stored in an additional
-    # subdirctory, if we sort the paths by descending length, we can overwrite
-    # the dict entries of the legacy files.
-    cwl_paths_sorted = sorted(glob.glob(pattern_cwl, recursive=True), key=len, reverse=True)
-    for cwl_path in cwl_paths_sorted:
-        #print(cwl_path)
-        try:
-            with open(cwl_path, 'r') as f:
-              tool = yaml.load(f.read(), Loader=yaml.SafeLoader)
-            stem = Path(cwl_path).stem
-            #print(stem)
-            tools_all[stem] = (cwl_path, tool)
-            #print(tool)
-        except yaml.scanner.ScannerError as se:
-            pass
-            # There are two cwl files that throw this error, but they are both legacy, so...
-            #print(cwl_path)
-            #print(se)
-
+    tools_cwl_yml = dict(list(tools_cwl.items()) + list(tools_yml.items()))
     # Restrict to the subset of tools that we are actually using.
-    tools = [tools_all[key][1] for key in steps_keys]
+    run_paths = [tools_cwl_yml[key][0] for key in steps_keys]
+    tools = [tools_cwl_yml[key][1] for key in steps_keys]
+
+    # Add headers
+    yaml_tree['cwlVersion'] = 'v1.0'
+    yaml_tree['class'] = 'Workflow'
+    # If there is at least one subworkflow, add a SubworkflowFeatureRequirement
+    if any([tool['class'] == 'Workflow' for tool in tools]):
+        subworkreq = 'SubworkflowFeatureRequirement'
+        subworkreqdict = {subworkreq: {'class': subworkreq}}
+        if 'requirements' in yaml_tree:
+            if not subworkreq in yaml_tree['requirements']:
+                new_reqs = dict(list(yaml_tree['requirements'].items()) + list(subworkreqdict))
+                yaml_tree['requirements'].update(new_reqs)
+        else:
+            yaml_tree['requirements'] = subworkreqdict
 
     # Collect workflow input parameters
     inputs_workflow = {}
@@ -82,16 +69,18 @@ if __name__ == '__main__':
     # Collect the internal workflow output variables
     vars_workflow_output_internal = []
 
-    dot = graphviz.Digraph(name=yaml_stem)
-    #dot.attr(rankdir='LR')
+    # Initialize the above from recursive values.
+    for key in subkeys:
+        inputs_file_workflow.update(subworkflows[key][1])
+        vars_workflow_output_internal += subworkflows[key][2]
 
     for i, key in enumerate(steps_keys):
         # Add run tag
         if steps[i][key]:
             if not 'run' in steps[i][key]:
-                steps[i][key].update({'run': tools_all[key][0]})
+                steps[i][key].update({'run': run_paths[i]})
         else:
-            steps[i] = {key: {'run': tools_all[key][0]}}
+            steps[i] = {key: {'run': run_paths[i]}}
 
         # Generate intermediate file names between steps.
         # The inputs for a given step need to come from either
@@ -120,16 +109,6 @@ if __name__ == '__main__':
             steps[i][key]['in'] = dict([(key, key) for key in args_required])
             inputs_workflow.update(in_tool)
             # Do not update inputs_file_workflow
-
-            # Add a SubworkflowFeatureRequirement
-            subworkreq = 'SubworkflowFeatureRequirement'
-            subworkreqdict = {subworkreq: {'class': subworkreq}}
-            if 'requirements' in yaml_tree:
-                if not subworkreq in yaml_tree['requirements']:
-                    new_reqs = dict(list(yaml_tree['requirements'].items()) + list(subworkreqdict))
-                    yaml_tree['requirements'].update(new_reqs)
-            else:
-                yaml_tree['requirements'] = subworkreqdict
         else:
             raise Exception(f'Unknown class', tools[i]['class'])
         
@@ -141,7 +120,8 @@ if __name__ == '__main__':
         #print(args_required)
         
         step_name = f'step_{i + 1}_{steps_keys[i]}'
-        dot.node(step_name)
+        if not tools[i]['class'] == 'Workflow':
+            dot.node(step_name)
         
         for arg_key in args_provided:
             # Extract input value into separate yml file
@@ -202,13 +182,22 @@ if __name__ == '__main__':
                             steps[i] = {key: {'in': arg_keyval}}
                         
                         # We also need to keep track of the 'internal' output variables
-                        vars_workflow_output_internal.append(arg_val)
+                        if tools[j]['class'] == 'Workflow':
+                            vars_workflow_output_internal.append(out_key)
+                        else:
+                            vars_workflow_output_internal.append(arg_val)
                         
                         # Add an edge between steps to the graph
-                        if args.graph_label_edges:
-                            dot.edge(step_name_j, step_name, label=out_key)
+                        if tools[j]['class'] == 'Workflow':
+                            if args.graph_label_edges:
+                                dot.edge(out_key, step_name, label=out_key)
+                            else:
+                                dot.edge(out_key, step_name)
                         else:
-                            dot.edge(step_name_j, step_name)
+                            if args.graph_label_edges:
+                                dot.edge(step_name_j, step_name, label=out_key)
+                            else:
+                                dot.edge(step_name_j, step_name)
                 # Break out two levels, i.e. continue onto the next iteration of the outermost loop.
                         match = True
                         break
@@ -236,7 +225,10 @@ if __name__ == '__main__':
         #print()
 
     # Add the provided inputs of each step to the workflow inputs
-    inputs_workflow_types = dict([(key, 'File' if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_2' in key and not 'step_8' in key else 'string') for key in inputs_workflow])
+    def filetype_predicate(key):
+        # TODO: Improve File type detection heuristics
+        return 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_2' in key and not 'step_8' in key
+    inputs_workflow_types = dict([(key, 'File' if filetype_predicate(key) else 'string') for key in inputs_workflow])
     yaml_tree.update({'inputs': inputs_workflow_types})
 
     # Add the outputs of each step to the workflow outputs
@@ -252,9 +244,14 @@ if __name__ == '__main__':
             out_var = f'{step_name}/{out_key}'
             out_name = f'{step_name}_{out_key}'
             # Avoid duplicating intermediate outputs in GraphViz
-            if not out_var in vars_workflow_output_internal and args.graph_show_outputs:
-                dot.node(out_name, label=out_key)
-                dot.edge(step_name, out_name)
+            if tools[i]['class'] == 'Workflow':
+                if not out_key in [var.replace('/', '_') for var in vars_workflow_output_internal] and args.graph_show_outputs:
+                    dot.node(out_name, label=out_key)
+                    dot.edge(step_name, out_name)
+            else:
+                if not out_var in vars_workflow_output_internal and args.graph_show_outputs:
+                    dot.node(out_name, label=out_key)
+                    dot.edge(step_name, out_name)
             # Exclude intermediate 'output' files.
             if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:
                 continue
@@ -271,15 +268,10 @@ if __name__ == '__main__':
         #steps[i] = {step_name: steps[i][key]}
         steps_dict.update({step_name: steps[i][key]})
     yaml_tree.update({'steps': steps_dict})
-
-    # Render the GraphViz diagram
-    dot.render()
-    #dot.view() # viewing does not work on headless machines (and requires xdg-utils)
     
     # Dump the workflow inputs to a separate yml file.
     for key, val in inputs_file_workflow.items():
-        # TODO: Improve File type detection heuristics
-        if 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_2' in key and not 'step_8' in key:
+        if filetype_predicate(key):
             inputs_file_workflow.update({key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2033'}})
     dump_options = {'line_break': '\n', 'indent': 2}
     yaml_content = yaml.dump(inputs_file_workflow, sort_keys=False, **dump_options)
@@ -292,11 +284,68 @@ if __name__ == '__main__':
     yaml_content = yaml.dump(yaml_tree, sort_keys=False, **dump_options)
     with open(f'{yaml_stem}.cwl', 'w') as w:
         w.write('#!/usr/bin/env cwl-runner\n')
-        w.write('cwlVersion: v1.0\n')
-        w.write('class: Workflow\n')
         w.write(''.join(yaml_content))
     
     print('Finished expanding. Validating...')
     
     cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
     sub.run(cmd)
+    
+    return (yaml_tree, inputs_file_workflow, vars_workflow_output_internal, is_root, dot)
+
+
+def main():
+    parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
+    parser.add_argument('--yaml', type=str, required=True,
+                        help='Yaml workflow file')
+    parser.add_argument('--clt_dir', type=str, required=False, default='biobb',
+                        help='Directory which contains the CWL CommandLineTools')
+    parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=False,
+                        help='Enable output files which are used between steps (for debugging).')
+    parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
+                        help='Label the graph edges with the name of the intermediate input/output.')
+    parser.add_argument('--graph_show_inputs', type=bool, required=False, default=False,
+                        help='Add nodes to the graph representing the workflow inputs.')
+    parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
+                        help='Add nodes to the graph representing the workflow outputs.')
+    args = parser.parse_args()
+
+    # Load ALL of the tools.
+    tools_cwl = {}
+    pattern_cwl = str(Path(args.clt_dir) / '**/*.cwl')
+    #print(pattern_cwl)
+    # Note that there is a current and a legacy copy of each cwl file for each tool.
+    # The only difference appears to be that some legacy parameters are named 
+    # *_file as opposed to *_path. Since glob does NOT return the results in
+    # any particular order, and since we are using stem as our dict key, current
+    # files may be overwritten with legacy files (and vice versa), resulting in
+    # an inconsistent naming scheme. Since legacy files are stored in an additional
+    # subdirctory, if we sort the paths by descending length, we can overwrite
+    # the dict entries of the legacy files.
+    cwl_paths_sorted = sorted(glob.glob(pattern_cwl, recursive=True), key=len, reverse=True)
+    for cwl_path in cwl_paths_sorted:
+        #print(cwl_path)
+        try:
+            with open(cwl_path, 'r') as f:
+              tool = yaml.load(f.read(), Loader=yaml.SafeLoader)
+            stem = Path(cwl_path).stem
+            #print(stem)
+            tools_cwl[stem] = (cwl_path, tool)
+            #print(tool)
+        except yaml.scanner.ScannerError as se:
+            pass
+            # There are two cwl files that throw this error, but they are both legacy, so...
+            #print(cwl_path)
+            #print(se)
+
+    dot_in = graphviz.Digraph(name=args.yaml)
+    #dot_in.attr(rankdir='LR')
+    workflow_data = expand_workflow(args, dot_in, tools_cwl, True, args.yaml)
+    dot_out = workflow_data[-1]
+    # Render the GraphViz diagram
+    dot_out.render()
+    #dot_out.view() # viewing does not work on headless machines (and requires xdg-utils)
+
+
+if __name__ == '__main__':
+    main()
