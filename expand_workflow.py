@@ -71,12 +71,12 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     # Collect the internal workflow output variables
     vars_workflow_output_internal = []
 
-    # Initialize the above from recursive values.
-    for key in subkeys:
-        inputs_file_workflow.update(subworkflows[key][1])
-        vars_workflow_output_internal += subworkflows[key][2]
-
     for i, key in enumerate(steps_keys):
+        # Initialize the above from recursive values.
+        if key in subkeys:
+            sub_namespaced = dict([(f'step_{i+1}_{key}_input___{k}', val) for k, val in subworkflows[key][1].items()])
+            inputs_file_workflow.update(sub_namespaced)
+            vars_workflow_output_internal += subworkflows[key][2]
         # Add run tag
         if steps[i][key]:
             if not 'run' in steps[i][key]:
@@ -109,8 +109,6 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
             # thus that all of their transitive inputs have been satisfied.
             # (i.e. simply combine the input yml files using the cat command.)
             steps[i][key]['in'] = dict([(key, key) for key in args_required])
-            inputs_workflow.update(in_tool)
-            # Do not update inputs_file_workflow
         else:
             raise Exception(f'Unknown class', tools[i]['class'])
         
@@ -171,8 +169,6 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                     out_key_no_namespace = out_key.split('___')[-1]
                     if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
                         #print('match!', j)  # We found a match!
-                        # Remove temporary input name as per the comment below.
-                        inputs_workflow.pop(arg_key, None)
                         # Generate a new namespace for out_key using the step number and add to inputs
                         step_name_j = f'step_{j + 1}_{steps_keys[j]}'
                         arg_val = f'{step_name_j}/{out_key}'
@@ -222,12 +218,9 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                 if is_root:
                     print('Error! No match found for input', i + 1, key, arg_key)
 
-                if key in subkeys: # i.e. if we performed recursion
-                    in_name = arg_key
-                else:
-                    in_name = f'{step_name}_input___{arg_key}'  # Use triple underscore for namespacing so we can split later
+                in_name = f'{step_name}_input___{arg_key}'  # Use triple underscore for namespacing so we can split later
                 arg_keyval = {arg_key: in_name}
-                # Add an input name for now; if we later match in a parent workflow, remove it in the parent.
+                # Add an input name to this subworkflow. Add a namespace prefix in the parent workflow.
                 inputs_workflow.update({in_name: arg_key})
                 if steps[i][key]:
                     if 'in' in steps[i][key]:
