@@ -37,7 +37,7 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         with dot.subgraph(name=f'cluster_{key}') as subdot:
             subdot.attr(label=stem_no_ext)
             subworkflow_data = expand_workflow(args, subdot, tools_cwl, False, path)
-        (sub_yaml_tree, sub_inputs_file_workflow, sub_vars_workflow_output_internal, is_root, sub_dot) = subworkflow_data
+        (sub_yaml_tree, sub_inputs_file_workflow, sub_vars_workflow_output_internal, sub_is_root, sub_dot) = subworkflow_data
         stem = stem_no_ext + '.cwl'
         tools_yml[key] = (stem, sub_yaml_tree)
         subworkflows[key] = subworkflow_data
@@ -132,10 +132,10 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
             # Replace it here with a new variable name
             arg_val = steps[i][key]['in'][arg_key]
             var_name = f'{step_name}/{arg_key}'
+            in_name = f'{step_name}_input___{arg_key}'  # Use triple underscore for namespacing so we can split later
             if arg_val[0] == '$':
                 #print('arg_key, arg_val', arg_key, arg_val)
                 if not vars_workflow_input.get(arg_val[1:]):
-                    in_name = f'{step_name}_{arg_key}_input'
                     inputs_workflow.update({in_name: arg_val[1:]})
                     inputs_file_workflow.update({in_name: arg_val[1:]})
                     steps[i][key]['in'][arg_key] = in_name
@@ -147,7 +147,6 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                     steps[i][key]['in'][arg_key] = vars_workflow_input[arg_val[1:]]
                     dot.edge(vars_workflow_input[arg_val[1:]].split('/')[0], step_name)
             else:
-                in_name = f'{step_name}_input___{arg_key}'  # Use triple underscore for namespacing so we can split later
                 inputs_workflow.update({in_name: arg_val})
                 inputs_file_workflow.update({in_name: arg_val})
                 steps[i][key]['in'][arg_key] = in_name
@@ -172,6 +171,8 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                     out_key_no_namespace = out_key.split('___')[-1]
                     if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
                         #print('match!', j)  # We found a match!
+                        # Remove temporary input name as per the comment below.
+                        inputs_workflow.pop(arg_key, None)
                         # Generate a new namespace for out_key using the step number and add to inputs
                         step_name_j = f'step_{j + 1}_{steps_keys[j]}'
                         arg_val = f'{step_name_j}/{out_key}'
@@ -216,7 +217,29 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                 if match:
                     break
             if not match:
-                print('Error! No match found for input', i + 1, key, arg_key)
+                # This just means we need to defer to the parent workflow.
+                # There will actually be an error only if no parent supplies an input value.
+                if is_root:
+                    print('Error! No match found for input', i + 1, key, arg_key)
+
+                if key in subkeys: # i.e. if we performed recursion
+                    in_name = arg_key
+                else:
+                    in_name = f'{step_name}_input___{arg_key}'  # Use triple underscore for namespacing so we can split later
+                arg_keyval = {arg_key: in_name}
+                # Add an input name for now; if we later match in a parent workflow, remove it in the parent.
+                inputs_workflow.update({in_name: arg_key})
+                if steps[i][key]:
+                    if 'in' in steps[i][key]:
+                        new_keys = dict(list(steps[i][key]['in'].items()) + list(arg_keyval.items()))
+                        new_keyvals = [(k, v) if k != 'in' else (k, new_keys) for k, v in steps[i][key].items()]
+                    else:
+                        new_keys = arg_keyval
+                        new_keyvals = dict(list(steps[i][key].items()) + [('in', new_keys)])
+                    steps[i][key].update(new_keyvals)
+                else:
+                    steps[i] = {key: {'in': arg_keyval}}
+                
         
         # Add CommandLineTool outputs tags to workflow out tags.
         # Note: Add all output tags for now, but depending on config options,
@@ -239,7 +262,8 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     # Add the provided inputs of each step to the workflow inputs
     def filetype_predicate(key):
         # TODO: Improve File type detection heuristics
-        return 'path' in key and not 'xvg' in key and not 'step_1' in key and not 'step_2' in key and not 'step_8' in key
+        keys = key.split('___')
+        return 'path' in keys[-1] and (not 'xvg' in keys[-1]) and ('grompp' in keys[0] and not 'tpr' in keys[-1]) and (not 'pdb' in keys[0])
     inputs_workflow_types = dict([(key, 'File' if filetype_predicate(key) else 'string') for key in inputs_workflow])
     yaml_tree.update({'inputs': inputs_workflow_types})
 
