@@ -2,7 +2,7 @@
 # The `in` tags are superfluous, but retained for now to simplify implementation.
 # Limit nsteps to 1000 for demo / development.
 steps:
-  - gromacs_tutorial_setup:  # Auto-generated subworkflow!
+  - setup.yml:  # Auto-generated subworkflow!
 # Minimization
   - grompp:
       in:
@@ -14,14 +14,7 @@ steps:
         config: '{"terms":  ["Potential"]}'
         output_xvg_path: 'energy_min.xvg'
 # NVT equil
-  - grompp:
-      in:
-        config: '{"mdp": {"integrator":"sd", "rvdw":"1.0", "rcoulomb":"1.0", "coulombtype":"pme", "nsteps":"1000", "dt":0.002, "tc-grps":"system", "ref-t":"300", "tau-t":"2", "constraints":"h-bonds", "nstxout":"1000", "define":"-DPOSRES"}}'
-  - mdrun:
-  - gmx_energy:
-      in:
-        config: '{"terms":  ["Temperature"]}'
-        output_xvg_path: 'energy_nvt.xvg'
+  - nvt.yml:
 # NPT equil
   - grompp:
       in:

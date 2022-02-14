@@ -1,5 +1,0 @@
-step_1_pdb_output_pdb_path_input: tutorial.pdb
-step_1_pdb_config_input: '{"pdb_code" : "1aki"}'
-step_4_editconf_config_input: '{"box_type": "cubic","distance_to_molecule": 1.0}'
-step_6_grompp_config_input: '{"mdp": {"integrator":"steep"}}'
-step_7_genion_config_input: '{"neutral": "True"}'
