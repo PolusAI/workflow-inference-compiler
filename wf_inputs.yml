@@ -20,16 +20,16 @@ wf_step_4_npt.yml___npt_step_1_grompp___config: '{"mdp": {"integrator":"sd", "rv
   "tau-p":"1", "ref-p":"1", "compressibility":"4.5e-5"}}'
 wf_step_4_npt.yml___npt_step_3_gmx_energy___config: '{"terms":  ["Pressure","Density"]}'
 wf_step_4_npt.yml___npt_step_3_gmx_energy___output_xvg_path: energy_npt.xvg
-wf_step_5_grompp___config: '{"mdp": {"integrator":"sd", "rvdw":"1.0", "rcoulomb":"1.0",
-  "coulombtype":"pme", "nsteps":"1000", "dt":0.002, "tc-grps":"system", "ref-t":"300",
-  "tau-t":"2", "constraints":"h-bonds", "nstxout":"1000", "pcoupl":"Berendsen", "tau-p":"1",
-  "ref-p":"1", "compressibility":"4.5e-5"}}'
-wf_step_5_grompp___output_tpr_path: prod.tpr
-wf_step_6_mdrun___output_gro_path: prod.gro
+wf_step_5_prod.yml___prod_step_1_grompp___config: '{"mdp": {"integrator":"sd", "rvdw":"1.0",
+  "rcoulomb":"1.0", "coulombtype":"pme", "nsteps":"1000", "dt":0.002, "tc-grps":"system",
+  "ref-t":"300", "tau-t":"2", "constraints":"h-bonds", "nstxout":"1000", "pcoupl":"Berendsen",
+  "tau-p":"1", "ref-p":"1", "compressibility":"4.5e-5"}}'
+wf_step_5_prod.yml___prod_step_1_grompp___output_tpr_path: prod.tpr
+wf_step_5_prod.yml___prod_step_2_mdrun___output_gro_path: prod.gro
+wf_step_6_gmx_rms___config: '{"selection": "Backbone"}'
+wf_step_6_gmx_rms___output_xvg_path: rmsd_first.xvg
 wf_step_7_gmx_rms___config: '{"selection": "Backbone"}'
-wf_step_7_gmx_rms___output_xvg_path: rmsd_first.xvg
-wf_step_8_gmx_rms___config: '{"selection": "Backbone"}'
-wf_step_8_gmx_rms___output_xvg_path: rmsd_exp.xvg
-wf_step_9_gmx_rgyr___config: '{"selection": "Backbone"}'
-wf_step_10_gmx_image___config: '{"center_selection":"Protein","output_selection":"Protein","pbc":"mol"}'
-wf_step_11_gmx_trjconv_str___config: '{"selection": "Protein"}'
+wf_step_7_gmx_rms___output_xvg_path: rmsd_exp.xvg
+wf_step_8_gmx_rgyr___config: '{"selection": "Backbone"}'
+wf_step_9_gmx_image___config: '{"center_selection":"Protein","output_selection":"Protein","pbc":"mol"}'
+wf_step_10_gmx_trjconv_str___config: '{"selection": "Protein"}'

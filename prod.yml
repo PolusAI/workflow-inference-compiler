@@ -1,0 +1,8 @@
+steps:
+  - grompp:
+      in:
+        config: '{"mdp": {"integrator":"sd", "rvdw":"1.0", "rcoulomb":"1.0", "coulombtype":"pme", "nsteps":"1000", "dt":0.002, "tc-grps":"system", "ref-t":"300", "tau-t":"2", "constraints":"h-bonds", "nstxout":"1000", "pcoupl":"Berendsen", "tau-p":"1", "ref-p":"1", "compressibility":"4.5e-5"}}'
+        output_tpr_path: '$prod.tpr'  # Explicitly specify filename for future reference.
+  - mdrun:
+      in:
+        output_gro_path: '$prod.gro'  # Explicitly specify filename for future reference.
