@@ -36,9 +36,8 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         with dot.subgraph(name=f'cluster_{key}') as subdot:
             subdot.attr(label=key)
             subworkflow_data = expand_workflow(args, subdot, tools_cwl, False, path)
-        (sub_yaml_tree, sub_inputs_workflow, sub_inputs_file_workflow, sub_vars_workflow_output_internal, sub_is_root, sub_dot) = subworkflow_data
         stem = Path(key).stem
-        tools_yml[stem] = (stem + '.cwl', sub_yaml_tree)
+        tools_yml[stem] = (stem + '.cwl', subworkflow_data[0])
         subworkflows[key] = subworkflow_data
 
     tools_cwl_yml = dict(list(tools_cwl.items()) + list(tools_yml.items()))
@@ -74,9 +73,11 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         # Initialize the above from recursive values.
         if key in subkeys:
             #inputs_workflow.update(subworkflows[key][1]) ?
-            sub_namespaced = dict([(f'{yaml_stem}_step_{i+1}_{key}___{k}', val) for k, val in subworkflows[key][2].items()])
+            sub_namespaced = dict([(f'{yaml_stem}_step_{i+1}_{key}___{k}', val) for k, val in subworkflows[key][2].items()]) # _{key}_input___{k}
             inputs_file_workflow.update(sub_namespaced)
-            vars_workflow_output_internal += subworkflows[key][3]
+            vars_namespaced = dict([(k, f"{yaml_stem}_step_{i+1}_{key}___{val}") for k, val in subworkflows[key][3].items()])
+            vars_input_dollar.update(vars_namespaced)
+            vars_workflow_output_internal += subworkflows[key][4]
         # Add run tag
         if steps[i][key]:
             if not 'run' in steps[i][key]:
@@ -133,18 +134,24 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
             var_name = f'{step_name}/{arg_key}'
             in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later
             if arg_val[0] == '$':
+                arg_val_no_s = arg_val[1:]  # Remove $
                 #print('arg_key, arg_val', arg_key, arg_val)
-                if not vars_input_dollar.get(arg_val[1:]):  # if first time
-                    inputs_workflow.update({in_name: arg_val[1:]})
-                    inputs_file_workflow.update({in_name: arg_val[1:]})
+                if not vars_input_dollar.get(arg_val_no_s):  # if first time
+                    inputs_workflow.update({in_name: arg_val_no_s})
+                    inputs_file_workflow.update({in_name: arg_val_no_s})
                     steps[i][key]['in'][arg_key] = in_name
-                    vars_input_dollar.update({arg_val[1:]: var_name})
+                    vars_input_dollar.update({arg_val_no_s: var_name})
                 else:
-                    steps[i][key]['in'][arg_key] = vars_input_dollar[arg_val[1:]]
+                    var =  vars_input_dollar[arg_val_no_s]
+                    # Move the '/' from right to left
+                    var = var.replace('/', '___').split('___')
+                    var = var[0] + '/' + '___'.join(var[1:])
+                    steps[i][key]['in'][arg_key] = var
+                    # TODO: Check this indexing
                     if args.graph_label_edges:
-                        dot.edge(vars_input_dollar[arg_val[1:]].split('/')[0], step_name, label=vars_input_dollar[arg_val[1:]].split('/')[1])
+                        dot.edge(vars_input_dollar[arg_val_no_s].split('/')[0].split('___')[-1], step_name, label=vars_input_dollar[arg_val_no_s].split('/')[1])
                     else:
-                        dot.edge(vars_input_dollar[arg_val[1:]].split('/')[0], step_name)
+                        dot.edge(vars_input_dollar[arg_val_no_s].split('/')[0].split('___')[-1], step_name)
             else:
                 inputs_workflow.update({in_name: arg_val})
                 inputs_file_workflow.update({in_name: arg_val})
@@ -186,6 +193,7 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                             steps[i] = {key: {'in': arg_keyval}}
 
                         # Determine which head and tail node to use for the new edge
+                        # TODO: Check this indexing
                         edge_node1 = step_name_j
                         if tools[j]['class'] == 'Workflow' and steps_keys[j] in subkeys: # i.e. if we performed recursion in step j
                             if args.graph_show_outputs:
@@ -264,7 +272,7 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     def filetype_predicate(key):
         # TODO: Improve File type detection heuristics
         keys = key.split('___')
-        return 'path' in keys[-1] and (not 'xvg' in keys[-1]) and ('grompp' in keys[0] and not 'tpr' in keys[-1]) and (not 'pdb' in keys[0])
+        return 'path' in keys[-1] and (not 'xvg' in keys[-1]) and ('grompp' in keys[-2] and not 'tpr' in keys[-1]) and (not 'pdb' in keys[-2])
     inputs_workflow_types = dict([(key, 'File' if filetype_predicate(key) else 'string') for key in inputs_workflow])
     yaml_tree.update({'inputs': inputs_workflow_types})
 
@@ -330,7 +338,7 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
     sub.run(cmd)
     
-    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, is_root, dot)
+    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_input_dollar, vars_workflow_output_internal, is_root, dot)
 
 
 def main():

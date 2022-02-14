@@ -1,0 +1,10 @@
+steps:
+  - grompp:
+      in:
+        config: '{"mdp": {"integrator":"steep", "rvdw":"1.4", "rcoulomb":"1.4", "nsteps":"100", "emtol":"500", "nstenergy":"1"}}'
+        output_tpr_path: '$min.tpr'  # Explicitly specify filename for future reference.
+  - mdrun:
+  - gmx_energy:
+      in:
+        config: '{"terms":  ["Potential"]}'
+        output_xvg_path: 'energy_min.xvg'
