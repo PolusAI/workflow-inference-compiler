@@ -72,9 +72,10 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     for i, key in enumerate(steps_keys):
         # Initialize the above from recursive values.
         if key in subkeys:
-            #inputs_workflow.update(subworkflows[key][1]) ?
-            sub_namespaced = dict([(f'{yaml_stem}_step_{i+1}_{key}___{k}', val) for k, val in subworkflows[key][2].items()]) # _{key}_input___{k}
-            inputs_file_workflow.update(sub_namespaced)
+            # Do not initialize inputs_workflow. See comment below.
+            # inputs_workflow.update(subworkflows[key][1])
+            inputs_namespaced = dict([(f'{yaml_stem}_step_{i+1}_{key}___{k}', val) for k, val in subworkflows[key][2].items()])
+            inputs_file_workflow.update(inputs_namespaced)
             vars_namespaced = dict([(k, f"{yaml_stem}_step_{i+1}_{key}___{val}") for k, val in subworkflows[key][3].items()])
             vars_input_dollar.update(vars_namespaced)
             vars_workflow_output_internal += subworkflows[key][4]
@@ -93,7 +94,6 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         # current step and previous steps, respectively, and then check again.
         # If there still isn't an exact match, explicit renaming may be required.
 
-        # TODO: Handle recursive case, i.e. spurious 'Error! No match found for input' messages below.
         args_provided = []
         if steps[i][key] and 'in' in steps[i][key]:
             args_provided = list(steps[i][key]['in'])
@@ -121,7 +121,7 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         # files accordingly.)
         #print(args_required)
         
-        step_name = f'{yaml_stem}_step_{i + 1}_{steps_keys[i]}'
+        step_name = f'{yaml_stem}_step_{i + 1}_{steps_keys[i]}' # steps_keys[i] = key
         if not tools[i]['class'] == 'Workflow':
             dot.node(step_name, shape='box', style='rounded, filled', fillcolor='lightblue')
         elif not (steps_keys[i] in subkeys and args.graph_inline_subgraphs):
@@ -133,28 +133,31 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
             arg_val = steps[i][key]['in'][arg_key]
             var_name = f'{step_name}/{arg_key}'
             in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later
+            in_type = in_tool[arg_key]['type'].replace('?', '')  # Providing optional arguments makes them required
             if arg_val[0] == '$':
-                arg_val_no_s = arg_val[1:]  # Remove $
+                arg_val = arg_val[1:]  # Remove $
                 #print('arg_key, arg_val', arg_key, arg_val)
-                if not vars_input_dollar.get(arg_val_no_s):  # if first time
-                    inputs_workflow.update({in_name: arg_val_no_s})
-                    inputs_file_workflow.update({in_name: arg_val_no_s})
+                if not vars_input_dollar.get(arg_val):  # if first time
+                    # TODO: Add edam format info, etc.
+                    inputs_workflow.update({in_name: {'type': in_type}})
+                    inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
                     steps[i][key]['in'][arg_key] = in_name
-                    vars_input_dollar.update({arg_val_no_s: var_name})
+                    vars_input_dollar.update({arg_val: var_name})
                 else:
-                    var =  vars_input_dollar[arg_val_no_s]
+                    var =  vars_input_dollar[arg_val]
                     # Move the '/' from right to left
                     var = var.replace('/', '___').split('___')
                     var = var[0] + '/' + '___'.join(var[1:])
                     steps[i][key]['in'][arg_key] = var
                     # TODO: Check this indexing
                     if args.graph_label_edges:
-                        dot.edge(vars_input_dollar[arg_val_no_s].split('/')[0].split('___')[-1], step_name, label=vars_input_dollar[arg_val_no_s].split('/')[1])
+                        dot.edge(vars_input_dollar[arg_val].split('/')[0].split('___')[-1], step_name, label=vars_input_dollar[arg_val].split('/')[1])
                     else:
-                        dot.edge(vars_input_dollar[arg_val_no_s].split('/')[0].split('___')[-1], step_name)
+                        dot.edge(vars_input_dollar[arg_val].split('/')[0].split('___')[-1], step_name)
             else:
-                inputs_workflow.update({in_name: arg_val})
-                inputs_file_workflow.update({in_name: arg_val})
+                # TODO: Add edam format info, etc.
+                inputs_workflow.update({in_name: {'type': in_type}})
+                inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
                 steps[i][key]['in'][arg_key] = in_name
                 if args.graph_show_inputs:
                     dot.node(var_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
@@ -165,7 +168,7 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
             if arg_key in args_provided:
                 continue  # We already convered this case above.
             match = False
-            # TODO: Figure out something better than replace
+            # TODO: Figure out something better than replace. Use type and/or edam format info? Yes.
             arg_key_no_namespace = arg_key.split('___')[-1]
             arg_key_noinput = arg_key_no_namespace.replace('input_', '').replace('solute_', '').replace('energy_', 'edr_').replace('structure_', 'tpr_').replace('traj_', 'trr_')
             # gmx_trjconv_str assumes gro, but other tools assume tpr; For now,
@@ -229,15 +232,30 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                 if match:
                     break
             if not match:
+                in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later
                 # This just means we need to defer to the parent workflow.
-                # There will actually be an error only if no parent supplies an input value.
-                if is_root:
+                # There will actually be an error only if no parent supplies an
+                # input value and thus there is no entry in inputs_file_workflow.
+                if is_root and not in_name in inputs_file_workflow:
                     print('Error! No match found for input', i + 1, key, arg_key)
 
-                in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later
+                # Add an input name to this subworkflow (only). Do not add to
+                # inputs_file_workflow because this may be an internal input,
+                # i.e. it may simply be split across subworkflow boundaries and
+                # the input may be supplied in one of the parent workflows.
+                # We also do not (necessarily) need to explicitly pass this list
+                # to the parent workflow since we are expanding the 'in' tag here,
+                # which should match in the parent workflow.
+                in_arg = in_tool[arg_key]
+                # TODO: check this
+                if isinstance(in_arg, str):
+                    in_type = in_arg
+                else:
+                    in_type = in_arg['type']
+                in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
+                inputs_workflow.update({in_name: {'type': in_type}})
+
                 arg_keyval = {arg_key: in_name}
-                # Add an input name to this subworkflow. Add a namespace prefix in the parent workflow.
-                inputs_workflow.update({in_name: arg_key})
                 if steps[i][key]:
                     if 'in' in steps[i][key]:
                         new_keys = dict(list(steps[i][key]['in'].items()) + list(arg_keyval.items()))
@@ -269,12 +287,15 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         #print()
 
     # Add the provided inputs of each step to the workflow inputs
-    def filetype_predicate(key):
-        # TODO: Improve File type detection heuristics
-        keys = key.split('___')
-        return 'path' in keys[-1] and (not 'xvg' in keys[-1]) and ('grompp' in keys[-2] and not 'tpr' in keys[-1]) and (not 'pdb' in keys[-2])
-    inputs_workflow_types = dict([(key, 'File' if filetype_predicate(key) else 'string') for key in inputs_workflow])
-    yaml_tree.update({'inputs': inputs_workflow_types})
+    temp = {}
+    for k, v in inputs_workflow.items():
+        # TODO: Remove this heuristic after we add the format info above.
+        new_keyval = {k: v['type']}
+        if 'mdin' in k and 'File' in v['type']:
+            newval = dict(list(v.items()) + list({'format': 'https://edamontology.org/format_2330'}.items()))
+            new_keyval = {k: newval}
+        temp.update(new_keyval)
+    yaml_tree.update({'inputs': temp})
 
     # Add the outputs of each step to the workflow outputs
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
@@ -317,11 +338,15 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     yaml_tree.update({'steps': steps_dict})
     
     # Dump the workflow inputs to a separate yml file.
-    for key, val in inputs_file_workflow.items():
-        if filetype_predicate(key):
-            inputs_file_workflow.update({key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2033'}})
+    temp = {}
+    for key, (val, in_type) in inputs_file_workflow.items():
+        new_keyval = {key: val}  # if string
+        if 'File' in in_type:
+            new_keyval = {key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2330'}}
+        temp.update(new_keyval)
+            
     dump_options = {'line_break': '\n', 'indent': 2}
-    yaml_content = yaml.dump(inputs_file_workflow, sort_keys=False, **dump_options)
+    yaml_content = yaml.dump(temp, sort_keys=False, **dump_options)
     with open(f'{yaml_stem}_inputs.yml', 'w') as inp:
         inp.write(yaml_content)
 
@@ -333,11 +358,15 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         w.write('#!/usr/bin/env cwl-runner\n')
         w.write(''.join(yaml_content))
     
-    print('Finished expanding. Validating...')
+    print(f'Finished expanding {yaml_path}')
     
-    cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
-    sub.run(cmd)
+    if args.cwl_validate:
+        print(f'Validating {yaml_stem}.cwl ...')
+        cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
+        sub.run(cmd)
     
+    # Note: We do not necessarily need to return inputs_workflow.
+    # 'Internal' inputs are encoded in yaml_tree. See Comment above.
     return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_input_dollar, vars_workflow_output_internal, is_root, dot)
 
 
@@ -345,10 +374,14 @@ def main():
     parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
     parser.add_argument('--yaml', type=str, required=True,
                         help='Yaml workflow file')
-    parser.add_argument('--clt_dir', type=str, required=False, default='biobb',
-                        help='Directory which contains the CWL CommandLineTools')
+    parser.add_argument('--cwl_dir', type=str, required=False, default='biobb',
+                        help='Directory which contains the CWL CommandLineTools and/or Workflows')
     parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=False,
                         help='Enable output files which are used between steps (for debugging).')
+    parser.add_argument('--cwl_run', type=bool, required=False, default=False,
+                        help='After generating the cwl file, run it.')
+    parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
+                        help='After generating the cwl file, validate it.')
     parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
                         help='Label the graph edges with the name of the intermediate input/output.')
     parser.add_argument('--graph_show_inputs', type=bool, required=False, default=False,
@@ -361,7 +394,7 @@ def main():
 
     # Load ALL of the tools.
     tools_cwl = {}
-    pattern_cwl = str(Path(args.clt_dir) / '**/*.cwl')
+    pattern_cwl = str(Path(args.cwl_dir) / '**/*.cwl')
     #print(pattern_cwl)
     # Note that there is a current and a legacy copy of each cwl file for each tool.
     # The only difference appears to be that some legacy parameters are named 
@@ -395,6 +428,12 @@ def main():
     # Render the GraphViz diagram
     rootdot.render()
     #rootdot.view() # viewing does not work on headless machines (and requires xdg-utils)
+    
+    if args.cwl_run:
+        yaml_stem = Path(args.yaml).stem
+        print(f'Running {yaml_stem}.cwl ...')
+        cmd = ['cwltool', '--cachedir', 'cache', f'{yaml_stem}.cwl', f'{yaml_stem}_inputs.yml']
+        sub.run(cmd)
 
 
 if __name__ == '__main__':
