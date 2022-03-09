@@ -1,0 +1,25 @@
+&cntrl
+  imin = 0
+  ntx = 5
+  cut = 16.0
+  ntr = 0
+  ntc = 2
+  ntf = 2
+  ntt = 3
+  ig = -1
+  ioutfm = 1
+  iwrap = 1
+  ; Limit to 10 timesteps because amber is not gpu accelerated.
+  nstlim = 10
+  ; sander_mdrun.cwl expects all output files to exist, so set the nt params to nstlim.
+  ntpr = 10
+  ntwx = 10
+  ntwr = 10
+  ; Use a very small timestep (for now) because the system is very unstable.
+  dt = 0.0001
+  irest = 1
+  gamma_ln = 5.0
+  pres0 = 1.0
+  ntp = 1
+  taup = 2.0
+&end
