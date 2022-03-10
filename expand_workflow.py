@@ -9,7 +9,7 @@ import graphviz
 import yaml
 
 
-def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
+def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
     # Load the high-level yaml workflow file.
     yaml_stem = Path(yaml_path).stem
     with open(Path(yaml_path), 'r') as y:
@@ -27,18 +27,31 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     subkeys = [key for key in steps_keys if key not in tools_cwl]
     tools_yml = {}
     subworkflows = {}
-    for key in subkeys:
+    node_1_names = []
+    subdots = []
+    subkeys_enum = [(i, key) for i, key in enumerate(steps_keys) if key not in tools_cwl]
+    for i, key in subkeys_enum:
         path = Path(key)
         if not (path.exists() and path.suffix == '.yml'):
             # TODO: Once we have defined a yml DSL schema,
             # check that the file contents actually satisfies the schema.
             raise Exception(f'Error! {path} does not exists or is not a .yml file.')
-        with dot.subgraph(name=f'cluster_{key}') as subdot:
-            subdot.attr(label=key)
-            subworkflow_data = expand_workflow(args, subdot, tools_cwl, False, path)
+        subdot = graphviz.Digraph(name=f'cluster_{key}')
+        subdot.attr(label=key)
+        subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{key}'], subdot, tools_cwl, False, path)
+        subdots.append(subworkflow_data[-1])
+        node_1_names.append(subworkflow_data[-2])
         stem = Path(key).stem
         tools_yml[stem] = (stem + '.cwl', subworkflow_data[0])
         subworkflows[key] = subworkflow_data
+    # Add the cluster subgraphs to the main graph, but we need to add them in
+    # reverse order to trick the graphviz layout algorithm.
+    for subdot in subdots[::-1]: # Reverse!
+        dot.subgraph(subdot)
+    # Align the cluster subgraphs using the same rank as the first node of each subgraph.
+    if not node_1_names == []:
+        nodes_same_rank = '\t{rank=same; ' + '; '.join(node_1_names) + '}\n'
+        dot.body.append(nodes_same_rank)
 
     tools_cwl_yml = dict(list(tools_cwl.items()) + list(tools_yml.items()))
     # Restrict to the subset of tools that we are actually using.
@@ -122,10 +135,13 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
         #print(args_required)
         
         step_name = f'{yaml_stem}_step_{i + 1}_{steps_keys[i]}' # steps_keys[i] = key
+        label = key
+        if args.graph_label_stepname:
+            label = step_name
         if not tools[i]['class'] == 'Workflow':
-            dot.node(step_name, shape='box', style='rounded, filled', fillcolor='lightblue')
+            dot.node(step_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
         elif not (steps_keys[i] in subkeys and args.graph_inline_subgraphs):
-            dot.node(step_name, shape='box', style='rounded, filled', fillcolor='lightblue')
+            dot.node(step_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
         
         for arg_key in args_provided:
             # Extract input value into separate yml file
@@ -150,10 +166,14 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                     var = var[0] + '/' + '___'.join(var[1:])
                     steps[i][key]['in'][arg_key] = var
                     # TODO: Check this indexing
+                    var_split = vars_input_dollar[arg_val].split('/')
+                    edge_node1 = var_split[0].split('___')[-1]
+                    edge_node2 = step_name
+
                     if args.graph_label_edges:
-                        dot.edge(vars_input_dollar[arg_val].split('/')[0].split('___')[-1], step_name, label=vars_input_dollar[arg_val].split('/')[1])
+                        dot.edge(edge_node1, edge_node2, label=var_split[1])
                     else:
-                        dot.edge(vars_input_dollar[arg_val].split('/')[0].split('___')[-1], step_name)
+                        dot.edge(edge_node1, edge_node2)
             else:
                 # TODO: Add edam format info, etc.
                 inputs_workflow.update({in_name: {'type': in_type}})
@@ -199,17 +219,11 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
                         # TODO: Check this indexing
                         edge_node1 = step_name_j
                         if tools[j]['class'] == 'Workflow' and steps_keys[j] in subkeys: # i.e. if we performed recursion in step j
-                            if args.graph_show_outputs:
-                                if args.graph_inline_subgraphs:
-                                    edge_node1 = out_key.split('___')[0]
-                            else:
+                            if args.graph_inline_subgraphs:
                                 edge_node1 = out_key.split('___')[0]
                         edge_node2 = step_name
                         if tools[i]['class'] == 'Workflow' and steps_keys[i] in subkeys: # i.e. if we performed recursion in step i
-                            if args.graph_show_outputs:
-                                if args.graph_inline_subgraphs:
-                                    edge_node2 = arg_key.split('___')[0]
-                            else:
+                            if args.graph_inline_subgraphs:
                                 edge_node2 = arg_key.split('___')[0]
 
                         # We also need to keep track of the 'internal' output variables
@@ -313,6 +327,8 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
             out_key_no_namespace = out_key.split('___')[-1]
             if args.graph_show_outputs:
                 case1 = (tools[i]['class'] == 'Workflow') and (not out_key in [var.replace('/', '___') for var in vars_workflow_output_internal])
+                # Avoid duplicating outputs from subgraphs in the main graph.
+                case1 = case1 and not args.graph_inline_subgraphs and not is_root
                 case2 = (tools[i]['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
                 if case1 or case2:
                     dot.node(out_name, label=out_key, shape='box', style='rounded, filled', fillcolor='lightyellow')
@@ -367,7 +383,8 @@ def expand_workflow(args, dot, tools_cwl, is_root, yaml_path):
     
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_input_dollar, vars_workflow_output_internal, is_root, dot)
+    node_1_name = f'{yaml_stem}_step_1_{steps_keys[0]}'  # Solely for graphviz layout purposes.
+    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_input_dollar, vars_workflow_output_internal, is_root, node_1_name, dot)
 
 
 def main():
@@ -384,6 +401,8 @@ def main():
                         help='After generating the cwl file, validate it.')
     parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
                         help='Label the graph edges with the name of the intermediate input/output.')
+    parser.add_argument('--graph_label_stepname', type=bool, required=False, default=False,
+                        help='Prepend the step name to each step node.')
     parser.add_argument('--graph_show_inputs', type=bool, required=False, default=False,
                         help='Add nodes to the graph representing the workflow inputs.')
     parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
@@ -421,10 +440,10 @@ def main():
             #print(se)
 
     rootdot = graphviz.Digraph(name=args.yaml)
+    rootdot.attr(newrank='True') # See graphviz layout comment above.
     with rootdot.subgraph(name=f'cluster_{args.yaml}') as subdot:
         subdot.attr(label=args.yaml)
-        #subdot.attr(rankdir='LR')
-        workflow_data = expand_workflow(args, subdot, tools_cwl, True, args.yaml)
+        workflow_data = expand_workflow(args, [], subdot, tools_cwl, True, args.yaml)
     # Render the GraphViz diagram
     rootdot.render()
     #rootdot.view() # viewing does not work on headless machines (and requires xdg-utils)
@@ -432,7 +451,7 @@ def main():
     if args.cwl_run:
         yaml_stem = Path(args.yaml).stem
         print(f'Running {yaml_stem}.cwl ...')
-        cmd = ['cwltool', '--cachedir', 'cache', f'{yaml_stem}.cwl', f'{yaml_stem}_inputs.yml']
+        cmd = ['cwltool', '--cachedir', 'cachedir','--outdir', 'outdir', f'{yaml_stem}.cwl', f'{yaml_stem}_inputs.yml']
         sub.run(cmd)
 
 
