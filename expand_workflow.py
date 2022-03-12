@@ -9,7 +9,7 @@ import graphviz
 import yaml
 
 
-def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
+def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, yaml_path):
     # Load the high-level yaml workflow file.
     yaml_stem = Path(yaml_path).stem
     with open(Path(yaml_path), 'r') as y:
@@ -22,47 +22,15 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
     for step in steps:
         steps_keys += list(step)
     #print(steps_keys)
-    
-    # Recursively expand subworkflows, if any.
-    subkeys = [key for key in steps_keys if key not in tools_cwl]
-    tools_yml = {}
-    subworkflows = {}
-    node_1_names = []
-    subdots = []
-    subkeys_enum = [(i, key) for i, key in enumerate(steps_keys) if key not in tools_cwl]
-    for i, key in subkeys_enum:
-        path = Path(key)
-        if not (path.exists() and path.suffix == '.yml'):
-            # TODO: Once we have defined a yml DSL schema,
-            # check that the file contents actually satisfies the schema.
-            raise Exception(f'Error! {path} does not exists or is not a .yml file.')
-        subdot = graphviz.Digraph(name=f'cluster_{key}')
-        subdot.attr(label=key)
-        subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{key}'], subdot, tools_cwl, False, path)
-        subdots.append(subworkflow_data[-1])
-        node_1_names.append(subworkflow_data[-2])
-        stem = Path(key).stem
-        tools_yml[stem] = (stem + '.cwl', subworkflow_data[0])
-        subworkflows[key] = subworkflow_data
-    # Add the cluster subgraphs to the main graph, but we need to add them in
-    # reverse order to trick the graphviz layout algorithm.
-    for subdot in subdots[::-1]: # Reverse!
-        dot.subgraph(subdot)
-    # Align the cluster subgraphs using the same rank as the first node of each subgraph.
-    if not node_1_names == []:
-        nodes_same_rank = '\t{rank=same; ' + '; '.join(node_1_names) + '}\n'
-        dot.body.append(nodes_same_rank)
 
-    tools_cwl_yml = dict(list(tools_cwl.items()) + list(tools_yml.items()))
-    # Restrict to the subset of tools that we are actually using.
-    run_paths = [tools_cwl_yml[Path(key).stem][0] for key in steps_keys]
-    tools = [tools_cwl_yml[Path(key).stem][1] for key in steps_keys]
+    subkeys = [key for key in steps_keys if key not in tools]
 
     # Add headers
     yaml_tree['cwlVersion'] = 'v1.0'
     yaml_tree['class'] = 'Workflow'
+
     # If there is at least one subworkflow, add a SubworkflowFeatureRequirement
-    if any([tool['class'] == 'Workflow' for tool in tools]):
+    if (not subkeys == []) or any([tools[Path(key).stem][1]['class'] == 'Workflow' for key in steps_keys if key not in subkeys]):
         subworkreq = 'SubworkflowFeatureRequirement'
         subworkreqdict = {subworkreq: {'class': subworkreq}}
         if 'requirements' in yaml_tree:
@@ -75,29 +43,52 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
     # Collect workflow input parameters
     inputs_workflow = {}
     inputs_file_workflow = {}
-
-    # Collect the explicit $ internal workflow input variables
-    vars_input_dollar = {}
     
     # Collect the internal workflow output variables
     vars_workflow_output_internal = []
 
+    # Collect recursive dollar variable dependency mappings
+    vars_dollar_tails = {}
+
+    # Collect recursive subworkflow data
+    node_1_names = []
+    subdots = []
+
     for i, key in enumerate(steps_keys):
-        # Initialize the above from recursive values.
+        stem = Path(key).stem
+        # Recursively expand subworkflows, adding expanded cwl file contents to tools
         if key in subkeys:
+            path = Path(key)
+            if not (path.exists() and path.suffix == '.yml'):
+                # TODO: Once we have defined a yml DSL schema,
+                # check that the file contents actually satisfies the schema.
+                raise Exception(f'Error! {path} does not exists or is not a .yml file.')
+            subdot = graphviz.Digraph(name=f'cluster_{key}')
+            subdot.attr(label=key)
+            subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{key}'], subdot, vars_dollar_input, tools, False, path)
+            subdots.append(subworkflow_data[-1])
+            node_1_names.append(subworkflow_data[-2])
+            # Add expanded cwl file contents to tools
+            tools[stem] = (stem + '.cwl', subworkflow_data[0])
+
+            # Initialize the above from recursive values.
             # Do not initialize inputs_workflow. See comment below.
-            # inputs_workflow.update(subworkflows[key][1])
-            inputs_namespaced = dict([(f'{yaml_stem}_step_{i+1}_{key}___{k}', val) for k, val in subworkflows[key][2].items()])
+            # inputs_workflow.update(subworkflow_data[1])
+            inputs_namespaced = dict([(f'{yaml_stem}_step_{i+1}_{key}___{k}', val) for k, val in subworkflow_data[2].items()]) # _{key}_input___{k}
             inputs_file_workflow.update(inputs_namespaced)
-            vars_namespaced = dict([(k, f"{yaml_stem}_step_{i+1}_{key}___{val}") for k, val in subworkflows[key][3].items()])
-            vars_input_dollar.update(vars_namespaced)
-            vars_workflow_output_internal += subworkflows[key][4]
+            vars_dollar_input.update(subworkflow_data[3])
+            vars_dollar_tails.update(subworkflow_data[4])
+            vars_workflow_output_internal += subworkflow_data[5]
+
+        tool_i = tools[stem][1]
+
         # Add run tag
+        run_path = tools[stem][0]
         if steps[i][key]:
             if not 'run' in steps[i][key]:
-                steps[i][key].update({'run': run_paths[i]})
+                steps[i][key].update({'run': run_path})
         else:
-            steps[i] = {key: {'run': run_paths[i]}}
+            steps[i] = {key: {'run': run_path}}
 
         # Generate intermediate file names between steps.
         # The inputs for a given step need to come from either
@@ -112,11 +103,11 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
             args_provided = list(steps[i][key]['in'])
         #print(args_provided)
 
-        in_tool = tools[i]['inputs']
+        in_tool = tool_i['inputs']
         #print(list(in_tool.keys()))
-        if tools[i]['class'] == 'CommandLineTool':
+        if tool_i['class'] == 'CommandLineTool':
             args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or in_tool[arg]['type'][-1] == '?')]
-        elif tools[i]['class'] == 'Workflow':
+        elif tool_i['class'] == 'Workflow':
             args_required = [arg for arg in in_tool]
             
             # Add the inputs. For now, assume that all sub-workflows have been
@@ -125,7 +116,7 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
             # (i.e. simply combine the input yml files using the cat command.)
             steps[i][key]['in'] = dict([(key, key) for key in args_required])
         else:
-            raise Exception(f'Unknown class', tools[i]['class'])
+            raise Exception(f'Unknown class', tool_i['class'])
         
         # Note: Some config tags are not required in the cwl files, but are in
         # fact required in the python source code! See check_mandatory_property
@@ -133,120 +124,129 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
         # them as explicit inputs in the cwl files, then modify the python
         # files accordingly.)
         #print(args_required)
-        
+
+        sub_args_provided = [arg for arg in args_required if arg in vars_dollar_tails]
+        #print(sub_args_provided)
+
         step_name = f'{yaml_stem}_step_{i + 1}_{steps_keys[i]}' # steps_keys[i] = key
         label = key
         if args.graph_label_stepname:
             label = step_name
-        if not tools[i]['class'] == 'Workflow':
+        if not tool_i['class'] == 'Workflow':
             dot.node(step_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
         elif not (steps_keys[i] in subkeys and args.graph_inline_subgraphs):
             dot.node(step_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
-        
+
+        # NOTE: sub_args_provided are handled within the args_required loop below
         for arg_key in args_provided:
             # Extract input value into separate yml file
             # Replace it here with a new variable name
             arg_val = steps[i][key]['in'][arg_key]
-            var_name = f'{step_name}/{arg_key}'
-            in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later
+            in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later # {step_name}_input___{arg_key}
             in_type = in_tool[arg_key]['type'].replace('?', '')  # Providing optional arguments makes them required
             if arg_val[0] == '$':
                 arg_val = arg_val[1:]  # Remove $
                 #print('arg_key, arg_val', arg_key, arg_val)
-                if not vars_input_dollar.get(arg_val):  # if first time
+                if not vars_dollar_input.get(arg_val):  # if first time
                     # TODO: Add edam format info, etc.
                     inputs_workflow.update({in_name: {'type': in_type}})
                     inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
                     steps[i][key]['in'][arg_key] = in_name
-                    vars_input_dollar.update({arg_val: var_name})
+                    vars_dollar_input.update({arg_val: (namespaces + [step_name], arg_key)})
                 else:
-                    var =  vars_input_dollar[arg_val]
-                    # Move the '/' from right to left
-                    var = var.replace('/', '___').split('___')
-                    var = var[0] + '/' + '___'.join(var[1:])
-                    steps[i][key]['in'][arg_key] = var
-                    # TODO: Check this indexing
-                    var_split = vars_input_dollar[arg_val].split('/')
-                    edge_node1 = var_split[0].split('___')[-1]
-                    edge_node2 = step_name
-
-                    if args.graph_label_edges:
-                        dot.edge(edge_node1, edge_node2, label=var_split[1])
+                    (nss, var) =  vars_dollar_input[arg_val]
+                    # if recursive, add to inputs_workflow
+                    if not namespaces == []:
+                        inputs_workflow.update({in_name: {'type': in_type}})
+                        steps[i][key]['in'][arg_key] = in_name
+                        # Pass var_dollar call site info up through the recursion.
+                        vars_dollar_tails.update({in_name: vars_dollar_input[arg_val]}) # {in_name, (namespaces + [step_name], var)} ?
                     else:
-                        dot.edge(edge_node1, edge_node2)
+                        var = nss[0] + '/' + '___'.join(nss[1:] + [var])
+                        steps[i][key]['in'][arg_key] = var
+                    # NOTE: Do NOT add edges here! (i.e. within the subgraph)
+                    # If you add an edge whose head/tail is outside of the subgraph,
+                    # graphviz will segfault! Add the edges in the parent graph below.
             else:
                 # TODO: Add edam format info, etc.
                 inputs_workflow.update({in_name: {'type': in_type}})
                 inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
                 steps[i][key]['in'][arg_key] = in_name
                 if args.graph_show_inputs:
+                    var_name = f'{step_name}/{arg_key}'
                     dot.node(var_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
                     dot.edge(var_name, step_name)
         
         for arg_key in args_required:
             #print('arg_key', arg_key)
             if arg_key in args_provided:
-                continue  # We already convered this case above.
+                continue  # We already covered this case above.
             match = False
-            # TODO: Figure out something better than replace. Use type and/or edam format info? Yes.
-            arg_key_no_namespace = arg_key.split('___')[-1]
-            arg_key_noinput = arg_key_no_namespace.replace('input_', '').replace('solute_', '').replace('energy_', 'edr_').replace('structure_', 'tpr_').replace('traj_', 'trr_')
-            # gmx_trjconv_str assumes gro, but other tools assume tpr; For now,
-            # instead of figuring out how to replace('structure_', 'gro_') for
-            # gmx_trjconv_str only, just require the user to specify filename.
-            for j in range(0, i)[::-1]:  # Reverse order!
-                out_keys = list(tools[j]['outputs'])[::-1] # Reverse order!
-                for out_key in out_keys:
-                    out_key_no_namespace = out_key.split('___')[-1]
-                    if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
-                        #print('match!', j)  # We found a match!
-                        # Generate a new namespace for out_key using the step number and add to inputs
-                        step_name_j = f'{yaml_stem}_step_{j + 1}_{steps_keys[j]}'
-                        arg_val = f'{step_name_j}/{out_key}'
-                        arg_keyval = {arg_key: arg_val}
-                        if steps[i][key]:
-                            if 'in' in steps[i][key]:
-                                new_keys = dict(list(steps[i][key]['in'].items()) + list(arg_keyval.items()))
-                                new_keyvals = [(k, v) if k != 'in' else (k, new_keys) for k, v in steps[i][key].items()]
-                            else:
-                                new_keys = arg_keyval
-                                new_keyvals = dict(list(steps[i][key].items()) + [('in', new_keys)])
-                            steps[i][key].update(new_keyvals)
-                        else:
-                            steps[i] = {key: {'in': arg_keyval}}
+            if arg_key in sub_args_provided: # Edges have been explicitly provided
+                match = True
+                (nss, var) = vars_dollar_tails[arg_key]
+                var_slash = nss[0] + '/' + '___'.join(nss[1:] + [var])
+                arg_keyval = {arg_key: var_slash}
 
-                        # Determine which head and tail node to use for the new edge
-                        # TODO: Check this indexing
-                        edge_node1 = step_name_j
-                        if tools[j]['class'] == 'Workflow' and steps_keys[j] in subkeys: # i.e. if we performed recursion in step j
-                            if args.graph_inline_subgraphs:
-                                edge_node1 = out_key.split('___')[0]
-                        edge_node2 = step_name
-                        if tools[i]['class'] == 'Workflow' and steps_keys[i] in subkeys: # i.e. if we performed recursion in step i
-                            if args.graph_inline_subgraphs:
-                                edge_node2 = arg_key.split('___')[0]
+                # NOTE: Add edges to subgraphs here (i.e. in the parent graph).
+                # Otherwise, graphviz will segfault! See comment above.
+                edge_node1 = nss[-1]
+                edge_node2 = arg_key.split('___')[0]
+                label = nss[0]
 
-                        # We also need to keep track of the 'internal' output variables
-                        if tools[j]['class'] == 'Workflow':
-                            vars_workflow_output_internal.append(out_key)
-                        else:
-                            vars_workflow_output_internal.append(arg_val)
-                        
-                        # Add an edge between two steps in the graph
-                        if args.graph_label_edges:
-                            if tools[j]['class'] == 'Workflow':
-                                dot.edge(edge_node1, edge_node2, label=out_key_no_namespace)
+                # TODO: vars_workflow_output_internal?
+            else: # We need to infer the edges
+                # TODO: Figure out something better than replace. Use type and/or edam format info? Yes.
+                arg_key_no_namespace = arg_key.split('___')[-1]
+                arg_key_noinput = arg_key_no_namespace.replace('input_', '').replace('solute_', '').replace('energy_', 'edr_').replace('structure_', 'tpr_').replace('traj_', 'trr_')
+                # gmx_trjconv_str assumes gro, but other tools assume tpr; For now,
+                # instead of figuring out how to replace('structure_', 'gro_') for
+                # gmx_trjconv_str only, just require the user to specify filename.
+                for j in range(0, i)[::-1]:  # Reverse order!
+                    tool_j = tools[Path(steps_keys[j]).stem][1]
+                    out_keys = list(tool_j['outputs'])[::-1] # Reverse order!
+                    for out_key in out_keys:
+                        out_key_no_namespace = out_key.split('___')[-1]
+                        if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
+                            #print('match!', j)  # We found a match!
+                            # Generate a new namespace for out_key using the step number and add to inputs
+                            step_name_j = f'{yaml_stem}_step_{j + 1}_{steps_keys[j]}'
+                            arg_val = f'{step_name_j}/{out_key}'
+                            arg_keyval = {arg_key: arg_val}
+
+                            # Determine which head and tail node to use for the new edge
+                            # TODO: Check this indexing
+                            edge_node1 = step_name_j
+                            if tool_j['class'] == 'Workflow' and steps_keys[j] in subkeys: # i.e. if we performed recursion in step j
+                                if args.graph_inline_subgraphs:
+                                    edge_node1 = out_key.split('___')[0]
+                            edge_node2 = step_name
+                            if tool_i['class'] == 'Workflow' and steps_keys[i] in subkeys: # i.e. if we performed recursion in step i
+                                if args.graph_inline_subgraphs:
+                                    edge_node2 = arg_key.split('___')[0]
+
+                            # We also need to keep track of the 'internal' output variables
+                            if tool_j['class'] == 'Workflow':
+                                vars_workflow_output_internal.append(out_key)
                             else:
-                                dot.edge(edge_node1, edge_node2, label=out_key)
-                        else:
-                            dot.edge(edge_node1, edge_node2)
-                # Break out two levels, i.e. continue onto the next iteration of the outermost loop.
-                        match = True
+                                vars_workflow_output_internal.append(arg_val)
+
+                            label = out_key_no_namespace if tool_j['class'] == 'Workflow' else out_key
+                    # Break out two levels, i.e. continue onto the next iteration of the outermost loop.
+                            match = True
+                            break
+                    if match:
                         break
-                if match:
-                    break
+
+            if match:
+                if args.graph_label_edges:
+                    dot.edge(edge_node1, edge_node2, label=label)
+                else:
+                    dot.edge(edge_node1, edge_node2)
+
             if not match:
-                in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later
+                in_name = f'{step_name}___{arg_key}'  # Use triple underscore for namespacing so we can split later # {step_name}_input___{arg_key}
+                arg_keyval = {arg_key: in_name}
                 # This just means we need to defer to the parent workflow.
                 # There will actually be an error only if no parent supplies an
                 # input value and thus there is no entry in inputs_file_workflow.
@@ -262,30 +262,27 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
                 # which should match in the parent workflow.
                 in_arg = in_tool[arg_key]
                 # TODO: check this
-                if isinstance(in_arg, str):
-                    in_type = in_arg
-                else:
-                    in_type = in_arg['type']
+                in_type = in_arg if isinstance(in_arg, str) else in_arg['type']
                 in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
                 inputs_workflow.update({in_name: {'type': in_type}})
 
-                arg_keyval = {arg_key: in_name}
-                if steps[i][key]:
-                    if 'in' in steps[i][key]:
-                        new_keys = dict(list(steps[i][key]['in'].items()) + list(arg_keyval.items()))
-                        new_keyvals = [(k, v) if k != 'in' else (k, new_keys) for k, v in steps[i][key].items()]
-                    else:
-                        new_keys = arg_keyval
-                        new_keyvals = dict(list(steps[i][key].items()) + [('in', new_keys)])
-                    steps[i][key].update(new_keyvals)
+            # Finally, add the inputs (for all cases).
+            if steps[i][key]:
+                if 'in' in steps[i][key]:
+                    new_keys = dict(list(steps[i][key]['in'].items()) + list(arg_keyval.items()))
+                    new_keyvals = [(k, v) if k != 'in' else (k, new_keys) for k, v in steps[i][key].items()]
                 else:
-                    steps[i] = {key: {'in': arg_keyval}}
+                    new_keys = arg_keyval
+                    new_keyvals = dict(list(steps[i][key].items()) + [('in', new_keys)])
+                steps[i][key].update(new_keyvals)
+            else:
+                steps[i] = {key: {'in': arg_keyval}}
                 
         
         # Add CommandLineTool outputs tags to workflow out tags.
         # Note: Add all output tags for now, but depending on config options,
         # not all output files will be generated. This may cause an error.
-        out_keys = list(tools[i]['outputs'])
+        out_keys = list(tool_i['outputs'])
         #print('out_keys', out_keys)
         if steps[i][key]:
             if 'out' in steps[i][key]:
@@ -299,6 +296,16 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
             steps[i] = {key: {'out': out_keys}}
 
         #print()
+
+    # Add the cluster subgraphs to the main graph, but we need to add them in
+    # reverse order to trick the graphviz layout algorithm.
+    for subdot in subdots[::-1]: # Reverse!
+        dot.subgraph(subdot)
+    # Align the cluster subgraphs using the same rank as the first node of each subgraph.
+    # See https://stackoverflow.com/questions/6824431/placing-clusters-on-the-same-rank-in-graphviz
+    if not node_1_names == []:
+        nodes_same_rank = '\t{rank=same; ' + '; '.join(node_1_names) + '}\n'
+        dot.body.append(nodes_same_rank)
 
     # Add the provided inputs of each step to the workflow inputs
     temp = {}
@@ -326,10 +333,10 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
             # Avoid duplicating intermediate outputs in GraphViz
             out_key_no_namespace = out_key.split('___')[-1]
             if args.graph_show_outputs:
-                case1 = (tools[i]['class'] == 'Workflow') and (not out_key in [var.replace('/', '___') for var in vars_workflow_output_internal])
+                case1 = (tool_i['class'] == 'Workflow') and (not out_key in [var.replace('/', '___') for var in vars_workflow_output_internal])
                 # Avoid duplicating outputs from subgraphs in the main graph.
                 case1 = case1 and not args.graph_inline_subgraphs and not is_root
-                case2 = (tools[i]['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
+                case2 = (tool_i['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
                 if case1 or case2:
                     dot.node(out_name, label=out_key, shape='box', style='rounded, filled', fillcolor='lightyellow')
                     if args.graph_label_edges:
@@ -384,7 +391,7 @@ def expand_workflow(args, namespaces, dot, tools_cwl, is_root, yaml_path):
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
     node_1_name = f'{yaml_stem}_step_1_{steps_keys[0]}'  # Solely for graphviz layout purposes.
-    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_input_dollar, vars_workflow_output_internal, is_root, node_1_name, dot)
+    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_dollar_input, vars_dollar_tails, vars_workflow_output_internal, is_root, node_1_name, dot)
 
 
 def main():
@@ -439,11 +446,14 @@ def main():
             #print(cwl_path)
             #print(se)
 
+    # Collect the explicit $ internal workflow input variables
+    vars_dollar_input = {}
+
     rootdot = graphviz.Digraph(name=args.yaml)
     rootdot.attr(newrank='True') # See graphviz layout comment above.
     with rootdot.subgraph(name=f'cluster_{args.yaml}') as subdot:
         subdot.attr(label=args.yaml)
-        workflow_data = expand_workflow(args, [], subdot, tools_cwl, True, args.yaml)
+        workflow_data = expand_workflow(args, [], subdot, vars_dollar_input, tools_cwl, True, args.yaml)
     # Render the GraphViz diagram
     rootdot.render()
     #rootdot.view() # viewing does not work on headless machines (and requires xdg-utils)
