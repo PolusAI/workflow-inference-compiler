@@ -23,14 +23,20 @@ def add_yamldict_keyval(steps_i, step_key, in_out, keyval):
     return steps_i
 
 
-def add_graph_edge(args, dot, edge_node1, edge_node2, label):
-    if args.graph_label_edges:
-        dot.edge(edge_node1, edge_node2, label=label)
-    else:
-        dot.edge(edge_node1, edge_node2)
+def add_graph_edge(args, dot, nss1, nss2, label):
+    nss1 = nss1[:(1 + args.graph_inline_depth)]
+    edge_node1 = '___'.join(nss1)
+    nss2 = nss2[:(1 + args.graph_inline_depth)]
+    edge_node2 = '___'.join(nss2)
+    # Hide internal self-edges
+    if not edge_node1 == edge_node2:
+        if args.graph_label_edges:
+            dot.edge(edge_node1, edge_node2, label=label)
+        else:
+            dot.edge(edge_node1, edge_node2)
 
 
-def perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps_i, arg_key, dot, is_root, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal):
+def perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps_i, arg_key, dot, is_root, namespaces, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal):
     match = False
     # TODO: Figure out something better than replace. Use type and/or edam format info? Yes.
     arg_key_no_namespace = arg_key.split('___')[-1]
@@ -52,25 +58,21 @@ def perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps
                 step_name_j = f'{yaml_stem}_step_{j + 1}_{steps_keys[j]}'
                 arg_val = f'{step_name_j}/{out_key}'
 
-                # Determine which head and tail node to use for the new edge
-                # TODO: Check this indexing
-                edge_node1 = step_name_j
-                if tool_j['class'] == 'Workflow' and steps_keys[j] in subkeys: # i.e. if we performed recursion in step j
-                    if args.graph_inline_subgraphs:
-                        edge_node1 = out_key.split('___')[0]
-                edge_node2 = step_name_i
-                if tool_i['class'] == 'Workflow' and steps_keys[i] in subkeys: # i.e. if we performed recursion in step i
-                    if args.graph_inline_subgraphs:
-                        edge_node2 = arg_key.split('___')[0]
-
                 # We also need to keep track of the 'internal' output variables
                 if tool_j['class'] == 'Workflow':
                     vars_workflow_output_internal.append(out_key)
                 else:
                     vars_workflow_output_internal.append(arg_val)
 
+                # Determine which head and tail node to use for the new edge
+                # First we need to extract the embedded namespaces
+                nss_embedded1 = out_key.split('___')[:-1]
+                nss_embedded2 = arg_key.split('___')[:-1]
+                nss1 = namespaces + [step_name_j] + nss_embedded1
+                nss2 = namespaces + [step_name_i] + nss_embedded2
+                # TODO: check this
                 label = out_key_no_namespace if tool_j['class'] == 'Workflow' else out_key
-                add_graph_edge(args, dot, edge_node1, edge_node2, label)
+                add_graph_edge(args, dot, nss1, nss2, label)
 
                 arg_keyval = {arg_key: arg_val}
                 steps_i = add_yamldict_keyval(steps_i, step_key, 'in', arg_keyval)
@@ -227,10 +229,14 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
         label = step_key
         if args.graph_label_stepname:
             label = step_name_i
+        step_node_name = '___'.join(namespaces + [step_name_i])
         if not tool_i['class'] == 'Workflow':
-            dot.node(step_name_i, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
-        elif not (step_key in subkeys and args.graph_inline_subgraphs):
-            dot.node(step_name_i, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+            dot.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+        elif not (step_key in subkeys and len(namespaces) < args.graph_inline_depth):
+            nssnode = namespaces + [step_name_i]
+            nssnode = nssnode[:(1 + args.graph_inline_depth)]
+            step_node_name = '___'.join(nssnode)
+            dot.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
 
         # NOTE: sub_args_provided are handled within the args_required loop below
         for arg_key in args_provided:
@@ -248,6 +254,7 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
                     inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
                     steps[i][step_key]['in'][arg_key] = in_name
                     vars_dollar_input.update({arg_val: (namespaces + [step_name_i], arg_key)})
+                    # TODO: Show input node?
                 else:
                     (nss, var) =  vars_dollar_input[arg_val]
                     # if recursive, add to inputs_workflow
@@ -268,9 +275,9 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
                 inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
                 steps[i][step_key]['in'][arg_key] = in_name
                 if args.graph_show_inputs:
-                    var_name = f'{step_name_i}/{arg_key}'
-                    dot.node(var_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
-                    dot.edge(var_name, step_name_i)
+                    input_node_name = '___'.join(namespaces + [step_name_i, arg_key])
+                    dot.node(input_node_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
+                    dot.edge(input_node_name, step_node_name)
         
         for arg_key in args_required:
             #print('arg_key', arg_key)
@@ -284,14 +291,17 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
 
                 # NOTE: Add edges to subgraphs here (i.e. in the parent graph).
                 # Otherwise, graphviz will segfault! See comment above.
-                edge_node1 = nss[-1]
-                edge_node2 = arg_key.split('___')[0]
-                label = nss[0]
-                add_graph_edge(args, dot, edge_node1, edge_node2, label)
+                nss_embedded1 = var.split('___')[:-1]
+                nss_embedded2 = arg_key.split('___')[:-1]
+                nss1 = nss + nss_embedded1
+                # [step_name_i] is correct; nss already contains step_name_j from the recursive call
+                nss2 = namespaces + [step_name_i] + nss_embedded2
+                label = var.split('___')[-1]
+                add_graph_edge(args, dot, nss1, nss2, label)
 
                 # TODO: vars_workflow_output_internal?
             else:
-                steps[i] = perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps[i], arg_key, dot, is_root, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal)
+                steps[i] = perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps[i], arg_key, dot, is_root, namespaces, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal)
         
         # Add CommandLineTool outputs tags to workflow out tags.
         # Note: Add all output tags for now, but depending on config options,
@@ -304,13 +314,25 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
 
     # Add the cluster subgraphs to the main graph, but we need to add them in
     # reverse order to trick the graphviz layout algorithm.
-    for subdot in subdots[::-1]: # Reverse!
-        dot.subgraph(subdot)
+    if len(namespaces) < args.graph_inline_depth:
+        for subdot in subdots[::-1]: # Reverse!
+            dot.subgraph(subdot)
     # Align the cluster subgraphs using the same rank as the first node of each subgraph.
     # See https://stackoverflow.com/questions/6824431/placing-clusters-on-the-same-rank-in-graphviz
-    if not step_1_names == []:
-        nodes_same_rank = '\t{rank=same; ' + '; '.join(step_1_names) + '}\n'
-        dot.body.append(nodes_same_rank)
+    if len(namespaces) < args.graph_inline_depth:
+        step_1_names_display = [name for name in step_1_names if len(name.split('___')) < 2 + args.graph_inline_depth]
+        if len(step_1_names_display) > 1:
+            nodes_same_rank = '\t{rank=same; ' + '; '.join(step_1_names_display) + '}\n'
+            dot.body.append(nodes_same_rank)
+    if steps_keys[0] in subkeys:
+        step_name_1 = step_1_names[0]
+    else:
+        step_name_1 = f'{yaml_stem}_step_1_{steps_keys[0]}'
+        step_name_1 = '___'.join(namespaces + [step_name_1])
+    # NOTE: Since the names of subgraphs '*.yml' contain a period, we need to
+    # escape them by enclosing the whole name in double quotes. Otherwise:
+    # "Error: *.yml.gv: syntax error in line n near '.'"
+        step_name_1 = f'"{step_name_1}"'
 
     # Add the provided inputs of each step to the workflow inputs
     temp = {}
@@ -334,23 +356,24 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
             if 'dhdl' in out_key or 'xtc' in out_key:
                 continue
             out_var = f'{step_name_i}/{out_key}'
-            out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             # Avoid duplicating intermediate outputs in GraphViz
             out_key_no_namespace = out_key.split('___')[-1]
             if args.graph_show_outputs:
                 case1 = (tool_i['class'] == 'Workflow') and (not out_key in [var.replace('/', '___') for var in vars_workflow_output_internal])
-                # Avoid duplicating outputs from subgraphs in the main graph.
-                case1 = case1 and not args.graph_inline_subgraphs and not is_root
+                # Avoid duplicating outputs from subgraphs in parent graphs.
+                output_node_name = '___'.join(namespaces + [step_name_i, out_key])
+                case1 = case1 and not is_root and (len(step_node_name.split('___')) + 1 == len(output_node_name.split('___')))
                 case2 = (tool_i['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
                 if case1 or case2:
-                    dot.node(out_name, label=out_key, shape='box', style='rounded, filled', fillcolor='lightyellow')
+                    dot.node(output_node_name, label=out_key_no_namespace, shape='box', style='rounded, filled', fillcolor='lightyellow')
                     if args.graph_label_edges:
-                        dot.edge(step_name_i, out_name, label=out_key_no_namespace)  # Is labeling necessary?
+                        dot.edge(step_node_name, output_node_name, label=out_key_no_namespace)  # Is labeling necessary?
                     else:
-                        dot.edge(step_name_i, out_name)
+                        dot.edge(step_node_name, output_node_name)
             # Exclude intermediate 'output' files.
             if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:
                 continue
+            out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             #print('out_name', out_name)
             outputs_workflow.update({out_name: {'type': 'File', 'outputSource': out_var}})
         #print('outputs_workflow', outputs_workflow)
@@ -395,7 +418,6 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
     
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    step_name_1 = f'{yaml_stem}_step_1_{steps_keys[0]}'  # Solely for graphviz layout purposes.
     return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_dollar_input, vars_dollar_tails, vars_workflow_output_internal, is_root, step_name_1, dot)
 
 
@@ -419,8 +441,8 @@ def main():
                         help='Add nodes to the graph representing the workflow inputs.')
     parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
                         help='Add nodes to the graph representing the workflow outputs.')
-    parser.add_argument('--graph_inline_subgraphs', type=bool, required=False, default=False,
-                        help='Controls whether subgraphs are displayed separately or positioned within the main graph.')
+    parser.add_argument('--graph_inline_depth', type=int, required=False, default=100,  # 100 == all
+                        help='Controls the depth of subgraphs which are displayed separately or positioned within the main graph.')
     args = parser.parse_args()
 
     # Load ALL of the tools.
