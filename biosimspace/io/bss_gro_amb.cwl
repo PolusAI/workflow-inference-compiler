@@ -33,7 +33,7 @@ inputs:
       position: 1
       prefix: --input_top_path
 
-  input_gro_path:
+  input_crd_path:
     label: Path to the input GROMACS structure GRO file
     doc: |-
       Path to the input GROMACS structure GRO file

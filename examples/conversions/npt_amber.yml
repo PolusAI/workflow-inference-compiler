@@ -1,0 +1,4 @@
+steps:
+  - sander_mdrun:
+      in:
+        input_mdin_path: npt.mdin

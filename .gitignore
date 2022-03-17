@@ -1,1 +1,7 @@
-cache/
+cachedir/
+outdir/
+*_inputs.yml
+*.gv
+*.pdf
+*.png
+plugin_ids

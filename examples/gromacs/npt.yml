@@ -1,0 +1,8 @@
+default_backend: gromacs
+backends:
+  - gromacs:
+      steps:
+        - npt_gromacs.yml:
+  - amber:
+      steps:
+        - npt_amber.yml:

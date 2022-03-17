@@ -1,17 +1,4 @@
-# This is based on the excellent gromacs CWL tutorial http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl
-# The `in` tags are superfluous, but retained for now to simplify implementation.
-# Limit nsteps to 1000 for demo / development.
 steps:
-  - setup.yml:  # Auto-generated subworkflow!
-# Minimization
-  - min.yml:
-# NVT equil
-  - nvt.yml:
-# NPT equil
-  - npt.yml:
-# Production
-  - prod.yml:
-# Trajectory Analysis
   - gmx_rms:
       in:
         config: '{"selection": "Backbone"}'
@@ -20,7 +7,7 @@ steps:
       in:
         config: '{"selection": "Backbone"}'
         output_xvg_path: 'rmsd_exp.xvg'
-        input_structure_path: '$min.tpr'
+        input_structure_path: '$min.tpr' # Use $ to explicitly create edges to other nodes
   - gmx_rgyr:
       in:
         config: '{"selection": "Backbone"}'
@@ -33,4 +20,4 @@ steps:
       in:
         config: '{"selection": "Protein"}'
         input_top_path: '$prod.tpr'
-        input_structure_path: '$prod.gro'
+        input_crd_path: '$prod.gro'

@@ -1,0 +1,27 @@
+&cntrl
+  imin = 0
+  ! Use ntx = 1+2+4 (?) to set coordinates, velocities, and box vectors
+  ntx = 1
+  irest = 0 ! Can only restart if there velocities...
+  cut = 10.0
+  ntr = 0
+  ntc = 2
+  ntf = 2
+  ntt = 3
+  ig = -1
+  ! ioutfm 0 = ascii, 1 = binary
+  ioutfm = 0
+  iwrap = 1
+  ! Limit to 10 timesteps because amber is not gpu accelerated.
+  nstlim = 10
+  ! sander_mdrun.cwl expects all output files to exist, so set the nt params to nstlim.
+  ntpr = 10
+  ntwx = 10
+  ntwr = 10
+  ntxo = 1
+  dt = 0.002
+  gamma_ln = 5.0
+  pres0 = 1.0
+  ntp = 1
+  taup = 2.0
+&end

@@ -69,7 +69,7 @@ outputs:
     outputBinding:
       glob: top.top  # BioSimSpace automatically renames *.GroTop to *.top
 
-  output_gro_path:
+  output_crd_path:
     label: Output coordinates file (GROMACS gro)
     doc: |-
       Output coordinates file (GROMACS gro)

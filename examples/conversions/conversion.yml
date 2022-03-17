@@ -2,19 +2,28 @@ steps:
   - setup.yml:
   - min.yml:
   - nvt.yml:
-#  - npt.yml:
+#  - npt_gromacs.yml:
 # Convert to amber for npt equilibration
   - unzip_top:
   - bss_gro_amb:
+  # Due to instabilities, minimize after conversion
+  - sander_mdrun:
+      in:
+        input_mdin_path: min.mdin
+        output_rst_path: $min.rst
+        output_traj_path: min.crd
   - sander_mdrun:
       in:
         input_mdin_path: npt.mdin
-        output_log_path: amber.log
+        input_crd_path: $min.rst
         output_rst_path: $amb.rst
+#        output_traj_path: amb.crd
   - bss_amb_gro:
       in:
         input_crd_path: $amb.rst
   - zip_top:
+  # Due to instabilities, minimize after conversion
+  - steep.yml:
 # Convert back to gromacs for production
   - prod.yml:
 # Skip analysis

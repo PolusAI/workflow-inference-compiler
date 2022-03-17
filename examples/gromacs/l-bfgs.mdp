@@ -1,0 +1,7 @@
+integrator = l-bfgs
+constraints = none
+rvdw = 1.0
+rcoulomb = 1.0
+nsteps = 100
+emtol = 500
+nstenergy = 1

@@ -105,7 +105,7 @@ def perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps
         return steps_i
 
 
-def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, yaml_path):
+def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, yaml_path, yml_paths):
     # Load the high-level yaml workflow file.
     yaml_stem = Path(yaml_path).stem
     with open(Path(yaml_path), 'r') as y:
@@ -119,8 +119,7 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
         steps_keys += list(step)
     #print(steps_keys)
 
-    #subkeys = [key for key in steps_keys if key not in tools]
-    subkeys = [key for key in steps_keys if Path(key + '.yml').exists()]
+    subkeys = [key for key in steps_keys if key not in tools]
 
     # Add headers
     yaml_tree['cwlVersion'] = 'v1.0'
@@ -159,14 +158,14 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
         # Recursively expand subworkflows, adding expanded cwl file contents to tools
         if step_key in subkeys:
             #path = Path(step_key)
-            path = Path(step_key + '.yml')
+            path = Path(yml_paths[Path(step_key).stem])
             if not (path.exists() and path.suffix == '.yml'):
                 # TODO: Once we have defined a yml DSL schema,
                 # check that the file contents actually satisfies the schema.
                 raise Exception(f'Error! {path} does not exist or is not a .yml file.')
             subdot = graphviz.Digraph(name=f'cluster_{step_key}')
-            subdot.attr(label=step_key + '.yml')
-            subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{step_key}'], subdot, vars_dollar_input, tools, False, path)
+            subdot.attr(label=str(path))
+            subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{step_key}'], subdot, vars_dollar_input, tools, False, path, yml_paths)
             subdots.append(subworkflow_data[-1])
             step_1_names.append(subworkflow_data[-2])
             # Add expanded cwl file contents to tools
@@ -534,12 +533,20 @@ def main():
             #print(cwl_path)
             #print(se)
 
+    # Glob all of the yml files too, so we don't have to deal with relative paths.
+    pattern_yml = str(Path(args.cwl_dir) / '**/*.yml')
+    yml_paths_sorted = sorted(glob.glob(pattern_yml, recursive=True), key=len, reverse=True)
+    yml_paths = {}
+    for yml_path in yml_paths_sorted:
+        stem = Path(yml_path).stem
+        yml_paths[stem] = yml_path
+
     # Collect the explicit $ internal workflow input variables
     vars_dollar_input = {}
 
     yaml_path = args.yaml
     if args.cwl_inline_subworkflows:
-        steps_inlined = inline_sub_steps(yaml_path)
+        steps_inlined = inline_sub_steps(yaml_path, tools_cwl, yml_paths)
         with open(Path(yaml_path), 'r') as y:
             yaml_tree = yaml.safe_load(y.read())
         yaml_tree['steps'] = steps_inlined
@@ -553,13 +560,14 @@ def main():
     rootdot.attr(newrank='True') # See graphviz layout comment above.
     with rootdot.subgraph(name=f'cluster_{yaml_path}') as subdot:
         subdot.attr(label=yaml_path)
-        workflow_data = expand_workflow(args, [], subdot, vars_dollar_input, tools_cwl, True, yaml_path)
+        workflow_data = expand_workflow(args, [], subdot, vars_dollar_input, tools_cwl, True, yaml_path, yml_paths)
     # Render the GraphViz diagram
     rootdot.render(format='png') # Default pdf. See https://graphviz.org/docs/outputs/
     #rootdot.view() # viewing does not work on headless machines (and requires xdg-utils)
     
     if args.cwl_run_local:
         yaml_stem = Path(args.yaml).stem
+        yaml_stem = yaml_stem + '_inline' if args.cwl_inline_subworkflows else yaml_stem
         print(f'Running {yaml_stem}.cwl ...')
         cmd = ['cwltool', '--cachedir', 'cachedir','--outdir', 'outdir', f'{yaml_stem}.cwl', f'{yaml_stem}_inputs.yml']
         sub.run(cmd)
@@ -582,7 +590,7 @@ def get_steps(yaml_tree, yaml_path):
     return steps
 
 
-def inline_sub_steps(yaml_path):
+def inline_sub_steps(yaml_path, tools, yml_paths):
     # Load the high-level yaml workflow file.
     with open(Path(yaml_path), 'r') as y:
         yaml_tree = yaml.safe_load(y.read())
@@ -594,13 +602,13 @@ def inline_sub_steps(yaml_path):
     for step in steps:
         steps_keys += list(step)
 
-    #subkeys = [key for key in steps_keys if key not in tools]
-    subkeys = [key for key in steps_keys if Path(key + '.yml').exists()]
+    subkeys = [key for key in steps_keys if key not in tools]
 
     steps_all = []
     for i, step_key in enumerate(steps_keys):
         if step_key in subkeys:
-            steps_i = inline_sub_steps(step_key + '.yml')
+            path = Path(yml_paths[Path(step_key).stem])
+            steps_i = inline_sub_steps(path, tools, yml_paths)
         else:
             steps_i = [steps[i]]
         steps_all.append(steps_i)

@@ -19,3 +19,4 @@ steps:
   - genion:
       in:
         config: '{"neutral": "True"}'
+        output_top_zip_path: $genion.top

@@ -1,0 +1,9 @@
+steps:
+  - grompp:
+      in:
+        config: '{"mdp": {"integrator":"steep", "rvdw":"1.4", "rcoulomb":"1.4", "nsteps":"10", "emtol":"500", "nstenergy":"1"}}'
+  - mdrun:
+  - gmx_energy:
+      in:
+        config: '{"terms":  ["Potential"]}'
+        output_xvg_path: 'energy_min_steep.xvg'

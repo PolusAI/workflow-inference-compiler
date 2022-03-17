@@ -1,0 +1,12 @@
+steps:
+  - grompp:
+      in:
+        config: '{"maxwarn":"1"}'
+#        config: '{"maxwarn": "1", "mdp": {"integrator":"l-bfgs", "rvdw":"1.0", "rcoulomb":"1.0", "nsteps":"100", "emtol":"500", "nstenergy":"1"}}'
+        input_mdp_path: l-bfgs.mdp
+        output_tpr_path: '$min.tpr'  # Explicitly specify filename for future reference.
+  - mdrun:
+  - gmx_energy:
+      in:
+        config: '{"terms":  ["Potential"]}'
+        output_xvg_path: 'energy_min_l-bfgs.xvg'
