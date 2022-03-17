@@ -1,13 +1,12 @@
 
 import argparse
-import copy
 import glob
 from pathlib import Path
+import requests
 import subprocess as sub
 
 import graphviz
 import yaml
-
 
 def add_yamldict_keyval(steps_i, step_key, in_out, keyval):
     if steps_i[step_key]:
@@ -110,9 +109,9 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
     # Load the high-level yaml workflow file.
     yaml_stem = Path(yaml_path).stem
     with open(Path(yaml_path), 'r') as y:
-        yaml_tree = yaml.load(y.read(), Loader=yaml.SafeLoader)
+        yaml_tree = yaml.safe_load(y.read())
 
-    steps = yaml_tree['steps']
+    steps = get_steps(yaml_tree, yaml_path)
 
     # Get the dictionary key (i.e. the name) of each step.
     steps_keys = []
@@ -120,7 +119,8 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
         steps_keys += list(step)
     #print(steps_keys)
 
-    subkeys = [key for key in steps_keys if key not in tools]
+    #subkeys = [key for key in steps_keys if key not in tools]
+    subkeys = [key for key in steps_keys if Path(key + '.yml').exists()]
 
     # Add headers
     yaml_tree['cwlVersion'] = 'v1.0'
@@ -151,17 +151,21 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
     step_1_names = []
     subdots = []
 
+    # Collect labshare plugin_ids
+    plugin_ids = []
+
     for i, step_key in enumerate(steps_keys):
         stem = Path(step_key).stem
         # Recursively expand subworkflows, adding expanded cwl file contents to tools
         if step_key in subkeys:
-            path = Path(step_key)
+            #path = Path(step_key)
+            path = Path(step_key + '.yml')
             if not (path.exists() and path.suffix == '.yml'):
                 # TODO: Once we have defined a yml DSL schema,
                 # check that the file contents actually satisfies the schema.
-                raise Exception(f'Error! {path} does not exists or is not a .yml file.')
+                raise Exception(f'Error! {path} does not exist or is not a .yml file.')
             subdot = graphviz.Digraph(name=f'cluster_{step_key}')
-            subdot.attr(label=step_key)
+            subdot.attr(label=step_key + '.yml')
             subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{step_key}'], subdot, vars_dollar_input, tools, False, path)
             subdots.append(subworkflow_data[-1])
             step_1_names.append(subworkflow_data[-2])
@@ -178,6 +182,16 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
             vars_workflow_output_internal += subworkflow_data[5]
 
         tool_i = tools[stem][1]
+
+        plugin_id = None
+        if args.cwl_run_slurm:
+            if not (step_key in subkeys):
+                # i.e. If this is either a primitive CommandLineTool and/or
+                # a 'primitive' Workflow that we did NOT recursively generate.
+                plugin_id = upload_labshare_plugin(args.compute_url, tool_i, stem)
+            else:
+                plugin_id = subworkflow_data[6]
+            plugin_ids.append(plugin_id)
 
         # Add run tag
         run_path = tools[stem][0]
@@ -387,17 +401,17 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
         #steps[i] = {step_name_i: steps[i][step_key]}
         steps_dict.update({step_name_i: steps[i][step_key]})
     yaml_tree.update({'steps': steps_dict})
-    
+
     # Dump the workflow inputs to a separate yml file.
-    temp = {}
+    yaml_inputs = {}
     for key, (val, in_type) in inputs_file_workflow.items():
         new_keyval = {key: val}  # if string
         if 'File' in in_type:
             new_keyval = {key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2330'}}
-        temp.update(new_keyval)
+        yaml_inputs.update(new_keyval)
             
     dump_options = {'line_break': '\n', 'indent': 2}
-    yaml_content = yaml.dump(temp, sort_keys=False, **dump_options)
+    yaml_content = yaml.dump(yaml_inputs, sort_keys=False, **dump_options)
     with open(f'{yaml_stem}_inputs.yml', 'w') as inp:
         inp.write(yaml_content)
 
@@ -408,7 +422,34 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
     with open(f'{yaml_stem}.cwl', 'w') as w:
         w.write('#!/usr/bin/env cwl-runner\n')
         w.write(''.join(yaml_content))
-    
+
+    if args.cwl_run_slurm:
+        # Convert the expanded yaml file to json for labshare Compute.
+        # Replace 'run' with plugin:id
+        import copy
+        yaml_tree_run = copy.deepcopy(yaml_tree)
+        for i, step_key in enumerate(steps_keys):
+            step_name_i = f'{yaml_stem}_step_{i + 1}_{step_key}'
+            run_val = f'plugin:{plugin_ids[i]}'
+            yaml_tree_run['steps'][step_name_i]['run'] = run_val
+        if key in subkeys: # and not is_root, but the former implies the latter
+            plugin_id = upload_labshare_plugin(args.compute_url, yaml_tree_run, stem)
+        if is_root:
+            compute_workflow = {
+                "driver": "slurm",
+                "name": yaml_stem,
+                "cwlJobInputs": yaml_inputs,
+                **yaml_tree_run
+            }
+            # Use http POST request to upload a primitive CommandLineTool / define a plugin and get its id hash.
+            response = requests.post(args.compute_url + '/compute/workflows', json = compute_workflow)
+            r_json = response.json()
+            print('post response')
+            print(r_json)
+            if 'id' not in r_json:
+                raise Exception(f'Error! Labshare workflow upload failed for {yaml_stem}.')
+            print_labshare_plugins(args.compute_url)
+
     print(f'Finished expanding {yaml_path}')
     
     if args.cwl_validate:
@@ -418,7 +459,7 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
     
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_dollar_input, vars_dollar_tails, vars_workflow_output_internal, is_root, step_name_1, dot)
+    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_dollar_input, vars_dollar_tails, vars_workflow_output_internal, plugin_id, is_root, step_name_1, dot)
 
 
 def main():
@@ -429,8 +470,16 @@ def main():
                         help='Directory which contains the CWL CommandLineTools and/or Workflows')
     parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=False,
                         help='Enable output files which are used between steps (for debugging).')
-    parser.add_argument('--cwl_run', type=bool, required=False, default=False,
-                        help='After generating the cwl file, run it.')
+    parser.add_argument('--cwl_run_local', type=bool, required=False, default=False,
+                        help='After generating the cwl file(s), run it on localhost.')
+    # NOTE: If cwl_run_slurm is enabled, you MUST enable cwl_inline_subworkflows!
+    # Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
+    parser.add_argument('--cwl_run_slurm', type=bool, required=False, default=False,
+                        help='After generating the cwl file, run it on labshare using the slurm driver.')
+    parser.add_argument('--compute_url', type=bool, required=False, default=False,
+                        help='The URL associated with the labshare slurm driver.')
+    parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, default=False,
+                        help='Before generating the cwl file, inline all subworkflows.')
     parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
                         help='After generating the cwl file, validate it.')
     parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
@@ -458,13 +507,25 @@ def main():
     # subdirctory, if we sort the paths by descending length, we can overwrite
     # the dict entries of the legacy files.
     cwl_paths_sorted = sorted(glob.glob(pattern_cwl, recursive=True), key=len, reverse=True)
+
+    # Delete plugins previously uploaded to labshare.
+    if args.cwl_run_slurm and Path('plugin_ids').exists():
+        with open('plugin_ids', 'r') as f:
+            ids = f.read().splitlines()
+        for id in ids:
+            response = requests.delete(args.compute_url + '/compute/plugins/' + id)
+        sub.run(['rm', 'plugin_ids'])
+
     for cwl_path in cwl_paths_sorted:
         #print(cwl_path)
         try:
             with open(cwl_path, 'r') as f:
-              tool = yaml.load(f.read(), Loader=yaml.SafeLoader)
+              tool = yaml.safe_load(f.read())
             stem = Path(cwl_path).stem
             #print(stem)
+            # Add / overwrite stdout and stderr
+            tool.update({'stdout': f'{stem}.out'})
+            tool.update({'stderr': f'{stem}.err'})
             tools_cwl[stem] = (cwl_path, tool)
             #print(tool)
         except yaml.scanner.ScannerError as se:
@@ -476,20 +537,108 @@ def main():
     # Collect the explicit $ internal workflow input variables
     vars_dollar_input = {}
 
-    rootdot = graphviz.Digraph(name=args.yaml)
+    yaml_path = args.yaml
+    if args.cwl_inline_subworkflows:
+        steps_inlined = inline_sub_steps(yaml_path)
+        with open(Path(yaml_path), 'r') as y:
+            yaml_tree = yaml.safe_load(y.read())
+        yaml_tree['steps'] = steps_inlined
+        dump_options = {'line_break': '\n', 'indent': 2}
+        yaml_content = yaml.dump(yaml_tree, sort_keys=False, **dump_options)
+        yaml_path = Path(args.yaml).stem + '_inline.yml'
+        with open(yaml_path, 'w') as y:
+            y.write(yaml_content)
+
+    rootdot = graphviz.Digraph(name=yaml_path)
     rootdot.attr(newrank='True') # See graphviz layout comment above.
-    with rootdot.subgraph(name=f'cluster_{args.yaml}') as subdot:
-        subdot.attr(label=args.yaml)
-        workflow_data = expand_workflow(args, [], subdot, vars_dollar_input, tools_cwl, True, args.yaml)
+    with rootdot.subgraph(name=f'cluster_{yaml_path}') as subdot:
+        subdot.attr(label=yaml_path)
+        workflow_data = expand_workflow(args, [], subdot, vars_dollar_input, tools_cwl, True, yaml_path)
     # Render the GraphViz diagram
-    rootdot.render()
+    rootdot.render(format='png') # Default pdf. See https://graphviz.org/docs/outputs/
     #rootdot.view() # viewing does not work on headless machines (and requires xdg-utils)
     
-    if args.cwl_run:
+    if args.cwl_run_local:
         yaml_stem = Path(args.yaml).stem
         print(f'Running {yaml_stem}.cwl ...')
         cmd = ['cwltool', '--cachedir', 'cachedir','--outdir', 'outdir', f'{yaml_stem}.cwl', f'{yaml_stem}_inputs.yml']
         sub.run(cmd)
+
+
+def get_steps(yaml_tree, yaml_path):
+    backend = None
+    if 'backends' in yaml_tree:
+        if 'default_backend' in yaml_tree:
+            backend = yaml_tree['default_backend']
+        if backend is None:
+            raise Exception(f'Error! No backend in {yaml_path}!')
+        if backend not in yaml_tree['backends']:
+            raise Exception(f'Error! No steps for backend {backend} in {yaml_path}!')
+        steps = yaml_tree['backends'][backend]['steps']
+    elif 'steps' in yaml_tree:
+        steps = yaml_tree['steps']
+    else:
+        raise Exception(f'Error! No backends and/or steps in {yaml_path}!')
+    return steps
+
+
+def inline_sub_steps(yaml_path):
+    # Load the high-level yaml workflow file.
+    with open(Path(yaml_path), 'r') as y:
+        yaml_tree = yaml.safe_load(y.read())
+
+    steps = get_steps(yaml_tree, yaml_path)
+
+    # Get the dictionary key (i.e. the name) of each step.
+    steps_keys = []
+    for step in steps:
+        steps_keys += list(step)
+
+    #subkeys = [key for key in steps_keys if key not in tools]
+    subkeys = [key for key in steps_keys if Path(key + '.yml').exists()]
+
+    steps_all = []
+    for i, step_key in enumerate(steps_keys):
+        if step_key in subkeys:
+            steps_i = inline_sub_steps(step_key + '.yml')
+        else:
+            steps_i = [steps[i]]
+        steps_all.append(steps_i)
+
+    steps_all_flattened = [step for steps in steps_all for step in steps]
+    return steps_all_flattened
+
+
+def upload_labshare_plugin(compute_url, tool, stem):
+        # Convert the expanded yaml file to json for labshare Compute.
+        # First remove $ in $namespaces and $schemas (anywhere else?)
+        dump_options = {'line_break': '\n', 'indent': 2}
+        tool_no_dollar = yaml.dump(tool, sort_keys=False, **dump_options).replace('$namespaces', 'namespaces').replace('$schemas', 'schemas')
+        compute_plugin = {
+            # Add unique 'id' below
+            'cwlScript': yaml.safe_load(tool_no_dollar)  # This effectively copies tool
+        }
+
+        # Use http POST request to upload a primitive CommandLineTool / define a plugin and get its id hash.
+        response = requests.post(compute_url + '/compute/plugins', json = compute_plugin)
+        r_json = response.json()
+        if 'id' not in r_json:
+            print('post response')
+            print(r_json)
+            raise Exception(f'Error! Labshare plugin upload failed for {stem}.')
+
+        compute_plugin.update({'id': r_json['id']}) # Necessary ?
+        # Save the plugin ids so we can delete them the next time we enable args.cwl_run_slurm
+        with open('plugin_ids', 'a') as f:
+            f.write(r_json['id'] + '\n')
+        return r_json['id']
+
+
+def print_labshare_plugins(compute_url):
+    r = requests.get(compute_url + '/compute/plugins/')
+    for j in r.json():
+        print(j)
+    print(len(r.json()))
 
 
 if __name__ == '__main__':
