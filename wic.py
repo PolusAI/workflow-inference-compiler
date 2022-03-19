@@ -291,13 +291,14 @@ def expand_workflow(args, namespaces, subgraphs, vars_dollar_defs, tools, is_roo
                     assert nss_def_inits == nss_call_inits
                     
                     # If the call site of an explicit edge is at the same level
-                    # or deeper into the recursion than the definition, then we
+                    # or deeper into the recursion than the definition, or if
+                    # they are in completely different branches, then we
                     # need to create inputs in all of the intervening cwl files
                     # so we can pass in the values from the outer scope(s). Here,
                     # we simply need to use in_name and add to inputs_workflow
                     # and vars_dollar_calls. The outer scope(s) are handled by
                     # the `if not match` clause in perform_edge_inference().
-                    if len(nss_call_tails) >= len(nss_def_tails):
+                    if len(nss_call_tails) >= len(nss_def_tails) or nss_call_inits == []:
                         inputs_workflow.update({in_name: {'type': in_type}})
                         steps[i][step_key]['in'][arg_key] = in_name
                         # Store var_dollar call site info up through the recursion.
