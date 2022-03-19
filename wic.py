@@ -8,6 +8,10 @@ import subprocess as sub
 import graphviz
 import yaml
 
+# Use white for dark backgrounds, black for light backgrounds
+font_edge_color = 'white'
+
+
 def add_yamldict_keyval(steps_i, step_key, in_out, keyval):
     if steps_i[step_key]:
         if in_out in steps_i[step_key]:
@@ -30,9 +34,9 @@ def add_graph_edge(args, dot, nss1, nss2, label):
     # Hide internal self-edges
     if not edge_node1 == edge_node2:
         if args.graph_label_edges:
-            dot.edge(edge_node1, edge_node2, label=label)
+            dot.edge(edge_node1, edge_node2, color=font_edge_color, label=label)
         else:
-            dot.edge(edge_node1, edge_node2)
+            dot.edge(edge_node1, edge_node2, color=font_edge_color)
 
 
 def perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps_i, arg_key, dot, is_root, namespaces, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal):
@@ -105,7 +109,7 @@ def perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps
         return steps_i
 
 
-def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, yaml_path, yml_paths):
+def expand_workflow(args, namespaces, dot, vars_dollar_defs, tools, is_root, yaml_path, yml_paths):
     # Load the high-level yaml workflow file.
     yaml_stem = Path(yaml_path).stem
     with open(Path(yaml_path), 'r') as y:
@@ -143,8 +147,8 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
     # Collect the internal workflow output variables
     vars_workflow_output_internal = []
 
-    # Collect recursive dollar variable dependency mappings
-    vars_dollar_tails = {}
+    # Collect recursive dollar variable call sites.
+    vars_dollar_calls = {}
 
     # Collect recursive subworkflow data
     step_1_names = []
@@ -164,8 +168,9 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
                 # check that the file contents actually satisfies the schema.
                 raise Exception(f'Error! {path} does not exist or is not a .yml file.')
             subdot = graphviz.Digraph(name=f'cluster_{step_key}')
-            subdot.attr(label=str(path))
-            subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{step_key}'], subdot, vars_dollar_input, tools, False, path, yml_paths)
+            subdot.attr(label=step_key) # str(path)
+            subdot.attr(color='lightblue')  # color of outline
+            subworkflow_data = expand_workflow(args, namespaces + [f'{yaml_stem}_step_{i+1}_{step_key}'], subdot, vars_dollar_defs, tools, False, path, yml_paths)
             subdots.append(subworkflow_data[-1])
             step_1_names.append(subworkflow_data[-2])
             # Add expanded cwl file contents to tools
@@ -176,8 +181,8 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
             # inputs_workflow.update(subworkflow_data[1])
             inputs_namespaced = dict([(f'{yaml_stem}_step_{i+1}_{step_key}___{k}', val) for k, val in subworkflow_data[2].items()]) # _{step_key}_input___{k}
             inputs_file_workflow.update(inputs_namespaced)
-            vars_dollar_input.update(subworkflow_data[3])
-            vars_dollar_tails.update(subworkflow_data[4])
+            vars_dollar_defs.update(subworkflow_data[3])
+            vars_dollar_calls.update(subworkflow_data[4])
             vars_workflow_output_internal += subworkflow_data[5]
 
         tool_i = tools[stem][1]
@@ -235,7 +240,7 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
         # files accordingly.)
         #print(args_required)
 
-        sub_args_provided = [arg for arg in args_required if arg in vars_dollar_tails]
+        sub_args_provided = [arg for arg in args_required if arg in vars_dollar_calls]
         #print(sub_args_provided)
 
         step_name_i = f'{yaml_stem}_step_{i + 1}_{step_key}'
@@ -261,24 +266,41 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
             if arg_val[0] == '$':
                 arg_val = arg_val[1:]  # Remove $
                 #print('arg_key, arg_val', arg_key, arg_val)
-                if not vars_dollar_input.get(arg_val):  # if first time
+                # NOTE: There can only be one definition, but multiple call sites.
+                if not vars_dollar_defs.get(arg_val):
+                    # if first time encountering arg_val, i.e. if defining
                     # TODO: Add edam format info, etc.
                     inputs_workflow.update({in_name: {'type': in_type}})
                     inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
                     steps[i][step_key]['in'][arg_key] = in_name
-                    vars_dollar_input.update({arg_val: (namespaces + [step_name_i], arg_key)})
+                    vars_dollar_defs.update({arg_val: (namespaces + [step_name_i], arg_key)})
                     # TODO: Show input node?
                 else:
-                    (nss, var) =  vars_dollar_input[arg_val]
-                    # if recursive, add to inputs_workflow
-                    if not namespaces == []:
+                    (nss_def_init, var) =  vars_dollar_defs[arg_val]
+
+                    nss_def_embedded = var.split('___')[:-1]
+                    nss_call_embedded = arg_key.split('___')[:-1]
+                    nss_def = nss_def_init + nss_def_embedded
+                    # [step_name_i] is correct; nss_def_init already contains step_name_j from the recursive call
+                    nss_call = namespaces + [step_name_i] + nss_call_embedded
+
+                    nss_def_inits_, nss_def_tails = partition_by_lowest_common_ancestor(nss_def, nss_call)
+                    nss_call_inits_, nss_call_tails = partition_by_lowest_common_ancestor(nss_call, nss_def)
+                    # If the call site of an explicit edge is at the same level
+                    # or deeper into the recursion than the definition, then we
+                    # need to create inputs in all of the intervening cwl files
+                    # so we can pass in the values from the outer scope(s). Here,
+                    # we simply need to use in_name and add to inputs_workflow
+                    # and vars_dollar_calls. The outer scope(s) are handled by
+                    # the `if not match` clause in perform_edge_inference().
+                    if len(nss_call_tails) >= len(nss_def_tails):
                         inputs_workflow.update({in_name: {'type': in_type}})
                         steps[i][step_key]['in'][arg_key] = in_name
-                        # Pass var_dollar call site info up through the recursion.
-                        vars_dollar_tails.update({in_name: vars_dollar_input[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
+                        # Store var_dollar call site info up through the recursion.
+                        vars_dollar_calls.update({in_name: vars_dollar_defs[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
                     else:
-                        var = nss[0] + '/' + '___'.join(nss[1:] + [var])
-                        steps[i][step_key]['in'][arg_key] = var
+                        var_slash = nss_def_tails[0] + '/' + '___'.join(nss_def_tails[1:] + [var])
+                        steps[i][step_key]['in'][arg_key] = var_slash
                     # NOTE: Do NOT add edges here! (i.e. within the subgraph)
                     # If you add an edge whose head/tail is outside of the subgraph,
                     # graphviz will segfault! Add the edges in the parent graph below.
@@ -290,27 +312,35 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
                 if args.graph_show_inputs:
                     input_node_name = '___'.join(namespaces + [step_name_i, arg_key])
                     dot.node(input_node_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
-                    dot.edge(input_node_name, step_node_name)
+                    dot.edge(input_node_name, step_node_name, color=font_edge_color)
         
         for arg_key in args_required:
             #print('arg_key', arg_key)
             if arg_key in args_provided:
                 continue  # We already covered this case above.
             if arg_key in sub_args_provided: # Edges have been explicitly provided
-                (nss, var) = vars_dollar_tails[arg_key]
-                var_slash = nss[0] + '/' + '___'.join(nss[1:] + [var])
-                arg_keyval = {arg_key: var_slash}
-                steps[i] = add_yamldict_keyval(steps[i], step_key, 'in', arg_keyval)
+                # We have now returned from the recursion and need to pass values in.
+                # Extract the stored defs namespaces from vars_dollar_calls.
+                # (See massive comment above.)
+                (nss_def_init, var) = vars_dollar_calls[arg_key]
 
                 # NOTE: Add edges to subgraphs here (i.e. in the parent graph).
                 # Otherwise, graphviz will segfault! See comment above.
-                nss_embedded1 = var.split('___')[:-1]
-                nss_embedded2 = arg_key.split('___')[:-1]
-                nss1 = nss + nss_embedded1
-                # [step_name_i] is correct; nss already contains step_name_j from the recursive call
-                nss2 = namespaces + [step_name_i] + nss_embedded2
+                nss_def_embedded = var.split('___')[:-1]
+                nss_call_embedded = arg_key.split('___')[:-1]
+                nss_def = nss_def_init + nss_def_embedded
+                # [step_name_i] is correct; nss_def_init already contains step_name_j from the recursive call
+                nss_call = namespaces + [step_name_i] + nss_call_embedded
+
+                nss_def_inits_, nss_def_tails = partition_by_lowest_common_ancestor(nss_def, nss_call)
+                nss_call_inits_, nss_call_tails = partition_by_lowest_common_ancestor(nss_call, nss_def)
+
+                var_slash = nss_def_tails[0] + '/' + '___'.join(nss_def_tails[1:] + [var])
+                arg_keyval = {arg_key: var_slash}
+                steps[i] = add_yamldict_keyval(steps[i], step_key, 'in', arg_keyval)
+
                 label = var.split('___')[-1]
-                add_graph_edge(args, dot, nss1, nss2, label)
+                add_graph_edge(args, dot, nss_def, nss_call, label)
 
                 # TODO: vars_workflow_output_internal?
             else:
@@ -380,9 +410,9 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
                 if case1 or case2:
                     dot.node(output_node_name, label=out_key_no_namespace, shape='box', style='rounded, filled', fillcolor='lightyellow')
                     if args.graph_label_edges:
-                        dot.edge(step_node_name, output_node_name, label=out_key_no_namespace)  # Is labeling necessary?
+                        dot.edge(step_node_name, output_node_name, color=font_edge_color, label=out_key_no_namespace)  # Is labeling necessary?
                     else:
-                        dot.edge(step_node_name, output_node_name)
+                        dot.edge(step_node_name, output_node_name, color=font_edge_color)
             # Exclude intermediate 'output' files.
             if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:
                 continue
@@ -458,7 +488,7 @@ def expand_workflow(args, namespaces, dot, vars_dollar_input, tools, is_root, ya
     
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_dollar_input, vars_dollar_tails, vars_workflow_output_internal, plugin_id, is_root, step_name_1, dot)
+    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_dollar_defs, vars_dollar_calls, vars_workflow_output_internal, plugin_id, is_root, step_name_1, dot)
 
 
 def main():
@@ -542,7 +572,7 @@ def main():
         yml_paths[stem] = yml_path
 
     # Collect the explicit $ internal workflow input variables
-    vars_dollar_input = {}
+    vars_dollar_defs = {}
 
     yaml_path = args.yaml
     if args.cwl_inline_subworkflows:
@@ -558,9 +588,13 @@ def main():
 
     rootdot = graphviz.Digraph(name=yaml_path)
     rootdot.attr(newrank='True') # See graphviz layout comment above.
+    rootdot.attr(bgcolor="transparent") # Useful for making slides
+    rootdot.attr(fontcolor=font_edge_color)
+    #rootdot.attr(rankdir='LR') # When --graph_inline_depth 1, this usually looks better.
     with rootdot.subgraph(name=f'cluster_{yaml_path}') as subdot:
         subdot.attr(label=yaml_path)
-        workflow_data = expand_workflow(args, [], subdot, vars_dollar_input, tools_cwl, True, yaml_path, yml_paths)
+        subdot.attr(color='lightblue')  # color of cluster subgraph outline
+        workflow_data = expand_workflow(args, [], subdot, vars_dollar_defs, tools_cwl, True, yaml_path, yml_paths)
     # Render the GraphViz diagram
     rootdot.render(format='png') # Default pdf. See https://graphviz.org/docs/outputs/
     #rootdot.view() # viewing does not work on headless machines (and requires xdg-utils)
@@ -571,6 +605,18 @@ def main():
         print(f'Running {yaml_stem}.cwl ...')
         cmd = ['cwltool', '--cachedir', 'cachedir','--outdir', 'outdir', f'{yaml_stem}.cwl', f'{yaml_stem}_inputs.yml']
         sub.run(cmd)
+
+
+def partition_by_lowest_common_ancestor(nss1, nss2):
+    # Only partition nss1; if you want to partition nss1
+    # just switch the arguments at the call site.
+    if nss1 == [] or nss2 == []:
+        return ([], nss1) # Base case
+    if nss1[0] == nss2[0]: # Keep going
+        (nss1_heads, nss1_tails) = partition_by_lowest_common_ancestor(nss1[1:], nss2[1:])
+        return ([nss1[0]] + nss1_heads, nss1_tails)
+    else:
+        return ([], nss1)
 
 
 def get_steps(yaml_tree, yaml_path):
