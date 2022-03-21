@@ -1,0 +1,5 @@
+steps:
+  - setup.yml:
+  - min.yml:
+  - equil.yml:
+  - prod.yml:

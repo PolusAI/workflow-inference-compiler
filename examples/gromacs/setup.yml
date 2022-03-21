@@ -5,17 +5,16 @@ steps:
   - pdb:
       in:
         output_pdb_path: tutorial.pdb
-        config: '{"pdb_code" : "1aki"}'
+        config: '{"pdb_code": "1aki"}'
   - fix_side_chain:
-# Setup
   - pdb2gmx:
   - editconf:
       in:
-        config: '{"box_type": "cubic","distance_to_molecule": 1.0}'
+        config: '{"box_type": "cubic", "distance_to_molecule": 1.0}'
   - solvate:
   - grompp:
       in:
-        config: '{"mdp": {"integrator":"steep"}}'
+        config: '{"mdp": {"integrator": "steep"}}'
   - genion:
       in:
         config: '{"neutral": "True"}'
