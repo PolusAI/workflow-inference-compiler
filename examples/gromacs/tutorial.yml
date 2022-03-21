@@ -2,14 +2,6 @@
 # The `in` tags are superfluous, but retained for now to simplify implementation.
 # Limit nsteps to 1000 for demo / development.
 steps:
-  - setup.yml:  # *.yml subworkflows are recursively expanded
-# Minimization
-  - min.yml:
-# NVT equil
-  - nvt.yml:
-# NPT equil
-  - npt.yml:
-# Production
-  - prod.yml:
+  - basic.yml:
 # Trajectory Analysis
   - analysis.yml:
