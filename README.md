@@ -3,7 +3,7 @@
 ## Quick Start
 ```
 cd examples/gromacs
-python ../../wic.py --yaml tutorial.yml --cwl_dir ../.. --cwl_output_intermediate_files True --cwl_run_local True
+python ../../main.py --yaml tutorial.yml --cwl_dir ../.. --cwl_output_intermediate_files True --cwl_run_local True
 ```
 
 ![Workflow](examples/gromacs/tutorial.yml.gv.png)
