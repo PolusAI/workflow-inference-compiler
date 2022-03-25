@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import utils
+from . import utils
 
 
 def perform_edge_inference(args, tools, steps_keys, subkeys, yaml_stem, i, steps_i, arg_key, graph, is_root, namespaces, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal):
