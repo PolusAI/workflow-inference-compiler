@@ -2,13 +2,13 @@
 
 ## Quick Start
 ```
-cd examples/gromacs
-python ../../main.py --yaml tutorial.yml --cwl_dir ../.. --cwl_output_intermediate_files True --cwl_run_local True
+pip install .
+wic --yaml examples/gromacs/tutorial.yml --cwl_dir ../.. --cwl_output_intermediate_files True --cwl_run_local True
 ```
 
 ![Workflow](examples/gromacs/tutorial.yml.gv.png)
 
-The Workflow Inference Compiler is a [Domain specific language](https://en.wikipedia.org/wiki/Domain-specific_language) (DSL) based on the [Common Workflow Language](https://www.commonwl.org). CWL is fantastic, but explicitly constructing the Directed Acyclic Graph (DAG) associated with a non-trivial workflow is not so simple. For example, the workflow shown above is based on the following [gromacs tutorial](http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl). Instead of writing raw CWL, you can write your workflows in a much simpler yml DSL.
+The Workflow Inference Compiler is a [Domain Specific Language](https://en.wikipedia.org/wiki/Domain-specific_language) (DSL) based on the [Common Workflow Language](https://www.commonwl.org). CWL is fantastic, but explicitly constructing the Directed Acyclic Graph (DAG) associated with a non-trivial workflow is not so simple. For example, the workflow shown above is based on the following [gromacs tutorial](http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl). Instead of writing raw CWL, you can write your workflows in a much simpler yml DSL.
 
 ## Edge Inference
 

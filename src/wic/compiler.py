@@ -8,9 +8,9 @@ import subprocess as sub
 import graphviz
 import yaml
 
-import inference
-import labshare
-import utils
+from . import inference
+from . import labshare
+from . import utils
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'

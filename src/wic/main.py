@@ -6,9 +6,9 @@ import subprocess as sub
 import graphviz
 import yaml
 
-import cli
-import compiler
-import utils
+from . import cli
+from . import compiler
+from . import utils
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
