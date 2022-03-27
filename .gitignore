@@ -8,4 +8,4 @@ plugin_ids
 *.pyc
 build/
 dist/
-src/workflow_inference_compiler.egg-info/
+*.egg-info/

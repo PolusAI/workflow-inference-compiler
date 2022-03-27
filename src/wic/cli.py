@@ -3,6 +3,7 @@ import argparse
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
 parser.add_argument('--yaml', type=str, required=True,
                     help='Yaml workflow file')
+
 parser.add_argument('--cwl_dir', type=str, required=False, default='biobb',
                     help='Directory which contains the CWL CommandLineTools and/or Workflows')
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=False,
@@ -19,6 +20,7 @@ parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, defa
                     help='Before generating the cwl file, inline all subworkflows.')
 parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
                     help='After generating the cwl file, validate it.')
+
 parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
                     help='Label the graph edges with the name of the intermediate input/output.')
 parser.add_argument('--graph_label_stepname', type=bool, required=False, default=False,

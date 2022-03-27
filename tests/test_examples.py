@@ -1,4 +1,4 @@
 import wic.main
 
-def test_examples():
+def test_examples() -> None:
     assert True
