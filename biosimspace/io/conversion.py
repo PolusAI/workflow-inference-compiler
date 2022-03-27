@@ -11,7 +11,7 @@ import BioSimSpace as BSS
 # we can use more precise edam formats and thus let CWL catch more errors.
 # In other words, the cwl scripts are type-safe wrappers around this script.
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     required_args = parser.add_argument_group('required arguments')
     required_args.add_argument('--input_top_path', required=True)

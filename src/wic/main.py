@@ -2,23 +2,26 @@ import glob
 from pathlib import Path
 import requests
 import subprocess as sub
+from typing import Tuple
 
 import graphviz
 import yaml
 
+from . import auto_gen_header
 from . import cli
 from . import compiler
 from . import utils
+from .wic_types import Cwl, Yaml, Tools
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
 
 
-def main():
+def main() -> None:
     args = cli.parser.parse_args()
 
     # Load ALL of the tools.
-    tools_cwl = {}
+    tools_cwl: Tools = {}
     pattern_cwl = str(Path(args.cwl_dir) / '**/*.cwl')
     #print(pattern_cwl)
     # Note that there is a current and a legacy copy of each cwl file for each tool.
@@ -39,17 +42,17 @@ def main():
             response = requests.delete(args.compute_url + '/compute/plugins/' + id)
         sub.run(['rm', 'plugin_ids'])
 
-    for cwl_path in cwl_paths_sorted:
+    for cwl_path_str in cwl_paths_sorted:
         #print(cwl_path)
         try:
-            with open(cwl_path, 'r') as f:
-              tool = yaml.safe_load(f.read())
-            stem = Path(cwl_path).stem
+            with open(cwl_path_str, 'r') as f:
+              tool: Cwl = yaml.safe_load(f.read())
+            stem = Path(cwl_path_str).stem
             #print(stem)
             # Add / overwrite stdout and stderr
             tool.update({'stdout': f'{stem}.out'})
             tool.update({'stderr': f'{stem}.err'})
-            tools_cwl[stem] = (cwl_path, tool)
+            tools_cwl[stem] = (cwl_path_str, tool)
             #print(tool)
         except yaml.scanner.ScannerError as se:
             pass
@@ -61,23 +64,20 @@ def main():
     pattern_yml = str(Path(args.cwl_dir) / '**/*.yml')
     yml_paths_sorted = sorted(glob.glob(pattern_yml, recursive=True), key=len, reverse=True)
     yml_paths = {}
-    for yml_path in yml_paths_sorted:
-        stem = Path(yml_path).stem
-        yml_paths[stem] = yml_path
-
-    # Collect the explicit $ internal workflow input variables
-    vars_dollar_defs = {}
+    for yml_path_str in yml_paths_sorted:
+        yml_path = Path(yml_path_str)
+        yml_paths[yml_path.stem] = yml_path
 
     yaml_path = args.yaml
     if args.cwl_inline_subworkflows:
         steps_inlined = utils.inline_sub_steps(yaml_path, tools_cwl, yml_paths)
         with open(Path(yaml_path), 'r') as y:
-            yaml_tree = yaml.safe_load(y.read())
+            yaml_tree: Yaml = yaml.safe_load(y.read())
         yaml_tree['steps'] = steps_inlined
-        dump_options = {'line_break': '\n', 'indent': 2}
-        yaml_content = yaml.dump(yaml_tree, sort_keys=False, **dump_options)
+        yaml_content = yaml.dump(yaml_tree, sort_keys=False, line_break='\n', indent=2)
         yaml_path = Path(args.yaml).stem + '_inline.yml'
         with open(yaml_path, 'w') as y:
+            y.write(auto_gen_header)
             y.write(yaml_content)
 
     rootgraph = graphviz.Digraph(name=yaml_path)
@@ -88,7 +88,7 @@ def main():
     with rootgraph.subgraph(name=f'cluster_{yaml_path}') as subgraph:
         subgraph.attr(label=yaml_path)
         subgraph.attr(color='lightblue')  # color of cluster subgraph outline
-        workflow_data = compiler.compile_workflow(args, [], [subgraph], vars_dollar_defs, tools_cwl, True, yaml_path, yml_paths)
+        workflow_data = compiler.compile_workflow(args, [], [subgraph], {}, tools_cwl, True, yaml_path, yml_paths)
     # Render the GraphViz diagram
     rootgraph.render(format='png') # Default pdf. See https://graphviz.org/docs/outputs/
     #rootgraph.view() # viewing does not work on headless machines (and requires xdg-utils)
