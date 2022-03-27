@@ -31,7 +31,7 @@ def perform_edge_inference(args: argparse.Namespace,
     # gmx_trjconv_str only, just require the user to specify filename.
     step_key = steps_keys[i]
     tool_i = tools[Path(step_key).stem][1]
-    step_name_i = utils.step_name_str(yaml_stem, i+1, step_key)
+    step_name_i = utils.step_name_str(yaml_stem, i, step_key)
     for j in range(0, i)[::-1]:  # Reverse order!
         tool_j = tools[Path(steps_keys[j]).stem][1]
         out_keys = list(tool_j['outputs'])[::-1] # Reverse order!
@@ -40,7 +40,7 @@ def perform_edge_inference(args: argparse.Namespace,
             if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
                 #print('match!', j)  # We found a match!
                 # Generate a new namespace for out_key using the step number and add to inputs
-                step_name_j = utils.step_name_str(yaml_stem, j+1, steps_keys[j])
+                step_name_j = utils.step_name_str(yaml_stem, j, steps_keys[j])
                 arg_val = f'{step_name_j}/{out_key}'
 
                 # We also need to keep track of the 'internal' output variables

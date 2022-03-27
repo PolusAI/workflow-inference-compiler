@@ -8,11 +8,9 @@ from typing import Dict, List
 import graphviz
 import yaml
 
-from . import auto_gen_header
 from . import inference
-from . import labshare
 from . import utils
-from .wic_types import Yaml, Tools, DollarDefs, CompilerInfo
+from .wic_types import Yaml, Tools, DollarDefs, CompilerInfo, WorkflowInputsFile
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -70,9 +68,8 @@ def compile_workflow(args: argparse.Namespace,
     # Collect recursive subworkflow data
     step_1_names = []
     sibling_subgraphs = []
-
-    # Collect labshare plugin_ids
-    plugin_ids = []
+    
+    recursive_data_list = []
 
     graph = subgraphs[-1] # Get the current graph
 
@@ -81,7 +78,7 @@ def compile_workflow(args: argparse.Namespace,
         # Recursively compile subworkflows, adding compiled cwl file contents to tools
         if step_key in subkeys:
             #path = Path(step_key)
-            path = yml_paths[Path(step_key).stem]
+            path = yml_paths[stem]
             if not (path.exists() and path.suffix == '.yml'):
                 # TODO: Once we have defined a yml DSL schema,
                 # check that the file contents actually satisfies the schema.
@@ -89,12 +86,18 @@ def compile_workflow(args: argparse.Namespace,
             subgraph = graphviz.Digraph(name=f'cluster_{step_key}')
             subgraph.attr(label=step_key) # str(path)
             subgraph.attr(color='lightblue')  # color of outline
-            step_name_i = utils.step_name_str(yaml_stem, i+1, step_key)
+            step_name_i = utils.step_name_str(yaml_stem, i, step_key)
             subworkflow_data = compile_workflow(args, namespaces + [step_name_i], subgraphs + [subgraph], vars_dollar_defs, tools, False, path, yml_paths)
-            sibling_subgraphs.append(subworkflow_data[-1]) # TODO: Just subgraph?
-            step_1_names.append(subworkflow_data[-2])
+            
+            recursive_data = subworkflow_data[0]
+            recursive_data_list.append(recursive_data)
+
+            sub_node_data = recursive_data[0]
+            
+            sibling_subgraphs.append(sub_node_data[-1]) # TODO: Just subgraph?
+            step_1_names.append(subworkflow_data[-1])
             # Add compiled cwl file contents to tools
-            tools[stem] = (stem + '.cwl', subworkflow_data[0])
+            tools[stem] = (stem + '.cwl', sub_node_data[1])
 
             # Initialize the above from recursive values.
             # Do not initialize inputs_workflow. See comment below.
@@ -106,16 +109,6 @@ def compile_workflow(args: argparse.Namespace,
             vars_dollar_calls.update(subworkflow_data[5])
 
         tool_i = tools[stem][1]
-
-        plugin_id = -1
-        if args.cwl_run_slurm:
-            if not (step_key in subkeys):
-                # i.e. If this is either a primitive CommandLineTool and/or
-                # a 'primitive' Workflow that we did NOT recursively generate.
-                plugin_id = labshare.upload_plugin(args.compute_url, tool_i, stem)
-            else:
-                plugin_id = subworkflow_data[6]
-            plugin_ids.append(plugin_id)
 
         # Add run tag
         run_path = tools[stem][0]
@@ -163,7 +156,7 @@ def compile_workflow(args: argparse.Namespace,
         sub_args_provided = [arg for arg in args_required if arg in vars_dollar_calls]
         #print(sub_args_provided)
 
-        step_name_i = utils.step_name_str(yaml_stem, i+1, step_key)
+        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         label = step_key
         if args.graph_label_stepname:
             label = step_name_i
@@ -344,7 +337,7 @@ def compile_workflow(args: argparse.Namespace,
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     outputs_workflow = {}
     for i, step_key in enumerate(steps_keys):
-        step_name_i = utils.step_name_str(yaml_stem, i+1, step_key)
+        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         out_keys = steps[i][step_key]['out']
         for out_key in out_keys:
             # Exclude certain output files as per the comment above.
@@ -386,58 +379,18 @@ def compile_workflow(args: argparse.Namespace,
     # and convert the list of steps into a dict
     steps_dict = {}
     for i, step_key in enumerate(steps_keys):
-        step_name_i = utils.step_name_str(yaml_stem, i+1, step_key)
+        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         #steps[i] = {step_name_i: steps[i][step_key]}
         steps_dict.update({step_name_i: steps[i][step_key]})
     yaml_tree.update({'steps': steps_dict})
 
     # Dump the workflow inputs to a separate yml file.
-    yaml_inputs = {}
+    yaml_inputs: WorkflowInputsFile = {}
     for key, (val, in_type) in inputs_file_workflow.items():
         new_keyval = {key: val}  # if string
         if 'File' in in_type:
             new_keyval = {key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2330'}}
         yaml_inputs.update(new_keyval)
-
-    yaml_content = yaml.dump(yaml_inputs, sort_keys=False, line_break='\n', indent=2)
-    with open(f'{yaml_stem}_inputs.yml', 'w') as inp:
-        inp.write(auto_gen_header)
-        inp.write(yaml_content)
-
-    # Dump the compiled yaml file to disk.
-    # Use sort_keys=False to preserve the order of the steps.
-    yaml_content = yaml.dump(yaml_tree, sort_keys=False, line_break='\n', indent=2)
-    with open(f'{yaml_stem}.cwl', 'w') as w:
-        w.write('#!/usr/bin/env cwl-runner\n')
-        w.write(auto_gen_header)
-        w.write(''.join(yaml_content))
-
-    if args.cwl_run_slurm:
-        # Convert the compiled yaml file to json for labshare Compute.
-        # Replace 'run' with plugin:id
-        import copy
-        yaml_tree_run = copy.deepcopy(yaml_tree)
-        for i, step_key in enumerate(steps_keys):
-            step_name_i = utils.step_name_str(yaml_stem, i+1, step_key)
-            run_val = f'plugin:{plugin_ids[i]}'
-            yaml_tree_run['steps'][step_name_i]['run'] = run_val
-        if key in subkeys: # and not is_root, but the former implies the latter
-            plugin_id = labshare.upload_plugin(args.compute_url, yaml_tree_run, stem)
-        if is_root:
-            compute_workflow = {
-                "driver": "slurm",
-                "name": yaml_stem,
-                "cwlJobInputs": yaml_inputs,
-                **yaml_tree_run
-            }
-            # Use http POST request to upload a primitive CommandLineTool / define a plugin and get its id hash.
-            response = requests.post(args.compute_url + '/compute/workflows', json = compute_workflow)
-            r_json = response.json()
-            print('post response')
-            print(r_json)
-            if 'id' not in r_json:
-                raise Exception(f'Error! Labshare workflow upload failed for {yaml_stem}.')
-            labshare.print_plugins(args.compute_url)
 
     print(f'Finished compiling {yaml_path}')
     
@@ -448,4 +401,5 @@ def compile_workflow(args: argparse.Namespace,
     
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    return (yaml_tree, inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, vars_dollar_defs, vars_dollar_calls, plugin_id, step_name_1, graph)
+    node_data = (yaml_stem, yaml_tree, yaml_inputs, graph) # step_name_1, plugin_id?
+    return ((node_data, recursive_data_list), inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, vars_dollar_defs, vars_dollar_calls, step_name_1)

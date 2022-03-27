@@ -2,7 +2,7 @@ import glob
 from pathlib import Path
 import requests
 import subprocess as sub
-from typing import Tuple
+from typing import Dict
 
 import graphviz
 import yaml
@@ -10,6 +10,7 @@ import yaml
 from . import auto_gen_header
 from . import cli
 from . import compiler
+from . import labshare
 from . import utils
 from .wic_types import Cwl, Yaml, Tools
 
@@ -17,12 +18,10 @@ from .wic_types import Cwl, Yaml, Tools
 font_edge_color = 'white'
 
 
-def main() -> None:
-    args = cli.parser.parse_args()
-
+def get_tools_cwl(cwl_dir: Path) -> Tools:
     # Load ALL of the tools.
     tools_cwl: Tools = {}
-    pattern_cwl = str(Path(args.cwl_dir) / '**/*.cwl')
+    pattern_cwl = str(cwl_dir / '**/*.cwl')
     #print(pattern_cwl)
     # Note that there is a current and a legacy copy of each cwl file for each tool.
     # The only difference appears to be that some legacy parameters are named 
@@ -33,14 +32,6 @@ def main() -> None:
     # subdirctory, if we sort the paths by descending length, we can overwrite
     # the dict entries of the legacy files.
     cwl_paths_sorted = sorted(glob.glob(pattern_cwl, recursive=True), key=len, reverse=True)
-
-    # Delete plugins previously uploaded to labshare.
-    if args.cwl_run_slurm and Path('plugin_ids').exists():
-        with open('plugin_ids', 'r') as f:
-            ids = f.read().splitlines()
-        for id in ids:
-            response = requests.delete(args.compute_url + '/compute/plugins/' + id)
-        sub.run(['rm', 'plugin_ids'])
 
     for cwl_path_str in cwl_paths_sorted:
         #print(cwl_path)
@@ -59,14 +50,27 @@ def main() -> None:
             # There are two cwl files that throw this error, but they are both legacy, so...
             #print(cwl_path)
             #print(se)
+    
+    return tools_cwl
 
+
+def get_yml_paths(cwl_dir: Path) -> Dict[str, Path]:
     # Glob all of the yml files too, so we don't have to deal with relative paths.
-    pattern_yml = str(Path(args.cwl_dir) / '**/*.yml')
+    pattern_yml = str(cwl_dir / '**/*.yml')
     yml_paths_sorted = sorted(glob.glob(pattern_yml, recursive=True), key=len, reverse=True)
     yml_paths = {}
     for yml_path_str in yml_paths_sorted:
         yml_path = Path(yml_path_str)
         yml_paths[yml_path.stem] = yml_path
+
+    return yml_paths
+
+
+def main() -> None:
+    args = cli.parser.parse_args()
+
+    tools_cwl = get_tools_cwl(Path(args.cwl_dir))
+    yml_paths = get_yml_paths(Path(args.cwl_dir))
 
     yaml_path = args.yaml
     if args.cwl_inline_subworkflows:
@@ -89,6 +93,27 @@ def main() -> None:
         subgraph.attr(label=yaml_path)
         subgraph.attr(color='lightblue')  # color of cluster subgraph outline
         workflow_data = compiler.compile_workflow(args, [], [subgraph], {}, tools_cwl, True, yaml_path, yml_paths)
+        recursive_data = workflow_data[0]
+
+    utils.write_to_disk(recursive_data)
+
+    if args.cwl_run_slurm:
+        # Delete plugins previously uploaded to labshare.
+        if args.cwl_run_slurm and Path('plugin_ids').exists():
+            with open('plugin_ids', 'r') as f:
+                ids = f.read().splitlines()
+            for id in ids:
+                response = requests.delete(args.compute_url + '/compute/plugins/' + id)
+            sub.run(['rm', 'plugin_ids'])
+        # Delete pipelines previously uploaded to labshare.
+        if args.cwl_run_slurm and Path('pipeline_ids').exists():
+            with open('pipeline_ids', 'r') as f:
+                ids = f.read().splitlines()
+            for id in ids:
+                response = requests.delete(args.compute_url + '/compute/pipelines/' + id)
+            sub.run(['rm', 'pipeline_ids'])
+        labshare.upload_all(recursive_data, tools_cwl, args, True)
+
     # Render the GraphViz diagram
     rootgraph.render(format='png') # Default pdf. See https://graphviz.org/docs/outputs/
     #rootgraph.view() # viewing does not work on headless machines (and requires xdg-utils)
