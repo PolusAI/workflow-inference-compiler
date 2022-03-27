@@ -6,7 +6,8 @@ import graphviz
 import yaml
 from typing import Any, Dict
 
-from .wic_types import Yaml
+from . import auto_gen_header
+from .wic_types import Yaml, RecursiveData, Cwl
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -14,22 +15,22 @@ font_edge_color = 'white'
 
 def step_name_str(yaml_stem: str, i: int, step_key: str) -> str:
     # Use double underscore so we can '__'.split() below.
-    # (This should work)
+    # (This should work as long as yaml_stem and step_key do not contain __)
     return f'{yaml_stem}__step__{i+1}__{step_key}'
 
 
 def parse_step_name_str(step_name_str: str) -> Tuple[str, int, str]:
-    vals = '__'.split(step_name_str) # double underscore
-    if not len(vals) == 3:
+    vals = step_name_str.split('__') # double underscore
+    if not len(vals) == 4:
         raise Exception(f"Error! {step_name_str} is not of the format \n"
-                        + '{yaml_stem}__step__\{i+1}__{step_key}'
+                        + '{yaml_stem}__step__\{i+1}__{step_key}\n'
                         + 'yaml_stem and step_key should not contain any double underscores.')
     try:
-        i = int(vals[1])
+        i = int(vals[2])
     except:
         raise Exception(f"Error! {step_name_str} is not of the format \n"
                         + '{yaml_stem}__step__\{i+1}__{step_key}')
-    return (vals[0], i, vals[2])
+    return (vals[0], i-1, vals[3])
 
 
 def add_yamldict_keyval(steps_i: Yaml, step_key: str, in_out: str, keyval: Yaml) -> Yaml:
@@ -123,3 +124,26 @@ def inline_sub_steps(yaml_path: Path, tools: Dict[str, Tuple[str, Any]], yml_pat
 
     steps_all_flattened = [step for steps in steps_all for step in steps]
     return steps_all_flattened
+
+
+def write_to_disk(recursive_data: RecursiveData) -> None:
+    sub_node_data = recursive_data[0]
+    yaml_stem = sub_node_data[0]
+    yaml_tree = sub_node_data[1]
+    yaml_inputs = sub_node_data[2]
+    
+    # Dump the compiled yaml file to disk.
+    # Use sort_keys=False to preserve the order of the steps.
+    yaml_content = yaml.dump(yaml_tree, sort_keys=False, line_break='\n', indent=2)
+    with open(f'{yaml_stem}.cwl', 'w') as w:
+        w.write('#!/usr/bin/env cwl-runner\n')
+        w.write(auto_gen_header)
+        w.write(''.join(yaml_content))
+
+    yaml_content = yaml.dump(yaml_inputs, sort_keys=False, line_break='\n', indent=2)
+    with open(f'{yaml_stem}_inputs.yml', 'w') as inp:
+        inp.write(auto_gen_header)
+        inp.write(yaml_content)
+
+    for r in recursive_data[1]:
+        write_to_disk(r)

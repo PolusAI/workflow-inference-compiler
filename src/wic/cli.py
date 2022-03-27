@@ -14,12 +14,13 @@ parser.add_argument('--cwl_run_local', type=bool, required=False, default=False,
 # Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
 parser.add_argument('--cwl_run_slurm', type=bool, required=False, default=False,
                     help='After generating the cwl file, run it on labshare using the slurm driver.')
-parser.add_argument('--compute_url', type=bool, required=False, default=False,
-                    help='The URL associated with the labshare slurm driver.')
 parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, default=False,
                     help='Before generating the cwl file, inline all subworkflows.')
 parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
                     help='After generating the cwl file, validate it.')
+
+parser.add_argument('--compute_url', type=str, required=False, default=False,
+                    help='The URL associated with the labshare slurm driver.')
 
 parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
                     help='Label the graph edges with the name of the intermediate input/output.')
