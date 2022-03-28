@@ -1,7 +1,11 @@
+# On my machine, 10 iterations of steepest descent is sufficient to prevent
+# conjugate gradient from crashing. (i.e. pytest works for me!)
+# But using only 10 iterations is causing the tests on github actions to fail!
+# Let's try 25.
 steps:
   - grompp:
       in:
-        config: '{"mdp": {"integrator":"steep", "rvdw":"1.4", "rcoulomb":"1.4", "nsteps":"10", "emtol":"500", "nstenergy":"1"}}'
+        config: '{"mdp": {"integrator":"steep", "rvdw":"1.4", "rcoulomb":"1.4", "nsteps":"25", "emtol":"500", "nstenergy":"1"}}'
   - mdrun:
   - gmx_energy:
       in:
