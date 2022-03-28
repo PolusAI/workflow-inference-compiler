@@ -1,8 +1,10 @@
+# Use &filename to create a reference to an output. Inputs in later steps can
+# use *filename to dereference the filename and create an explicit edge.
 steps:
   - grompp:
       in:
         config: '{"mdp": {"integrator":"cg", "rvdw":"1.0", "rcoulomb":"1.0", "nsteps":"200", "emtol":"500", "nstenergy":"1"}}'
-        output_tpr_path: '$min.tpr'  # Explicitly specify filename for future reference.
+        output_tpr_path: '&min.tpr'
   - mdrun:
   - gmx_energy:
       in:

@@ -23,7 +23,7 @@ Namespaces = List[Namespace]
 # This is absolutely critical to ensuring that the CWL files corresponding to
 # Subworkflows are completely independent of their embedding into a parent
 # Workflow. This is one of the main design criteria, so do not mess this up!!!
-# There will be unit/regression tests for this very soon...
+# In fact, you can't mess this up because of test_cwl_embedding_independence()
 # (FYI, we are forced to store this info in specially encoded strings because
 # the CWL schema does not allow us to add extra tags. Specially encoded strings
 # are almost never the right answer, but for now I don't see any other way.)
