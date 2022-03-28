@@ -6,7 +6,8 @@ parser.add_argument('--yaml', type=str, required=True,
 
 parser.add_argument('--cwl_dir', type=str, required=False, default='biobb',
                     help='Directory which contains the CWL CommandLineTools and/or Workflows')
-parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=False,
+# Change default to True for now. See comment in compiler.py
+parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
 parser.add_argument('--cwl_run_local', type=bool, required=False, default=False,
                     help='After generating the cwl file(s), run it on localhost.')

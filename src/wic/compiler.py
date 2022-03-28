@@ -176,8 +176,8 @@ def compile_workflow(args: argparse.Namespace,
             arg_val = steps[i][step_key]['in'][arg_key]
             in_name = f'{step_name_i}___{arg_key}'  # Use triple underscore for namespacing so we can split later # {step_name_i}_input___{arg_key}
             in_type = in_tool[arg_key]['type'].replace('?', '')  # Providing optional arguments makes them required
-            if arg_val[0] == '$':
-                arg_val = arg_val[1:]  # Remove $
+            if arg_val[0] == '&':
+                arg_val = arg_val[1:]  # Remove &
                 #print('arg_key, arg_val', arg_key, arg_val)
                 # NOTE: There can only be one definition, but multiple call sites.
                 if not vars_dollar_defs.get(arg_val):
@@ -188,6 +188,22 @@ def compile_workflow(args: argparse.Namespace,
                     steps[i][step_key]['in'][arg_key] = in_name
                     vars_dollar_defs.update({arg_val: (namespaces + [step_name_i], arg_key)})
                     # TODO: Show input node?
+                else:
+                    raise Exception(f"Error! Multiple definitions of &{arg_val}!")
+            elif arg_val[0] == '*':
+                arg_val = arg_val[1:]  # Remove *
+                if not vars_dollar_defs.get(arg_val):
+                    if is_root:
+                        # Even if is_root, we don't want to raise an Exception
+                        # here because in test_cwl_embedding_independence, we
+                        # recompile all subworkflows as if they were root. That
+                        # will cause this code path to be taken but it is not
+                        # actually an error. Add a CWL input for testing only.
+                        print(f"Error! No definition found for &{arg_val}!")
+                        print(f"Creating the CWL input {in_name} anyway, but")
+                        print("without any corresponding input value this will fail validation!")
+                        inputs_workflow.update({in_name: {'type': in_type}})
+                        steps[i][step_key]['in'][arg_key] = in_name
                 else:
                     (nss_def_init, var) =  vars_dollar_defs[arg_val]
 
@@ -350,6 +366,7 @@ def compile_workflow(args: argparse.Namespace,
                 case1 = (tool_i['class'] == 'Workflow') and (not out_key in [var.replace('/', '___') for var in vars_workflow_output_internal])
                 # Avoid duplicating outputs from subgraphs in parent graphs.
                 output_node_name = '___'.join(namespaces + [step_name_i, out_key])
+                # TODO: check is_root here
                 case1 = case1 and not is_root and (len(step_node_name.split('___')) + 1 == len(output_node_name.split('___')))
                 case2 = (tool_i['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
                 if case1 or case2:
@@ -366,8 +383,11 @@ def compile_workflow(args: argparse.Namespace,
             # However, once we reach the root workflow, we can choose whether
             # we want to pollute our output directory with intermediate files.
             # (You can always enable --provenance to get intermediate files.)
+            # NOTE: Remove is_root for now because in test_cwl_embedding_independence,
+            # we recompile all subworkflows as if they were root. Thus, for now
+            # we need to enable args.cwl_output_intermediate_files
             # Exclude intermediate 'output' files.
-            if is_root and out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:
+            if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files: # and is_root
                 continue
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             #print('out_name', out_name)

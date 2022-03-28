@@ -5,12 +5,12 @@ steps:
   - sander_mdrun:
       in:
         input_mdin_path: min.mdin
-        output_rst_path: $min.rst
+        output_rst_path: '&min.rst'
         output_traj_path: min.crd
   - npt_amber.yml:
   - bss_amb_gro:
       in:
-        input_crd_path: $amb.rst
+        input_crd_path: '*amb.rst'
   - zip_top:
   # Due to instabilities, minimize after conversion
   - steep.yml:

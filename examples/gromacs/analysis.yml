@@ -1,3 +1,5 @@
+# We previously used &filename to create references to outputs. Now we can
+# use *filename to dereference filename and create an explicit edge to the inputs.
 steps:
   - gmx_rms:
       in:
@@ -7,17 +9,17 @@ steps:
       in:
         config: '{"selection": "Backbone"}'
         output_xvg_path: 'rmsd_exp.xvg'
-        input_structure_path: '$min.tpr' # Use $ to explicitly create edges to other nodes
+        input_structure_path: '*min.tpr'
   - gmx_rgyr:
       in:
         config: '{"selection": "Backbone"}'
-        input_structure_path: '$min.tpr'
+        input_structure_path: '*min.tpr'
   - gmx_image:
       in:
         config: '{"center_selection":"Protein","output_selection":"Protein","pbc":"mol"}'
-        input_top_path: '$prod.tpr'
+        input_top_path: '*prod.tpr'
   - gmx_trjconv_str:
       in:
         config: '{"selection": "Protein"}'
-        input_top_path: '$prod.tpr'
-        input_crd_path: '$prod.gro'
+        input_top_path: '*prod.tpr'
+        input_crd_path: '*prod.gro'

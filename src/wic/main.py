@@ -60,8 +60,9 @@ def get_yml_paths(cwl_dir: Path) -> Dict[str, Path]:
     yml_paths_sorted = sorted(glob.glob(pattern_yml, recursive=True), key=len, reverse=True)
     yml_paths = {}
     for yml_path_str in yml_paths_sorted:
-        yml_path = Path(yml_path_str)
-        yml_paths[yml_path.stem] = yml_path
+        if '_inputs' not in yml_path_str:
+            yml_path = Path(yml_path_str)
+            yml_paths[yml_path.stem] = yml_path
 
     return yml_paths
 

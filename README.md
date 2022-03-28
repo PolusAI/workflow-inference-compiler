@@ -20,11 +20,14 @@ Every DAG has a [topological ordering](https://en.wikipedia.org/wiki/Topological
 
 ## Explicit Edges
 
-If for some reason edge inference fails, you can always explicitly specify the edges using `$var` notation. Simply specify the output file name of a given step to be `$var` and then, in any later step, specify the input file name to be `$var` to create an edge between the output and the input. See `$min.tpr` in examples/gromacs for a concrete example.
+If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See examples/gromacs for a concrete example. Unfortunately, due to yml syntax, these variables will need to be in quotes.
 
 ## Subworkflows
 
 Subworkflows are very useful for creating reusable, composable building blocks. As shown above, recursive subworkflows are fully supported, and the edge inference algorithm has been very carefully constructed to work across subworkflow boundaries. If there are subworkflows, the linear order in the parent workflow is determined by inlineing the subworkflows. (If you are unsure, simply enable `--cwl_inline_subworkflows`) Note that since CWL files for subworkflows are also automatically generated, any subworkflow can be treated as a black box if desired.
+
+### Embedding Independence
+Moreover, in addition to ignoring irrelevant details inside a subworkflow, users should also be able to ignore the details of the parent workflow in which a subworkflow is embedded. In other words, subworkflows should be context-free and have 'embedding independence'. Again, the edge inference algorithm has been carefully constructed such that the edges inferred within a subworkflow do not depend on its embedding within a parent workflow. (This requirement is guaranteed by the regression tests!)
 
 ## Explicit CWL
 

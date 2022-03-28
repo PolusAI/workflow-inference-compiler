@@ -7,7 +7,7 @@ import yaml
 from typing import Any, Dict
 
 from . import auto_gen_header
-from .wic_types import Yaml, RecursiveData, Cwl
+from .wic_types import NodeData, Yaml, RecursiveData
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -124,6 +124,12 @@ def inline_sub_steps(yaml_path: Path, tools: Dict[str, Tuple[str, Any]], yml_pat
 
     steps_all_flattened = [step for steps in steps_all for step in steps]
     return steps_all_flattened
+
+
+def flatten_recursive_data(recursive_data: RecursiveData) -> List[NodeData]:
+    sub_node_data = recursive_data[0]
+    sub_rec_flat = [flatten_recursive_data(r) for r in recursive_data[1]]
+    return [sub_node_data] + [y for x in sub_rec_flat for y in x]
 
 
 def write_to_disk(recursive_data: RecursiveData) -> None:
