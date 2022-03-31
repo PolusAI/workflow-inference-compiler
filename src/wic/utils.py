@@ -23,13 +23,13 @@ def parse_step_name_str(step_name_str: str) -> Tuple[str, int, str]:
     vals = step_name_str.split('__') # double underscore
     if not len(vals) == 4:
         raise Exception(f"Error! {step_name_str} is not of the format \n"
-                        + '{yaml_stem}__step__\{i+1}__{step_key}\n'
+                        + '{yaml_stem}__step__{i+1}__{step_key}\n'
                         + 'yaml_stem and step_key should not contain any double underscores.')
     try:
         i = int(vals[2])
     except:
         raise Exception(f"Error! {step_name_str} is not of the format \n"
-                        + '{yaml_stem}__step__\{i+1}__{step_key}')
+                        + '{yaml_stem}__step__{i+1}__{step_key}')
     return (vals[0], i-1, vals[3])
 
 
@@ -53,7 +53,7 @@ def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, keyval: List[str]) -> 
     return add_yamldict_keyval(steps_i, step_key, 'out', keyval) # type: ignore
 
 
-def add_graph_edge(args: argparse.Namespace, graph: graphviz.Digraph, nss1: List[str], nss2: List[str], label: str) -> None:
+def add_graph_edge(args: argparse.Namespace, graph: graphviz.Digraph, nss1: List[str], nss2: List[str], label: str, color: str = font_edge_color) -> None:
     nss1 = nss1[:(1 + args.graph_inline_depth)]
     edge_node1 = '___'.join(nss1)
     nss2 = nss2[:(1 + args.graph_inline_depth)]
@@ -61,9 +61,9 @@ def add_graph_edge(args: argparse.Namespace, graph: graphviz.Digraph, nss1: List
     # Hide internal self-edges
     if not edge_node1 == edge_node2:
         if args.graph_label_edges:
-            graph.edge(edge_node1, edge_node2, color=font_edge_color, label=label)
+            graph.edge(edge_node1, edge_node2, color=color, label=label)
         else:
-            graph.edge(edge_node1, edge_node2, color=font_edge_color)
+            graph.edge(edge_node1, edge_node2, color=color)
 
 
 def partition_by_lowest_common_ancestor(nss1: List[str], nss2: List[str]) -> Tuple[List[str], List[str]]:
@@ -76,6 +76,15 @@ def partition_by_lowest_common_ancestor(nss1: List[str], nss2: List[str]) -> Tup
         return ([nss1[0]] + nss1_heads, nss1_tails)
     else:
         return ([], nss1)
+
+
+def get_steps_keys(steps: List[Yaml]) -> List[str]:
+    # Get the dictionary key (i.e. the name) of each step.
+    steps_keys = []
+    for step in steps:
+        steps_keys += list(step)
+    #print(steps_keys)
+    return steps_keys
 
 
 def extract_backend_steps(yaml_tree: Yaml, yaml_path: Path) -> Yaml:
@@ -132,24 +141,54 @@ def flatten_recursive_data(recursive_data: RecursiveData) -> List[NodeData]:
     return [sub_node_data] + [y for x in sub_rec_flat for y in x]
 
 
-def write_to_disk(recursive_data: RecursiveData) -> None:
+def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: bool) -> None:
     sub_node_data = recursive_data[0]
-    yaml_stem = sub_node_data[0]
-    yaml_tree = sub_node_data[1]
-    yaml_inputs = sub_node_data[2]
-    
+    namespaces = sub_node_data[0]
+    yaml_stem = sub_node_data[1]
+    yaml_tree = sub_node_data[2]
+    # Omit yaml DSL args because they *should* be passed in and converted into regular yaml inputs.
+    yaml_inputs = sub_node_data[4]
+    # TODO: destructure sub_node_data rather than using explicit indexing.
+
+    path.mkdir(parents=True, exist_ok=True)
+    if relative_run_path:
+        filename_cwl = f'{yaml_stem}.cwl'
+        filename_yml = f'{yaml_stem}_inputs.yml'
+    else:
+        filename_cwl = '___'.join(namespaces + [f'{yaml_stem}.cwl'])
+        filename_yml = '___'.join(namespaces + [f'{yaml_stem}_inputs.yml'])
+
     # Dump the compiled yaml file to disk.
     # Use sort_keys=False to preserve the order of the steps.
     yaml_content = yaml.dump(yaml_tree, sort_keys=False, line_break='\n', indent=2)
-    with open(f'{yaml_stem}.cwl', 'w') as w:
+    with open(path / filename_cwl, 'w') as w:
         w.write('#!/usr/bin/env cwl-runner\n')
         w.write(auto_gen_header)
         w.write(''.join(yaml_content))
 
     yaml_content = yaml.dump(yaml_inputs, sort_keys=False, line_break='\n', indent=2)
-    with open(f'{yaml_stem}_inputs.yml', 'w') as inp:
+    with open(path / filename_yml, 'w') as inp:
         inp.write(auto_gen_header)
         inp.write(yaml_content)
 
     for r in recursive_data[1]:
-        write_to_disk(r)
+        subpath = path
+        if relative_run_path:
+            sub_namespace = r[0][0]
+            sub_step_name = sub_namespace[-1]
+            subpath = path / sub_step_name
+        write_to_disk(r, subpath, relative_run_path)
+
+
+def recursively_delete_dict_key(key: str, obj: Any) -> Any:
+    if isinstance(obj, List):
+        return [recursively_delete_dict_key(key, x) for x in obj]
+    elif isinstance(obj, Dict):
+        new_dict = {}
+        for key_ in obj.keys():
+            if not (key_ == key): # i.e. effectively delete key
+                new_dict[key_] = recursively_delete_dict_key(key, obj[key_])
+        return new_dict
+    else:
+        return obj
+            

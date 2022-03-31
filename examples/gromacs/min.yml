@@ -3,7 +3,7 @@ steps:
 # Fatal error:
 # The coordinates could not be constrained. Minimizer 'cg' can not handle
 # constraint failures, use minimizer 'steep' before using 'cg'.
-  - cg.yml:
+#  - cg.yml:
 # Fatal error:
 # The combination of constraints and L-BFGS minimization is not implemented.
 # Either do not use constraints, or use another minimizer (e.g. steepest
