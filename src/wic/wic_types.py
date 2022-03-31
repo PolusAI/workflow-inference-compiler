@@ -37,13 +37,14 @@ DollarCalls = Dict[str, DollarDef]
 PluginID = int
 StepName1 = str
 DiGraph = Any # graphviz.DiGraph
+YamlDSLArgs = Yaml
 
 # As mentioned above, since we cannot store extra info in CWL files, we need a
 # data structure to store temporary compiler info that gets passed through the
 # recursion.
 # Unfortunately, since mypy does not support Algebraic Data Types (ADTs)
 # we have to weaken the type of RecursiveData to Any :(
-NodeData = Tuple[str, Cwl, WorkflowInputsFile, DiGraph]
+NodeData = Tuple[Namespaces, str, Cwl, YamlDSLArgs, WorkflowInputsFile, DollarDefs, DollarCalls, DiGraph]
 #RecursiveData = Tuple[NodeData, List[RecursiveData]]
 RecursiveData = Any
 CompilerInfo = Tuple[RecursiveData, WorkflowInputs, WorkflowInputsFile, InternalOutputs, DollarDefs, DollarCalls, StepName1]

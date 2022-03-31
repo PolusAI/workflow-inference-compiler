@@ -20,7 +20,7 @@ Every DAG has a [topological ordering](https://en.wikipedia.org/wiki/Topological
 
 ## Explicit Edges
 
-If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See examples/gromacs for a concrete example. Unfortunately, due to yml syntax, these variables will need to be in quotes.
+If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See examples/gromacs for a concrete example. Due to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!), these variables will need to be in quotes. (The notation is intended to be nearly identical, but instead of using `'*tag'` to refer to the *contents* of `'&var'` it refers to the *path* to `'&var'`.)
 
 ## Subworkflows
 

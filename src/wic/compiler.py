@@ -1,16 +1,17 @@
 
 import argparse
+import copy
 from pathlib import Path
-import requests
 import subprocess as sub
 from typing import Dict, List
 
+from mergedeep import merge, Strategy
 import graphviz
 import yaml
 
 from . import inference
 from . import utils
-from .wic_types import Yaml, Tools, DollarDefs, CompilerInfo, WorkflowInputsFile
+from .wic_types import Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, DiGraph
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -20,23 +21,22 @@ def compile_workflow(args: argparse.Namespace,
                      namespaces: List[str],
                      subgraphs: List[graphviz.Digraph],
                      vars_dollar_defs: DollarDefs,
+                     vars_dollar_calls: DollarCalls,
                      tools: Tools,
                      is_root: bool,
                      yaml_path: Path,
-                     yml_paths: Dict[str, Path]) -> CompilerInfo:
+                     yaml_dsl_args: Yaml,
+                     yml_paths: Dict[str, Path],
+                     relative_run_path: bool) -> CompilerInfo:
     # Load the high-level yaml workflow file.
     yaml_stem = Path(yaml_path).stem
     with open(Path(yaml_path), 'r') as y:
         yaml_tree: Yaml = yaml.safe_load(y.read())
 
     yaml_tree = utils.extract_backend_steps(yaml_tree, yaml_path)
-    steps = yaml_tree['steps']
+    steps: List[Yaml] = yaml_tree['steps']
 
-    # Get the dictionary key (i.e. the name) of each step.
-    steps_keys: List[str] = []
-    for step in steps:
-        steps_keys += list(step)
-    #print(steps_keys)
+    steps_keys = utils.get_steps_keys(steps)
 
     subkeys = [key for key in steps_keys if key not in tools]
 
@@ -44,16 +44,8 @@ def compile_workflow(args: argparse.Namespace,
     yaml_tree['cwlVersion'] = 'v1.0'
     yaml_tree['class'] = 'Workflow'
 
-    # If there is at least one subworkflow, add a SubworkflowFeatureRequirement
-    if (not subkeys == []) or any([tools[Path(key).stem][1]['class'] == 'Workflow' for key in steps_keys if key not in subkeys]):
-        subworkreq = 'SubworkflowFeatureRequirement'
-        subworkreqdict = {subworkreq: {'class': subworkreq}}
-        if 'requirements' in yaml_tree:
-            if not subworkreq in yaml_tree['requirements']:
-                new_reqs = dict(list(yaml_tree['requirements'].items()) + list(subworkreqdict))
-                yaml_tree['requirements'].update(new_reqs)
-        else:
-            yaml_tree['requirements'] = subworkreqdict
+    # NOTE: currently mutates yaml_tree (maybe)
+    maybe_add_subworkflow_requirement(yaml_tree, tools, steps_keys, subkeys)
 
     # Collect workflow input parameters
     inputs_workflow = {}
@@ -62,8 +54,11 @@ def compile_workflow(args: argparse.Namespace,
     # Collect the internal workflow output variables
     vars_workflow_output_internal = []
 
+    # Collect recursive dollar variable definitions.
+    vars_dollar_defs_copy = copy.deepcopy(vars_dollar_defs)
+
     # Collect recursive dollar variable call sites.
-    vars_dollar_calls = {}
+    vars_dollar_calls_copy = copy.deepcopy(vars_dollar_calls)
 
     # Collect recursive subworkflow data
     step_1_names = []
@@ -74,7 +69,9 @@ def compile_workflow(args: argparse.Namespace,
     graph = subgraphs[-1] # Get the current graph
 
     for i, step_key in enumerate(steps_keys):
+        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         stem = Path(step_key).stem
+
         # Recursively compile subworkflows, adding compiled cwl file contents to tools
         if step_key in subkeys:
             #path = Path(step_key)
@@ -83,21 +80,37 @@ def compile_workflow(args: argparse.Namespace,
                 # TODO: Once we have defined a yml DSL schema,
                 # check that the file contents actually satisfies the schema.
                 raise Exception(f'Error! {path} does not exist or is not a .yml file.')
+
+            # Extract provided yaml args, if any, and (recursively) merge them with
+            # provided yaml_dsl_args passed in from the parent, if any.
+            yaml_dsl_args_parent = {}
+            if f'({i+1}, {step_key})' in yaml_dsl_args:
+                yaml_dsl_args_parent = yaml_dsl_args[f'({i+1}, {step_key})']
+            yaml_dsl_args_child = {}
+            if steps[i][step_key]:
+                yaml_dsl_args_child = copy.deepcopy(steps[i][step_key])
+                # Delete child yml DSL parameters, if any, so that we are left
+                # with only CWL parameters below.
+                steps[i].update({step_key: {}}) # delete
+            # NOTE: To support overloading, the parent args must overwrite the child args!
+            sub_yaml_dsl_args = merge(yaml_dsl_args_child, yaml_dsl_args_parent, strategy=Strategy.TYPESAFE_REPLACE) # TYPESAFE_ADDITIVE ? 
+            #print('sub_yaml_dsl_args', sub_yaml_dsl_args)
+
             subgraph = graphviz.Digraph(name=f'cluster_{step_key}')
             subgraph.attr(label=step_key) # str(path)
             subgraph.attr(color='lightblue')  # color of outline
-            step_name_i = utils.step_name_str(yaml_stem, i, step_key)
-            subworkflow_data = compile_workflow(args, namespaces + [step_name_i], subgraphs + [subgraph], vars_dollar_defs, tools, False, path, yml_paths)
+            subworkflow_data = compile_workflow(args, namespaces + [step_name_i], subgraphs + [subgraph], vars_dollar_defs, vars_dollar_calls, tools, False, path, sub_yaml_dsl_args, yml_paths, relative_run_path)
             
             recursive_data = subworkflow_data[0]
             recursive_data_list.append(recursive_data)
 
             sub_node_data = recursive_data[0]
+            # TODO: destructure sub_node_data rather than using explicit indexing.
             
             sibling_subgraphs.append(sub_node_data[-1]) # TODO: Just subgraph?
             step_1_names.append(subworkflow_data[-1])
             # Add compiled cwl file contents to tools
-            tools[stem] = (stem + '.cwl', sub_node_data[1])
+            tools[stem] = (stem + '.cwl', sub_node_data[2])
 
             # Initialize the above from recursive values.
             # Do not initialize inputs_workflow. See comment below.
@@ -110,8 +123,22 @@ def compile_workflow(args: argparse.Namespace,
 
         tool_i = tools[stem][1]
 
-        # Add run tag
+        # Add run tag, using relative or flat-directory paths
+        # NOTE: run: path issues were causing test_cwl_embedding_independence()
+        # to fail, so I simply ignore the run tag in that test.
         run_path = tools[stem][0]
+        if relative_run_path:
+            if step_key in subkeys:
+                run_path = step_name_i + '/' + run_path
+            else:
+                run_path = ('../' * len(namespaces)) + run_path
+                run_path = '../' + run_path # Relative to autogenerated/
+        else:
+            if step_key in subkeys:
+                run_path = '___'.join(namespaces + [step_name_i, run_path])
+            else:
+                run_path = '../' + run_path # Relative to autogenerated/
+
         if steps[i][step_key]:
             if not 'run' in steps[i][step_key]:
                 steps[i][step_key].update({'run': run_path})
@@ -125,6 +152,23 @@ def compile_workflow(args: argparse.Namespace,
         # If there isn't an exact match, remove input_* and output_* from the
         # current step and previous steps, respectively, and then check again.
         # If there still isn't an exact match, explicit renaming may be required.
+
+        # Extract provided CWL args, if any, and (recursively) merge them with
+        # provided CWL args passed in from the parent, if any.
+        # (At this point, any DSL args provided from the parent(s) should have
+        # all of the initial yml tags removed, leaving only CWL tags remaining.)
+        args_provided_dict_parent = {}
+        if (f'({i+1}, {step_key})' in yaml_dsl_args and
+            (not step_key in subkeys)): # Do not add yml tags to the compiled CWL!
+            args_provided_dict_parent = yaml_dsl_args[f'({i+1}, {step_key})']
+        args_provided_dict_child = {}
+        if steps[i][step_key]:
+            args_provided_dict_child = steps[i][step_key]
+        # NOTE: To support overloading, the parent args must overwrite the child args!
+        args_provided_dict = merge(args_provided_dict_child, args_provided_dict_parent,
+                                   strategy=Strategy.REPLACE) # TYPESAFE_ADDITIVE ?
+        # Now mutably overwrite the child args with the merged args
+        steps[i][step_key] = args_provided_dict
 
         args_provided = []
         if steps[i][step_key] and 'in' in steps[i][step_key]:
@@ -156,7 +200,6 @@ def compile_workflow(args: argparse.Namespace,
         sub_args_provided = [arg for arg in args_required if arg in vars_dollar_calls]
         #print(sub_args_provided)
 
-        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         label = step_key
         if args.graph_label_stepname:
             label = step_name_i
@@ -194,6 +237,7 @@ def compile_workflow(args: argparse.Namespace,
                 arg_val = arg_val[1:]  # Remove *
                 if not vars_dollar_defs.get(arg_val):
                     if is_root:
+                        # TODO: Check this comment.
                         # Even if is_root, we don't want to raise an Exception
                         # here because in test_cwl_embedding_independence, we
                         # recompile all subworkflows as if they were root. That
@@ -202,8 +246,8 @@ def compile_workflow(args: argparse.Namespace,
                         print(f"Error! No definition found for &{arg_val}!")
                         print(f"Creating the CWL input {in_name} anyway, but")
                         print("without any corresponding input value this will fail validation!")
-                        inputs_workflow.update({in_name: {'type': in_type}})
-                        steps[i][step_key]['in'][arg_key] = in_name
+                    inputs_workflow.update({in_name: {'type': in_type}})
+                    steps[i][step_key]['in'][arg_key] = in_name
                 else:
                     (nss_def_init, var) =  vars_dollar_defs[arg_val]
 
@@ -219,6 +263,7 @@ def compile_workflow(args: argparse.Namespace,
                     # This defines the 'common node' in the call stack w.r.t. the inits.
                     assert nss_def_inits == nss_call_inits
                     
+                    # TODO: Check this comment.
                     # Relative to the common node, if the call site of an explicit
                     # edge is at a depth > 1, (i.e. if it is NOT simply of the form
                     # last_namespace/input_variable) then we
@@ -235,6 +280,7 @@ def compile_workflow(args: argparse.Namespace,
                         # Store var_dollar call site info up through the recursion.
                         vars_dollar_calls.update({in_name: vars_dollar_defs[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
                     elif len(nss_call_tails) == 1:
+                        # TODO: Check this comment.
                         # The definition site recursion (only, if any) has completed
                         # and we are already in the common node, thus
                         # we need to pass in the value from the definition site.
@@ -258,7 +304,9 @@ def compile_workflow(args: argparse.Namespace,
                     # (This is the only reason we need to pass in all subgraphs.)
                     label = var.split('___')[-1]
                     graph_init = subgraphs[len(nss_def_inits)]
-                    utils.add_graph_edge(args, graph_init, nss_def, nss_call, label)
+                    # Let's use regular blue for explicit edges.
+                    # Use constraint=false ?
+                    utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
             else:
                 # TODO: Add edam format info, etc.
                 inputs_workflow.update({in_name: {'type': in_type}})
@@ -271,6 +319,7 @@ def compile_workflow(args: argparse.Namespace,
         
         for arg_key in args_required:
             #print('arg_key', arg_key)
+            in_name = f'{step_name_i}___{arg_key}'
             if arg_key in args_provided:
                 continue  # We already covered this case above.
             if arg_key in sub_args_provided: # Edges have been explicitly provided
@@ -292,15 +341,30 @@ def compile_workflow(args: argparse.Namespace,
                 nss_call_inits, nss_call_tails = utils.partition_by_lowest_common_ancestor(nss_call, nss_def)
                 assert nss_def_inits == nss_call_inits
 
-                var_slash = nss_def_tails[0] + '/' + '___'.join(nss_def_tails[1:] + [var])
-                arg_keyval = {arg_key: var_slash}
-                steps[i] = utils.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
+                nss_call_tails_stems = [utils.parse_step_name_str(x)[0] for x in nss_call_tails]
+                if yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0:
+                    # i.e. if it is possible to do more recursion
+                    # NOTE: This works, and test_cwl_embedding_independence()
+                    # passes, but it is NOT morally embedding independent.
+                    in_type = in_tool[arg_key]
+                    inputs_workflow.update({in_name: {'type': in_type}})
+                    steps[i][step_key]['in'][arg_key] = in_name
+                    # Store var_dollar call site info up through the recursion.
+                    vars_dollar_calls.update({in_name: vars_dollar_calls[arg_key]})
+                else:
+                    # TODO: Check this comment.
+                    # The definition site recursion (only, if any) has completed
+                    # and we are already in the common node, thus
+                    # we need to pass in the value from the definition site.
+                    # Note that since len(nss_call_tails) == 1,
+                    # there will not be any call site recursion in this case.
+                    var_slash = nss_def_tails[0] + '/' + '___'.join(nss_def_tails[1:] + [var])
+                    steps[i][step_key]['in'][arg_key] = var_slash
 
                 # NOTE: We already added an edge to the appropriate subgraph above.
                 # TODO: vars_workflow_output_internal?
             else:
-                in_name = f'{step_name_i}___{arg_key}'
-                in_name_in_inputs_file_workflow = in_name in inputs_file_workflow
+                in_name_in_inputs_file_workflow: bool = (in_name in inputs_file_workflow)
                 steps[i] = inference.perform_edge_inference(args, tools, steps_keys,
                     subkeys, yaml_stem, i, steps[i], arg_key, graph, is_root, namespaces,
                     vars_workflow_output_internal, inputs_workflow, in_name_in_inputs_file_workflow)
@@ -316,27 +380,9 @@ def compile_workflow(args: argparse.Namespace,
 
         #print()
 
-    # Add the cluster subgraphs to the main graph, but we need to add them in
-    # reverse order to trick the graphviz layout algorithm.
-    if len(namespaces) < args.graph_inline_depth:
-        for sibling in sibling_subgraphs[::-1]: # Reverse!
-            graph.subgraph(sibling)
-    # Align the cluster subgraphs using the same rank as the first node of each subgraph.
-    # See https://stackoverflow.com/questions/6824431/placing-clusters-on-the-same-rank-in-graphviz
-    if len(namespaces) < args.graph_inline_depth:
-        step_1_names_display = [name for name in step_1_names if len(name.split('___')) < 2 + args.graph_inline_depth]
-        if len(step_1_names_display) > 1:
-            nodes_same_rank = '\t{rank=same; ' + '; '.join(step_1_names_display) + '}\n'
-            graph.body.append(nodes_same_rank)
-    if steps_keys[0] in subkeys:
-        step_name_1 = step_1_names[0]
-    else:
-        step_name_1 = utils.step_name_str(yaml_stem, 1, steps_keys[0])
-        step_name_1 = '___'.join(namespaces + [step_name_1])
-    # NOTE: Since the names of subgraphs '*.yml' contain a period, we need to
-    # escape them by enclosing the whole name in double quotes. Otherwise:
-    # "Error: *.yml.gv: syntax error in line n near '.'"
-        step_name_1 = f'"{step_name_1}"'
+    # NOTE: currently mutates graph
+    add_subgraphs(args, graph, sibling_subgraphs, namespaces, step_1_names)
+    step_name_1 = get_step_name_1(step_1_names, yaml_stem, namespaces, steps_keys, subkeys)
 
     # Add the provided inputs of each step to the workflow inputs
     temp = {}
@@ -349,10 +395,104 @@ def compile_workflow(args: argparse.Namespace,
         temp.update(new_keyval)
     yaml_tree.update({'inputs': temp})
 
-    # Add the outputs of each step to the workflow outputs
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
-    outputs_workflow = {}
+    # (Why are we getting uniques?)
+    workflow_outputs = get_workflow_outputs(args, namespaces, is_root, yaml_stem, steps, vars_workflow_output_internal, graph, tools, step_node_name)
+    yaml_tree.update({'outputs': workflow_outputs})
+
+    # Finally, rename the steps to be unique
+    # and convert the list of steps into a dict
+    steps_dict = {}
     for i, step_key in enumerate(steps_keys):
+        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        #steps[i] = {step_name_i: steps[i][step_key]}
+        steps_dict.update({step_name_i: steps[i][step_key]})
+    yaml_tree.update({'steps': steps_dict})
+
+    # Dump the workflow inputs to a separate yml file.
+    yaml_inputs: WorkflowInputsFile = {}
+    for key, (val, in_type) in inputs_file_workflow.items():
+        new_keyval = {key: val}  # if string
+        if 'File' in in_type:
+            new_keyval = {key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2330'}}
+        yaml_inputs.update(new_keyval)
+
+    if args.cwl_validate:
+        print(f'Validating {yaml_stem}.cwl ...')
+        cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
+        sub.run(cmd)
+    
+    # Note: We do not necessarily need to return inputs_workflow.
+    # 'Internal' inputs are encoded in yaml_tree. See Comment above.
+    node_data = (namespaces, yaml_stem, yaml_tree, yaml_dsl_args, yaml_inputs, vars_dollar_defs_copy, vars_dollar_calls_copy, graph) # step_name_1, plugin_id?
+    return ((node_data, recursive_data_list), inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, vars_dollar_defs, vars_dollar_calls, step_name_1)
+
+
+def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys: List[str], subkeys: List[str]) -> None:
+    # If there is at least one subworkflow, add a SubworkflowFeatureRequirement
+    if (not subkeys == []) or any([tools[Path(key).stem][1]['class'] == 'Workflow' for key in steps_keys if key not in subkeys]):
+        subworkreq = 'SubworkflowFeatureRequirement'
+        subworkreqdict = {subworkreq: {'class': subworkreq}}
+        if 'requirements' in yaml_tree:
+            if not subworkreq in yaml_tree['requirements']:
+                new_reqs = dict(list(yaml_tree['requirements'].items()) + list(subworkreqdict))
+                yaml_tree['requirements'].update(new_reqs)
+        else:
+            yaml_tree['requirements'] = subworkreqdict
+
+
+def add_subgraphs(args: argparse.Namespace,
+                  graph: DiGraph,
+                  sibling_subgraphs: List[DiGraph],
+                  namespaces: List[str],
+                  step_1_names: List[str]) -> None:
+    # Add the cluster subgraphs to the main graph, but we need to add them in
+    # reverse order to trick the graphviz layout algorithm.
+    if len(namespaces) < args.graph_inline_depth:
+        for sibling in sibling_subgraphs[::-1]: # Reverse!
+            graph.subgraph(sibling)
+    # Align the cluster subgraphs using the same rank as the first node of each subgraph.
+    # See https://stackoverflow.com/questions/6824431/placing-clusters-on-the-same-rank-in-graphviz
+    if len(namespaces) < args.graph_inline_depth:
+        step_1_names_display = [name for name in step_1_names if len(name.split('___')) < 2 + args.graph_inline_depth]
+        if len(step_1_names_display) > 1:
+            nodes_same_rank = '\t{rank=same; ' + '; '.join(step_1_names_display) + '}\n'
+            graph.body.append(nodes_same_rank)
+
+
+def get_step_name_1(step_1_names: List[str],
+                    yaml_stem: str,
+                    namespaces: List[str],
+                    steps_keys: List[str],
+                    subkeys: List[str]) -> str:
+    if steps_keys[0] in subkeys:
+        step_name_1 = step_1_names[0]
+    else:
+        step_name_1 = utils.step_name_str(yaml_stem, 0, steps_keys[0])
+        step_name_1 = '___'.join(namespaces + [step_name_1])
+    # NOTE: Since the names of subgraphs '*.yml' contain a period, we need to
+    # escape them by enclosing the whole name in double quotes. Otherwise:
+    # "Error: *.yml.gv: syntax error in line n near '.'"
+        step_name_1 = f'"{step_name_1}"'
+
+    return step_name_1
+
+
+def get_workflow_outputs(args: argparse.Namespace,
+                         namespaces: List[str],
+                         is_root: bool,
+                         yaml_stem: str,
+                         steps: List[Yaml],
+                         vars_workflow_output_internal: InternalOutputs,
+                         graph: DiGraph,
+                         tools: Tools,
+                         step_node_name: str) -> Dict[str, Dict[str, str]]:
+    # Add the outputs of each step to the workflow outputs
+    workflow_outputs = {}
+    steps_keys = utils.get_steps_keys(steps)
+    for i, step_key in enumerate(steps_keys):
+        stem = Path(step_key).stem
+        tool_i = tools[stem][1]
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         out_keys = steps[i][step_key]['out']
         for out_key in out_keys:
@@ -391,35 +531,6 @@ def compile_workflow(args: argparse.Namespace,
                 continue
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             #print('out_name', out_name)
-            outputs_workflow.update({out_name: {'type': 'File', 'outputSource': out_var}})
-        #print('outputs_workflow', outputs_workflow)
-    yaml_tree.update({'outputs': outputs_workflow})
-
-    # Finally, rename the steps to be unique
-    # and convert the list of steps into a dict
-    steps_dict = {}
-    for i, step_key in enumerate(steps_keys):
-        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
-        #steps[i] = {step_name_i: steps[i][step_key]}
-        steps_dict.update({step_name_i: steps[i][step_key]})
-    yaml_tree.update({'steps': steps_dict})
-
-    # Dump the workflow inputs to a separate yml file.
-    yaml_inputs: WorkflowInputsFile = {}
-    for key, (val, in_type) in inputs_file_workflow.items():
-        new_keyval = {key: val}  # if string
-        if 'File' in in_type:
-            new_keyval = {key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2330'}}
-        yaml_inputs.update(new_keyval)
-
-    print(f'Finished compiling {yaml_path}')
-    
-    if args.cwl_validate:
-        print(f'Validating {yaml_stem}.cwl ...')
-        cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
-        sub.run(cmd)
-    
-    # Note: We do not necessarily need to return inputs_workflow.
-    # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    node_data = (yaml_stem, yaml_tree, yaml_inputs, graph) # step_name_1, plugin_id?
-    return ((node_data, recursive_data_list), inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, vars_dollar_defs, vars_dollar_calls, step_name_1)
+            workflow_outputs.update({out_name: {'type': 'File', 'outputSource': out_var}})
+        #print('workflow_outputs', workflow_outputs)
+    return workflow_outputs

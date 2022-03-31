@@ -1,0 +1,6 @@
+steps:
+  - pdb:
+      in:
+        output_pdb_path: tutorial.pdb
+        config: '{"pdb_code": "1aki"}'
+  - fix_side_chain:
