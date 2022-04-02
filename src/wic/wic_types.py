@@ -44,7 +44,19 @@ YamlDSLArgs = Yaml
 # recursion.
 # Unfortunately, since mypy does not support Algebraic Data Types (ADTs)
 # we have to weaken the type of RecursiveData to Any :(
-NodeData = Tuple[Namespaces, str, Cwl, YamlDSLArgs, WorkflowInputsFile, DollarDefs, DollarCalls, DiGraph]
-#RecursiveData = Tuple[NodeData, List[RecursiveData]]
+NodeData = Tuple[Namespaces, str, Cwl, WorkflowInputsFile, DollarDefs, DollarCalls, DiGraph]
+# RecursiveData = Tuple[NodeData, List[RecursiveData]]
 RecursiveData = Any
 CompilerInfo = Tuple[RecursiveData, WorkflowInputs, WorkflowInputsFile, InternalOutputs, DollarDefs, DollarCalls, StepName1]
+
+# Create a type for our Abstract Syntax Tree (AST).
+# We can probably use Dict here if str is step_name_i not just yaml_stem.
+# If we need to insert steps (i.e. file format conversions), that will happen
+# after edge inference, so there should not be a uniqueness issue w.r.t. step
+# number re-indexing.
+# NOTE: This Dict is currently performing double-duty: if there is only one
+# backend, it contains the subworkflows. If there are backends, it contains
+# each backend. For now, these are mutually exclusive, so is should be okay.
+YamlTree = Tuple[str, Yaml]
+# YamlForest = Tuple(YamlTree, Dict[str, YamlForest])
+YamlForest = Any

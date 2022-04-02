@@ -48,8 +48,7 @@ def upload_all(recursive_data: RecursiveData, tools: Tools, args: argparse.Names
     sub_node_data = recursive_data[0]
     yaml_stem = sub_node_data[1]
     cwl_tree = sub_node_data[2]
-    # Omit yaml DSL args because they *should* be passed in and converted into regular yaml inputs.
-    yaml_inputs = sub_node_data[4]
+    yaml_inputs = sub_node_data[3]
     # TODO: destructure sub_node_data rather than using explicit indexing.
     
     sub_rec_data: Dict[str, RecursiveData] = dict([(r[0][0], r) for r in recursive_data[1]])
