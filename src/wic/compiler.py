@@ -5,35 +5,30 @@ from pathlib import Path
 import subprocess as sub
 from typing import Dict, List
 
-from mergedeep import merge, Strategy
 import graphviz
-import yaml
 
 from . import inference
 from . import utils
-from .wic_types import Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, DiGraph
+from .wic_types import Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, DiGraph, YamlTree
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
 
 
-def compile_workflow(args: argparse.Namespace,
+def compile_workflow(yaml_tree_: YamlTree,
+                     args: argparse.Namespace,
                      namespaces: List[str],
                      subgraphs: List[graphviz.Digraph],
                      vars_dollar_defs: DollarDefs,
                      vars_dollar_calls: DollarCalls,
                      tools: Tools,
                      is_root: bool,
-                     yaml_path: Path,
-                     yaml_dsl_args: Yaml,
-                     yml_paths: Dict[str, Path],
                      relative_run_path: bool) -> CompilerInfo:
-    # Load the high-level yaml workflow file.
-    yaml_stem = Path(yaml_path).stem
-    with open(Path(yaml_path), 'r') as y:
-        yaml_tree: Yaml = yaml.safe_load(y.read())
+    (yaml_path, yaml_tree) = yaml_tree_
 
-    yaml_tree = utils.extract_backend_steps(yaml_tree, yaml_path)
+    yaml_stem = Path(yaml_path).stem
+
+    (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, Path(yaml_path))
     steps: List[Yaml] = yaml_tree['steps']
 
     steps_keys = utils.get_steps_keys(steps)
@@ -68,38 +63,23 @@ def compile_workflow(args: argparse.Namespace,
 
     graph = subgraphs[-1] # Get the current graph
 
+    # TODO: Check for top-level yml dsl args
+
     for i, step_key in enumerate(steps_keys):
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         stem = Path(step_key).stem
 
         # Recursively compile subworkflows, adding compiled cwl file contents to tools
         if step_key in subkeys:
-            #path = Path(step_key)
-            path = yml_paths[stem]
-            if not (path.exists() and path.suffix == '.yml'):
-                # TODO: Once we have defined a yml DSL schema,
-                # check that the file contents actually satisfies the schema.
-                raise Exception(f'Error! {path} does not exist or is not a .yml file.')
-
-            # Extract provided yaml args, if any, and (recursively) merge them with
-            # provided yaml_dsl_args passed in from the parent, if any.
-            yaml_dsl_args_parent = {}
-            if f'({i+1}, {step_key})' in yaml_dsl_args:
-                yaml_dsl_args_parent = yaml_dsl_args[f'({i+1}, {step_key})']
-            yaml_dsl_args_child = {}
-            if steps[i][step_key]:
-                yaml_dsl_args_child = copy.deepcopy(steps[i][step_key])
-                # Delete child yml DSL parameters, if any, so that we are left
-                # with only CWL parameters below.
-                steps[i].update({step_key: {}}) # delete
-            # NOTE: To support overloading, the parent args must overwrite the child args!
-            sub_yaml_dsl_args = merge(yaml_dsl_args_child, yaml_dsl_args_parent, strategy=Strategy.TYPESAFE_REPLACE) # TYPESAFE_ADDITIVE ? 
-            #print('sub_yaml_dsl_args', sub_yaml_dsl_args)
+            # Extract the sub yaml file that we pre-loaded from disk.
+            sub_yaml_tree = (step_key, steps[i][step_key])
 
             subgraph = graphviz.Digraph(name=f'cluster_{step_key}')
             subgraph.attr(label=step_key) # str(path)
             subgraph.attr(color='lightblue')  # color of outline
-            subworkflow_data = compile_workflow(args, namespaces + [step_name_i], subgraphs + [subgraph], vars_dollar_defs, vars_dollar_calls, tools, False, path, sub_yaml_dsl_args, yml_paths, relative_run_path)
+
+            steps[i].update({step_key: {}}) # delete yml subtree
+            subworkflow_data = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i], subgraphs + [subgraph], vars_dollar_defs, vars_dollar_calls, tools, False, relative_run_path)
             
             recursive_data = subworkflow_data[0]
             recursive_data_list.append(recursive_data)
@@ -152,23 +132,6 @@ def compile_workflow(args: argparse.Namespace,
         # If there isn't an exact match, remove input_* and output_* from the
         # current step and previous steps, respectively, and then check again.
         # If there still isn't an exact match, explicit renaming may be required.
-
-        # Extract provided CWL args, if any, and (recursively) merge them with
-        # provided CWL args passed in from the parent, if any.
-        # (At this point, any DSL args provided from the parent(s) should have
-        # all of the initial yml tags removed, leaving only CWL tags remaining.)
-        args_provided_dict_parent = {}
-        if (f'({i+1}, {step_key})' in yaml_dsl_args and
-            (not step_key in subkeys)): # Do not add yml tags to the compiled CWL!
-            args_provided_dict_parent = yaml_dsl_args[f'({i+1}, {step_key})']
-        args_provided_dict_child = {}
-        if steps[i][step_key]:
-            args_provided_dict_child = steps[i][step_key]
-        # NOTE: To support overloading, the parent args must overwrite the child args!
-        args_provided_dict = merge(args_provided_dict_child, args_provided_dict_parent,
-                                   strategy=Strategy.REPLACE) # TYPESAFE_ADDITIVE ?
-        # Now mutably overwrite the child args with the merged args
-        steps[i][step_key] = args_provided_dict
 
         args_provided = []
         if steps[i][step_key] and 'in' in steps[i][step_key]:
@@ -424,7 +387,7 @@ def compile_workflow(args: argparse.Namespace,
     
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    node_data = (namespaces, yaml_stem, yaml_tree, yaml_dsl_args, yaml_inputs, vars_dollar_defs_copy, vars_dollar_calls_copy, graph) # step_name_1, plugin_id?
+    node_data = (namespaces, yaml_stem, yaml_tree, yaml_inputs, vars_dollar_defs_copy, vars_dollar_calls_copy, graph) # step_name_1, plugin_id?
     return ((node_data, recursive_data_list), inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, vars_dollar_defs, vars_dollar_calls, step_name_1)
 
 

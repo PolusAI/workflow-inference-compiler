@@ -1,4 +1,5 @@
 import argparse
+import copy
 from pathlib import Path
 from typing import List, Tuple
 
@@ -7,7 +8,7 @@ import yaml
 from typing import Any, Dict
 
 from . import auto_gen_header
-from .wic_types import NodeData, Yaml, RecursiveData
+from .wic_types import NodeData, Yaml, RecursiveData, YamlForest
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -87,13 +88,17 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
     return steps_keys
 
 
-def extract_backend_steps(yaml_tree: Yaml, yaml_path: Path) -> Yaml:
-    backend = None
+def extract_backend(yaml_tree_: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
+    yaml_tree = copy.deepcopy(yaml_tree_)
+    backend = ''
     if 'backends' in yaml_tree:
         if 'default_backend' in yaml_tree:
             backend = yaml_tree['default_backend']
             del yaml_tree['default_backend']
-        if backend is None:
+        if 'backend' in yaml_tree:
+            backend = yaml_tree['backend']
+            del yaml_tree['backend']
+        if backend == '':
             raise Exception(f'Error! No backend in {yaml_path}!')
         if backend not in yaml_tree['backends']:
             raise Exception(f'Error! No steps for backend {backend} in {yaml_path}!')
@@ -104,7 +109,7 @@ def extract_backend_steps(yaml_tree: Yaml, yaml_path: Path) -> Yaml:
         pass # steps = yaml_tree['steps']
     else:
         raise Exception(f'Error! No backends and/or steps in {yaml_path}!')
-    return yaml_tree
+    return (backend, yaml_tree)
 
 
 def inline_sub_steps(yaml_path: Path, tools: Dict[str, Tuple[str, Any]], yml_paths: Dict[str, Path]) -> List[Yaml]:
@@ -112,7 +117,7 @@ def inline_sub_steps(yaml_path: Path, tools: Dict[str, Tuple[str, Any]], yml_pat
     with open(Path(yaml_path), 'r') as y:
         yaml_tree: Yaml = yaml.safe_load(y.read())
 
-    yaml_tree = extract_backend_steps(yaml_tree, yaml_path)
+    (back_name_, yaml_tree) = extract_backend(yaml_tree, yaml_path)
     steps = yaml_tree['steps']
 
     # Get the dictionary key (i.e. the name) of each step.
@@ -135,10 +140,52 @@ def inline_sub_steps(yaml_path: Path, tools: Dict[str, Tuple[str, Any]], yml_pat
     return steps_all_flattened
 
 
+def flatten(lists: List[List[Any]]) -> List[List[Any]]:
+    return [x for lst in lists for x in lst]
+
+
 def flatten_recursive_data(recursive_data: RecursiveData) -> List[NodeData]:
     sub_node_data = recursive_data[0]
-    sub_rec_flat = [flatten_recursive_data(r) for r in recursive_data[1]]
-    return [sub_node_data] + [y for x in sub_rec_flat for y in x]
+    sub_rec_lists = [flatten_recursive_data(r) for r in recursive_data[1]]
+    return [sub_node_data] + flatten(sub_rec_lists)
+
+
+def print_forest(forest: YamlForest) -> None:
+    print(forest[0][0])
+    print(yaml.dump(forest[0][1]))
+    print(yaml.dump(forest[1]))
+
+
+def flatten_forest(forest: YamlForest) -> List[YamlForest]:
+    #print_forest(forest)
+    if forest == {}:
+        return []
+    yaml_tree = forest[0][1]
+    if 'backends' in yaml_tree:
+        #print_forest(forest)
+        back_name = ''
+        if 'default_backend' in yaml_tree:
+            back_name = yaml_tree['default_backend']
+        if 'backend' in yaml_tree:
+            back_name = yaml_tree['backend']
+        if back_name == '':
+            print_forest(forest)
+            raise Exception(f'Error! No backend in yaml forest!\n')
+        step_1 = forest[1][back_name][0][1]['steps'][0]
+        step_name_1 = list(step_1.keys())[0]
+        if Path(step_name_1).suffix == '.yml':
+            # Choose a specific backend
+            return flatten_forest(forest[1][back_name])
+        else:
+            return [forest]
+
+    forests = list(forest[1].values())
+    sub_forests = [flatten_forest(f) for f in forests]
+    # Use depth first search flattening to match flatten_recursive_data()
+    #bfs = forests + flatten(sub_forests)
+    dfs_lists = [[f] + fs for f, fs in zip(forests, sub_forests)]
+    dfs = flatten(dfs_lists)
+    return dfs
 
 
 def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: bool) -> None:
@@ -146,8 +193,7 @@ def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: 
     namespaces = sub_node_data[0]
     yaml_stem = sub_node_data[1]
     yaml_tree = sub_node_data[2]
-    # Omit yaml DSL args because they *should* be passed in and converted into regular yaml inputs.
-    yaml_inputs = sub_node_data[4]
+    yaml_inputs = sub_node_data[3]
     # TODO: destructure sub_node_data rather than using explicit indexing.
 
     path.mkdir(parents=True, exist_ok=True)
