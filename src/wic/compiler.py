@@ -26,6 +26,13 @@ def compile_workflow(yaml_tree_: YamlTree,
                      relative_run_path: bool) -> CompilerInfo:
     (yaml_path, yaml_tree) = yaml_tree_
 
+    # Check for top-level yml dsl args
+    wic = {'wic': yaml_tree.get('wic', {})}
+    #print('wic', yaml.dump(wic))
+    if 'wic' in yaml_tree:
+        del yaml_tree['wic']
+    wic_steps = wic['wic'].get('steps', {})
+    
     yaml_stem = Path(yaml_path).stem
 
     (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, Path(yaml_path))
