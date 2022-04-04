@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Tuple
 
 import graphviz
+import networkx as nx
 
 KV = Dict[str, Any]
 Cwl = KV
@@ -37,6 +38,7 @@ DollarCalls = Dict[str, DollarDef]
 PluginID = int
 StepName1 = str
 DiGraph = Any # graphviz.DiGraph
+Graph = Tuple[DiGraph, nx.DiGraph]
 YamlDSLArgs = Yaml
 
 # As mentioned above, since we cannot store extra info in CWL files, we need a
@@ -44,7 +46,7 @@ YamlDSLArgs = Yaml
 # recursion.
 # Unfortunately, since mypy does not support Algebraic Data Types (ADTs)
 # we have to weaken the type of RecursiveData to Any :(
-NodeData = Tuple[Namespaces, str, Cwl, WorkflowInputsFile, DollarDefs, DollarCalls, DiGraph]
+NodeData = Tuple[Namespaces, str, Cwl, WorkflowInputsFile, DollarDefs, DollarCalls, Graph]
 # RecursiveData = Tuple[NodeData, List[RecursiveData]]
 RecursiveData = Any
 CompilerInfo = Tuple[RecursiveData, WorkflowInputs, WorkflowInputsFile, InternalOutputs, DollarDefs, DollarCalls, StepName1]
