@@ -6,11 +6,20 @@ steps:
 # to this level and use the following syntax to pass it to only one call site.
 # (Moreover, the former will create multiple definitions of &min.tpr, which is not allowed.)
   - min.yml:
-# Pass the CWL `in` tag as a parameter through BOTH of the yml DSL tags steep.yml and grompp.
-# Use (1-based) indexing to uniquely reference (step_number, step_name).
-      (1, steep.yml):
-        (1, grompp):
-          in:
-            output_tpr_path: '&min.tpr'
   - equil.yml:
   - prod.yml:
+
+# Pass the CWL `in` tag as a parameter through BOTH of the yml DSL tags steep.yml and grompp.
+# Use (1-based) indexing to uniquely reference (step_number, step_name).
+# Put everything under one top-level wic: tag to facilitate easy merging and removal.
+wic:
+  steps:
+    (1, min.yml):
+      wic:
+        steps:
+          (1, steep.yml):
+            wic:
+              steps:
+                (1, grompp):
+                  in:
+                    output_tpr_path: '&min.tpr'
