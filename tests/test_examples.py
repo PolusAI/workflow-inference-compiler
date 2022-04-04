@@ -5,6 +5,8 @@ import sys
 from unittest.mock import patch
 
 import graphviz
+import networkx as nx
+from networkx.algorithms import isomorphism
 import yaml
 
 from wic import auto_gen_header
@@ -40,9 +42,11 @@ def test_examples() -> None:
             f.write(yaml.dump(yaml_tree[1]))
 
 
-        rootgraph = graphviz.Digraph(name=f'cluster_{yml_path}')
-        rootgraph.attr(newrank='True')
-        workflow_data = wic.compiler.compile_workflow(yaml_tree, args, [], [rootgraph], {}, {}, tools_cwl, True, relative_run_path=True)
+        graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
+        graph_gv.attr(newrank='True')
+        graph_nx = nx.DiGraph()
+        graph = (graph_gv, graph_nx)
+        workflow_data = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, tools_cwl, True, relative_run_path=True)
         recursive_data = workflow_data[0]
         sub_node_data = recursive_data[0]
         yaml_stem = sub_node_data[1]
@@ -96,10 +100,12 @@ def test_cwl_embedding_independence() -> None:
         yaml_forest = wic.ast.tree_to_forest(yaml_tree, tools_cwl)
         yaml_forest_lst =  wic.utils.flatten_forest(yaml_forest)
 
-        rootgraph = graphviz.Digraph(name=f'cluster_{yml_path}')
-        rootgraph.attr(newrank='True')
+        graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
+        graph_gv.attr(newrank='True')
+        graph_nx = nx.DiGraph()
+        graph = (graph_gv, graph_nx)
         is_root = True
-        workflow_data = wic.compiler.compile_workflow(yaml_tree, args, [], [rootgraph], {}, {}, tools_cwl, is_root, relative_run_path=False)
+        workflow_data = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, tools_cwl, is_root, relative_run_path=False)
         recursive_data = workflow_data[0]
         node_data_lst = wic.utils.flatten_recursive_data(recursive_data)
 
@@ -115,17 +121,19 @@ def test_cwl_embedding_independence() -> None:
             (sub_namespaces, sub_yml_path_str, sub_cwl_embedded, sub_yaml_inputs_, sub_dollar_defs_copy, sub_dollar_calls_copy, sub_rootgraph_) = sub_node_data
             assert sub_yaml_forest[0][0] == sub_node_data[1] + '.yml'
 
-            # NOTE: Okay, well actually we still need to pass in sub_namespaces
-            # and sub_yaml_dsl_args. (sub_dollar_defs_copy and sub_dollar_calls_copy
-            # may also be necessary, but at present the test passes without them.)
+            # NOTE: Okay, well actually we still need to pass in sub_namespaces.
+            # (sub_dollar_defs_copy and sub_dollar_calls_copy should also be
+            # necessary, but curiosly the test passes without them...)
             # so the embedding is independent w.r.t. everything ELSE in the parent.
             # Of course, dsl_args should generally be used sparingly. The only time
             # they must be used is to pass in an explicit edge definition/reference using &.
 
-            rootgraph_fakeroot = graphviz.Digraph(name=f'cluster_{sub_yml_path_str}')
-            rootgraph_fakeroot.attr(newrank='True')
+            graph_fakeroot_gv = graphviz.Digraph(name=f'cluster_{sub_yml_path_str}')
+            graph_fakeroot_gv.attr(newrank='True')
+            graph_fakeroot_nx = nx.DiGraph()
+            graph_fakeroot = (graph_fakeroot_gv, graph_fakeroot_nx)
             fake_root = True
-            workflow_data_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest[0], args, sub_namespaces, [rootgraph_fakeroot], sub_dollar_defs_copy, sub_dollar_calls_copy, tools_cwl, fake_root, relative_run_path=False)
+            workflow_data_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest[0], args, sub_namespaces, [graph_fakeroot], {}, {}, tools_cwl, fake_root, relative_run_path=False)
             sub_node_data_fakeroot = workflow_data_fakeroot[0][0]
             sub_cwl_fakeroot = sub_node_data_fakeroot[2]
 
@@ -158,3 +166,61 @@ def test_cwl_embedding_independence() -> None:
                 sub.run(cmd, shell=True)
                 print(f'Error! Check {filename_emb} and {filename_fake} and {sub_yml_path_str}.diff')
             assert sub_cwl_embedded == sub_cwl_fakeroot
+            
+            # Check that the subgraphs are isomorphic.
+            sub_graph_nx = sub_node_data[-1][1]
+            sub_graph_fakeroot_nx = sub_node_data_fakeroot[-1][1]
+            gm = isomorphism.GraphMatcher(sub_graph_nx, sub_graph_fakeroot_nx)
+            assert gm.is_isomorphic()
+
+
+def test_inline_subworkflows() -> None:
+    testargs = ['wic', '--yaml', '', '--cwl_output_intermediate_files', 'True']  # ignore --yaml
+    # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
+    with patch.object(sys, 'argv', testargs):
+        args = wic.cli.parser.parse_args()
+
+    tools_cwl = wic.main.get_tools_cwl(Path('.'))
+    yml_paths = wic.main.get_yml_paths(Path('examples/'))
+
+    for yml_path_str in yml_paths:
+        yml_path = yml_paths[yml_path_str]
+        # Load the high-level yaml workflow file.
+        with open(yml_path, 'r') as y:
+            root_yaml_tree: Yaml = yaml.safe_load(y.read())
+        Path('autogenerated/').mkdir(parents=True, exist_ok=True)
+        yaml_tree_raw = wic.ast.read_AST_from_disk((yml_path_str, root_yaml_tree), yml_paths, tools_cwl)
+        with open(f'autogenerated/{Path(yml_path).stem}_tree_raw.yml', 'w') as f:
+            f.write(yaml.dump(yaml_tree_raw[1]))
+        yaml_tree = wic.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
+        with open(f'autogenerated/{Path(yml_path).stem}_tree_merged.yml', 'w') as f:
+            f.write(yaml.dump(yaml_tree[1]))
+
+        graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
+        graph_gv.attr(newrank='True')
+        graph_nx = nx.DiGraph()
+        graph = (graph_gv, graph_nx)
+        workflow_data = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, tools_cwl, True, relative_run_path=True)
+        recursive_data = workflow_data[0]
+        sub_node_data = recursive_data[0]
+
+        wic.utils.write_to_disk(recursive_data, Path('autogenerated/'), relative_run_path=True)
+
+        # Inline each subworkflow individually and check that the graphs are isomorphic.
+        namespaces_list = wic.ast.get_inlineable_subworkflows(yaml_tree, tools_cwl, [])
+        for namespaces in namespaces_list:
+            inline_yaml_tree = wic.ast.inline_subworkflow(yaml_tree, tools_cwl, namespaces)
+
+            inline_graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
+            inline_graph_gv.attr(newrank='True')
+            inline_graph_nx = nx.DiGraph()
+            inline_graph = (inline_graph_gv, inline_graph_nx)
+            inline_workflow_data = wic.compiler.compile_workflow(inline_yaml_tree, args, [], [inline_graph], {}, {}, tools_cwl, True, relative_run_path=True)
+            inline_recursive_data = inline_workflow_data[0]
+            inline_sub_node_data = inline_recursive_data[0]
+
+            # Check that the subgraphs are isomorphic.
+            sub_graph_nx = sub_node_data[-1][1]
+            sub_graph_fakeroot_nx = inline_sub_node_data[-1][1]
+            gm = isomorphism.GraphMatcher(sub_graph_nx, sub_graph_fakeroot_nx)
+            assert gm.is_isomorphic()

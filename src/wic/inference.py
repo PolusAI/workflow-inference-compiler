@@ -2,10 +2,8 @@ import argparse
 from pathlib import Path
 from typing import List, Tuple
 
-import graphviz
-
 from . import utils
-from .wic_types import KV, Tools, WorkflowInputs, InternalOutputs
+from .wic_types import KV, Tools, WorkflowInputs, InternalOutputs, Graph
 
 
 def perform_edge_inference(args: argparse.Namespace,
@@ -15,7 +13,7 @@ def perform_edge_inference(args: argparse.Namespace,
                            i: int,
                            steps_i: KV,
                            arg_key: str,
-                           graph: graphviz.Digraph,
+                           graph: Graph,
                            is_root: bool,
                            namespaces: List[str],
                            vars_workflow_output_internal: InternalOutputs,

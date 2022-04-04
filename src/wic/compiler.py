@@ -1,4 +1,3 @@
-
 import argparse
 import copy
 from pathlib import Path
@@ -6,10 +5,11 @@ import subprocess as sub
 from typing import Dict, List
 
 import graphviz
+import networkx  as nx
 
 from . import inference
 from . import utils
-from .wic_types import Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, DiGraph, YamlTree
+from .wic_types import Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, Graph, YamlTree
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -18,7 +18,7 @@ font_edge_color = 'white'
 def compile_workflow(yaml_tree_: YamlTree,
                      args: argparse.Namespace,
                      namespaces: List[str],
-                     subgraphs: List[graphviz.Digraph],
+                     subgraphs: List[Graph],
                      vars_dollar_defs: DollarDefs,
                      vars_dollar_calls: DollarCalls,
                      tools: Tools,
@@ -69,6 +69,7 @@ def compile_workflow(yaml_tree_: YamlTree,
     recursive_data_list = []
 
     graph = subgraphs[-1] # Get the current graph
+    (graph_gv, graph_nx) = graph
 
     # TODO: Check for top-level yml dsl args
 
@@ -81,9 +82,11 @@ def compile_workflow(yaml_tree_: YamlTree,
             # Extract the sub yaml file that we pre-loaded from disk.
             sub_yaml_tree = (step_key, steps[i][step_key])
 
-            subgraph = graphviz.Digraph(name=f'cluster_{step_key}')
-            subgraph.attr(label=step_key) # str(path)
-            subgraph.attr(color='lightblue')  # color of outline
+            subgraph_gv = graphviz.Digraph(name=f'cluster_{step_key}')
+            subgraph_gv.attr(label=step_key) # str(path)
+            subgraph_gv.attr(color='lightblue')  # color of outline
+            subgraph_nx = nx.DiGraph()
+            subgraph = (subgraph_gv, subgraph_nx)
 
             steps[i].update({step_key: {}}) # delete yml subtree
             subworkflow_data = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i], subgraphs + [subgraph], vars_dollar_defs, vars_dollar_calls, tools, False, relative_run_path)
@@ -175,12 +178,14 @@ def compile_workflow(yaml_tree_: YamlTree,
             label = step_name_i
         step_node_name = '___'.join(namespaces + [step_name_i])
         if not tool_i['class'] == 'Workflow':
-            graph.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+            graph_gv.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+            graph_nx.add_node(step_node_name)
         elif not (step_key in subkeys and len(namespaces) < args.graph_inline_depth):
             nssnode = namespaces + [step_name_i]
             nssnode = nssnode[:(1 + args.graph_inline_depth)]
             step_node_name = '___'.join(nssnode)
-            graph.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+            graph_gv.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+            graph_nx.add_node(step_node_name)
 
         # NOTE: sub_args_provided are handled within the args_required loop below
         for arg_key in args_provided:
@@ -284,8 +289,10 @@ def compile_workflow(yaml_tree_: YamlTree,
                 steps[i][step_key]['in'][arg_key] = in_name
                 if args.graph_show_inputs:
                     input_node_name = '___'.join(namespaces + [step_name_i, arg_key])
-                    graph.node(input_node_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
-                    graph.edge(input_node_name, step_node_name, color=font_edge_color)
+                    graph_gv.node(input_node_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
+                    graph_gv.edge(input_node_name, step_node_name, color=font_edge_color)
+                    graph_nx.add_node(input_node_name)
+                    graph_nx.add_edge(input_node_name, step_node_name)
         
         for arg_key in args_required:
             #print('arg_key', arg_key)
@@ -412,22 +419,26 @@ def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys:
 
 
 def add_subgraphs(args: argparse.Namespace,
-                  graph: DiGraph,
-                  sibling_subgraphs: List[DiGraph],
+                  graph: Graph,
+                  sibling_subgraphs: List[Graph],
                   namespaces: List[str],
                   step_1_names: List[str]) -> None:
+    (graph_gv, graph_nx) = graph
     # Add the cluster subgraphs to the main graph, but we need to add them in
     # reverse order to trick the graphviz layout algorithm.
-    if len(namespaces) < args.graph_inline_depth:
-        for sibling in sibling_subgraphs[::-1]: # Reverse!
-            graph.subgraph(sibling)
+    for sibling in sibling_subgraphs[::-1]: # Reverse!
+        (sib_graph_gv, sib_graph_nx) = sibling
+        if len(namespaces) < args.graph_inline_depth:
+            graph_gv.subgraph(sib_graph_gv)
+        graph_nx.add_nodes_from(sib_graph_nx.nodes)
+        graph_nx.add_edges_from(sib_graph_nx.edges)
     # Align the cluster subgraphs using the same rank as the first node of each subgraph.
     # See https://stackoverflow.com/questions/6824431/placing-clusters-on-the-same-rank-in-graphviz
     if len(namespaces) < args.graph_inline_depth:
         step_1_names_display = [name for name in step_1_names if len(name.split('___')) < 2 + args.graph_inline_depth]
         if len(step_1_names_display) > 1:
             nodes_same_rank = '\t{rank=same; ' + '; '.join(step_1_names_display) + '}\n'
-            graph.body.append(nodes_same_rank)
+            graph_gv.body.append(nodes_same_rank)
 
 
 def get_step_name_1(step_1_names: List[str],
@@ -454,7 +465,7 @@ def get_workflow_outputs(args: argparse.Namespace,
                          yaml_stem: str,
                          steps: List[Yaml],
                          vars_workflow_output_internal: InternalOutputs,
-                         graph: DiGraph,
+                         graph: Graph,
                          tools: Tools,
                          step_node_name: str) -> Dict[str, Dict[str, str]]:
     # Add the outputs of each step to the workflow outputs
@@ -480,11 +491,14 @@ def get_workflow_outputs(args: argparse.Namespace,
                 case1 = case1 and not is_root and (len(step_node_name.split('___')) + 1 == len(output_node_name.split('___')))
                 case2 = (tool_i['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
                 if case1 or case2:
-                    graph.node(output_node_name, label=out_key_no_namespace, shape='box', style='rounded, filled', fillcolor='lightyellow')
+                    (graph_gv, graph_nx) = graph
+                    graph_gv.node(output_node_name, label=out_key_no_namespace, shape='box', style='rounded, filled', fillcolor='lightyellow')
                     if args.graph_label_edges:
-                        graph.edge(step_node_name, output_node_name, color=font_edge_color, label=out_key_no_namespace)  # Is labeling necessary?
+                        graph_gv.edge(step_node_name, output_node_name, color=font_edge_color, label=out_key_no_namespace)  # Is labeling necessary?
                     else:
-                        graph.edge(step_node_name, output_node_name, color=font_edge_color)
+                        graph_gv.edge(step_node_name, output_node_name, color=font_edge_color)
+                    graph_nx.add_node(output_node_name)
+                    graph_nx.add_edge(step_node_name, output_node_name)
             # NOTE: Unless we are in the root workflow, we always need to
             # output everything. This is because while we are within a
             # subworkflow, we do not yet know if a subworkflow output will be used as

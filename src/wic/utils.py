@@ -3,12 +3,11 @@ import copy
 from pathlib import Path
 from typing import List, Tuple
 
-import graphviz
 import yaml
 from typing import Any, Dict
 
 from . import auto_gen_header
-from .wic_types import NodeData, Yaml, RecursiveData, YamlForest
+from .wic_types import NodeData, Yaml, RecursiveData, YamlForest, Graph
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -54,17 +53,19 @@ def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, keyval: List[str]) -> 
     return add_yamldict_keyval(steps_i, step_key, 'out', keyval) # type: ignore
 
 
-def add_graph_edge(args: argparse.Namespace, graph: graphviz.Digraph, nss1: List[str], nss2: List[str], label: str, color: str = font_edge_color) -> None:
+def add_graph_edge(args: argparse.Namespace, graph: Graph, nss1: List[str], nss2: List[str], label: str, color: str = font_edge_color) -> None:
     nss1 = nss1[:(1 + args.graph_inline_depth)]
     edge_node1 = '___'.join(nss1)
     nss2 = nss2[:(1 + args.graph_inline_depth)]
     edge_node2 = '___'.join(nss2)
+    (graph_gv, graph_nx) = graph
     # Hide internal self-edges
     if not edge_node1 == edge_node2:
         if args.graph_label_edges:
-            graph.edge(edge_node1, edge_node2, color=color, label=label)
+            graph_gv.edge(edge_node1, edge_node2, color=color, label=label)
         else:
-            graph.edge(edge_node1, edge_node2, color=color)
+            graph_gv.edge(edge_node1, edge_node2, color=color)
+    graph_nx.add_edge(edge_node1, edge_node2)
 
 
 def partition_by_lowest_common_ancestor(nss1: List[str], nss2: List[str]) -> Tuple[List[str], List[str]]:

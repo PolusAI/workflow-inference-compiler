@@ -6,7 +6,7 @@ from mergedeep import merge, Strategy
 import yaml
 
 from . import utils
-from .wic_types import Yaml, Tools, YamlTree, YamlForest
+from .wic_types import Namespaces, Yaml, Tools, YamlTree, YamlForest
 
 # TODO: Check for inline-ing subworkflows more than once and, if there are not
 # any modifications from any parent dsl args, use yaml anchors and aliases.
@@ -131,3 +131,81 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
             yaml_forest_dict[sub_yml_tree_name] = sub_yml_forest
 
     return ((yaml_name, yaml_tree), yaml_forest_dict)
+
+
+def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
+                                tools: Tools,
+                                namespaces_init: Namespaces) -> List[Namespaces]:
+    (yaml_name, yaml_tree) = yaml_tree_tuple
+
+    # Check for top-level yml dsl args
+    wic = {'wic': yaml_tree.get('wic', {})}
+    yaml_tree['wic'] = wic['wic']
+    wic_steps = wic['wic'].get('steps', {})
+    
+    if 'backends' in yaml_tree:
+        # Use yaml_name (instead of back_name) and do not append to namespace_init.
+        sub_namespaces_list = [get_inlineable_subworkflows((yaml_name, back), tools, namespaces_init) for back_name, back in yaml_tree['backends'].items()]
+        return utils.flatten(sub_namespaces_list)
+
+    steps: List[Yaml] = yaml_tree['steps']
+    steps_keys = utils.get_steps_keys(steps)
+    subkeys = [key for key in steps_keys if key not in tools]
+
+    # All subworkflows except backends are inlineable.
+    inlineable = wic.get('inlineable', True)
+    namespaces = [namespaces_init] if inlineable and not (namespaces_init == []) else []
+
+    for i, step_key in enumerate(steps_keys):
+        yaml_stem = Path(yaml_name).stem
+        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        if step_key in subkeys:
+            sub_yml_tree = steps[i][step_key]
+
+            sub_namespaces = get_inlineable_subworkflows((step_key, sub_yml_tree), tools, namespaces_init + [step_name_i])
+            namespaces += sub_namespaces
+
+    return namespaces
+
+
+def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Namespaces) -> YamlTree:
+    if namespaces == []:
+        return yaml_tree_tuple
+
+    (yaml_name, yaml_tree) = yaml_tree_tuple
+    
+    if 'backends' in yaml_tree:
+        # Pass namespaces through unmodified
+        backends_trees_dict = dict([inline_subworkflow((back_name, back), tools, namespaces) for back_name, back in yaml_tree['backends'].items()])
+        yaml_tree['backends'] = backends_trees_dict
+        return (yaml_name, yaml_tree)
+
+    steps: List[Yaml] = yaml_tree['steps']
+    steps_keys = utils.get_steps_keys(steps)
+    subkeys = [key for key in steps_keys if key not in tools]
+
+    for i, step_key in enumerate(steps_keys):
+        yaml_stem = Path(yaml_name).stem
+        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        if step_key in subkeys:
+            sub_yml_tree = steps[i][step_key]
+
+            if namespaces[0] == step_name_i:
+                if len(namespaces) == 1:
+                    steps_inits = steps[:i] # Exclude step i
+                    steps_tails = steps[i+1:] # Exclude step i
+                    # Inline sub-steps.
+                    sub_steps: List[Yaml] = sub_yml_tree['steps']
+                    yaml_tree['steps'] = steps_inits + sub_steps + steps_tails
+                    # Need to re-index both the sub-step numbers as well as the
+                    # subsequent steps in this workflow? No, except for wic: steps:
+                else:
+                    # Strip off one initial namespace
+                    (step_key_, sub_yml_tree) = inline_subworkflow((step_key, sub_yml_tree), tools, namespaces[1:])
+                    # TODO: re-index wic: steps: ? We probably should, although
+                    # inlineing after merging should not affect CWL args.
+                    # Re-indexing could be tricky w.r.t. overloading.
+                    # TODO: maintain inference boundaries (once feature is added)
+                    steps[i][step_key] = sub_yml_tree
+
+    return (yaml_name, yaml_tree)
