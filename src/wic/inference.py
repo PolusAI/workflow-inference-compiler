@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from . import utils
-from .wic_types import KV, Tools, WorkflowInputs, InternalOutputs, Graph
+from .wic_types import Namespaces, KV, Tools, WorkflowInputs, InternalOutputs, Graph
 
 
 def perform_edge_inference(args: argparse.Namespace,
@@ -14,10 +14,31 @@ def perform_edge_inference(args: argparse.Namespace,
                            arg_key: str,
                            graph: Graph,
                            is_root: bool,
-                           namespaces: List[str],
+                           namespaces: Namespaces,
                            vars_workflow_output_internal: InternalOutputs,
                            inputs_workflow: WorkflowInputs,
                            in_name_in_inputs_file_workflow: bool) -> KV:
+    """This function implements the core edge inference feature.
+    NOTE: steps_i, vars_workflow_output_internal, inputs_workflow are mutably updated.
+
+    Args:
+        args (argparse.Namespace): The command line arguments
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        steps_keys (List[str]): The name of each step in the current CWL workflow
+        yaml_stem (str): The name (filename without extension) of the current CWL workflow
+        i (int): The (zero-based) step number
+        steps_i (KV): The i-th component of the steps: tag of the current CWL workflow
+        arg_key (str): The name of the CWL input tag that needs a concrete input value inferred
+        graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
+        is_root (bool): True if this is the root workflow (for debugging only)
+        namespaces (Namespaces): Specifies the path in the AST of the current subworkflow
+        vars_workflow_output_internal (InternalOutputs): Keeps track of output variables which are internal to the root workflow, but not necessarily to subworkflows.
+        inputs_workflow (WorkflowInputs): Keeps track of CWL inputs: variables for the current workflow.
+        in_name_in_inputs_file_workflow (bool): Used to determine whether failure to find a match should be considered an error.
+
+    Returns:
+        KV: steps_i with the input tag arg_key updated with an inferred input value.
+    """
     # Use in_name_in_inputs_file_workflow: bool so that at the call site, we don't
     # have to question whether or not this function modifies inputs_file_workflow
     # TODO: Figure out something better than replace. Use type and/or edam format info? Yes.

@@ -9,7 +9,7 @@ import networkx  as nx
 
 from . import inference
 from . import utils
-from .wic_types import Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, Graph, YamlTree
+from .wic_types import Namespaces, Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, Graph, YamlTree
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -17,13 +17,32 @@ font_edge_color = 'white'
 
 def compile_workflow(yaml_tree_: YamlTree,
                      args: argparse.Namespace,
-                     namespaces: List[str],
+                     namespaces: Namespaces,
                      subgraphs: List[Graph],
                      vars_dollar_defs: DollarDefs,
                      vars_dollar_calls: DollarCalls,
                      tools: Tools,
                      is_root: bool,
                      relative_run_path: bool) -> CompilerInfo:
+    """Recursively compiles yml workflow definition ASTs to CWL file contents
+
+    Args:
+        yaml_tree_ (YamlTree): A tuple of name and yml AST
+        args (argparse.Namespace): The command line arguments
+        namespaces (Namespaces): Specifies the path in the yml AST to the current subworkflow
+        subgraphs (List[Graph]): The graphs associated with the parent workflows of the current subworkflow
+        vars_dollar_defs (DollarDefs): Stores the (path, value) of the explicit edge definition sites
+        vars_dollar_calls (DollarCalls): Stores the (path, value) of the explicit edge call sites
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        is_root (bool): True if this is the root workflow
+        relative_run_path (bool): Controls whether to use subdirectories or just one directory when writing the compiled CWL files to disk
+
+    Raises:
+        Exception: If any errors occur
+
+    Returns:
+        CompilerInfo: A recursive data structure which contains information which needs to be passed through the recursion.
+    """
     (yaml_path, yaml_tree) = yaml_tree_
 
     # Check for top-level yml dsl args
@@ -426,6 +445,14 @@ def compile_workflow(yaml_tree_: YamlTree,
 
 
 def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys: List[str], subkeys: List[str]) -> None:
+    """Adds a SubworkflowFeatureRequirement if there are any subworkflows
+
+    Args:
+        yaml_tree (Yaml): A tuple of name and yml AST
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        steps_keys (List[str]): The name of each step in the current CWL workflow
+        subkeys (List[str]): The keys associated with subworkflows
+    """
     # If there is at least one subworkflow, add a SubworkflowFeatureRequirement
     if (not subkeys == []) or any([tools[Path(key).stem][1]['class'] == 'Workflow' for key in steps_keys if key not in subkeys]):
         subworkreq = 'SubworkflowFeatureRequirement'
@@ -441,9 +468,20 @@ def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys:
 def add_subgraphs(args: argparse.Namespace,
                   graph: Graph,
                   sibling_subgraphs: List[Graph],
-                  namespaces: List[str],
+                  namespaces: Namespaces,
                   step_1_names: List[str],
                   steps_ranksame: List[str]) -> None:
+    """Add all subgraphs to the current graph, except for GraphViz subgraphs
+    below a given depth, which allows us to hide irrelevant details.
+
+    Args:
+        args (argparse.Namespace): The command line arguments
+        graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
+        sibling_subgraphs (List[Graph]): The subgraphs of the immediate children of the current workflow
+        namespaces (List[str]): Specifies the path in the AST of the current subworkflow
+        step_1_names (List[str]): The names of the first step
+        steps_ranksame (List[str]): Additional node names to be aligned using ranksame
+    """
     (graph_gv, graph_nx) = graph
     # Add the cluster subgraphs to the main graph, but we need to add them in
     # reverse order to trick the graphviz layout algorithm.
@@ -468,9 +506,24 @@ def add_subgraphs(args: argparse.Namespace,
 
 def get_step_name_1(step_1_names: List[str],
                     yaml_stem: str,
-                    namespaces: List[str],
+                    namespaces: Namespaces,
                     steps_keys: List[str],
                     subkeys: List[str]) -> str:
+    """Finds the name of the first step in the current subworkflow. If the first
+    step is itself subworkflow, the call site recurses until it finds a node.
+    This is necessary because ranksame in GraphViz can only be applied to
+    individual nodes, not cluster_subgraphs.
+
+    Args:
+        step_1_names (List[str]): The list of potential first node names
+        yaml_stem (str): The name of the current subworkflow (stem of the yaml filepath)
+        namespaces (Namespaces): Specifies the path in the AST of the current subworkflow
+        steps_keys (List[str]): The name of each step in the current CWL workflow
+        subkeys (List[str]): The keys associated with subworkflows
+
+    Returns:
+        str: _description_
+    """
     if steps_keys[0] in subkeys:
         step_name_1 = step_1_names[0]
     else:
@@ -485,7 +538,7 @@ def get_step_name_1(step_1_names: List[str],
 
 
 def get_workflow_outputs(args: argparse.Namespace,
-                         namespaces: List[str],
+                         namespaces: Namespaces,
                          is_root: bool,
                          yaml_stem: str,
                          steps: List[Yaml],
@@ -493,6 +546,22 @@ def get_workflow_outputs(args: argparse.Namespace,
                          graph: Graph,
                          tools: Tools,
                          step_node_name: str) -> Dict[str, Dict[str, str]]:
+    """Chooses a subset of the CWL outputs: to actually output
+
+    Args:
+        args (argparse.Namespace): The command line arguments
+        namespaces (Namespaces): Specifies the path in the AST of the current subworkflow
+        is_root (bool): True if this is the root workflow
+        yaml_stem (str): The name of the current subworkflow (stem of the yaml filepath)
+        steps (List[Yaml]): The steps: tag of a CWL workflow
+        vars_workflow_output_internal (InternalOutputs): Keeps track of output variables which are internal to the root workflow, but not necessarily to subworkflows.
+        graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        step_node_name (str): The namespaced name of the current step
+
+    Returns:
+        Dict[str, Dict[str, str]]: The actual outputs to be specified in the generated CWL file
+    """
     # Add the outputs of each step to the workflow outputs
     workflow_outputs = {}
     steps_keys = utils.get_steps_keys(steps)

@@ -21,6 +21,14 @@ font_edge_color = 'white'
 
 
 def get_tools_cwl(cwl_dir: Path) -> Tools:
+    """Uses glob() to find all of the CWL CommandLineTool definition files within any subdirectory of cwl_dir
+
+    Args:
+        cwl_dir (Path): The subdirectory in which to search for CWL CommandLineTools
+
+    Returns:
+        Tools: The CWL CommandLineTool definitions found using glob()
+    """
     # Load ALL of the tools.
     tools_cwl: Tools = {}
     pattern_cwl = str(cwl_dir / '**/*.cwl')
@@ -57,9 +65,19 @@ def get_tools_cwl(cwl_dir: Path) -> Tools:
     return tools_cwl
 
 
-def get_yml_paths(cwl_dir: Path) -> Dict[str, Path]:
+def get_yml_paths(yml_dir: Path) -> Dict[str, Path]:
+    """Uses glob() to find all of the yml workflow definition files within any subdirectory of yml_dir
+    NOTE: This function assumes all *.yml files found are workflow definition files,
+    so do not mix regular *.yml files and workflow files in the same root directory.
+
+    Args:
+        yml_dir (Path): The subdirectory in which to search for yml files
+
+    Returns:
+        Dict[str, Path]: A dict containing the filepath stem and filepath of each *.yml file
+    """
     # Glob all of the yml files too, so we don't have to deal with relative paths.
-    pattern_yml = str(cwl_dir / '**/*.yml')
+    pattern_yml = str(yml_dir / '**/*.yml')
     yml_paths_sorted = sorted(glob.glob(pattern_yml, recursive=True), key=len, reverse=True)
     yml_paths = {}
     for yml_path_str in yml_paths_sorted:
