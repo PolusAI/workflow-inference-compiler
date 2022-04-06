@@ -8,19 +8,40 @@ import yaml
 from typing import Any, Dict
 
 from . import auto_gen_header
-from .wic_types import NodeData, Yaml, RecursiveData, YamlForest, Graph, Tool
+from .wic_types import Namespaces, NodeData, Yaml, RecursiveData, YamlForest, Graph, Tool, Tools
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
 
 
 def step_name_str(yaml_stem: str, i: int, step_key: str) -> str:
+    """Returns a string which uniquely and hierarchically identifies a step in a workflow
+
+    Args:
+        yaml_stem (str): The name of the workflow (filepath stem)
+        i (int): The (zero-based) step number
+        step_key (str): The name of the step (used as a dict key)
+
+    Returns:
+        str: The parameters (and the word 'step') joined together with double underscores
+    """
     # Use double underscore so we can '__'.split() below.
     # (This should work as long as yaml_stem and step_key do not contain __)
     return f'{yaml_stem}__step__{i+1}__{step_key}'
 
 
 def parse_step_name_str(step_name_str: str) -> Tuple[str, int, str]:
+    """The inverse function to step_name_str()
+
+    Args:
+        step_name_str (str): A string of the same form as returned by step_name_str()
+
+    Raises:
+        Exception: If the argument is not of the same form as returned by step_name_str()
+
+    Returns:
+        Tuple[str, int, str]: The parameters used to create step_name_str
+    """
     vals = step_name_str.split('__') # double underscore
     if not len(vals) == 4:
         raise Exception(f"Error! {step_name_str} is not of the format \n"
@@ -35,6 +56,18 @@ def parse_step_name_str(step_name_str: str) -> Tuple[str, int, str]:
 
 
 def add_yamldict_keyval(steps_i: Yaml, step_key: str, in_out: str, keyval: Yaml) -> Yaml:
+    """Convenience function used to (mutably) merge two Yaml dicts.
+
+    Args:
+        steps_i (Yaml): A partially-completed Yaml dict representing a step in a CWL workflow
+        step_key (str): The name of the step in a CWL workflow
+        in_out (str): Either the string 'in' or the string 'out'
+        keyval (Yaml): A Yaml dict with additional details to be merged into the first Yaml dict
+
+    Returns:
+        Yaml: The first Yaml dict with the second Yaml dict merged into it.
+    """
+    # TODO: Check whether we can just use deepmerge.merge()
     if steps_i[step_key]:
         if in_out in steps_i[step_key]:
             new_keys = dict(list(steps_i[step_key][in_out].items()) + list(keyval.items()))
@@ -54,7 +87,23 @@ def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, keyval: List[str]) -> 
     return add_yamldict_keyval(steps_i, step_key, 'out', keyval) # type: ignore
 
 
-def add_graph_edge(args: argparse.Namespace, graph: Graph, nss1: List[str], nss2: List[str], label: str, color: str = font_edge_color) -> None:
+def add_graph_edge(args: argparse.Namespace, graph: Graph, nss1: Namespaces, nss2: Namespaces, label: str, color: str = font_edge_color) -> None:
+    """Adds edges to (all of) our graph representations, with the ability to
+    collapse all nodes below a given depth to a single node.
+
+    This function utilizes the fact that nodes have been carefully designed to
+    have unique, hierarchical names. If we want to hide all of the details
+    below a given depth, we can simply truncate each of the namespaces!
+    (and do the same when creating the nodes)
+
+    Args:
+        args (argparse.Namespace): The command line arguments
+        graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
+        nss1 (Namespaces): The namespaces associated with the first node
+        nss2 (Namespaces): The namespaces associated with the second node
+        label (str): The edge label
+        color (str, optional): The edge color Defaults to font_edge_color
+    """
     nss1 = nss1[:(1 + args.graph_inline_depth)]
     edge_node1 = '___'.join(nss1)
     nss2 = nss2[:(1 + args.graph_inline_depth)]
@@ -69,7 +118,16 @@ def add_graph_edge(args: argparse.Namespace, graph: Graph, nss1: List[str], nss2
     graph_nx.add_edge(edge_node1, edge_node2)
 
 
-def partition_by_lowest_common_ancestor(nss1: List[str], nss2: List[str]) -> Tuple[List[str], List[str]]:
+def partition_by_lowest_common_ancestor(nss1: Namespaces, nss2: Namespaces) -> Tuple[Namespaces, Namespaces]:
+    """See https://en.wikipedia.org/wiki/Lowest_common_ancestor
+
+    Args:
+        nss1 (Namespaces): The namespaces associated with the first node
+        nss2 (Namespaces): The namespaces associated with the second node
+
+    Returns:
+        Tuple[Namespaces, Namespaces]: nss1, partitioned by lowest common ancestor
+    """
     # Only partition nss1; if you want to partition nss1
     # just switch the arguments at the call site.
     if nss1 == [] or nss2 == []:
@@ -82,6 +140,14 @@ def partition_by_lowest_common_ancestor(nss1: List[str], nss2: List[str]) -> Tup
 
 
 def get_steps_keys(steps: List[Yaml]) -> List[str]:
+    """Returns the name (dict key) of each step in the given CWL workflow
+
+    Args:
+        steps (List[Yaml]): The steps: tag of a CWL workflow
+
+    Returns:
+        List[str]: The name of each step in the given CWL workflow
+    """
     # Get the dictionary key (i.e. the name) of each step.
     steps_keys = []
     for step in steps:
@@ -91,6 +157,21 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
 
 
 def extract_backend(yaml_tree_: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
+    """Chooses a specific backend for a given CWL workflow step.
+
+    The backends should be thought of as either 'exactly' identical, or at
+    least the same high-level protocol but implemented with a different algorithm.
+
+    Args:
+        yaml_tree_ (Yaml): A Yaml AST dict with sub-dicts for each backend.
+        yaml_path (Path): The filepath of yaml_tree_, only used for error reporting.
+
+    Raises:
+        Exception: If the steps: and/or backend: tags are not present.
+
+    Returns:
+        Tuple[str, Yaml]: The Yaml AST dict of the chosen backend.
+    """
     yaml_tree = copy.deepcopy(yaml_tree_)
     backend = ''
     if 'backends' in yaml_tree:
@@ -114,7 +195,19 @@ def extract_backend(yaml_tree_: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
     return (backend, yaml_tree)
 
 
-def inline_sub_steps(yaml_path: Path, tools: Dict[str, Tuple[str, Any]], yml_paths: Dict[str, Path]) -> List[Yaml]:
+def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Path]) -> List[Yaml]:
+    """Recursively inlines the contents of ALL of the yml sub-workflows. (deprecated)
+    
+    This function is deprecated and will soon be replaced with a better implementation.
+
+    Args:
+        yaml_path (Path): The filepath of the yml workflow.
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        yml_paths (Dict[str, Path]): The yml workflow definitions found using get_yml_paths()
+
+    Returns:
+        List[Yaml]: The recursively inlined contents of the given yml workflow.
+    """
     # Load the high-level yaml workflow file.
     with open(Path(yaml_path), 'r') as y:
         yaml_tree: Yaml = yaml.safe_load(y.read())
@@ -142,11 +235,27 @@ def inline_sub_steps(yaml_path: Path, tools: Dict[str, Tuple[str, Any]], yml_pat
     return steps_all_flattened
 
 
-def flatten(lists: List[List[Any]]) -> List[List[Any]]:
+def flatten(lists: List[List[Any]]) -> List[Any]:
+    """Concatenates a list of lists into a single list.
+
+    Args:
+        lists (List[List[Any]]): A list of lists
+
+    Returns:
+        List[Any]: A single list
+    """
     return [x for lst in lists for x in lst]
 
 
 def flatten_recursive_data(recursive_data: RecursiveData) -> List[NodeData]:
+    """Flattens the data structure returned by the compiler
+
+    Args:
+        recursive_data (RecursiveData): The data structure returned by the compiler
+
+    Returns:
+        List[NodeData]: The list of data associated with each node in the AST
+    """
     sub_node_data = recursive_data[0]
     sub_rec_lists = [flatten_recursive_data(r) for r in recursive_data[1]]
     return [sub_node_data] + flatten(sub_rec_lists)
@@ -159,6 +268,17 @@ def print_forest(forest: YamlForest) -> None:
 
 
 def flatten_forest(forest: YamlForest) -> List[YamlForest]:
+    """Flattens the sub-trees encountered while traversing an AST
+
+    Args:
+        forest (YamlForest): The yaml AST forest to be flattened
+
+    Raises:
+        Exception: If backend: tags are missing.
+
+    Returns:
+        List[YamlForest]: The flattened forest
+    """
     #print_forest(forest)
     if forest == {}:
         return []
@@ -191,6 +311,17 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
 
 
 def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: bool) -> None:
+    """Writes the compiled CWL files and their associated yml inputs files to disk.
+
+    NOTE: Only the yml input file associated with the root workflow is
+    guaranteed to have all inputs. In other words, subworkflows will all have
+    valid CWL files, but may not be executable due to 'missing' inputs.
+
+    Args:
+        recursive_data (RecursiveData): The data structure returned by the compiler
+        path (Path): The directory in which to write the files
+        relative_run_path (bool): Controls whether to use subdirectories or just one directory.
+    """
     sub_node_data = recursive_data[0]
     namespaces = sub_node_data[0]
     yaml_stem = sub_node_data[1]
@@ -229,6 +360,15 @@ def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: 
 
 
 def recursively_delete_dict_key(key: str, obj: Any) -> Any:
+    """Recursively deletes any dict entries with the given key.
+
+    Args:
+        key (str): The key to be deleted
+        obj (Any): The object from which to delete key.
+
+    Returns:
+        Any: _description_
+    """
     if isinstance(obj, List):
         return [recursively_delete_dict_key(key, x) for x in obj]
     elif isinstance(obj, Dict):
@@ -242,6 +382,13 @@ def recursively_delete_dict_key(key: str, obj: Any) -> Any:
 
 
 def make_tool_DAG(tool_stem: str, tool: Tool) -> None:
+    """Uses the `dot` executable from the graphviz package to make a Directed
+    Acyclic Graphs corresponding to the given CWL CommandLineTool
+
+    Args:
+        tool_stem (str): The name of the Tool
+        tool (Tool): The CWL ComandLineTool
+    """
     (tool_path, tool_cwl) = tool
     yaml_path = f'autogenerated/DAG/{tool_path}'
     Path(yaml_path).parents[0].mkdir(parents=True, exist_ok=True)

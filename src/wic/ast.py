@@ -8,12 +8,27 @@ import yaml
 from . import utils
 from .wic_types import Namespaces, Yaml, Tools, YamlTree, YamlForest
 
+# NOTE: AST = Abstract Syntax Tree
+
 # TODO: Check for inline-ing subworkflows more than once and, if there are not
 # any modifications from any parent dsl args, use yaml anchors and aliases.
 # That way, we should be able to serialize back to disk without duplication.
 def read_AST_from_disk(yaml_tree_tuple: YamlTree,
                        yml_paths: Dict[str, Path],
                        tools: Tools) -> YamlTree:
+    """Reads the yml workflow definition files from disk (recursively) and inlines them into an AST
+
+    Args:
+        yaml_tree_tuple (YamlTree): A tuple of a filepath and its Yaml file contents.
+        yml_paths (Dict[str, Path]): The yml workflow definitions found using get_yml_paths()
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+
+    Raises:
+        Exception: If the yml file(s) do not exist
+
+    Returns:
+        YamlTree: A tuple of the root filepath and the associated yml AST
+    """
     (yaml_name, yaml_tree) = yaml_tree_tuple
     
     if 'backends' in yaml_tree:
@@ -55,6 +70,21 @@ def read_AST_from_disk(yaml_tree_tuple: YamlTree,
 def merge_yml_trees(yaml_tree_tuple: YamlTree,
                     wic_parent: Yaml,
                     tools: Tools) -> YamlTree:
+    """Implements 'parameter passing' by recursively merging wic: yml tags.
+    Values from the parent workflow will overwrite / override subworkflows.
+    See examples/gromacs/basic.yml for details
+
+    Args:
+        yaml_tree_tuple (YamlTree): A tuple of a name and a yml AST
+        wic_parent (Yaml): The wic: yml dict from the parent workflow
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+
+    Raises:
+        Exception: If a wic: tag is found as an argument to a CWL CommandLineTool
+
+    Returns:
+        YamlTree: The yml AST with all wic: tags recursively merged.
+    """
     (yaml_name, yaml_tree) = yaml_tree_tuple
 
     # Check for top-level yml dsl args
@@ -94,6 +124,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
         # all of the initial yml tags removed, leaving only CWL tags remaining.)
         if not (step_key in subkeys):
             clt_args = wic_steps.get(f'({i+1}, {step_key})', {})
+            # TODO: Check to see if we can relax this restriction.
             if 'wic' in clt_args: # Do NOT add yml tags to the raw CWL!
                 raise Exception(f'Error! wic: key found in CommandLineTool args.\n' + yaml.dump(sub_wic))
             sub_yml_tree = clt_args
@@ -110,6 +141,15 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
 
 
 def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
+    """The purpose of this function is to abstract away the process of traversing an AST.
+
+    Args:
+        yaml_tree_tuple (YamlTree): A tuple of name and yml AST
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+
+    Returns:
+        YamlForest: A recursive data structure containing all sub-trees encountered while traversing the yml AST.
+    """
     (yaml_name, yaml_tree) = yaml_tree_tuple
     
     if 'backends' in yaml_tree:
@@ -135,7 +175,17 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
 
 def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
                                 tools: Tools,
-                                namespaces_init: Namespaces) -> List[Namespaces]:
+                                namespaces_init: Namespaces = []) -> List[Namespaces]:
+    """Traverses a yml AST and finds all subworkflows which can be inlined into their parent workflow.
+
+    Args:
+        yaml_tree_tuple (YamlTree): A tuple of name and yml AST
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        namespaces_init (Namespaces): The initial subworkflow to start the traversal ([] == root)
+
+    Returns:
+        List[Namespaces]: The subworkflows which can be inlined into their parent workflows.
+    """
     (yaml_name, yaml_tree) = yaml_tree_tuple
 
     # Check for top-level yml dsl args
@@ -169,6 +219,16 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
 
 def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Namespaces) -> YamlTree:
+    """Inlines the given subworkflow into its immediate parent workflow.
+
+    Args:
+        yaml_tree_tuple (YamlTree): A tuple of name and yml AST
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        namespaces (Namespaces): Specifies the path in the yml AST to the subworkflow to be inlined.
+
+    Returns:
+        YamlTree: The updated root workflow with the given subworkflow inlined into its immediate parent workflow.
+    """
     if namespaces == []:
         return yaml_tree_tuple
 

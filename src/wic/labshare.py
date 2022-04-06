@@ -9,34 +9,52 @@ from .wic_types import KV, Cwl, RecursiveData, Tools
 from . import utils
 
 def upload_plugin(compute_url: str, tool: Cwl, stem: str) -> str:
-        # Convert the compiled yaml file to json for labshare Compute.
-        # First remove $ in $namespaces and $schemas (anywhere else?)
-        tool_str = str(yaml.dump(tool, sort_keys=False, line_break='\n', indent=2))
-        tool_str_no_dollar = tool_str.replace('$namespaces', 'namespaces').replace('$schemas', 'schemas')
-        tool_no_dollar: Cwl = yaml.safe_load(tool_str_no_dollar)  # This effectively copies tool
-        compute_plugin: KV = {
-            # Add unique 'id' below
-            'cwlScript': tool_no_dollar
-        }
+    """Uploads CWL CommandLineTools to Polus Compute
 
-        # Use http POST request to upload a primitive CommandLineTool / define a plugin and get its id hash.
-        response = requests.post(compute_url + '/compute/plugins', json = compute_plugin)
-        r_json = response.json()
-        if 'id' not in r_json:
-            print('post response')
-            print(r_json)
-            raise Exception(f'Error! Labshare plugin upload failed for {stem}.')
+    Args:
+        compute_url (str): The url to the Compute API
+        tool (Cwl): The CWL CommandLineTool
+        stem (str): The name of the CWL CommandLineTool
 
-        plugin_id: str = r_json['id'] # hash
-        compute_plugin['id'] = plugin_id
-        compute_plugin.update({'id': plugin_id}) # Necessary ?
-        # Save the plugin ids so we can delete them the next time we enable args.cwl_run_slurm
-        with open('plugin_ids', 'a') as f:
-            f.write(f'{plugin_id}\n')
-        return plugin_id
+    Raises:
+        Exception: If the upload failed for any reason
+
+    Returns:
+        str: The unique id of the plugin
+    """
+    # Convert the compiled yaml file to json for labshare Compute.
+    # First remove $ in $namespaces and $schemas (anywhere else?)
+    tool_str = str(yaml.dump(tool, sort_keys=False, line_break='\n', indent=2))
+    tool_str_no_dollar = tool_str.replace('$namespaces', 'namespaces').replace('$schemas', 'schemas')
+    tool_no_dollar: Cwl = yaml.safe_load(tool_str_no_dollar)  # This effectively copies tool
+    compute_plugin: KV = {
+        # Add unique 'id' below
+        'cwlScript': tool_no_dollar
+    }
+
+    # Use http POST request to upload a primitive CommandLineTool / define a plugin and get its id hash.
+    response = requests.post(compute_url + '/compute/plugins', json = compute_plugin)
+    r_json = response.json()
+    if 'id' not in r_json:
+        print('post response')
+        print(r_json)
+        raise Exception(f'Error! Labshare plugin upload failed for {stem}.')
+
+    plugin_id: str = r_json['id'] # hash
+    compute_plugin['id'] = plugin_id
+    compute_plugin.update({'id': plugin_id}) # Necessary ?
+    # Save the plugin ids so we can delete them the next time we enable args.cwl_run_slurm
+    with open('plugin_ids', 'a') as f:
+        f.write(f'{plugin_id}\n')
+    return plugin_id
 
 
 def print_plugins(compute_url: str) -> None:
+    """prints information on all currently available Compute plugins
+
+    Args:
+        compute_url (str): The url to the Compute API
+    """
     r = requests.get(compute_url + '/compute/plugins/')
     for j in r.json():
         print(f"id {j.get('id')} class {j.get('class')} name {j.get('name')}")
@@ -45,6 +63,20 @@ def print_plugins(compute_url: str) -> None:
 
 
 def upload_all(recursive_data: RecursiveData, tools: Tools, args: argparse.Namespace, is_root: bool) -> str:
+    """Uploads all Plugins, Pipelines, and the root Workflow to the Compute platform
+
+    Args:
+        recursive_data (RecursiveData): The data structure returned by the compiler
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        args (argparse.Namespace): The command line arguments
+        is_root (bool): True if this is the root workflow
+
+    Raises:
+        Exception: If any of the uploads fails for any reason
+
+    Returns:
+        str: The unique id of the workflow
+    """
     sub_node_data = recursive_data[0]
     yaml_stem = sub_node_data[1]
     cwl_tree = sub_node_data[2]
