@@ -8,7 +8,6 @@ from .wic_types import KV, Tools, WorkflowInputs, InternalOutputs, Graph
 
 def perform_edge_inference(args: argparse.Namespace,
                            tools: Tools, steps_keys: List[str],
-                           subkeys: List[str],
                            yaml_stem: str,
                            i: int,
                            steps_i: KV,
@@ -30,12 +29,30 @@ def perform_edge_inference(args: argparse.Namespace,
     step_key = steps_keys[i]
     tool_i = tools[Path(step_key).stem][1]
     step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+
+    in_tool = tool_i['inputs']
+    in_type = in_tool[arg_key]['type']
+    in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
+    in_dict = {'type': in_type}
+    in_format = None
+    if 'format' in in_tool[arg_key]:
+        in_format = in_tool[arg_key]['format']
+        in_dict['format'] = in_format
     for j in range(0, i)[::-1]:  # Reverse order!
         tool_j = tools[Path(steps_keys[j]).stem][1]
+        out_tool = tool_j['outputs']
         out_keys = list(tool_j['outputs'])[::-1] # Reverse order!
         for out_key in out_keys:
+            out_type = out_tool[out_key]['type']
+            out_dict = {'type': out_type}
+            out_format = None
+            if 'format' in out_tool[out_key]:
+                out_format = out_tool[out_key]['format']
+                out_dict['format'] = out_format
             out_key_no_namespace = out_key.split('___')[-1]
             if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
+                if in_format and out_format:
+                    assert out_format in in_format
                 #print('match!', j)  # We found a match!
                 # Generate a new namespace for out_key using the step number and add to inputs
                 step_name_j = utils.step_name_str(yaml_stem, j, steps_keys[j])
@@ -78,12 +95,7 @@ def perform_edge_inference(args: argparse.Namespace,
         # We also do not (necessarily) need to explicitly pass this list
         # to the parent workflow since we are compiling the 'in' tag here,
         # which should match in the parent workflow.
-        in_tool = tool_i['inputs']
-        in_arg = in_tool[arg_key]
-        # TODO: check this
-        in_type = in_arg if isinstance(in_arg, str) else in_arg['type']
-        in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
-        inputs_workflow.update({in_name: {'type': in_type}})
+        inputs_workflow.update({in_name: in_dict})
 
         arg_keyval = {arg_key: in_name}
         steps_i = utils.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)

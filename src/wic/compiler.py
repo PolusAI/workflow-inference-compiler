@@ -45,6 +45,8 @@ def compile_workflow(yaml_tree_: YamlTree,
     # Add headers
     yaml_tree['cwlVersion'] = 'v1.0'
     yaml_tree['class'] = 'Workflow'
+    yaml_tree['$namespaces'] = {'edam': 'https://edamontology.org/'}
+    yaml_tree['$schemas'] = ['https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl']
 
     # NOTE: currently mutates yaml_tree (maybe)
     maybe_add_subworkflow_requirement(yaml_tree, tools, steps_keys, subkeys)
@@ -112,6 +114,7 @@ def compile_workflow(yaml_tree_: YamlTree,
             vars_dollar_calls.update(subworkflow_data[5])
 
         tool_i = tools[stem][1]
+        utils.make_tool_DAG(stem, tools[stem])
 
         # Add run tag, using relative or flat-directory paths
         # NOTE: run: path issues were causing test_cwl_embedding_independence()
@@ -194,15 +197,19 @@ def compile_workflow(yaml_tree_: YamlTree,
             arg_val = steps[i][step_key]['in'][arg_key]
             in_name = f'{step_name_i}___{arg_key}'  # Use triple underscore for namespacing so we can split later # {step_name_i}_input___{arg_key}
             in_type = in_tool[arg_key]['type'].replace('?', '')  # Providing optional arguments makes them required
+            in_dict = {'type': in_type}
+            if 'format' in in_tool[arg_key]:
+                in_format = in_tool[arg_key]['format']
+                in_dict['format'] = in_format
             if arg_val[0] == '&':
                 arg_val = arg_val[1:]  # Remove &
                 #print('arg_key, arg_val', arg_key, arg_val)
                 # NOTE: There can only be one definition, but multiple call sites.
                 if not vars_dollar_defs.get(arg_val):
                     # if first time encountering arg_val, i.e. if defining
-                    # TODO: Add edam format info, etc.
-                    inputs_workflow.update({in_name: {'type': in_type}})
-                    inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
+                    inputs_workflow.update({in_name: in_dict})
+                    in_dict = {**in_dict, 'value': arg_val}
+                    inputs_file_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
                     vars_dollar_defs.update({arg_val: (namespaces + [step_name_i], arg_key)})
                     # TODO: Show input node?
@@ -221,7 +228,7 @@ def compile_workflow(yaml_tree_: YamlTree,
                         print(f"Error! No definition found for &{arg_val}!")
                         print(f"Creating the CWL input {in_name} anyway, but")
                         print("without any corresponding input value this will fail validation!")
-                    inputs_workflow.update({in_name: {'type': in_type}})
+                    inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
                 else:
                     (nss_def_init, var) =  vars_dollar_defs[arg_val]
@@ -250,7 +257,7 @@ def compile_workflow(yaml_tree_: YamlTree,
                     # Note that the outputs from the definition site are bubbled
                     # up the call stack until they reach the common node.
                     if len(nss_call_tails) > 1:
-                        inputs_workflow.update({in_name: {'type': in_type}})
+                        inputs_workflow.update({in_name: in_dict})
                         steps[i][step_key]['in'][arg_key] = in_name
                         # Store var_dollar call site info up through the recursion.
                         vars_dollar_calls.update({in_name: vars_dollar_defs[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
@@ -283,9 +290,9 @@ def compile_workflow(yaml_tree_: YamlTree,
                     # Use constraint=false ?
                     utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
             else:
-                # TODO: Add edam format info, etc.
-                inputs_workflow.update({in_name: {'type': in_type}})
-                inputs_file_workflow.update({in_name: (arg_val, in_type)})  # Add type info
+                inputs_workflow.update({in_name: in_dict})
+                in_dict = {**in_dict, 'value': arg_val}
+                inputs_file_workflow.update({in_name: in_dict})
                 steps[i][step_key]['in'][arg_key] = in_name
                 if args.graph_show_inputs:
                     input_node_name = '___'.join(namespaces + [step_name_i, arg_key])
@@ -323,8 +330,12 @@ def compile_workflow(yaml_tree_: YamlTree,
                     # i.e. if it is possible to do more recursion
                     # NOTE: This works, and test_cwl_embedding_independence()
                     # passes, but it is NOT morally embedding independent.
-                    in_type = in_tool[arg_key]
-                    inputs_workflow.update({in_name: {'type': in_type}})
+                    in_type = in_tool[arg_key]['type']
+                    in_dict = {'type': in_type}
+                    if 'format' in in_tool[arg_key]:
+                        in_format = in_tool[arg_key]['format']
+                        in_dict['format'] = in_format
+                    inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
                     # Store var_dollar call site info up through the recursion.
                     vars_dollar_calls.update({in_name: vars_dollar_calls[arg_key]})
@@ -343,7 +354,7 @@ def compile_workflow(yaml_tree_: YamlTree,
             else:
                 in_name_in_inputs_file_workflow: bool = (in_name in inputs_file_workflow)
                 steps[i] = inference.perform_edge_inference(args, tools, steps_keys,
-                    subkeys, yaml_stem, i, steps[i], arg_key, graph, is_root, namespaces,
+                    yaml_stem, i, steps[i], arg_key, graph, is_root, namespaces,
                     vars_workflow_output_internal, inputs_workflow, in_name_in_inputs_file_workflow)
                 # NOTE: For now, perform_edge_inference mutably appends to
                 # inputs_workflow and vars_workflow_output_internal.
@@ -357,20 +368,18 @@ def compile_workflow(yaml_tree_: YamlTree,
 
         #print()
 
-    # NOTE: currently mutates graph
-    add_subgraphs(args, graph, sibling_subgraphs, namespaces, step_1_names)
+    # NOTE: add_subgraphs currently mutates graph
+    gv_options = wic['wic'].get('graphviz', {})
+    ranksame_strs = gv_options.get('ranksame', [])
+    import ast
+    ranksame_pairs = [ast.literal_eval(x) for x in ranksame_strs]
+    steps_ranksame = ['___'.join(namespaces + [utils.step_name_str(yaml_stem, num-1, name)]) for num, name in ranksame_pairs]
+    steps_ranksame = [f'"{x}"' for x in steps_ranksame]  # Escape with double quotes.
+    add_subgraphs(args, graph, sibling_subgraphs, namespaces, step_1_names, steps_ranksame)
     step_name_1 = get_step_name_1(step_1_names, yaml_stem, namespaces, steps_keys, subkeys)
 
     # Add the provided inputs of each step to the workflow inputs
-    temp = {}
-    for k, v in inputs_workflow.items():
-        # TODO: Remove this heuristic after we add the format info above.
-        new_keyval = {k: v['type']}
-        if 'mdin' in k and 'File' in v['type']:
-            newval = dict(list(v.items()) + list({'format': 'https://edamontology.org/format_2330'}.items()))
-            new_keyval = {k: newval}
-        temp.update(new_keyval)
-    yaml_tree.update({'inputs': temp})
+    yaml_tree.update({'inputs': inputs_workflow})
 
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
@@ -388,10 +397,15 @@ def compile_workflow(yaml_tree_: YamlTree,
 
     # Dump the workflow inputs to a separate yml file.
     yaml_inputs: WorkflowInputsFile = {}
-    for key, (val, in_type) in inputs_file_workflow.items():
-        new_keyval = {key: val}  # if string
-        if 'File' in in_type:
-            new_keyval = {key: {'class': 'File', 'path': val, 'format': 'https://edamontology.org/format_2330'}}
+    for key, in_dict in inputs_file_workflow.items():
+        new_keyval: WorkflowInputsFile = {}
+        if 'File' == in_dict['type']:
+            new_keyval = {key: {'class': 'File', 'path': in_dict['value'], 'format': in_dict['format']}}
+        elif 'string' == in_dict['type']:
+            # We cannot store string values as a dict, so use type: ignore
+            new_keyval = {key: in_dict['value']} # type: ignore 
+        else:
+            raise Exception(f"Error! Unknown type: {in_dict['type']}")
         yaml_inputs.update(new_keyval)
 
     if args.cwl_validate:
@@ -422,7 +436,8 @@ def add_subgraphs(args: argparse.Namespace,
                   graph: Graph,
                   sibling_subgraphs: List[Graph],
                   namespaces: List[str],
-                  step_1_names: List[str]) -> None:
+                  step_1_names: List[str],
+                  steps_ranksame: List[str]) -> None:
     (graph_gv, graph_nx) = graph
     # Add the cluster subgraphs to the main graph, but we need to add them in
     # reverse order to trick the graphviz layout algorithm.
@@ -439,6 +454,10 @@ def add_subgraphs(args: argparse.Namespace,
         if len(step_1_names_display) > 1:
             nodes_same_rank = '\t{rank=same; ' + '; '.join(step_1_names_display) + '}\n'
             graph_gv.body.append(nodes_same_rank)
+        if len(steps_ranksame) > 1:
+            nodes_same_rank = '\t{rank=same; ' + '; '.join(steps_ranksame) + '}\n'
+            graph_gv.body.append(nodes_same_rank)
+        
 
 
 def get_step_name_1(step_1_names: List[str],
