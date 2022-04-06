@@ -21,7 +21,10 @@ jobs:
         
     - name: Install Common Workflow Language
       run: sudo apt install cwltool
-      
+
+    - name: Install System Graphviz (NOT python3-graphviz)
+      run: sudo apt install graphviz
+
     - name: Setup Python
       uses: actions/setup-python@v2
       with:
@@ -29,6 +32,11 @@ jobs:
 
     - name: Install Dependencies
       run: python -m pip install --upgrade graphviz pyyaml pytest
+# NOTE: This 'graphviz' refers to the python bindings to the underlying
+# system binary graphviz package (i.e. the `dot` executable) which we need to 
+# install separately using either `conda install graphviz` or `sudo apt install graphviz`.
+# This 'graphviz' is equivalent to `conda install python-graphviz` or
+# `sudo apt install python3-graphiviz` ONLY.
 
     - name: Install Workflow Inference Compiler
       working-directory: ${{github.workspace}}
