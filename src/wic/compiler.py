@@ -400,7 +400,13 @@ def compile_workflow(yaml_tree_: YamlTree,
     for key, in_dict in inputs_file_workflow.items():
         new_keyval: WorkflowInputsFile = {}
         if 'File' == in_dict['type']:
-            new_keyval = {key: {'class': 'File', 'path': in_dict['value'], 'format': in_dict['format']}}
+            in_format = in_dict['format']
+            if isinstance(in_format, List):
+                print(f'NOTE: More than one input file format for {key}')
+                print(f'formats: {in_format}')
+                print(f'Choosing {in_format[0]}')
+                in_format = in_format[0]
+            new_keyval = {key: {'class': 'File', 'path': in_dict['value'], 'format': in_format}}
         elif 'string' == in_dict['type']:
             # We cannot store string values as a dict, so use type: ignore
             new_keyval = {key: in_dict['value']} # type: ignore 

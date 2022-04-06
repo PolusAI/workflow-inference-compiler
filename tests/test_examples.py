@@ -64,9 +64,8 @@ def test_examples() -> None:
             # "Missing required input parameter" and only fail the
             # workflows which should have succeeded.
             missing_input = "Missing required input parameter"
-            bad_format = "File has an incompatible format"
             output = proc.stdout.decode("utf-8")
-            if not (missing_input in output or bad_format in output):
+            if not (missing_input in output):
                 print(f"Error! {yml_paths[yml_path_str]} failed!")
                 print(output)
                 assert proc.returncode == 0
