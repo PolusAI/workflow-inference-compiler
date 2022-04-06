@@ -30,7 +30,7 @@ Namespaces = List[Namespace]
 # are almost never the right answer, but for now I don't see any other way.)
 
 WorkflowInputs = Dict[str, Dict[str, str]]
-WorkflowInputsFile = Dict[str, Tuple[str, str]]
+WorkflowInputsFile = Dict[str, Dict[str, str]]
 InternalOutputs = List[str]
 DollarDef = Tuple[Namespaces, str]
 DollarDefs = Dict[str, DollarDef]
