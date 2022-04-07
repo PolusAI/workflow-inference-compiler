@@ -71,6 +71,7 @@ def test_examples() -> None:
                 assert proc.returncode == 0
 
 
+@pytest.mark.fast
 def test_cwl_embedding_independence() -> None:
     testargs = ['wic', '--yaml', '']  # ignore --yaml
     with patch.object(sys, 'argv', testargs):
