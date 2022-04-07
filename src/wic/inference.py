@@ -26,7 +26,7 @@ def perform_edge_inference(args: argparse.Namespace,
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         steps_keys (List[str]): The name of each step in the current CWL workflow
         yaml_stem (str): The name (filename without extension) of the current CWL workflow
-        i (int): The (zero-based) step number
+        i (int): The (zero-based) step number w.r.t. the current subworkflow. Since we are trying to infer inputs from previous outputs, this will not perform any inference (again, w.r.t. the current subworkflow) if i == 0.
         steps_i (KV): The i-th component of the steps: tag of the current CWL workflow
         arg_key (str): The name of the CWL input tag that needs a concrete input value inferred
         graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
@@ -41,9 +41,6 @@ def perform_edge_inference(args: argparse.Namespace,
     """
     # Use in_name_in_inputs_file_workflow: bool so that at the call site, we don't
     # have to question whether or not this function modifies inputs_file_workflow
-    # TODO: Figure out something better than replace. Use type and/or edam format info? Yes.
-    arg_key_no_namespace = arg_key.split('___')[-1]
-    arg_key_noinput = arg_key_no_namespace.replace('input_', '').replace('solute_', '').replace('energy_', 'edr_').replace('structure_', 'tpr_').replace('traj_', 'trr_')
     # gmx_trjconv_str assumes gro, but other tools assume tpr; For now,
     # instead of figuring out how to replace('structure_', 'gro_') for
     # gmx_trjconv_str only, just require the user to specify filename.
@@ -55,52 +52,111 @@ def perform_edge_inference(args: argparse.Namespace,
     in_type = in_tool[arg_key]['type']
     in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
     in_dict = {'type': in_type}
-    in_format = None
+    in_formats = []
     if 'format' in in_tool[arg_key]:
-        in_format = in_tool[arg_key]['format']
-        in_dict['format'] = in_format
+        in_formats = in_tool[arg_key]['format']
+        in_dict['format'] = in_formats
+    format_matches_all = []
+    attempted_matches_all = []
     for j in range(0, i)[::-1]:  # Reverse order!
         tool_j = tools[Path(steps_keys[j]).stem][1]
         out_tool = tool_j['outputs']
         out_keys = list(tool_j['outputs'])[::-1] # Reverse order!
+        format_matches = []
+        attempted_matches = []
         for out_key in out_keys:
             out_type = out_tool[out_key]['type']
             out_dict = {'type': out_type}
-            out_format = None
+            out_format = ''
             if 'format' in out_tool[out_key]:
                 out_format = out_tool[out_key]['format']
                 out_dict['format'] = out_format
-            out_key_no_namespace = out_key.split('___')[-1]
-            if arg_key_noinput == out_key_no_namespace.replace('output_', ''):
-                if in_format and out_format:
-                    assert out_format in in_format
-                #print('match!', j)  # We found a match!
-                # Generate a new namespace for out_key using the step number and add to inputs
-                step_name_j = utils.step_name_str(yaml_stem, j, steps_keys[j])
-                arg_val = f'{step_name_j}/{out_key}'
+            if out_format == '':
+                print(f'Warning! No output format! Cannot possibly match!')
+                print(f'out_key {out_key}')
+            attempted_matches.append((out_key, out_format))
+            # Great! We found an 'exact' type and format match.
+            if (out_type == in_type) and out_format in in_formats:
+                format_matches.append((out_key, out_format))
+            # TODO: elif there exists a file format conversion...
+        format_matches_all.append(format_matches)
+        attempted_matches_all.append(attempted_matches)
+        # Most log files just have format_2330 "Textual format", but this can
+        # conflict with other structured text files that also have format_2330.
+        # Unfortunately, the edam formats are not very finely curated, so they
+        # are not very 'exact'. For now, we can perform additional matching
+        # based on naming conventions and/or we can simply exclude log files
+        # (which are not usually parsed or otherwise used as inputs).
+        # Eventually, we will want to improve the format curation.
+        # NOTE: Use underscores to prevent excluding e.g. 'topology'
+        # This isn't great, but works for now (until someone uses '_log_' ...)
+        # format_matches = [x for x in format_matches if not '_log_' in x[0]]
+        if not len(format_matches) == 0:
+            if len(format_matches) == 1:
+                # Great! We found a unique format match.
+                out_key = format_matches[0][0]
+            else:
+                name_matches = []
+                # NOTE: The biobb CWL files do not use consistent naming
+                # conventions, so we need to perform some renamings here.
+                # Eventually, the CWL files themselves should be fixed.
+                arg_key_no_namespace = arg_key.split('___')[-1]
+                arg_key_renamed = arg_key_no_namespace.replace('input_', '')
+                renamings = [('energy_', 'edr_'), ('structure_', 'tpr_'), ('traj_', 'trr_')]
+                for name1, name2 in renamings:
+                    arg_key_renamed = arg_key_renamed.replace(name1, name2)
 
-                # We also need to keep track of the 'internal' output variables
-                if tool_j['class'] == 'Workflow':
-                    vars_workflow_output_internal.append(out_key)
+                for out_key, out_format in format_matches:
+                    out_key_no_namespace = out_key.split('___')[-1]
+                    out_key_renamed = out_key_no_namespace.replace('output_', '')
+                    if arg_key_renamed == out_key_renamed:
+                        name_matches.append((out_key, out_format))
+
+                if len(name_matches) == 0:
+                    #print(f'Found multiple outputs with compatible types and formats (but no matching names) for input {arg_key}')
+                    #for x in format_matches:
+                    #    print(x)
+                    #print(f'Arbitrarily choosing the first match {format_matches[0][0]}')
+                    out_key = format_matches[0][0]
+                elif len(name_matches) == 1:
+                    # Great! We found a unique match.
+                    out_key = name_matches[0][0]
                 else:
-                    vars_workflow_output_internal.append(arg_val)
+                    #print(f'Found multiple outputs with compatible types and formats (and multiple matching names) for input {arg_key}')
+                    #for x in name_matches:
+                    #    print(x)
+                    #print(f'Arbitrarily choosing the first match {name_matches[0][0]}')
+                    out_key = name_matches[0][0]
+            #print('match!', j)  # We found a match!
+            # Generate a new namespace for out_key using the step number and add to inputs
+            step_name_j = utils.step_name_str(yaml_stem, j, steps_keys[j])
+            arg_val = f'{step_name_j}/{out_key}'
 
-                # Determine which head and tail node to use for the new edge
-                # First we need to extract the embedded namespaces
-                nss_embedded1 = out_key.split('___')[:-1]
-                nss_embedded2 = arg_key.split('___')[:-1]
-                nss1 = namespaces + [step_name_j] + nss_embedded1
-                nss2 = namespaces + [step_name_i] + nss_embedded2
-                # TODO: check this
-                label = out_key_no_namespace if tool_j['class'] == 'Workflow' else out_key
-                utils.add_graph_edge(args, graph, nss1, nss2, label)
+            # We also need to keep track of the 'internal' output variables
+            if tool_j['class'] == 'Workflow':
+                vars_workflow_output_internal.append(out_key)
+            else:
+                vars_workflow_output_internal.append(arg_val)
 
-                arg_keyval = {arg_key: arg_val}
-                steps_i = utils.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
-                return steps_i  # Short circuit
+            # Determine which head and tail node to use for the new edge
+            # First we need to extract the embedded namespaces
+            nss_embedded1 = out_key.split('___')[:-1]
+            nss_embedded2 = arg_key.split('___')[:-1]
+            nss1 = namespaces + [step_name_j] + nss_embedded1
+            nss2 = namespaces + [step_name_i] + nss_embedded2
+            # TODO: check this
+            out_key_no_namespace = out_key.split('___')[-1]
+            label = out_key_no_namespace if tool_j['class'] == 'Workflow' else out_key
+            utils.add_graph_edge(args, graph, nss1, nss2, label)
+
+            arg_keyval = {arg_key: arg_val}
+            steps_i = utils.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
+            #print(f'inference i {i} y arg_key {arg_key}')
+            return steps_i  # Short circuit
 
     match = False
     if not match:
+        #print(f'inference i {i} n arg_key {arg_key}')
         in_name = f'{step_name_i}___{arg_key}'  # Use triple underscore for namespacing so we can split later # {step_name_i}_input___{arg_key}
 
         # This just means we need to defer to the parent workflow.
@@ -108,6 +164,10 @@ def perform_edge_inference(args: argparse.Namespace,
         # input value and thus there is no entry in inputs_file_workflow.
         if is_root and not in_name_in_inputs_file_workflow:
             print('Error! No match found for input', i + 1, step_key, arg_key)
+            print('number of attempted matches ', len(utils.flatten(attempted_matches_all)))
+            for y in attempted_matches_all:
+                for x in y:
+                    print(x)
 
         # Add an input name to this subworkflow (only). Do not add to
         # inputs_file_workflow because this may be an internal input,

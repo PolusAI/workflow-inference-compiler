@@ -9,7 +9,7 @@ import networkx  as nx
 
 from . import inference
 from . import utils
-from .wic_types import Namespaces, Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, InternalOutputs, Graph, YamlTree
+from .wic_types import Namespaces, Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, WorkflowOutputs, InternalOutputs, Graph, YamlTree
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -33,7 +33,7 @@ def compile_workflow(yaml_tree_: YamlTree,
         subgraphs (List[Graph]): The graphs associated with the parent workflows of the current subworkflow
         vars_dollar_defs (DollarDefs): Stores the (path, value) of the explicit edge definition sites
         vars_dollar_calls (DollarCalls): Stores the (path, value) of the explicit edge call sites
-        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl(). yml files that have been compiled to CWL SubWorkflows are also added during compilation.
         is_root (bool): True if this is the root workflow
         relative_run_path (bool): Controls whether to use subdirectories or just one directory when writing the compiled CWL files to disk
 
@@ -44,6 +44,7 @@ def compile_workflow(yaml_tree_: YamlTree,
         CompilerInfo: A recursive data structure which contains information which needs to be passed through the recursion.
     """
     (yaml_path, yaml_tree) = yaml_tree_
+    print(' starting', ('  ' * len(namespaces)) + yaml_path)
 
     # Check for top-level yml dsl args
     wic = {'wic': yaml_tree.get('wic', {})}
@@ -75,6 +76,7 @@ def compile_workflow(yaml_tree_: YamlTree,
     inputs_file_workflow = {}
     
     # Collect the internal workflow output variables
+    outputs_workflow = []
     vars_workflow_output_internal = []
 
     # Collect recursive dollar variable definitions.
@@ -121,6 +123,12 @@ def compile_workflow(yaml_tree_: YamlTree,
             sibling_subgraphs.append(sub_node_data[-1]) # TODO: Just subgraph?
             step_1_names.append(subworkflow_data[-1])
             # Add compiled cwl file contents to tools
+            # NOTE: We need to consider what to do when stem is not unique.
+            # This can happen when two yml files in different subdirectories
+            # have the same stem, and it can also happen when we reuse a
+            # subworkflow but due to parameter passing the compiled CWL is different.
+            if stem in tools:
+                print(f'Warning! Overwriting tool {stem}')
             tools[stem] = (stem + '.cwl', sub_node_data[2])
 
             # Initialize the above from recursive values.
@@ -204,6 +212,8 @@ def compile_workflow(yaml_tree_: YamlTree,
             graph_nx.add_node(step_node_name)
         elif not (step_key in subkeys and len(namespaces) < args.graph_inline_depth):
             nssnode = namespaces + [step_name_i]
+            # Just like in add_graph_edge(), here we can hide all of the details
+            # below a given depth by simply truncating the node's namespaces.
             nssnode = nssnode[:(1 + args.graph_inline_depth)]
             step_node_name = '___'.join(nssnode)
             graph_gv.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
@@ -381,9 +391,15 @@ def compile_workflow(yaml_tree_: YamlTree,
         # Add CommandLineTool outputs tags to workflow out tags.
         # Note: Add all output tags for now, but depending on config options,
         # not all output files will be generated. This may cause an error.
-        out_keys = list(tool_i['outputs'])
-        #print('out_keys', out_keys)
-        steps[i] = utils.add_yamldict_keyval_out(steps[i], step_key, out_keys)
+        out_keyvals = {}
+        for out_key, out_dict in tool_i['outputs'].items():
+            out_keyvals[out_key] = {'type': out_dict['type'], 'format': out_dict['format']}
+            #print(out_key, out_keyvals[out_key])
+        if out_keyvals == {}: # FYI this should never happen
+            print(f'Error! no outputs for step {step_key}')
+        outputs_workflow.append(out_keyvals)
+
+        steps[i] = utils.add_yamldict_keyval_out(steps[i], step_key, list(tool_i['outputs']))
 
         #print()
 
@@ -402,7 +418,7 @@ def compile_workflow(yaml_tree_: YamlTree,
 
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
-    workflow_outputs = get_workflow_outputs(args, namespaces, is_root, yaml_stem, steps, vars_workflow_output_internal, graph, tools, step_node_name)
+    workflow_outputs = get_workflow_outputs(args, namespaces, is_root, yaml_stem, steps, outputs_workflow, vars_workflow_output_internal, graph, tools, step_node_name)
     yaml_tree.update({'outputs': workflow_outputs})
 
     # Finally, rename the steps to be unique
@@ -437,7 +453,8 @@ def compile_workflow(yaml_tree_: YamlTree,
         print(f'Validating {yaml_stem}.cwl ...')
         cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
         sub.run(cmd)
-    
+
+    print('finishing', ('  ' * len(namespaces)) + yaml_path)
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
     node_data = (namespaces, yaml_stem, yaml_tree, yaml_inputs, vars_dollar_defs_copy, vars_dollar_calls_copy, graph) # step_name_1, plugin_id?
@@ -542,6 +559,7 @@ def get_workflow_outputs(args: argparse.Namespace,
                          is_root: bool,
                          yaml_stem: str,
                          steps: List[Yaml],
+                         outputs_workflow: WorkflowOutputs,
                          vars_workflow_output_internal: InternalOutputs,
                          graph: Graph,
                          tools: Tools,
@@ -554,6 +572,7 @@ def get_workflow_outputs(args: argparse.Namespace,
         is_root (bool): True if this is the root workflow
         yaml_stem (str): The name of the current subworkflow (stem of the yaml filepath)
         steps (List[Yaml]): The steps: tag of a CWL workflow
+        outputs_workflow (WorkflowOutputs): Contains the contents of the out: tags for each step.
         vars_workflow_output_internal (InternalOutputs): Keeps track of output variables which are internal to the root workflow, but not necessarily to subworkflows.
         graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
@@ -571,9 +590,6 @@ def get_workflow_outputs(args: argparse.Namespace,
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         out_keys = steps[i][step_key]['out']
         for out_key in out_keys:
-            # Exclude certain output files as per the comment above.
-            if 'dhdl' in out_key or 'xtc' in out_key:
-                continue
             out_var = f'{step_name_i}/{out_key}'
             # Avoid duplicating intermediate outputs in GraphViz
             out_key_no_namespace = out_key.split('___')[-1]
@@ -609,6 +625,10 @@ def get_workflow_outputs(args: argparse.Namespace,
                 continue
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             #print('out_name', out_name)
-            workflow_outputs.update({out_name: {'type': 'File', 'outputSource': out_var}})
+
+        for out_key, out_dict in outputs_workflow[i].items():
+            out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
+            out_var = f'{step_name_i}/{out_key}'
+            workflow_outputs.update({out_name: {**out_dict, 'outputSource': out_var}})
         #print('workflow_outputs', workflow_outputs)
     return workflow_outputs

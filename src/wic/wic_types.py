@@ -31,6 +31,7 @@ Namespaces = List[Namespace]
 
 WorkflowInputs = Dict[str, Dict[str, str]]
 WorkflowInputsFile = Dict[str, Dict[str, str]]
+WorkflowOutputs = List[Yaml]
 InternalOutputs = List[str]
 DollarDef = Tuple[Namespaces, str]
 DollarDefs = Dict[str, DollarDef]
