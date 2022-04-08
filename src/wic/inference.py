@@ -61,6 +61,12 @@ def perform_edge_inference(args: argparse.Namespace,
     for j in range(0, i)[::-1]:  # Reverse order!
         tool_j = tools[Path(steps_keys[j]).stem][1]
         out_tool = tool_j['outputs']
+        # NOTE: The outputs of a CommandLineTool are all made available
+        # simultaneously. Although that is technically also true for subworkflows,
+        # the CommandLineTools within the subworkflow are certainly ordered,
+        # and so we definitely want to use reverse order here. As mentioned,
+        # it doesn't necessarily make sense for CommandLineTools, but the
+        # important thing is that we just define the order for users some way.
         out_keys = list(tool_j['outputs'])[::-1] # Reverse order!
         format_matches = []
         attempted_matches = []
