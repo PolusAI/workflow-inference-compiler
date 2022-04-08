@@ -118,11 +118,11 @@ def test_cwl_embedding_independence() -> None:
         # check that the generated CWL of a subworkflow is independent of its
         # embedding into a parent workflow.
         for sub_node_data, sub_yaml_forest in zip(node_data_lst[1:], yaml_forest_lst):
-            (sub_namespaces, sub_yml_path_str, sub_cwl_embedded, sub_yaml_inputs_, sub_dollar_defs_copy, sub_dollar_calls_copy, sub_rootgraph_) = sub_node_data
+            (sub_namespaces, sub_yml_path_str, sub_cwl_embedded, sub_yaml_inputs_, sub_explicit_edge_defs_copy, sub_explicit_edge_calls_copy, sub_rootgraph_) = sub_node_data
             assert sub_yaml_forest[0][0] == sub_node_data[1] + '.yml'
 
             # NOTE: Okay, well actually we still need to pass in sub_namespaces.
-            # (sub_dollar_defs_copy and sub_dollar_calls_copy should also be
+            # (sub_explicit_edge_defs_copy and sub_explicit_edge_calls_copy should also be
             # necessary, but curiosly the test passes without them...)
             # so the embedding is independent w.r.t. everything ELSE in the parent.
             # Of course, dsl_args should generally be used sparingly. The only time

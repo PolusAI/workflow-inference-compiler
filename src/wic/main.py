@@ -92,6 +92,7 @@ def main() -> None:
     args = cli.parser.parse_args()
 
     tools_cwl = get_tools_cwl(Path(args.cwl_dir))
+    utils.make_plugins_DAG(tools_cwl)
     yml_paths = get_yml_paths(Path(args.cwl_dir))
 
     yaml_path = args.yaml

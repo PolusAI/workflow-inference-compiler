@@ -9,7 +9,7 @@ import networkx  as nx
 
 from . import inference
 from . import utils
-from .wic_types import Namespaces, Yaml, Tools, DollarDefs, DollarCalls, CompilerInfo, WorkflowInputsFile, WorkflowOutputs, InternalOutputs, Graph, YamlTree
+from .wic_types import Namespaces, Yaml, Tools, ExplicitEdgeDefs, ExplicitEdgeCalls, CompilerInfo, WorkflowInputsFile, WorkflowOutputs, InternalOutputs, Graph, YamlTree
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -19,20 +19,21 @@ def compile_workflow(yaml_tree_: YamlTree,
                      args: argparse.Namespace,
                      namespaces: Namespaces,
                      subgraphs: List[Graph],
-                     vars_dollar_defs: DollarDefs,
-                     vars_dollar_calls: DollarCalls,
+                     explicit_edge_defs: ExplicitEdgeDefs,
+                     explicit_edge_calls: ExplicitEdgeCalls,
                      tools: Tools,
                      is_root: bool,
                      relative_run_path: bool) -> CompilerInfo:
-    """Recursively compiles yml workflow definition ASTs to CWL file contents
+    """STOP: Have you read the Developer's Guide?? docs/devguide.md\n
+    Recursively compiles yml workflow definition ASTs to CWL file contents
 
     Args:
         yaml_tree_ (YamlTree): A tuple of name and yml AST
         args (argparse.Namespace): The command line arguments
         namespaces (Namespaces): Specifies the path in the yml AST to the current subworkflow
         subgraphs (List[Graph]): The graphs associated with the parent workflows of the current subworkflow
-        vars_dollar_defs (DollarDefs): Stores the (path, value) of the explicit edge definition sites
-        vars_dollar_calls (DollarCalls): Stores the (path, value) of the explicit edge call sites
+        explicit_edge_defs (ExplicitEdgeDefs): Stores the (path, value) of the explicit edge definition sites
+        explicit_edge_calls (ExplicitEdgeCalls): Stores the (path, value) of the explicit edge call sites
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl(). yml files that have been compiled to CWL SubWorkflows are also added during compilation.
         is_root (bool): True if this is the root workflow
         relative_run_path (bool): Controls whether to use subdirectories or just one directory when writing the compiled CWL files to disk
@@ -79,11 +80,11 @@ def compile_workflow(yaml_tree_: YamlTree,
     outputs_workflow = []
     vars_workflow_output_internal = []
 
-    # Collect recursive dollar variable definitions.
-    vars_dollar_defs_copy = copy.deepcopy(vars_dollar_defs)
-
-    # Collect recursive dollar variable call sites.
-    vars_dollar_calls_copy = copy.deepcopy(vars_dollar_calls)
+    # Copy recursive explicit edge variable definitions and call sites.
+    # Unlike the originals which are mutably updated, these are returned unmodified
+    # so that we can test that compilation is embedding independent.
+    explicit_edge_defs_copy = copy.deepcopy(explicit_edge_defs)
+    explicit_edge_calls_copy = copy.deepcopy(explicit_edge_calls)
 
     # Collect recursive subworkflow data
     step_1_names = []
@@ -112,7 +113,7 @@ def compile_workflow(yaml_tree_: YamlTree,
             subgraph = (subgraph_gv, subgraph_nx)
 
             steps[i].update({step_key: {}}) # delete yml subtree
-            subworkflow_data = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i], subgraphs + [subgraph], vars_dollar_defs, vars_dollar_calls, tools, False, relative_run_path)
+            subworkflow_data = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i], subgraphs + [subgraph], explicit_edge_defs, explicit_edge_calls, tools, False, relative_run_path)
             
             recursive_data = subworkflow_data[0]
             recursive_data_list.append(recursive_data)
@@ -137,8 +138,8 @@ def compile_workflow(yaml_tree_: YamlTree,
             inputs_namespaced = dict([(f'{step_name_i}___{k}', val) for k, val in subworkflow_data[2].items()]) # _{step_key}_input___{k}
             inputs_file_workflow.update(inputs_namespaced)
             vars_workflow_output_internal += subworkflow_data[3]
-            vars_dollar_defs.update(subworkflow_data[4])
-            vars_dollar_calls.update(subworkflow_data[5])
+            explicit_edge_defs.update(subworkflow_data[4])
+            explicit_edge_calls.update(subworkflow_data[5])
 
         tool_i = tools[stem][1]
         utils.make_tool_DAG(stem, tools[stem])
@@ -200,7 +201,7 @@ def compile_workflow(yaml_tree_: YamlTree,
         # files accordingly.)
         #print(args_required)
 
-        sub_args_provided = [arg for arg in args_required if arg in vars_dollar_calls]
+        sub_args_provided = [arg for arg in args_required if arg in explicit_edge_calls]
         #print(sub_args_provided)
 
         label = step_key
@@ -234,19 +235,19 @@ def compile_workflow(yaml_tree_: YamlTree,
                 arg_val = arg_val[1:]  # Remove &
                 #print('arg_key, arg_val', arg_key, arg_val)
                 # NOTE: There can only be one definition, but multiple call sites.
-                if not vars_dollar_defs.get(arg_val):
+                if not explicit_edge_defs.get(arg_val):
                     # if first time encountering arg_val, i.e. if defining
                     inputs_workflow.update({in_name: in_dict})
                     in_dict = {**in_dict, 'value': arg_val}
                     inputs_file_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
-                    vars_dollar_defs.update({arg_val: (namespaces + [step_name_i], arg_key)})
+                    explicit_edge_defs.update({arg_val: (namespaces + [step_name_i], arg_key)})
                     # TODO: Show input node?
                 else:
                     raise Exception(f"Error! Multiple definitions of &{arg_val}!")
             elif arg_val[0] == '*':
                 arg_val = arg_val[1:]  # Remove *
-                if not vars_dollar_defs.get(arg_val):
+                if not explicit_edge_defs.get(arg_val):
                     if is_root:
                         # TODO: Check this comment.
                         # Even if is_root, we don't want to raise an Exception
@@ -260,7 +261,7 @@ def compile_workflow(yaml_tree_: YamlTree,
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
                 else:
-                    (nss_def_init, var) =  vars_dollar_defs[arg_val]
+                    (nss_def_init, var) =  explicit_edge_defs[arg_val]
 
                     nss_def_embedded = var.split('___')[:-1]
                     nss_call_embedded = arg_key.split('___')[:-1]
@@ -270,30 +271,30 @@ def compile_workflow(yaml_tree_: YamlTree,
 
                     nss_def_inits, nss_def_tails = utils.partition_by_lowest_common_ancestor(nss_def, nss_call)
                     nss_call_inits, nss_call_tails = utils.partition_by_lowest_common_ancestor(nss_call, nss_def)
-                    # nss_def and nss_call are paths into the abstract 'call stack'.
-                    # This defines the 'common node' in the call stack w.r.t. the inits.
+                    # nss_def and nss_call are paths into the abstract syntax tree 'call stack'.
+                    # This defines the 'common namespace' in the call stack w.r.t. the inits.
                     assert nss_def_inits == nss_call_inits
                     
                     # TODO: Check this comment.
-                    # Relative to the common node, if the call site of an explicit
+                    # Relative to the common namespace, if the call site of an explicit
                     # edge is at a depth > 1, (i.e. if it is NOT simply of the form
                     # last_namespace/input_variable) then we
                     # need to create inputs in all of the intervening CWL files
                     # so we can pass in the values from the outer scope(s). Here,
                     # we simply need to use in_name and add to inputs_workflow
-                    # and vars_dollar_calls. The outer scope(s) are handled by
+                    # and explicit_edge_calls. The outer scope(s) are handled by
                     # the sub_args_provided clause below.
                     # Note that the outputs from the definition site are bubbled
-                    # up the call stack until they reach the common node.
+                    # up the call stack until they reach the common namespace.
                     if len(nss_call_tails) > 1:
                         inputs_workflow.update({in_name: in_dict})
                         steps[i][step_key]['in'][arg_key] = in_name
-                        # Store var_dollar call site info up through the recursion.
-                        vars_dollar_calls.update({in_name: vars_dollar_defs[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
+                        # Store explicit edge call site info up through the recursion.
+                        explicit_edge_calls.update({in_name: explicit_edge_defs[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
                     elif len(nss_call_tails) == 1:
                         # TODO: Check this comment.
                         # The definition site recursion (only, if any) has completed
-                        # and we are already in the common node, thus
+                        # and we are already in the common namespace, thus
                         # we need to pass in the value from the definition site.
                         # Note that since len(nss_call_tails) == 1,
                         # there will not be any call site recursion in this case.
@@ -338,11 +339,11 @@ def compile_workflow(yaml_tree_: YamlTree,
             if arg_key in sub_args_provided: # Edges have been explicitly provided
                 # The definition site recursion (if any) and the call site
                 # recursion (yes, see above), have both completed and we are
-                # now in the common node, thus 
+                # now in the common namespace, thus 
                 # we need to pass in the value from the definition site.
-                # Extract the stored defs namespaces from vars_dollar_calls.
+                # Extract the stored defs namespaces from explicit_edge_calls.
                 # (See massive comment above.)
-                (nss_def_init, var) = vars_dollar_calls[arg_key]
+                (nss_def_init, var) = explicit_edge_calls[arg_key]
 
                 nss_def_embedded = var.split('___')[:-1]
                 nss_call_embedded = arg_key.split('___')[:-1]
@@ -366,12 +367,12 @@ def compile_workflow(yaml_tree_: YamlTree,
                         in_dict['format'] = in_format
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
-                    # Store var_dollar call site info up through the recursion.
-                    vars_dollar_calls.update({in_name: vars_dollar_calls[arg_key]})
+                    # Store explicit edge call site info up through the recursion.
+                    explicit_edge_calls.update({in_name: explicit_edge_calls[arg_key]})
                 else:
                     # TODO: Check this comment.
                     # The definition site recursion (only, if any) has completed
-                    # and we are already in the common node, thus
+                    # and we are already in the common namespace, thus
                     # we need to pass in the value from the definition site.
                     # Note that since len(nss_call_tails) == 1,
                     # there will not be any call site recursion in this case.
@@ -457,8 +458,8 @@ def compile_workflow(yaml_tree_: YamlTree,
     print('finishing', ('  ' * len(namespaces)) + yaml_path)
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    node_data = (namespaces, yaml_stem, yaml_tree, yaml_inputs, vars_dollar_defs_copy, vars_dollar_calls_copy, graph) # step_name_1, plugin_id?
-    return ((node_data, recursive_data_list), inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, vars_dollar_defs, vars_dollar_calls, step_name_1)
+    node_data = (namespaces, yaml_stem, yaml_tree, yaml_inputs, explicit_edge_defs_copy, explicit_edge_calls_copy, graph) # step_name_1, plugin_id?
+    return ((node_data, recursive_data_list), inputs_workflow, inputs_file_workflow, vars_workflow_output_internal, explicit_edge_defs, explicit_edge_calls, step_name_1)
 
 
 def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys: List[str], subkeys: List[str]) -> None:
