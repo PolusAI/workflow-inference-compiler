@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from . import utils
-from .wic_types import Namespaces, KV, Tools, WorkflowInputs, InternalOutputs, Graph
+from .wic_types import Namespaces, KV, Tools, WorkflowInputs, InternalOutputs, GraphReps
 
 
 def perform_edge_inference(args: argparse.Namespace,
@@ -12,7 +12,7 @@ def perform_edge_inference(args: argparse.Namespace,
                            i: int,
                            steps_i: KV,
                            arg_key: str,
-                           graph: Graph,
+                           graph: GraphReps,
                            is_root: bool,
                            namespaces: Namespaces,
                            vars_workflow_output_internal: InternalOutputs,
@@ -29,7 +29,7 @@ def perform_edge_inference(args: argparse.Namespace,
         i (int): The (zero-based) step number w.r.t. the current subworkflow. Since we are trying to infer inputs from previous outputs, this will not perform any inference (again, w.r.t. the current subworkflow) if i == 0.
         steps_i (KV): The i-th component of the steps: tag of the current CWL workflow
         arg_key (str): The name of the CWL input tag that needs a concrete input value inferred
-        graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
+        graph (GraphReps): A tuple of a GraphViz DiGraph and a networkx DiGraph
         is_root (bool): True if this is the root workflow (for debugging only)
         namespaces (Namespaces): Specifies the path in the AST of the current subworkflow
         vars_workflow_output_internal (InternalOutputs): Keeps track of output variables which are internal to the root workflow, but not necessarily to subworkflows.
@@ -45,7 +45,7 @@ def perform_edge_inference(args: argparse.Namespace,
     # instead of figuring out how to replace('structure_', 'gro_') for
     # gmx_trjconv_str only, just require the user to specify filename.
     step_key = steps_keys[i]
-    tool_i = tools[Path(step_key).stem][1]
+    tool_i = tools[Path(step_key).stem].cwl
     step_name_i = utils.step_name_str(yaml_stem, i, step_key)
 
     in_tool = tool_i['inputs']
@@ -59,7 +59,7 @@ def perform_edge_inference(args: argparse.Namespace,
     format_matches_all = []
     attempted_matches_all = []
     for j in range(0, i)[::-1]:  # Reverse order!
-        tool_j = tools[Path(steps_keys[j]).stem][1]
+        tool_j = tools[Path(steps_keys[j]).stem].cwl
         out_tool = tool_j['outputs']
         # NOTE: The outputs of a CommandLineTool are all made available
         # simultaneously. Although that is technically also true for subworkflows,
