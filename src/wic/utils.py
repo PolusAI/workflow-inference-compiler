@@ -8,7 +8,7 @@ import yaml
 from typing import Any, Dict
 
 from . import auto_gen_header
-from .wic_types import Namespaces, NodeData, Yaml, RecursiveData, YamlForest, Graph, Tool, Tools
+from .wic_types import Namespaces, NodeData, Yaml, RoseTree, YamlForest, GraphReps, Tool, Tools, YamlTree
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -87,7 +87,7 @@ def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, keyval: List[str]) -> 
     return add_yamldict_keyval(steps_i, step_key, 'out', keyval) # type: ignore
 
 
-def add_graph_edge(args: argparse.Namespace, graph: Graph, nss1: Namespaces, nss2: Namespaces, label: str, color: str = font_edge_color) -> None:
+def add_graph_edge(args: argparse.Namespace, graph: GraphReps, nss1: Namespaces, nss2: Namespaces, label: str, color: str = font_edge_color) -> None:
     """Adds edges to (all of) our graph representations, with the ability to
     collapse all nodes below a given depth to a single node.
 
@@ -98,7 +98,7 @@ def add_graph_edge(args: argparse.Namespace, graph: Graph, nss1: Namespaces, nss
 
     Args:
         args (argparse.Namespace): The command line arguments
-        graph (Graph): A tuple of a GraphViz DiGraph and a networkx DiGraph
+        graph (GraphReps): A tuple of a GraphViz DiGraph and a networkx DiGraph
         nss1 (Namespaces): The namespaces associated with the first node
         nss2 (Namespaces): The namespaces associated with the second node
         label (str): The edge label
@@ -108,7 +108,8 @@ def add_graph_edge(args: argparse.Namespace, graph: Graph, nss1: Namespaces, nss
     edge_node1 = '___'.join(nss1)
     nss2 = nss2[:(1 + args.graph_inline_depth)]
     edge_node2 = '___'.join(nss2)
-    (graph_gv, graph_nx) = graph
+    graph_gv = graph.graphviz
+    graph_nx = graph.networkx
     # Hide internal self-edges
     if not edge_node1 == edge_node2:
         if args.graph_label_edges:
@@ -247,24 +248,23 @@ def flatten(lists: List[List[Any]]) -> List[Any]:
     return [x for lst in lists for x in lst]
 
 
-def flatten_recursive_data(recursive_data: RecursiveData) -> List[NodeData]:
-    """Flattens the data structure returned by the compiler
+def flatten_rose_tree(rose_tree: RoseTree) -> List[Any]:
+    """Flattens the data contained in the Rose Tree into a List
 
     Args:
-        recursive_data (RecursiveData): The data structure returned by the compiler
+        rose_tree (RoseTree): A Rose Tree
 
     Returns:
-        List[NodeData]: The list of data associated with each node in the AST
+        List[Any]: The list of data associated with each node in the RoseTree
     """
-    sub_node_data = recursive_data[0]
-    sub_rec_lists = [flatten_recursive_data(r) for r in recursive_data[1]]
-    return [sub_node_data] + flatten(sub_rec_lists)
+    sub_rose_trees = [flatten_rose_tree(r) for r in rose_tree.sub_trees]
+    return [rose_tree.data] + flatten(sub_rose_trees)
 
 
 def print_forest(forest: YamlForest) -> None:
-    print(forest[0][0])
-    print(yaml.dump(forest[0][1]))
-    print(yaml.dump(forest[1]))
+    print(forest.yaml_tree.name)
+    print(yaml.dump(forest.yaml_tree.yml))
+    print(yaml.dump(forest.sub_forests))
 
 
 def flatten_forest(forest: YamlForest) -> List[YamlForest]:
@@ -282,7 +282,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     #print_forest(forest)
     if forest == {}:
         return []
-    yaml_tree = forest[0][1]
+    yaml_tree = forest.yaml_tree.yml
     if 'backends' in yaml_tree:
         #print_forest(forest)
         back_name = ''
@@ -293,24 +293,25 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
         if back_name == '':
             print_forest(forest)
             raise Exception(f'Error! No backend in yaml forest!\n')
-        step_1 = forest[1][back_name][0][1]['steps'][0]
+        yaml_tree_back: YamlTree = forest.sub_forests[back_name].yaml_tree
+        step_1 = yaml_tree_back.yml['steps'][0]
         step_name_1 = list(step_1.keys())[0]
         if Path(step_name_1).suffix == '.yml':
             # Choose a specific backend
-            return flatten_forest(forest[1][back_name])
+            return flatten_forest(forest.sub_forests[back_name])
         else:
             return [forest]
 
-    forests = list(forest[1].values())
+    forests = list(forest.sub_forests.values())
     sub_forests = [flatten_forest(f) for f in forests]
-    # Use depth first search flattening to match flatten_recursive_data()
+    # Use depth first search flattening to match flatten_rose_tree()
     #bfs = forests + flatten(sub_forests)
     dfs_lists = [[f] + fs for f, fs in zip(forests, sub_forests)]
     dfs = flatten(dfs_lists)
     return dfs
 
 
-def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: bool) -> None:
+def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> None:
     """Writes the compiled CWL files and their associated yml inputs files to disk.
 
     NOTE: Only the yml input file associated with the root workflow is
@@ -318,16 +319,15 @@ def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: 
     valid CWL files, but may not be executable due to 'missing' inputs.
 
     Args:
-        recursive_data (RecursiveData): The data structure returned by the compiler
+        rose_tree (RoseTree): The data associated with compiled subworkflows
         path (Path): The directory in which to write the files
         relative_run_path (bool): Controls whether to use subdirectories or just one directory.
     """
-    sub_node_data = recursive_data[0]
-    namespaces = sub_node_data[0]
-    yaml_stem = sub_node_data[1]
-    yaml_tree = sub_node_data[2]
-    yaml_inputs = sub_node_data[3]
-    # TODO: destructure sub_node_data rather than using explicit indexing.
+    node_data: NodeData = rose_tree.data
+    namespaces = node_data.namespaces
+    yaml_stem = node_data.name
+    cwl_tree = node_data.compiled_cwl
+    yaml_inputs = node_data.workflow_inputs_file
 
     path.mkdir(parents=True, exist_ok=True)
     if relative_run_path:
@@ -337,9 +337,9 @@ def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: 
         filename_cwl = '___'.join(namespaces + [f'{yaml_stem}.cwl'])
         filename_yml = '___'.join(namespaces + [f'{yaml_stem}_inputs.yml'])
 
-    # Dump the compiled yaml file to disk.
+    # Dump the compiled CWL file contents to disk.
     # Use sort_keys=False to preserve the order of the steps.
-    yaml_content = yaml.dump(yaml_tree, sort_keys=False, line_break='\n', indent=2)
+    yaml_content = yaml.dump(cwl_tree, sort_keys=False, line_break='\n', indent=2)
     with open(path / filename_cwl, 'w') as w:
         w.write('#!/usr/bin/env cwl-runner\n')
         w.write(auto_gen_header)
@@ -350,13 +350,13 @@ def write_to_disk(recursive_data: RecursiveData, path: Path, relative_run_path: 
         inp.write(auto_gen_header)
         inp.write(yaml_content)
 
-    for r in recursive_data[1]:
+    for sub_rose_tree in rose_tree.sub_trees:
         subpath = path
         if relative_run_path:
-            sub_namespace = r[0][0]
-            sub_step_name = sub_namespace[-1]
+            sub_node_data: NodeData = sub_rose_tree.data
+            sub_step_name = sub_node_data.namespaces[-1]
             subpath = path / sub_step_name
-        write_to_disk(r, subpath, relative_run_path)
+        write_to_disk(sub_rose_tree, subpath, relative_run_path)
 
 
 def recursively_delete_dict_key(key: str, obj: Any) -> Any:

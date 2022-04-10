@@ -5,7 +5,7 @@ from typing import Dict, List
 import requests
 import yaml
 
-from .wic_types import KV, Cwl, RecursiveData, Tools
+from .wic_types import KV, Cwl, NodeData, RoseTree, Tools
 from . import utils
 
 def upload_plugin(compute_url: str, tool: Cwl, stem: str) -> str:
@@ -62,11 +62,11 @@ def print_plugins(compute_url: str) -> None:
     print(len(r.json()))
 
 
-def upload_all(recursive_data: RecursiveData, tools: Tools, args: argparse.Namespace, is_root: bool) -> str:
+def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_root: bool) -> str:
     """Uploads all Plugins, Pipelines, and the root Workflow to the Compute platform
 
     Args:
-        recursive_data (RecursiveData): The data structure returned by the compiler
+        rose_tree (RoseTree): The data associated with compiled subworkflows
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         args (argparse.Namespace): The command line arguments
         is_root (bool): True if this is the root workflow
@@ -77,14 +77,13 @@ def upload_all(recursive_data: RecursiveData, tools: Tools, args: argparse.Names
     Returns:
         str: The unique id of the workflow
     """
-    sub_node_data = recursive_data[0]
-    yaml_stem = sub_node_data[1]
-    cwl_tree = sub_node_data[2]
-    yaml_inputs = sub_node_data[3]
-    # TODO: destructure sub_node_data rather than using explicit indexing.
+    sub_node_data: NodeData = rose_tree.data
+    yaml_stem = sub_node_data.name
+    cwl_tree = sub_node_data.compiled_cwl
+    yaml_inputs = sub_node_data.workflow_inputs_file
     
-    sub_rec_data: Dict[str, RecursiveData] = dict([(r[0][0], r) for r in recursive_data[1]])
-    #print(list(sub_rec_data))
+    sub_rose_trees: Dict[str, RoseTree] = dict([(r.data.name, r) for r in rose_tree.sub_trees])
+    #print(list(sub_rose_trees))
 
     steps = cwl_tree['steps']
 
@@ -103,13 +102,13 @@ def upload_all(recursive_data: RecursiveData, tools: Tools, args: argparse.Names
     cwl_tree_run = copy.deepcopy(cwl_tree)
     for i, step_key in enumerate(steps_keys):
         stem = Path(step_key).stem
-        tool_i = tools[stem][1]
+        tool_i = tools[stem].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
 
         #if step_key in subkeys: # and not is_root, but the former implies the latter
             #plugin_id = upload_plugin(args.compute_url, cwl_tree_run, yaml_stem)
-        if stem in sub_rec_data:
-            subworkflow_id = upload_all(sub_rec_data[stem], tools, args, False)
+        if stem in sub_rose_trees:
+            subworkflow_id = upload_all(sub_rose_trees[stem], tools, args, False)
             run_val = f'pipeline:{subworkflow_id}'
 
             # Save the pipeline ids so we can delete them the next time we enable args.cwl_run_slurm
