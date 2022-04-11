@@ -14,6 +14,24 @@ steps:
 # use *filename to dereference the filename and create an explicit edge.
 wic:
   graphviz:
+    label: Solvation & Ionization
     ranksame:
-    - (1, 'editconf')
-    - (4, 'genion')
+    - (1, editconf)
+    - (4, genion)
+  steps:
+    (1, editconf):
+      wic:
+        graphviz:
+          label: 'Initialize\nPeriodic Box'
+    (2, solvate):
+      wic:
+        graphviz:
+          label: 'Add Water\nSolvent'
+    (3, grompp):
+      wic:
+        graphviz:
+          label: 'Update\nTopology'
+    (4, genion):
+      wic:
+        graphviz:
+          label: 'Neutralize &\nAdd Ions'

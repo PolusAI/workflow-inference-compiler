@@ -7,3 +7,20 @@ steps:
       in:
         config: '{"terms":  ["Pressure","Density"]}'
         output_xvg_path: 'energy_npt.xvg'
+
+wic:
+  graphviz:
+    label: Constant\nPressure
+  steps:
+    (1, grompp):
+      wic:
+        graphviz:
+          label: 'Update\nTopology'
+    (2, mdrun):
+      wic:
+        graphviz:
+          label: 'Molecular\nDynamics'
+    (3, gmx_energy):
+      wic:
+        graphviz:
+          label: 'Analyze & Plot\nDensity\nTimeseries'

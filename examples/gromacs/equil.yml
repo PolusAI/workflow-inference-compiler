@@ -2,3 +2,7 @@ steps:
   - nvt.yml:
   - npt.yml:
 #  - conversion.yml:
+
+wic:
+  graphviz:
+    label: Equilibration

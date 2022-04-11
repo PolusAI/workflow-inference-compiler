@@ -13,11 +13,13 @@ steps:
 # Use (1-based) indexing to uniquely reference (step_number, step_name).
 # Put everything under one top-level wic: tag to facilitate easy merging and removal.
 wic:
+  graphviz:
+    label: Molecular Dynamics
   steps:
     (1, min.yml):
       wic:
         steps:
-          (1, steep.yml):
+          (2, cg.yml):
             wic:
               steps:
                 (1, grompp):

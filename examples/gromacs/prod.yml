@@ -11,3 +11,16 @@ steps:
   - mdrun:
       in:
         output_crd_path: '&prod.gro'
+
+wic:
+  graphviz:
+    label: Production
+  steps:
+    (1, grompp):
+      wic:
+        graphviz:
+          label: 'Update\nTopology'
+    (2, mdrun):
+      wic:
+        graphviz:
+          label: 'Molecular\nDynamics'

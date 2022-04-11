@@ -4,5 +4,8 @@
 steps:
   - setup.yml:
   - basic.yml:
-# Trajectory Analysis
   - analysis.yml:
+
+wic:
+  graphviz:
+    label: Molecular Dynamics Stability Analysis

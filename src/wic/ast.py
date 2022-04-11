@@ -124,9 +124,12 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
         # all of the initial yml tags removed, leaving only CWL tags remaining.)
         if not (step_key in subkeys):
             clt_args = wic_steps.get(f'({i+1}, {step_key})', {})
-            # TODO: Check to see if we can relax this restriction.
-            if 'wic' in clt_args: # Do NOT add yml tags to the raw CWL!
-                raise Exception(f'Error! wic: key found in CommandLineTool args.\n' + yaml.dump(sub_wic))
+            if 'wic' in clt_args:
+                # Do NOT add yml tags to the raw CWL!
+                # We can simply leave any step-specific wic: tags at top-level.
+                # Copy so we only delete from the step, not also the top-level.
+                clt_args = copy.deepcopy(clt_args)
+                del clt_args['wic']
             sub_yml_tree = clt_args
             args_provided_dict_self = {}
             if steps[i][step_key]:

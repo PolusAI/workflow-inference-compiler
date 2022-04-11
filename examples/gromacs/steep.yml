@@ -11,3 +11,20 @@ steps:
       in:
         config: '{"terms":  ["Potential"]}'
         output_xvg_path: 'energy_min_steep.xvg'
+
+wic:
+  graphviz:
+    label: Steepest\nDescent
+  steps:
+    (1, grompp):
+      wic:
+        graphviz:
+          label: 'Update\nTopology'
+    (2, mdrun):
+      wic:
+        graphviz:
+          label: 'Energy\nMinimization'
+    (3, gmx_energy):
+      wic:
+        graphviz:
+          label: 'Analyze & Plot\nPotential Energy\nTimeseries'

@@ -4,3 +4,16 @@ steps:
         output_pdb_path: tutorial.pdb
         config: '{"pdb_code": "1aki"}'
   - fix_side_chain:
+
+wic:
+  graphviz:
+    label: Molecular\nModeling
+  steps:
+    (1, pdb):
+      wic:
+        graphviz:
+          label: 'Download\nPDB Code'
+    (2, fix_side_chain):
+      wic:
+        graphviz:
+          label: 'Fix Side Chain'
