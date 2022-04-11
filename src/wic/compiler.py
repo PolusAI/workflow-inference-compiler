@@ -2,7 +2,7 @@ import argparse
 import copy
 from pathlib import Path
 import subprocess as sub
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import graphviz
 import networkx  as nx
@@ -44,12 +44,13 @@ def compile_workflow(yaml_tree_: YamlTree,
     Returns:
         CompilerInfo: Contains the data associated with compiled subworkflows (in the Rose Tree) together with mutable cumulative environment information which needs to be passed through the recursion.
     """
-    (yaml_path, yaml_tree) = yaml_tree_
+    # NOTE: Use deepcopy so that when we delete wic: we don't modify any call sites
+    (yaml_path, yaml_tree) = copy.deepcopy(yaml_tree_)
     print(' starting', ('  ' * len(namespaces)) + yaml_path)
 
     # Check for top-level yml dsl args
     wic = {'wic': yaml_tree.get('wic', {})}
-    #print('wic', yaml.dump(wic))
+    #import yaml; print(yaml.dump(wic))
     if 'wic' in yaml_tree:
         del yaml_tree['wic']
     wic_steps = wic['wic'].get('steps', {})
@@ -96,19 +97,22 @@ def compile_workflow(yaml_tree_: YamlTree,
     graph_gv = graph.graphviz
     graph_nx = graph.networkx
 
-    # TODO: Check for top-level yml dsl args
-
     for i, step_key in enumerate(steps_keys):
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         stem = Path(step_key).stem
+        wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
 
         # Recursively compile subworkflows, adding compiled cwl file contents to tools
         if step_key in subkeys:
             # Extract the sub yaml file that we pre-loaded from disk.
             sub_yaml_tree = YamlTree(step_key, steps[i][step_key])
 
+            # get the label (if any) from the subworkflow
+            step_i_wic_graphviz = sub_yaml_tree.yml.get('wic', {}).get('graphviz', {})
+            label = step_i_wic_graphviz.get('label', step_key)
+
             subgraph_gv = graphviz.Digraph(name=f'cluster_{step_key}')
-            subgraph_gv.attr(label=step_key) # str(path)
+            subgraph_gv.attr(label=label) # str(path)
             subgraph_gv.attr(color='lightblue')  # color of outline
             subgraph_nx = nx.DiGraph()
             subgraph = GraphReps(subgraph_gv, subgraph_nx)
@@ -209,7 +213,10 @@ def compile_workflow(yaml_tree_: YamlTree,
         if args.graph_label_stepname:
             label = step_name_i
         step_node_name = '___'.join(namespaces + [step_name_i])
+
         if not tool_i['class'] == 'Workflow':
+            wic_graphviz_step_i = wic_step_i.get('wic', {}).get('graphviz', {})
+            label = wic_graphviz_step_i.get('label', label)
             graph_gv.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
             graph_nx.add_node(step_node_name)
         elif not (step_key in subkeys and len(namespaces) < args.graph_inline_depth):
@@ -218,6 +225,10 @@ def compile_workflow(yaml_tree_: YamlTree,
             # below a given depth by simply truncating the node's namespaces.
             nssnode = nssnode[:(1 + args.graph_inline_depth)]
             step_node_name = '___'.join(nssnode)
+            # NOTE: NOT wic_graphviz_step_i
+            # get the label (if any) from the subworkflow
+            step_i_wic_graphviz = sub_yaml_tree.yml.get('wic', {}).get('graphviz', {})
+            label = step_i_wic_graphviz.get('label', label)
             graph_gv.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
             graph_nx.add_node(step_node_name)
 
@@ -405,11 +416,16 @@ def compile_workflow(yaml_tree_: YamlTree,
 
         #print()
 
+    def parse_int_string_tuple(string: str) -> Tuple[int, str]:
+        # Parses a string of the form '(int, string)'
+        string_no_parens = string.strip()[1:-1]
+        (str1, str2) = string_no_parens.split(',')
+        return (int(str1.strip()), str2.strip())
+
     # NOTE: add_subgraphs currently mutates graph
-    gv_options = wic['wic'].get('graphviz', {})
-    ranksame_strs = gv_options.get('ranksame', [])
-    import ast
-    ranksame_pairs = [ast.literal_eval(x) for x in ranksame_strs]
+    wic_graphviz = wic['wic'].get('graphviz', {})
+    ranksame_strs = wic_graphviz.get('ranksame', [])
+    ranksame_pairs = [parse_int_string_tuple(x) for x in ranksame_strs]
     steps_ranksame = ['___'.join(namespaces + [utils.step_name_str(yaml_stem, num-1, name)]) for num, name in ranksame_pairs]
     steps_ranksame = [f'"{x}"' for x in steps_ranksame]  # Escape with double quotes.
     add_subgraphs(args, graph, sibling_subgraphs, namespaces, step_1_names, steps_ranksame)
@@ -500,7 +516,7 @@ def add_subgraphs(args: argparse.Namespace,
         args (argparse.Namespace): The command line arguments
         graph (GraphReps): A tuple of a GraphViz DiGraph and a networkx DiGraph
         sibling_subgraphs (List[Graph]): The subgraphs of the immediate children of the current workflow
-        namespaces (List[str]): Specifies the path in the AST of the current subworkflow
+        namespaces (Namespaces): Specifies the path in the AST of the current subworkflow
         step_1_names (List[str]): The names of the first step
         steps_ranksame (List[str]): Additional node names to be aligned using ranksame
     """

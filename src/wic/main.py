@@ -126,7 +126,10 @@ def main() -> None:
     rootgraph.attr(fontcolor=font_edge_color)
     #rootgraph.attr(rankdir='LR') # When --graph_inline_depth 1, this usually looks better.
     with rootgraph.subgraph(name=f'cluster_{yaml_path}') as subgraph_gv:
-        subgraph_gv.attr(label=yaml_path)
+        # get the label (if any) from the workflow
+        step_i_wic_graphviz = yaml_tree.yml.get('wic', {}).get('graphviz', {})
+        label = step_i_wic_graphviz.get('label', yaml_path)
+        subgraph_gv.attr(label=label)
         subgraph_gv.attr(color='lightblue')  # color of cluster subgraph outline
         subgraph_nx = nx.DiGraph()
         subgraph = GraphReps(subgraph_gv, subgraph_nx)

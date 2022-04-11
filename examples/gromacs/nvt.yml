@@ -7,3 +7,20 @@ steps:
       in:
         config: '{"terms":  ["Temperature"]}'
         output_xvg_path: 'energy_nvt.xvg'
+
+wic:
+  graphviz:
+    label: Constant\nVolume
+  steps:
+    (1, grompp):
+      wic:
+        graphviz:
+          label: 'Update\nTopology'
+    (2, mdrun):
+      wic:
+        graphviz:
+          label: 'Molecular\nDynamics'
+    (3, gmx_energy):
+      wic:
+        graphviz:
+          label: 'Analyze & Plot\nTemperature\nTimeseries'

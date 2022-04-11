@@ -23,3 +23,32 @@ steps:
         config: '{"selection": "Protein"}'
         input_top_path: '*prod.tpr'
         input_crd_path: '*prod.gro'
+
+wic:
+  graphviz:
+    label: Stability Analysis
+    ranksame:
+    - (1, gmx_rms)
+    - (2, gmx_rms)
+    - (3, gmx_rgyr)
+  steps:
+    (1, gmx_rms):
+      wic:
+        graphviz:
+          label: Root Mean\nSquare
+    (2, gmx_rms):
+      wic:
+        graphviz:
+          label: Root Mean\nSquare
+    (3, gmx_rgyr):
+      wic:
+        graphviz:
+          label: Radius of\nGyration
+    (4, gmx_image):
+      wic:
+        graphviz:
+          label: Wrap Periodic\nCoordinates
+    (5, gmx_trjconv_str):
+      wic:
+        graphviz:
+          label: Extract Protein\nTrajectory

@@ -6,3 +6,7 @@ backends:
   amber:
     steps:
       - npt_amber.yml:
+
+wic:
+  graphviz:
+    label: Constant\nPressure

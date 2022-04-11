@@ -1,5 +1,7 @@
 # Workflow Inference Compiler
 
+Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but users still need to explicitly specify how to connect the steps. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between steps, and it compiles to CWL for execution. The examples are chosen from classical molecular dynamics but like CWL, the software is general purpose and is not limited to any specific domain.
+
 ## Quick Start
 ```
 pip install .
@@ -12,7 +14,7 @@ The Workflow Inference Compiler is a [Domain Specific Language](https://en.wikip
 
 ## Edge Inference
 
-The key feature is that in most cases, you do not need to specify any of the edges! They will be automatically inferred for you based on file formats and other information. The above command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the workflow, and run it locally.
+The key feature is that in most cases, you do not need to specify any of the edges! They will be automatically inferred for you based on types, file formats, and naming conventions. The above command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the workflow, and run it locally.
 
 ### Maths
 
@@ -20,7 +22,7 @@ Every DAG has a [topological ordering](https://en.wikipedia.org/wiki/Topological
 
 ## Explicit Edges
 
-If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See examples/gromacs for a concrete example. Due to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!), these variables will need to be in quotes. (The notation is intended to be nearly identical, but instead of using `'*tag'` to refer to the *contents* of `'&var'` it refers to the *path* to `'&var'`.)
+If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See examples/gromacs for a concrete example. Due to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!), these variables will need to be in quotes. (The notation is intended to be nearly identical, but instead of using `'*var'` to refer to the *contents* of `'&var'` it refers to the *path* to `'&var'`.)
 
 ## Subworkflows
 
