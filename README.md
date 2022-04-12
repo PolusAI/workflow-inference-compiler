@@ -7,6 +7,10 @@ Scientific computing can be difficult in practice due to various complex softwar
 pip install .
 wic --yaml examples/gromacs/tutorial.yml --cwl_dir . --cwl_output_intermediate_files True --cwl_run_local True
 ```
+Then, in another terminal, use the following command to view the plots in real-time.
+```
+python WatchdogPlots.py
+```
 
 ![Workflow](examples/gromacs/tutorial.yml.gv.png)
 
