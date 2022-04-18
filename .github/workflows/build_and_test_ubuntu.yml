@@ -18,9 +18,24 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: recursive
-        
+
+    - uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniconda-version: "latest"
+          activate-environment: wic
+          channels: conda-forge
+
     - name: Install Common Workflow Language
-      run: sudo apt install cwltool
+# The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
+#      run: sudo apt install cwltool
+# Use conda to install cwltool (version 3.1.20220224085855)
+      working-directory: ${{github.workspace}}
+      run: |
+        conda info
+        conda list
+        conda config --show-sources
+        conda config --show
+        conda install cwltool
 
     - name: Install System Graphviz (NOT python3-graphviz)
       run: sudo apt install graphviz
