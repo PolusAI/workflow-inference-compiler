@@ -5,6 +5,7 @@ Scientific computing can be difficult in practice due to various complex softwar
 ## Quick Start
 ```
 pip install .
+git submodule init && git submodule update
 wic --yaml examples/gromacs/tutorial.yml --cwl_dir . --cwl_output_intermediate_files True --cwl_run_local True
 ```
 Then, in another terminal, use the following command to view the plots in real-time.
