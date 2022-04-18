@@ -1,11 +1,14 @@
 import argparse
+import sys
 
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
 parser.add_argument('--yaml', type=str, required=True,
                     help='Yaml workflow file')
 
 parser.add_argument('--cwl_dir', type=str, required=False, default='biobb',
-                    help='Directory which contains the CWL CommandLineTools and/or Workflows')
+                    help='Directory which contains the CWL CommandLineTools')
+parser.add_argument('--yml_dir', type=str, required=False, default='.',
+                    help='Directory which contains the YAML Workflows')
 # Change default to True for now. See comment in compiler.py
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
@@ -22,6 +25,8 @@ parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
 
 parser.add_argument('--compute_url', type=str, required=False, default=False,
                     help='The URL associated with the labshare slurm driver.')
+parser.add_argument('--compute_access_token', type=str, required=False, default=False,
+                    help='The access_token used for authentication. For now, get this manually from https://a-qa.labshare.org/')
 
 parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
                     help='Label the graph edges with the name of the intermediate input/output.')
@@ -31,5 +36,5 @@ parser.add_argument('--graph_show_inputs', type=bool, required=False, default=Fa
                     help='Add nodes to the graph representing the workflow inputs.')
 parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
                     help='Add nodes to the graph representing the workflow outputs.')
-parser.add_argument('--graph_inline_depth', type=int, required=False, default=100,  # 100 == all
+parser.add_argument('--graph_inline_depth', type=int, required=False, default=sys.maxsize,
                     help='Controls the depth of subgraphs which are displayed separately or positioned within the main graph.')

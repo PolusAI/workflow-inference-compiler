@@ -51,7 +51,14 @@ Again note that if we are in a subworkflow, edge inference may fail for some inp
 
 ## Git Submodules
 
-The plugins (i.e. CWL adapters) are added to this repo as git submodules. This is because they should be completely independent of the core inference and compilation algorithms and because they should not need to be modified very often. Developers should be very careful when using git submodules! The following links explain why:
+The plugins (i.e. CWL adapters) are added to this repo as git submodules. This is because they should be completely independent of the core inference and compilation algorithms and because they should not need to be modified very often.
+
+As shown in the README, cloning the main repo will not clone the submodules; you will need to run the following command:
+```
+git submodule init && git submodule update
+```
+
+Developers should be very careful when using git submodules! The following links explain why:
 
 * [how do i commit changes in a git submodule](https://stackoverflow.com/questions/5542910/how-do-i-commit-changes-in-a-git-submodule)
 * [how to link git repos](https://stackoverflow.com/questions/36554810/how-to-link-folder-from-a-git-repo-to-another-repo)

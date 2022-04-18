@@ -65,7 +65,7 @@ def compile_workflow(yaml_tree_: YamlTree,
     subkeys = [key for key in steps_keys if key not in tools]
 
     # Add headers
-    yaml_tree['cwlVersion'] = 'v1.0'
+    yaml_tree['cwlVersion'] = 'v1.2' # Use 1.2 to support conditional workflows
     yaml_tree['class'] = 'Workflow'
     yaml_tree['$namespaces'] = {'edam': 'https://edamontology.org/'}
     yaml_tree['$schemas'] = ['https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl']

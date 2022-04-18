@@ -5,8 +5,6 @@ outdir/
 *.gv
 *.pdf
 *.png
-plugin_ids
-pipeline_ids
 *.pyc
 build/
 dist/
