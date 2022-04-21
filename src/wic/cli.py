@@ -12,21 +12,26 @@ parser.add_argument('--yml_dir', type=str, required=False, default='.',
 # Change default to True for now. See comment in compiler.py
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
-parser.add_argument('--cwl_run_local', type=bool, required=False, default=False,
+
+group_run = parser.add_mutually_exclusive_group()
+group_run.add_argument('--cwl_run_local', type=bool, required=False, default=False,
                     help='After generating the cwl file(s), run it on localhost.')
-# NOTE: If cwl_run_slurm is enabled, you MUST enable cwl_inline_subworkflows!
-# Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
-parser.add_argument('--cwl_run_slurm', type=bool, required=False, default=False,
+group_run.add_argument('--cwl_run_slurm', type=bool, required=False, default=False,
                     help='After generating the cwl file, run it on labshare using the slurm driver.')
-parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, default=False,
-                    help='Before generating the cwl file, inline all subworkflows.')
+# Use required=('--cwl_run_slurm' in sys.argv) make other args conditionally required.
+# See https://stackoverflow.com/questions/19414060/argparse-required-argument-y-if-x-is-present
+# For example, if cwl_run_slurm is enabled, you MUST enable cwl_inline_subworkflows!
+# Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
+
+parser.add_argument('--cwl_inline_subworkflows', type=bool, required=('--cwl_run_slurm' in sys.argv), default=('--cwl_run_slurm' in sys.argv),
+                    help='Before generating the cwl file, inline all subworkflows. Required for --cwl_run_slurm')
 parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
                     help='After generating the cwl file, validate it.')
 
-parser.add_argument('--compute_url', type=str, required=False, default=False,
-                    help='The URL associated with the labshare slurm driver.')
-parser.add_argument('--compute_access_token', type=str, required=False, default=False,
-                    help='The access_token used for authentication. For now, get this manually from https://a-qa.labshare.org/')
+parser.add_argument('--compute_url', type=str, required=('--cwl_run_slurm' in sys.argv),
+                    help='The URL associated with the labshare slurm driver. Required for --cwl_run_slurm')
+parser.add_argument('--compute_access_token', type=str, required=('--cwl_run_slurm' in sys.argv),
+                    help='The access_token used for authentication. Required for --cwl_run_slurm For now, get this manually from https://a-qa.labshare.org/')
 
 parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
                     help='Label the graph edges with the name of the intermediate input/output.')
