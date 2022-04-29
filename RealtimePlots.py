@@ -1,14 +1,15 @@
 import glob
+import math
 from pathlib import Path
 import os
 import sys
 import time
 from typing import List, Dict, Tuple
-import matplotlib
 
-import numpy as np
+import matplotlib
 from matplotlib import _pylab_helpers # type: ignore
 import matplotlib.pyplot as plt
+import numpy as np
 from scipy.interpolate import UnivariateSpline
 
 import ruptures as rpt
@@ -96,6 +97,52 @@ labels = {
 }
 
 
+def zscore(mean1: float, std1: float, mean2: float, std2: float) -> float:
+    return abs(mean1 - mean2) / math.sqrt(std1**2 + std2**2)
+
+
+def cluster_intervals_zscore(intervals_: List[Tuple[int, int]], ys: List[float], zscore_cutoff: float = 1) -> List[List[Tuple[int, int]]]:
+    import copy
+    intervals: List[Tuple[int, int]] = copy.deepcopy(intervals_)
+    intervals.sort(key=lambda x: x[1] - x[0], reverse=True) # length of interval
+
+    ys_segmented: Dict[Tuple[int, int], List[float]] = {}
+    for (i1, i2) in intervals:
+        ys_segmented[(i1, i2)] = ys[i1:i2]
+
+    # Greedily cluster intervals based on Z-score
+    # It hopefully shouldn't matter, but start with the biggest intervals first
+    # (since more I.I.D. data should have smaller standard deviations).
+    clusters_indices: List[List[Tuple[int, int]]] = [[intervals[0]]]
+    clusters_stats: List[Tuple[float, float]] = [(np.mean(intervals[0]), np.std(intervals[0]))]
+    for i1, i2 in intervals[1:]:
+        ys_seg = ys_segmented[(i1, i2)]
+
+        z_scores = []
+        for i, (mean_c, std_c) in enumerate(clusters_stats):
+            z_score = zscore(mean_c, std_c, np.mean(ys_seg), np.std(ys_seg))
+            z_scores.append((i, z_score))
+        z_scores.sort(key=lambda x: x[1])
+        zscore_seg = z_scores[0][1]
+        if zscore_seg < zscore_cutoff:
+            # Statistically equivalent, so add segment to existing cluster.
+            cluster_index = z_scores[0][0]
+            clusters_indices[cluster_index].append((i1, i2))
+        else:
+            # Create a new cluster
+            clusters_indices.append([(i1, i2)])
+
+        # Update stats after each iteration
+        clusters_stats = []
+        for cluster_indices in clusters_indices:
+            ys_cluster = [ys_segmented[i1_i2] for i1_i2 in cluster_indices]
+            ys_cluster_flat = [x for y in ys_cluster for x in y]
+            cluster_stats = (np.mean(ys_cluster_flat), np.std(ys_cluster_flat))
+            clusters_stats.append(cluster_stats)
+
+    return clusters_indices
+
+
 def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyplot.Axes]]) -> None:
     """Update the previously initialized plots (if there is any new data).
 
@@ -131,6 +178,33 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                 #print(xs)
                 #print(ys)
 
+                # Smooth the timeseries using spline interpolaton
+                spline = UnivariateSpline(xs, ys)
+                spline.set_smoothing_factor(0.15)
+                ys_spline = spline(xs)
+
+                # Use Change Point Detection to partition the timeseries
+                # into piecewise 'constant' segments.
+                # Pure python implementation is very slow!
+                # algo = rpt.Pelt(model='rbf', min_size=10).fit(ys)
+                # C implementation is much faster
+                algo = rpt.KernelCPD(kernel='rbf', min_size=10).fit(ys)
+                indices = algo.predict(pen=100) # Large penalty = less segments
+                indices_zero = [0] + indices
+                interval_indices = list(zip(indices_zero, indices_zero[1:]))
+                interval_indices_clustered = cluster_intervals_zscore(interval_indices, ys)
+                changepoints = [xs[i-1] for i in indices]
+
+                xs_segmented = []
+                ys_segmented = []
+                for inter in interval_indices_clustered:
+                    xs_seg_nest = [xs[i1:i2] for i1, i2 in inter]
+                    xs_seg = [x for y in xs_seg_nest for x in y]
+                    xs_segmented.append(xs_seg)
+                    ys_seg_nest = [ys[i1:i2] for i1, i2 in inter]
+                    ys_seg = [x for y in ys_seg_nest for x in y]
+                    ys_segmented.append(ys_seg)
+
                 plot_histograms_bool = 'rmsd' in Path(path).stem
                 plot_histograms_list = [False, True] if plot_histograms_bool else [False]
 
@@ -140,8 +214,10 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     idx_ax_row = idx_ax - (ncols * idx_ax_col)
                     ax = axes2d[idx_ax_col][idx_ax_row]
                     ax.ticklabel_format(style='sci', scilimits=(-2,3), axis='both') # type: ignore
+                    cmap = plt.get_cmap("tab10") # type: ignore
+                    colors = [cmap(i) for i in range(len(xs_segmented))]
                     if plot_histogram:
-                        ax.hist(ys, density=True, histtype='step', bins='sqrt', color='blue') # type: ignore
+                        ax.hist(ys_segmented, stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
                         ax.set_xlim(xmin=0)
 
                         filename = Path(path).stem + '.xvg'
@@ -161,22 +237,11 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                         ax.set_ylim(ymin, ymax)
 
                         # See https://stackoverflow.com/questions/39753282/scatter-plot-with-single-pixel-marker-in-matplotlib
-                        ax.scatter(xs, ys, marker='o', s=(72./fig.dpi)**2, c='blue')  # type: ignore
+                        for i, (xs_seg, ys_seg) in enumerate(zip(xs_segmented, ys_segmented)):
+                            ax.scatter(xs_seg, ys_seg, marker='o', s=(72./fig.dpi)**2, color=colors[i])  # type: ignore
 
-                        # Smooth the timeseries using spline interpolaton
-                        spline = UnivariateSpline(xs, ys)
-                        spline.set_smoothing_factor(0.15)
-                        ys_spline = spline(xs)
-                        ax.plot(xs, ys_spline, color='g')
+                        ax.plot(xs, ys_spline, color='white')
 
-                        # Use Change Point Detection to partition the timeseries
-                        # into piecewise 'constant' segments.
-                        # Pure python implementation is very slow!
-                        # algo = rpt.Pelt(model='rbf', min_size=10).fit(ys)
-                        # C implementation is much faster
-                        algo = rpt.KernelCPD(kernel='rbf', min_size=10).fit(ys)
-                        indices = algo.predict(pen=100) # Large penalty = less segments
-                        changepoints = [xs[i-1] for i in indices]
                         for cp_xval in changepoints:
                             ax.vlines(cp_xval, ymin, ymax, color='gray') # type: ignore
 
