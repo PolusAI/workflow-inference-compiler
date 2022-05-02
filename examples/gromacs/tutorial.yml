@@ -1,6 +1,5 @@
-# This is based on the excellent gromacs CWL tutorial http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl
-# The `in` tags are superfluous, but retained for now to simplify implementation.
-# Limit nsteps to 100 for demo / development.
+# This is based on the excellent gromacs CWL tutorial
+# http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl
 steps:
   - setup.yml:
   - basic.yml:

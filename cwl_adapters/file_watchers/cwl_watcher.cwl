@@ -75,3 +75,9 @@ outputs:
     outputBinding:
       glob: $(inputs.cwl_tool)_only.log
     format: edam:format_2330 # 'Textual format'
+
+$namespaces:
+  edam: https://edamontology.org/
+
+$schemas:
+- https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl

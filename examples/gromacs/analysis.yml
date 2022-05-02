@@ -1,55 +1,9 @@
 # We previously used &filename to create references to outputs. Now we can
 # use *filename to dereference filename and create an explicit edge to the inputs.
 steps:
-  - gmx_rms:
-      in:
-        config: '{"selection": "Backbone"}'
-        output_xvg_path: 'rmsd_equil.xvg'
-  - gmx_rms:
-      in:
-        config: '{"selection": "Backbone"}'
-        output_xvg_path: 'rmsd_xray.xvg'
-        input_structure_path: '*min.tpr'
-  - gmx_rgyr:
-      in:
-        config: '{"selection": "Backbone"}'
-        output_xvg_path: 'radius_gyration.xvg'
-        input_structure_path: '*min.tpr'
-  - gmx_image:
-      in:
-        config: '{"center_selection":"Protein","output_selection":"Protein","pbc":"mol"}'
-        input_top_path: '*prod.tpr'
-  - gmx_trjconv_str:
-      in:
-        config: '{"selection": "Protein"}'
-        input_top_path: '*prod.tpr'
-        input_crd_path: '*prod.gro'
+  - analysis_realtime.yml:
+  - analysis_final.yml:
 
 wic:
   graphviz:
     label: Stability Analysis
-    ranksame:
-    - (1, gmx_rms)
-    - (2, gmx_rms)
-    - (3, gmx_rgyr)
-  steps:
-    (1, gmx_rms):
-      wic:
-        graphviz:
-          label: Root Mean\nSquare w.r.t.\nEquil Coords
-    (2, gmx_rms):
-      wic:
-        graphviz:
-          label: Root Mean\nSquare w.r.t.\nX-ray Coords
-    (3, gmx_rgyr):
-      wic:
-        graphviz:
-          label: Radius of\nGyration
-    (4, gmx_image):
-      wic:
-        graphviz:
-          label: Wrap Periodic\nCoordinates
-    (5, gmx_trjconv_str):
-      wic:
-        graphviz:
-          label: Extract Protein\nTrajectory
