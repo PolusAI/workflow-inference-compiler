@@ -3,7 +3,7 @@
 steps:
   - grompp:
       in:
-        config: '{"mdp": {"integrator":"sd", "rvdw":"1.0", "rcoulomb":"1.0", "coulombtype":"pme", "nsteps":"10000", "dt":0.002, "tc-grps":"system", "ref-t":"300", "tau-t":"2", "constraints":"h-bonds", "nstxout":"10", "pcoupl":"Berendsen", "tau-p":"1", "ref-p":"1", "compressibility":"4.5e-5"}}'
+        config: '{"mdp": {"integrator":"sd", "rvdw":"1.0", "rcoulomb":"1.0", "coulombtype":"pme", "nsteps":"10000", "dt":0.002, "tc-grps":"system", "ref-t":"298", "tau-t":"2", "constraints":"h-bonds", "nstxout":"10", "nstenergy":"10", "pcoupl":"Berendsen", "tau-p":"1", "ref-p":"1", "compressibility":"4.5e-5"}}'
         output_tpr_path: '&prod.tpr'
         input_top_zip_path: '*genion.top'  # Use the original topology file so
 # we don't have to question whether the topology gets messed up after file format conversions.
@@ -11,6 +11,20 @@ steps:
   - mdrun:
       in:
         output_crd_path: '&prod.gro'
+        output_trr_path: '&prod.trr' # Explicitly specify for cwl_watcher
+        output_edr_path: '&prod.edr'
+  - cwl_watcher:
+      in:
+        #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
+        file_pattern: ' *prod.trr'
+        cwl_tool: analysis_realtime.yml
+        max_times: '20'
+        config: '{"(1, gmx_rms)": {"in": {"input_structure_path": "prod.tpr", "input_traj_path": "prod.trr"}}
+                 ,"(2, gmx_rms)": {"in": {"input_structure_path": "prod.tpr", "input_traj_path": "prod.trr"}}
+                 ,"(3, gmx_rms)": {"in": {"input_structure_path": "min.tpr", "input_traj_path": "prod.trr"}}
+                 ,"(4, gmx_rgyr)": {"in": {"input_structure_path": "min.tpr", "input_traj_path": "prod.trr"}}
+                 ,"(5, gmx_energy)": {"in": {"input_energy_path": "prod.edr"}}
+                 }'
 
 wic:
   graphviz:
@@ -24,3 +38,7 @@ wic:
       wic:
         graphviz:
           label: 'Molecular\nDynamics'
+    (3, cwl_watcher):
+      wic:
+        graphviz:
+          label: 'Real-time\nAnalysis'

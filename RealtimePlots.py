@@ -78,7 +78,10 @@ def initialize_plots(nrows: int, ncols: int) -> Tuple[matplotlib.pyplot.Figure, 
     """
     plt.style.use('dark_background') # type: ignore
     fig, axes2d = plt.subplots(nrows=nrows, ncols=ncols, figsize=(18, 9.5))
+    # The purpose of calling suptitle is to take up some blank space. suptitle
+    # displays a title above all of the subplots, but NOT for the window itself.
     fig.suptitle('')
+    plt.get_current_fig_manager().set_window_title('Real-time Analysis Plots')
     fig.tight_layout()
     plt.subplots_adjust(left=0.05, wspace=0.24, bottom=0.05, hspace=0.24)
     plt.show(block=False) # type: ignore
@@ -91,8 +94,11 @@ labels = {
     'energy_min_cg.xvg': ('Conjugate Gradient Minimization', 'timesteps', 'energy (kJ / mol)'),
     'temperature.xvg': ('Temperature', 'time (ps)', 'temperature (K)'),
     'density.xvg': ('Density', 'time (ps)', 'density (g / cm^3)'),
-    'rmsd_xray.xvg': ('Root Mean Square w.r.t. Xray', 'time (ps)', 'rmsd (nm)'),
-    'rmsd_equil.xvg': ('Root Mean Square w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
+    'energy_total.xvg': ('Total Energy', 'timesteps', 'energy (kJ / mol)'),
+    'rmsd_xray_mainchain.xvg': ('Mainchain RMSD w.r.t. Xray', 'time (ps)', 'rmsd (nm)'),
+    'rmsd_equil_mainchain.xvg': ('Mainchain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
+    'rmsd_equil_mainchain.xvg': ('Mainchain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
+    'rmsd_equil_sidechain.xvg': ('Sidechain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
     'radius_gyration.xvg': ('Radius of Gyration', 'time (ps)', 'radius (nm)'),
 }
 
@@ -159,9 +165,16 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
         #print('updating plots')
         idx_ax = 0
         for path, data in data_glob:
+            if idx_ax >= nrows*ncols:
+                # TODO: resize plot grid
+                # initialize_plots(...)
+                break
             #print(num y cols, len(data[0]))
             # Plot multiple y values individually
-            for idx_y_col in range(1, len(data[0])):
+            col_indices = list(range(1, len(data[0])))
+            if 'radius_gyration' == Path(path).stem:
+                col_indices = [1]
+            for idx_y_col in col_indices:
                 if len(data.shape) == 2:
                     xs = data[:,0]
                     ys = data[:,idx_y_col] 
@@ -178,22 +191,22 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                 #print(xs)
                 #print(ys)
 
-                # Smooth the timeseries using spline interpolaton
-                spline = UnivariateSpline(xs, ys)
-                spline.set_smoothing_factor(0.15)
-                ys_spline = spline(xs)
-
-                # Use Change Point Detection to partition the timeseries
-                # into piecewise 'constant' segments.
-                # Pure python implementation is very slow!
-                # algo = rpt.Pelt(model='rbf', min_size=10).fit(ys)
-                # C implementation is much faster
-                algo = rpt.KernelCPD(kernel='rbf', min_size=10).fit(ys)
-                indices = algo.predict(pen=100) # Large penalty = less segments
-                indices_zero = [0] + indices
-                interval_indices = list(zip(indices_zero, indices_zero[1:]))
-                interval_indices_clustered = cluster_intervals_zscore(interval_indices, ys)
-                changepoints = [xs[i-1] for i in indices]
+                interval_indices_clustered = [[(0, len(xs))]]
+                xs_segmented = [xs]
+                xs_segmented = [ys]
+                changepoints = []
+                if len(xs) > 1:
+                    # Use Change Point Detection to partition the timeseries
+                    # into piecewise 'constant' segments.
+                    # Pure python implementation is very slow!
+                    # algo = rpt.Pelt(model='rbf', min_size=10).fit(ys)
+                    # C implementation is much faster
+                    algo = rpt.KernelCPD(kernel='rbf', min_size=10).fit(ys)
+                    indices = algo.predict(pen=100) # Large penalty = less segments
+                    indices_zero = [0] + indices
+                    interval_indices = list(zip(indices_zero, indices_zero[1:]))
+                    interval_indices_clustered = cluster_intervals_zscore(interval_indices, ys)
+                    changepoints = [xs[i-1] for i in indices]
 
                 xs_segmented = []
                 ys_segmented = []
@@ -213,6 +226,7 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     idx_ax_col = int(idx_ax / ncols)
                     idx_ax_row = idx_ax - (ncols * idx_ax_col)
                     ax = axes2d[idx_ax_col][idx_ax_row]
+                    ax.clear() # type: ignore
                     ax.ticklabel_format(style='sci', scilimits=(-2,3), axis='both') # type: ignore
                     cmap = plt.get_cmap("tab10") # type: ignore
                     colors = [cmap(i) for i in range(len(xs_segmented))]
@@ -231,8 +245,10 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                             ax.set_xlabel('y-axis')
                             ax.set_ylabel('frequency')
                     else:
-                        ymin = min(ys)
-                        ymax = max(ys)
+                        # For plotting purposes only, ignore first 1% of data
+                        # (Initial data may have transients that distort plots)
+                        ymin = min(ys[int(len(ys)/100):])
+                        ymax = max(ys[int(len(ys)/100):])
                         ax.set_xlim(min(xs), max(xs))
                         ax.set_ylim(ymin, ymax)
 
@@ -240,7 +256,31 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                         for i, (xs_seg, ys_seg) in enumerate(zip(xs_segmented, ys_segmented)):
                             ax.scatter(xs_seg, ys_seg, marker='o', s=(72./fig.dpi)**2, color=colors[i])  # type: ignore
 
-                        ax.plot(xs, ys_spline, color='white')
+                        # Smooth the timeseries using spline interpolaton of degree k
+                        k=3
+                        if len(ys) > k:
+                            spline = UnivariateSpline(xs, ys, k=k)
+                            # "Number of knots will be increased until the smoothing condition is satisfied:
+                            # sum((w[i] * (y[i]-spl(x[i])))**2, axis=0) <= s"
+                            # The following is somewhat ad-hoc (based on the above condition)
+                            # but currently produces visually appealing results.
+                            std_ys = np.std(ys)
+                            sfactor = np.abs(np.mean(ys))
+                            if std_ys < 1.0: # if 'rmsd' in Path(path).stem or 'gyration' in Path(path).stem:
+                                sfactor = math.sqrt(sfactor)
+                            if 'total' in Path(path).stem:
+                                # The total energy is controlled by the thermostat,
+                                # so its std will be relatively smaller w.r.t.
+                                # the other plots, so square it to make it bigger.
+                                sfactor = (std_ys ** 2) * sfactor
+                            else:
+                                sfactor = math.sqrt(std_ys) * sfactor
+                            if std_ys < 1.0: # if 'rmsd' in Path(path).stem or 'gyration' in Path(path).stem:
+                                sfactor = math.sqrt(sfactor)
+                            #print('path, sfactor', path, sfactor)
+                            spline.set_smoothing_factor(sfactor)
+                            ys_spline = spline(xs)
+                            ax.plot(xs, ys_spline, color='white')
 
                         for cp_xval in changepoints:
                             ax.vlines(cp_xval, ymin, ymax, color='gray') # type: ignore
@@ -297,9 +337,9 @@ def pause_no_show(interval: float) -> None:
             store_tabular_data(path)"""
 
 
-def file_watcher_glob(dir: Path, pattern: str, prev_files: Dict[str, float]) -> Dict[str, float]:
+def file_watcher_glob(cachedir_path: Path, pattern: str, prev_files: Dict[str, float]) -> Dict[str, float]:
     changed_files = {}
-    file_pattern = str(dir / f'**/{pattern}')
+    file_pattern = str(cachedir_path / f'**/{pattern}')
     file_paths = glob.glob(file_pattern, recursive=True)
     for file in file_paths:
         time = os.path.getmtime(file)
@@ -320,11 +360,12 @@ def on_close(event) -> None: # type: ignore
 
 def main() -> None:
     global figure_closed
-    path = sys.argv[1] if len(sys.argv) > 1 else '.'
+    cachedir_path = sys.argv[1] if len(sys.argv) > 1 else '.'
+    file_pattern = sys.argv[2] if len(sys.argv) > 2 else '*.xvg'
 
-    #event_handler = TabularDataHandler(patterns=['*.xvg'])
+    #event_handler = TabularDataHandler(patterns=[file_pattern])
     #observer = PollingObserver() # This does not work!
-    #observer.schedule(event_handler, path, recursive=True)
+    #observer.schedule(event_handler, cachedir_path, recursive=True)
     #observer.start()
 
     nrows: int = 3
@@ -335,7 +376,7 @@ def main() -> None:
     try:
         while not figure_closed:
             # Use our own polling file watcher, see above.
-            changed_files = file_watcher_glob(Path(path), '*.xvg', prev_files)
+            changed_files = file_watcher_glob(Path(cachedir_path), file_pattern, prev_files)
             changed_files_list = list(changed_files.items())
             # Sort by modified time so that if we start RealtimePlots in the
             # middle of the calculation, the plots will still be drawn in the

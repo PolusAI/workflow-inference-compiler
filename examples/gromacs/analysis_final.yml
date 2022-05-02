@@ -1,0 +1,25 @@
+steps:
+  - gmx_image:
+      in:
+        input_crd_path: '*prod.gro'
+        config: '{"center_selection":"Protein","output_selection":"Protein","pbc":"mol"}'
+        input_top_path: '*prod.tpr'
+  - gmx_trjconv_str:
+      in:
+        config: '{"selection": "System"}'
+        input_top_path: '*prod.tpr'
+        input_crd_path: '*prod.gro'
+        output_str_path: 'prod.pdb'
+
+wic:
+  graphviz:
+    label: Final Analysis
+  steps:
+    (1, gmx_image):
+      wic:
+        graphviz:
+          label: Wrap Periodic\nFinal Coordinates
+    (2, gmx_trjconv_str):
+      wic:
+        graphviz:
+          label: Extract Protein\nFinal Coordinates

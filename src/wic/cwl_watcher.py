@@ -16,32 +16,48 @@ from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEvent, PatternMatchingEventHandler"""
 
 from .wic_types import GraphReps, Tools, YamlTree, Json
-from .main import get_tools_cwl
+from .main import get_tools_cwl, get_yml_paths
 
-from . import cli, compiler, utils
+from . import ast, cli, compiler, utils
 
 
-def absolute_paths(json: Json, path: str) -> Json:
+def absolute_paths(json: Json, cachedir_path: Path) -> Json:
     new_json: Json = {}
     for key, val in json.items():
-        new_val = val
-        # TODO: Generalize beyond the gmx_energy use case
-        if key == 'input_energy_path':
-            new_val = path + '/' + val
+        if isinstance(val, Dict):
+            new_val = absolute_paths(val, cachedir_path)
+        else:
+            new_val = val
+            if 'input' in key and 'path' in key:
+                new_val = str(cachedir_path / val) # type: ignore
+                changed_files = file_watcher_glob(cachedir_path, val, {})
+                # We require unique filenames, so there should only be one file.
+                # TODO: check
+                for file in changed_files:
+                    new_val = str(Path(file).absolute()) # type: ignore
         new_json[key] = new_val
     return new_json
 
 
-def rerun_cwltool(directory: Path, cachedir_path: str, cwl_tool: str, args_vals: Json, tools_cwl: Tools) -> None:
+def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str, args_vals: Json, tools_cwl: Tools, yml_paths: Dict[str, Path]) -> None:
     try:
-        # Make paths in arguments absolute w.r.t the given directory. See below.
-        args_vals_new = absolute_paths(args_vals, str(directory))
+        # Make paths in arguments absolute w.r.t the realtime directory. See below.
+        args_vals_new = absolute_paths(args_vals, cachedir_path)
 
         # Construct a single-step workflow and add its arguments
-        yml = {'steps': [{cwl_tool: {'in': args_vals_new}}]}
+        #import yaml
+        if Path(cwl_tool).suffix == '.yml':
+            yaml_path = cwl_tool
+            root_yaml_tree = {'wic': {'steps': {f'(1, {cwl_tool})': {'wic': {'steps': args_vals_new}}}}, 'steps': [{cwl_tool: None}]}
+            #print('root_yaml_tree')
+            #print(yaml.dump(root_yaml_tree))
+            yaml_tree_raw = ast.read_AST_from_disk(YamlTree(yaml_path, root_yaml_tree), yml_paths, tools_cwl)
+            yaml_tree = ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
+            yml = yaml_tree.yml
+        else:
+            yml = {'steps': [{cwl_tool: args_vals_new}]}
         #print('yml')
         #print(yml)
-        #import yaml
         #print(yaml.dump(yml))
 
         # Measure compile time
@@ -59,7 +75,7 @@ def rerun_cwltool(directory: Path, cachedir_path: str, cwl_tool: str, args_vals:
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [subgraph], {}, {}, tools_cwl, True, relative_run_path=False)
         rose_tree = compiler_info.rose
         working_dir = Path('.') # Use a new working directory.
-        # Can also use `directory` at the risk of overwriting other files.
+        # Can also use `directory_realtime` at the risk of overwriting other files.
         utils.write_to_disk(rose_tree, working_dir, relative_run_path=False)
 
         time_final = time.time()
@@ -73,7 +89,7 @@ def rerun_cwltool(directory: Path, cachedir_path: str, cwl_tool: str, args_vals:
         # seconds, but most of the time will be CWL validation and runtime.
         # Alternatively, we could try to compile once in main() and then
         # make the paths absolute in f'{cwl_tool}_only_inputs.yml' here.
-        cmd: List[str] = ['cwltool', '--cachedir', cachedir_path, f'{cwl_tool}_only.cwl', f'{cwl_tool}_only_inputs.yml']
+        cmd: List[str] = ['cwltool', '--cachedir', str(cachedir_path), f'{cwl_tool}_only.cwl', f'{cwl_tool}_only_inputs.yml']
         #proc = sub.run(self.cmd, cwd=working_dir)
         #cmd = self.cmd
         print('Running', cmd)
@@ -121,9 +137,9 @@ def rerun_cwltool(directory: Path, cachedir_path: str, cwl_tool: str, args_vals:
             #self.lock = False"""
 
 
-def file_watcher_glob(dir: Path, pattern: str, prev_files: Dict[str, float]) -> Dict[str, float]:
+def file_watcher_glob(cachedir_path: Path, pattern: str, prev_files: Dict[str, float]) -> Dict[str, float]:
     changed_files = {}
-    file_pattern = str(dir / f'**/{pattern}')
+    file_pattern = str(cachedir_path / f'**/{pattern}')
     file_paths = glob.glob(file_pattern, recursive=True)
     for file in file_paths:
         time = os.path.getmtime(file)
@@ -140,7 +156,7 @@ def main() -> None:
     print('cwl_watcher sys.argv', sys.argv)
     # TODO: check that 1,3,5, are --cachedir_path, --file_pattern, --cwl_tool
     # or switch to argparse
-    cachedir_path = sys.argv[2]
+    cachedir_path = Path(sys.argv[2])
     file_pattern = sys.argv[4].strip()
     cwl_tool = sys.argv[6]
     max_times = int(sys.argv[8])
@@ -156,8 +172,9 @@ def main() -> None:
 
     # This really needs to be args.cwl_dir, where args comes from the original
     # command line, i.e. we can't just use dummy args.
-    cwl_dir = Path(cachedir_path).parent
+    cwl_dir = cachedir_path.parent
     tools_cwl = get_tools_cwl(cwl_dir)
+    yml_paths = get_yml_paths(cwl_dir) # TODO: Use cwl_dir for now, but should be yml_dir
 
     """# Make paths in arguments absolute w.r.t the given directory. See below.
     args_vals_new = absolute_paths(args_vals, str(directory))
@@ -201,11 +218,11 @@ def main() -> None:
     try:
         while iter < max_times:
             # Use our own polling file watcher, see above.
-            changed_files = file_watcher_glob(cachedir_hash_path.parent, '*.edr', prev_files)
+            changed_files = file_watcher_glob(cachedir_path, file_pattern, prev_files)
             for file in changed_files:
                 if file_pattern[1:] in file:
                     print(file)
-                    rerun_cwltool(Path(file).parent, cachedir_path, cwl_tool , args_vals, tools_cwl)
+                    rerun_cwltool(Path(file).parent, cachedir_path, cwl_tool , args_vals, tools_cwl, yml_paths)
             prev_files = {**prev_files, **changed_files}
 
             time.sleep(1.0) # Wait at least 1 second so we don't just spin.
