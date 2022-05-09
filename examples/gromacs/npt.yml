@@ -1,12 +1,11 @@
-default_backend: gromacs
-backends:
-  gromacs:
-    steps:
-      - npt_gromacs.yml:
-  amber:
-    steps:
-      - npt_amber.yml:
-
 wic:
+  default_backend: gromacs
+  backends:
+    gromacs:
+      steps:
+        - npt_gromacs.yml:
+    amber:
+      steps:
+        - npt_amber.yml:
   graphviz:
     label: Constant\nPressure

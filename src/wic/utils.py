@@ -157,7 +157,7 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
     return steps_keys
 
 
-def extract_backend(yaml_tree_: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
+def extract_backend(yaml_tree_: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
     """Chooses a specific backend for a given CWL workflow step.
 
     The backends should be thought of as either 'exactly' identical, or at
@@ -175,19 +175,16 @@ def extract_backend(yaml_tree_: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
     """
     yaml_tree = copy.deepcopy(yaml_tree_)
     backend = ''
-    if 'backends' in yaml_tree:
-        if 'default_backend' in yaml_tree:
-            backend = yaml_tree['default_backend']
-            del yaml_tree['default_backend']
-        if 'backend' in yaml_tree:
-            backend = yaml_tree['backend']
-            del yaml_tree['backend']
+    if 'backends' in wic:
+        if 'default_backend' in wic:
+            backend = wic['default_backend']
+        if 'backend' in wic:
+            backend = wic['backend']
         if backend == '':
             raise Exception(f'Error! No backend in {yaml_path}!')
-        if backend not in yaml_tree['backends']:
+        if backend not in wic['backends']:
             raise Exception(f'Error! No steps for backend {backend} in {yaml_path}!')
-        steps = yaml_tree['backends'][backend]['steps']
-        del yaml_tree['backends']
+        steps = wic['backends'][backend]['steps']
         yaml_tree.update({'steps': steps})
     elif 'steps' in yaml_tree:
         pass # steps = yaml_tree['steps']
@@ -213,7 +210,8 @@ def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Path]) 
     with open(Path(yaml_path), 'r') as y:
         yaml_tree: Yaml = yaml.safe_load(y.read())
 
-    (back_name_, yaml_tree) = extract_backend(yaml_tree, yaml_path)
+    wic = yaml_tree.get('wic', {})
+    (back_name_, yaml_tree) = extract_backend(yaml_tree, wic, yaml_path)
     steps = yaml_tree['steps']
 
     # Get the dictionary key (i.e. the name) of each step.
@@ -438,3 +436,10 @@ def make_plugins_DAG(tools: Tools) -> None:
             (tool_path, tool_cwl) = tools[tool]
             graph.node(Path(tool_path).stem, shape='box', style='rounded, filled', fillcolor='lightblue', fontsize="24", width='0.75')
         graph.render(format='png')
+
+
+def parse_int_string_tuple(string: str) -> Tuple[int, str]:
+    # Parses a string of the form '(int, string)'
+    string_no_parens = string.strip()[1:-1]
+    (str1, str2) = string_no_parens.split(',')
+    return (int(str1.strip()), str2.strip())

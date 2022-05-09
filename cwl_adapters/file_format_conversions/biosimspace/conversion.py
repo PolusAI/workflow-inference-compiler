@@ -31,7 +31,9 @@ def main() -> None:
         sys.exit(1)
 
     input_filenames = [args.input_top_path, args.input_crd_path]
-    properties = {'GROMACS_PATH': '/home/ec2-user/gromacs-2020.6/share/top/'}
+    # TODO: Automatically find GROMACS_PATH
+    #properties = {'GROMACS_PATH': '/home/ec2-user/gromacs-2020.6/share/top/'}
+    properties = {'GROMACS_PATH': '/Users/jakefennick/opt/anaconda3/envs/wic/share/gromacs/top/'}
     system = BSS.IO.readMolecules(input_filenames, properties)
 
     output_file_formats = [args.output_top_format, args.output_crd_format]

@@ -12,12 +12,12 @@
   ! ioutfm 0 = ascii, 1 = binary
   ioutfm = 0
   iwrap = 1
-  ! Limit to 10 timesteps because amber is not gpu accelerated.
-  nstlim = 10
-  ! sander_mdrun.cwl expects all output files to exist, so set the nt params to nstlim.
+  ! Limit to 1000 timesteps because sander is single threaded.
+  nstlim = 1000
+  ! sander_mdrun.cwl expects all output files to exist, so set the nt params <= nstlim.
   ntpr = 10
-  ntwx = 10
-  ntwr = 10
+  ntwx = 1000
+  ntwr = 1000
   ntxo = 1
   dt = 0.002
   gamma_ln = 5.0

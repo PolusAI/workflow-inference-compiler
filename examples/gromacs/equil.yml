@@ -1,8 +1,11 @@
 steps:
   - nvt.yml:
   - npt.yml:
-#  - conversion.yml:
 
 wic:
   graphviz:
     label: Equilibration
+  steps:
+    (2, npt.yml):
+      wic:
+        backend: amber

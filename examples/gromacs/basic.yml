@@ -9,7 +9,7 @@ steps:
   - equil.yml:
   - prod.yml:
 
-# Pass the CWL `in` tag as a parameter through BOTH of the yml DSL tags steep.yml and grompp.
+# Pass the CWL `in` tag as a parameter through BOTH of the yml DSL tags cg.yml and grompp.
 # Use (1-based) indexing to uniquely reference (step_number, step_name).
 # Put everything under one top-level wic: tag to facilitate easy merging and removal.
 wic:

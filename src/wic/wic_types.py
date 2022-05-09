@@ -61,6 +61,9 @@ class RoseTree(NamedTuple):
 class NodeData(NamedTuple):
     namespaces: Namespaces
     name: str
+    yml: Yaml # i.e. The AST that was compiled.
+    # If this is not the AST that was passed in, then the compiler introduced
+    # some modifications (i.e. file format conversions) and you need to recompile
     compiled_cwl: Cwl
     workflow_inputs_file: WorkflowInputsFile
     explicit_edge_defs: ExplicitEdgeDefs
