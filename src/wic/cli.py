@@ -25,6 +25,8 @@ group_run.add_argument('--cwl_run_slurm', type=bool, required=False, default=Fal
 
 parser.add_argument('--cwl_inline_subworkflows', type=bool, required=('--cwl_run_slurm' in sys.argv), default=('--cwl_run_slurm' in sys.argv),
                     help='Before generating the cwl file, inline all subworkflows. Required for --cwl_run_slurm')
+parser.add_argument('--cwl_inference_use_naming_conventions', type=bool, required=False, default=False,
+                    help='Enables the use of naming conventions in the inference algorithm')
 parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
                     help='After generating the cwl file, validate it.')
 

@@ -1,7 +1,0 @@
-steps:
-  - sander_mdrun:
-      in:
-        input_mdin_path: npt.mdin
-        input_crd_path: '*min.rst'
-        output_rst_path: '&amb.rst'
-#        output_traj_path: amb.crd

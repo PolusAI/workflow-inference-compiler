@@ -30,12 +30,13 @@ def read_AST_from_disk(yaml_tree_tuple: YamlTree,
         YamlTree: A tuple of the root filepath and the associated yml AST
     """
     (yaml_name, yaml_tree) = yaml_tree_tuple
-    
-    if 'backends' in yaml_tree:
+
+    wic = {'wic': yaml_tree.get('wic', {})}
+    if 'backends' in wic['wic']:
         # Recursively expand each backend, but do NOT choose a specific backend.
         # Require back_name to be .yml? For now, yes.
-        backends_trees_dict = dict([read_AST_from_disk(YamlTree(back_name, back), yml_paths, tools) for back_name, back in yaml_tree['backends'].items()])
-        yaml_tree['backends'] = backends_trees_dict
+        backends_trees_dict = dict([read_AST_from_disk(YamlTree(back_name, back), yml_paths, tools) for back_name, back in wic['wic']['backends'].items()])
+        yaml_tree['wic']['backends'] = backends_trees_dict
         return YamlTree(yaml_name, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -94,13 +95,12 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
     # In the compilation phase, we want to remove it.
     yaml_tree['wic'] = wic['wic']
     wic_steps = wic['wic'].get('steps', {})
-    
-    if 'backends' in yaml_tree:
+
+    if 'backends' in wic['wic']:
         # Recursively expand each backend, but do NOT choose a specific backend.
         # Require back_name to be .yml? For now, yes.
-        # Pass wic_parent through unmodified (i.e. For now, simply skip backend: steps.)
-        backends_trees_dict = dict([merge_yml_trees(YamlTree(back_name, back), wic_parent, tools) for back_name, back in yaml_tree['backends'].items()])
-        yaml_tree['backends'] = backends_trees_dict
+        backends_trees_dict = dict([merge_yml_trees(YamlTree(back_name, back), wic_parent, tools) for back_name, back in wic['wic']['backends'].items()])
+        yaml_tree['wic']['backends'] = backends_trees_dict
         return YamlTree(yaml_name, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -154,9 +154,10 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
         YamlForest: A recursive data structure containing all sub-trees encountered while traversing the yml AST.
     """
     (yaml_name, yaml_tree) = yaml_tree_tuple
-    
-    if 'backends' in yaml_tree:
-        backends_forest_dict = dict([(back_name, tree_to_forest(YamlTree(back_name, back), tools)) for back_name, back in yaml_tree['backends'].items()])
+
+    wic = {'wic': yaml_tree.get('wic', {})}
+    if 'backends' in wic['wic']:
+        backends_forest_dict = dict([(back_name, tree_to_forest(YamlTree(back_name, back), tools)) for back_name, back in wic['wic']['backends'].items()])
         return YamlForest(YamlTree(yaml_name, yaml_tree), backends_forest_dict)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -193,12 +194,10 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
     # Check for top-level yml dsl args
     wic = {'wic': yaml_tree.get('wic', {})}
-    yaml_tree['wic'] = wic['wic']
-    wic_steps = wic['wic'].get('steps', {})
-    
-    if 'backends' in yaml_tree:
+
+    if 'backends' in wic['wic']:
         # Use yaml_name (instead of back_name) and do not append to namespace_init.
-        sub_namespaces_list = [get_inlineable_subworkflows(YamlTree(yaml_name, back), tools, namespaces_init) for back_name, back in yaml_tree['backends'].items()]
+        sub_namespaces_list = [get_inlineable_subworkflows(YamlTree(yaml_name, back), tools, namespaces_init) for back_name, back in wic['wic']['backends'].items()]
         return utils.flatten(sub_namespaces_list)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -236,11 +235,12 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
         return yaml_tree_tuple
 
     (yaml_name, yaml_tree) = yaml_tree_tuple
-    
-    if 'backends' in yaml_tree:
+
+    wic = {'wic': yaml_tree.get('wic', {})}
+    if 'backends' in wic['wic']:
         # Pass namespaces through unmodified
-        backends_trees_dict = dict([inline_subworkflow(YamlTree(back_name, back), tools, namespaces) for back_name, back in yaml_tree['backends'].items()])
-        yaml_tree['backends'] = backends_trees_dict
+        backends_trees_dict = dict([inline_subworkflow(YamlTree(back_name, back), tools, namespaces) for back_name, back in wic['wic']['backends'].items()])
+        yaml_tree['wic']['backends'] = backends_trees_dict
         return YamlTree(yaml_name, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']

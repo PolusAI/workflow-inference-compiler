@@ -93,8 +93,9 @@ labels = {
     'energy_min_steep.xvg': ('Steepest Descent Minimization', 'timesteps', 'energy (kJ / mol)'),
     'energy_min_cg.xvg': ('Conjugate Gradient Minimization', 'timesteps', 'energy (kJ / mol)'),
     'temperature.xvg': ('Temperature', 'time (ps)', 'temperature (K)'),
-    'density.xvg': ('Density', 'time (ps)', 'density (g / cm^3)'),
-    'energy_total.xvg': ('Total Energy', 'timesteps', 'energy (kJ / mol)'),
+    'density.xvg': ('Density', 'time (ps)', 'density (kg / m^3)'),
+    'density.dat': ('Density', 'time (ps)', 'density (g / cm^3)'),
+    'energy_total.xvg': ('Total Energy', 'time (ps)', 'energy (kJ / mol)'),
     'rmsd_xray_mainchain.xvg': ('Mainchain RMSD w.r.t. Xray', 'time (ps)', 'rmsd (nm)'),
     'rmsd_equil_mainchain.xvg': ('Mainchain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
     'rmsd_equil_mainchain.xvg': ('Mainchain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
@@ -195,18 +196,22 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                 xs_segmented = [xs]
                 xs_segmented = [ys]
                 changepoints = []
-                if len(xs) > 1:
+                min_size=10
+                if len(xs) > min_size:
                     # Use Change Point Detection to partition the timeseries
                     # into piecewise 'constant' segments.
                     # Pure python implementation is very slow!
                     # algo = rpt.Pelt(model='rbf', min_size=10).fit(ys)
                     # C implementation is much faster
-                    algo = rpt.KernelCPD(kernel='rbf', min_size=10).fit(ys)
-                    indices = algo.predict(pen=100) # Large penalty = less segments
-                    indices_zero = [0] + indices
-                    interval_indices = list(zip(indices_zero, indices_zero[1:]))
-                    interval_indices_clustered = cluster_intervals_zscore(interval_indices, ys)
-                    changepoints = [xs[i-1] for i in indices]
+                    try:
+                        algo = rpt.KernelCPD(kernel='rbf', min_size=min_size).fit(ys)
+                        indices = algo.predict(pen=100) # Large penalty = less segments
+                        indices_zero = [0] + indices
+                        interval_indices = list(zip(indices_zero, indices_zero[1:]))
+                        interval_indices_clustered = cluster_intervals_zscore(interval_indices, ys)
+                        changepoints = [xs[i-1] for i in indices]
+                    except rpt.exceptions.BadSegmentationParameters as bsp:
+                        pass
 
                 xs_segmented = []
                 ys_segmented = []
@@ -230,8 +235,13 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     ax.ticklabel_format(style='sci', scilimits=(-2,3), axis='both') # type: ignore
                     cmap = plt.get_cmap("tab10") # type: ignore
                     colors = [cmap(i) for i in range(len(xs_segmented))]
+
+                    # For plotting purposes only, ignore first 1% of data
+                    # (Initial data may have transients that distort plots)
+                    ymin = min(ys[int(len(ys)/100):])
+                    ymax = max(ys[int(len(ys)/100):])
                     if plot_histogram:
-                        ax.hist(ys_segmented, stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
+                        ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
                         ax.set_xlim(xmin=0)
 
                         filename = Path(path).stem + '.xvg'
@@ -245,10 +255,6 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                             ax.set_xlabel('y-axis')
                             ax.set_ylabel('frequency')
                     else:
-                        # For plotting purposes only, ignore first 1% of data
-                        # (Initial data may have transients that distort plots)
-                        ymin = min(ys[int(len(ys)/100):])
-                        ymax = max(ys[int(len(ys)/100):])
                         ax.set_xlim(min(xs), max(xs))
                         ax.set_ylim(ymin, ymax)
 
@@ -337,11 +343,12 @@ def pause_no_show(interval: float) -> None:
             store_tabular_data(path)"""
 
 
-def file_watcher_glob(cachedir_path: Path, pattern: str, prev_files: Dict[str, float]) -> Dict[str, float]:
+def file_watcher_glob(cachedir_path: Path, patterns: List[str], prev_files: Dict[str, float]) -> Dict[str, float]:
     changed_files = {}
-    file_pattern = str(cachedir_path / f'**/{pattern}')
-    file_paths = glob.glob(file_pattern, recursive=True)
-    for file in file_paths:
+    file_patterns = [str(cachedir_path / f'**/{pattern}') for pattern in patterns]
+    file_paths_all = [glob.glob(fp, recursive=True) for fp in file_patterns]
+    file_paths_flat = [path for fps in file_paths_all for path in fps]
+    for file in file_paths_flat:
         time = os.path.getmtime(file)
         if file not in prev_files:
             # created
@@ -361,7 +368,7 @@ def on_close(event) -> None: # type: ignore
 def main() -> None:
     global figure_closed
     cachedir_path = sys.argv[1] if len(sys.argv) > 1 else '.'
-    file_pattern = sys.argv[2] if len(sys.argv) > 2 else '*.xvg'
+    file_patterns = sys.argv[2:] if len(sys.argv) > 2 else ['*.xvg', '*.dat']
 
     #event_handler = TabularDataHandler(patterns=[file_pattern])
     #observer = PollingObserver() # This does not work!
@@ -376,7 +383,7 @@ def main() -> None:
     try:
         while not figure_closed:
             # Use our own polling file watcher, see above.
-            changed_files = file_watcher_glob(Path(cachedir_path), file_pattern, prev_files)
+            changed_files = file_watcher_glob(Path(cachedir_path), file_patterns, prev_files)
             changed_files_list = list(changed_files.items())
             # Sort by modified time so that if we start RealtimePlots in the
             # middle of the calculation, the plots will still be drawn in the
