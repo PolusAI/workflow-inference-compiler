@@ -5,8 +5,8 @@ steps:
   amb_gro_zip__step__1__bss_amb_gro:
     run: bss_amb_gro.cwl
     in:
-      input_top_path: amb_gro_zip__step__1__bss_amb_gro___input_top_path
-      input_crd_path: amb_gro_zip__step__1__bss_amb_gro___input_crd_path
+      input_top_path: amb_gro_zip__step__1__bss_amb_gro__input_top_path
+      input_crd_path: amb_gro_zip__step__1__bss_amb_gro__input_crd_path
     out:
     - output_top_path
     - output_crd_path
@@ -23,13 +23,13 @@ $namespaces:
 $schemas:
 - https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl
 inputs:
-  amb_gro_zip__step__1__bss_amb_gro___input_top_path:
+  amb_gro_zip__step__1__bss_amb_gro__input_top_path:
     type: File
     format:
     - edam:format_3881
     - edam:format_3881
     - edam:format_3881
-  amb_gro_zip__step__1__bss_amb_gro___input_crd_path:
+  amb_gro_zip__step__1__bss_amb_gro__input_crd_path:
     type: File
     format:
     - edam:format_3878
@@ -39,15 +39,15 @@ inputs:
     - edam:format_3650
     - edam:format_3886
 outputs:
-  amb_gro_zip__step__1__bss_amb_gro___output_top_path:
+  amb_gro_zip__step__1__bss_amb_gro__output_top_path:
     type: File
     format: edam:format_3880
     outputSource: amb_gro_zip__step__1__bss_amb_gro/output_top_path
-  amb_gro_zip__step__1__bss_amb_gro___output_crd_path:
+  amb_gro_zip__step__1__bss_amb_gro__output_crd_path:
     type: File
     format: edam:format_2033
     outputSource: amb_gro_zip__step__1__bss_amb_gro/output_crd_path
-  amb_gro_zip__step__2__zip_top___output_top_zip_path:
+  amb_gro_zip__step__2__zip_top__output_top_zip_path:
     type: File
     format: edam:format_3987
     outputSource: amb_gro_zip__step__2__zip_top/output_top_zip_path

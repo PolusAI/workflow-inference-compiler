@@ -14,7 +14,15 @@ from .wic_types import Namespaces, Yaml, Tool, Tools, ExplicitEdgeDefs, Explicit
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
 
-def compile_workflow(yaml_tree_: YamlTree, *args: Any, **kwargs: Any) -> CompilerInfo:
+def compile_workflow(yaml_tree_: YamlTree,
+                     args: argparse.Namespace,
+                     namespaces: Namespaces,
+                     subgraphs_: List[GraphReps],
+                     explicit_edge_defs_: ExplicitEdgeDefs,
+                     explicit_edge_calls_: ExplicitEdgeCalls,
+                     tools: Tools,
+                     is_root: bool,
+                     relative_run_path: bool) -> CompilerInfo:
     """fixed-point wrapper around compile_workflow_once\n
     See https://en.wikipedia.org/wiki/Fixed_point_(mathematics)
 
@@ -35,7 +43,8 @@ def compile_workflow(yaml_tree_: YamlTree, *args: Any, **kwargs: Any) -> Compile
     max_iters = 100 # 100 ought to be plenty. TODO: calculate n-1 from steps:
     iter = 0
     while ast_modified and iter < max_iters:
-        compiler_info = compile_workflow_once(yaml_tree, *args, **kwargs)
+        subgraphs = copy.deepcopy(subgraphs_) # See comment below!
+        compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs, explicit_edge_defs_, explicit_edge_calls_, tools, is_root, relative_run_path)
         node_data: NodeData = compiler_info.rose.data
         ast_modified = not (yaml_tree.yml == node_data.yml)
         if ast_modified:
@@ -44,6 +53,25 @@ def compile_workflow(yaml_tree_: YamlTree, *args: Any, **kwargs: Any) -> Compile
             #print()
             yaml_tree = YamlTree(yaml_tree_.name, node_data.yml)
         iter += 1
+
+    # Overwrite subgraphs_ element-wise
+    # This is a terrible hack due to the fact that the graphviz library API
+    # only allows appending to the body. This introduces mutable state, so each
+    # time we speculatively compile we accumulate duplicate nodes and edges.
+    # The 'correct' solution is to store the nodes and edges that you want to
+    # add in a separate data structure, return them from compile_workflow_once,
+    # and only once we have reached the fixed point then add them here. Due to
+    # labeling and styling and other graphviz metadata that is not trivial, so
+    # instead we simply deepcopy and overwite the bodies here.
+    # (Also note that you have to do this element-wise; you cannot simply write
+    # subgraphs_ = subgraphs because that will only overwrite the local binding
+    # and thus it will not affect the call site of compile_workflow!)
+    # TODO: overwrite the networkx subgraphs. For now this is okay because
+    # we are only using the networkx graphs to do an isomorphism check in the
+    # regression tests, in which case identical duplication will not matter.
+    for i in range(len(subgraphs_)):
+        subgraphs_[i].graphviz.body = subgraphs[i].graphviz.body
+
     if iter == max_iters:
         import yaml
         print(yaml.dump(node_data.yml))
@@ -239,7 +267,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
         # cachedir_path needs to be an absolute path, but for reproducibility
         # we don't want users' home directories in the yml files.
         if 'cwl_watcher' in step_key:
-            cachedir_path = Path('cachedir/').absolute()
+            cachedir_path = Path(args.cachedir).absolute()
             #print('setting cachedir_path to', cachedir_path)
             steps[i][step_key]['in']['cachedir_path'] = str(cachedir_path)
 
@@ -281,7 +309,10 @@ def compile_workflow_once(yaml_tree_: YamlTree,
         if not tool_i['class'] == 'Workflow':
             wic_graphviz_step_i = wic_step_i.get('wic', {}).get('graphviz', {})
             label = wic_graphviz_step_i.get('label', label)
-            graph_gv.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+            default_style = 'rounded, filled'
+            style = wic_graphviz_step_i.get('style', '')
+            style = default_style if style == '' else default_style + ', ' + style
+            graph_gv.node(step_node_name, label=label, shape='box', style=style, fillcolor='lightblue')
             graph_nx.add_node(step_node_name)
         elif not (step_key in subkeys and len(namespaces) < args.graph_inline_depth):
             nssnode = namespaces + [step_name_i]
@@ -291,11 +322,16 @@ def compile_workflow_once(yaml_tree_: YamlTree,
             step_node_name = '___'.join(nssnode)
             # NOTE: NOT wic_graphviz_step_i
             # get the label (if any) from the subworkflow
-            # TODO: This causes the regression tests to fail.
+            # TODO: This causes test_cwl_embedding_independence to fail.
             #yml = sub_node_data.yml if ast_modified else sub_yaml_tree.yml
             #step_i_wic_graphviz = yml.get('wic', {}).get('graphviz', {})
+            # TODO: For file format conversions, figure out why this is using
+            # the label from the parent workflow.
             #label = step_i_wic_graphviz.get('label', label)
-            graph_gv.node(step_node_name, label=label, shape='box', style='rounded, filled', fillcolor='lightblue')
+            default_style = 'rounded, filled'
+            style = '' #step_i_wic_graphviz.get('style', '')
+            style = default_style if style == '' else default_style + ', ' + style
+            graph_gv.node(step_node_name, label=label, shape='box', style=style, fillcolor='lightblue')
             graph_nx.add_node(step_node_name)
 
         # NOTE: sub_args_provided are handled within the args_required loop below
@@ -338,6 +374,9 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                         print("without any corresponding input value this will fail validation!")
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
+                    # Add a 'dummy' value to explicit_edge_calls anyway, because
+                    # that determines sub_args_provided when the recursion returns.
+                    explicit_edge_calls.update({in_name: (namespaces + [step_name_i], arg_key)})
                 else:
                     (nss_def_init, var) =  explicit_edge_defs[arg_val]
 
@@ -393,11 +432,6 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     # the lowest_common_ancestor of the definition and call site.
                     # (This is the only reason we need to pass in all subgraphs.)
                     label = var.split('___')[-1]
-                    #print('nss_def_inits', nss_def_inits)
-                    #print('len(subgraphs)', len(subgraphs))
-                    #for s in subgraphs:
-                    #    print(s.graphviz.body)
-                    # TODO: This causes the regression tests to fail.
                     graph_init = subgraphs[len(nss_def_inits)]
                     # Let's use regular blue for explicit edges.
                     # Use constraint=false ?
@@ -454,10 +488,10 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                 assert nss_def_inits == nss_call_inits
 
                 nss_call_tails_stems = [utils.parse_step_name_str(x)[0] for x in nss_call_tails]
-                if yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0:
-                    # i.e. if it is possible to do more recursion
-                    # NOTE: This works, and test_cwl_embedding_independence()
-                    # passes, but it is NOT morally embedding independent.
+                arg_val = steps[i][step_key]['in'][arg_key]
+                if (not arg_val in explicit_edge_defs) or (yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0):
+                    # TODO: Check whether arg_val is correct. (Should it be namespaced? etc)
+                    # i.e. (if 'dummy' value) or (if it is possible to do more recursion)
                     in_type = in_tool[arg_key]['type']
                     in_dict = {'type': in_type}
                     if 'format' in in_tool[arg_key]:

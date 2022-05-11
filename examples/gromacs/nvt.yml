@@ -38,3 +38,4 @@ wic:
       wic:
         graphviz:
           label: 'Real-time\nAnalysis'
+          style: invis # Make this node invisible

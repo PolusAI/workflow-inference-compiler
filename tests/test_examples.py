@@ -121,19 +121,16 @@ def test_cwl_embedding_independence() -> None:
             sub_name = sub_node_data.name
             assert sub_yaml_forest.yaml_tree.name == sub_name + '.yml'
 
-            # NOTE: Okay, well actually we still need to pass in sub_namespaces.
-            # (sub_node_data.explicit_edge_defs and sub_node_data.explicit_edge_calls
-            # should also be necessary, but curiosly the test passes without them...)
-            # so the embedding is independent w.r.t. everything ELSE in the parent.
-            # Of course, dsl_args should generally be used sparingly. The only time
-            # they must be used is to pass in an explicit edge definition/reference using &.
+            # NOTE: Do we want to also test embedding independence with args.graph_inline_depth?
+            # If so, we will need to patch testargs depending on len(sub_node_data.namespaces)
+            # (due to the various instances of `if len(namespaces) < args.graph_inline_depth`)
 
             graph_fakeroot_gv = graphviz.Digraph(name=f'cluster_{sub_name}')
             graph_fakeroot_gv.attr(newrank='True')
             graph_fakeroot_nx = nx.DiGraph()
             graph_fakeroot = GraphReps(graph_fakeroot_gv, graph_fakeroot_nx)
             fake_root = True
-            compiler_info_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest.yaml_tree, args, sub_node_data.namespaces, [graph_fakeroot], {}, {}, tools_cwl, fake_root, relative_run_path=False)
+            compiler_info_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest.yaml_tree, args, [], [graph_fakeroot], {}, {}, tools_cwl, fake_root, relative_run_path=False)
             sub_node_data_fakeroot: NodeData = compiler_info_fakeroot.rose.data
             sub_cwl_fakeroot = sub_node_data_fakeroot.compiled_cwl
 
