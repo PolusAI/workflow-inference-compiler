@@ -1,6 +1,7 @@
 # This is based on the excellent gromacs CWL tutorial
 # http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl
 steps:
+  - modeling.yml:
   - setup.yml:
   - basic.yml:
   - analysis.yml:

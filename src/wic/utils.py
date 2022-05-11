@@ -281,13 +281,15 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     if forest == {}:
         return []
     yaml_tree = forest.yaml_tree.yml
-    if 'backends' in yaml_tree:
+    wic = {'wic': yaml_tree.get('wic', {})}
+
+    if 'backends' in wic['wic']:
         #print_forest(forest)
         back_name = ''
-        if 'default_backend' in yaml_tree:
-            back_name = yaml_tree['default_backend']
-        if 'backend' in yaml_tree:
-            back_name = yaml_tree['backend']
+        if 'default_backend' in wic['wic']:
+            back_name = wic['wic']['default_backend']
+        if 'backend' in wic['wic']:
+            back_name = wic['wic']['backend']
         if back_name == '':
             print_forest(forest)
             raise Exception(f'Error! No backend in yaml forest!\n')
