@@ -20,6 +20,7 @@
   ntwr = 1000
   ntxo = 1
   dt = 0.002
+  temp0 = 498
   gamma_ln = 5.0
   pres0 = 1.0
   ntp = 1

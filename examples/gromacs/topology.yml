@@ -1,5 +1,7 @@
 steps:
   - pdb2gmx:
+      in:
+        config: '{"water_type": "spce", "force_field": "amber99sb-ildn", "ignh": "False", "merge": "False"}'
 # We want to perform vacuum minimization first, before solvation and ionization.
 # NOTE: Gromacs no longer supports non-periodic boundary conditions (!!!),
 # so we must emulate a vacuum by using a very large (1000 Angstrom) box.
