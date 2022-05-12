@@ -241,7 +241,10 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     ymin = min(ys[int(len(ys)/100):])
                     ymax = max(ys[int(len(ys)/100):])
                     if plot_histogram:
-                        ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
+                        if np.isfinite(ymin) and np.isfinite(ymax):
+                            ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
+                        else:
+                            ax.hist(ys_segmented, stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
                         ax.set_xlim(xmin=0)
 
                         filename = Path(path).stem + '.xvg'
@@ -256,7 +259,8 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                             ax.set_ylabel('frequency')
                     else:
                         ax.set_xlim(min(xs), max(xs))
-                        ax.set_ylim(ymin, ymax)
+                        if np.isfinite(ymin) and np.isfinite(ymax):
+                            ax.set_ylim(ymin, ymax)
 
                         # See https://stackoverflow.com/questions/39753282/scatter-plot-with-single-pixel-marker-in-matplotlib
                         for i, (xs_seg, ys_seg) in enumerate(zip(xs_segmented, ys_segmented)):
