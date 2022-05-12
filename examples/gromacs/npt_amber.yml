@@ -16,7 +16,7 @@ steps:
         #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
         file_pattern: ' *amb_npt.log'
         cwl_tool: process_mdout
-        max_times: '10'
+        max_times: '20'
         config: '{"in": {"input_log_path": "amb_npt.log", "config": "{\"terms\":  [\"DENSITY\"]}", "output_dat_path": "density.dat"}}'
 
 wic:
