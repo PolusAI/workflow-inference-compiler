@@ -8,4 +8,5 @@ wic:
   steps:
     (2, npt.yml):
       wic:
-        backend: amber
+        backend: gromacs
+#        backend: amber

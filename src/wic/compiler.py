@@ -356,6 +356,9 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     inputs_file_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
                     explicit_edge_defs.update({arg_val: (namespaces + [step_name_i], arg_key)})
+                    # Add a 'dummy' value to explicit_edge_calls, because
+                    # that determines sub_args_provided when the recursion returns.
+                    explicit_edge_calls.update({in_name: (namespaces + [step_name_i], arg_key)})
                     # TODO: Show input node?
                 else:
                     raise Exception(f"Error! Multiple definitions of &{arg_val}!")
@@ -489,8 +492,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
 
                 nss_call_tails_stems = [utils.parse_step_name_str(x)[0] for x in nss_call_tails]
                 arg_val = steps[i][step_key]['in'][arg_key]
-                if (not arg_val in explicit_edge_defs) or (yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0):
-                    # TODO: Check whether arg_val is correct. (Should it be namespaced? etc)
+                if (nss_call_tails_stems == []) or (yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0):
                     # i.e. (if 'dummy' value) or (if it is possible to do more recursion)
                     in_type = in_tool[arg_key]['type']
                     in_dict = {'type': in_type}
