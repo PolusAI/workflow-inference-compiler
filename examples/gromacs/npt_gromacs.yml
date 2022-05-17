@@ -1,14 +1,34 @@
 steps:
   - grompp:
       in:
-        config: '{"mdp": {"integrator":"sd", "rvdw":"1.0", "rcoulomb":"1.0", "coulombtype":"pme", "nsteps":"10000", "dt":0.002, "tc-grps":"system", "ref-t":"498", "tau-t":"2", "constraints":"h-bonds", "nstxout":"1000", "nstenergy":"10", "pcoupl":"Berendsen", "tau-p":"1", "ref-p":"1", "compressibility":"4.5e-5", "comm-mode":"linear", "comm-grps":"system"}}'
+        config:
+          mdp:
+            integrator: sd
+            rvdw: 1.0
+            rcoulomb: 1.0
+            coulombtype: pme
+            nsteps: 10000
+            dt: 0.002
+            tc-grps: system
+            ref-t: 498
+            tau-t: 2
+            constraints: h-bonds
+            nstxout: 1000
+            nstenergy: 10
+            pcoupl: Berendsen
+            tau-p: 1
+            ref-p: 1
+            compressibility: 4.5e-5
+            comm-mode: linear
+            comm-grps: system
   - mdrun:
       in:
         output_edr_path: 'npt.edr'
-        #config: '{"use_gpu": "True"}'
+        #config: {use_gpu: True}
   - gmx_energy:
       in:
-        config: '{"terms":  ["Density"]}'
+        config:
+          terms: [Density]
         output_xvg_path: 'density.xvg'
   - cwl_watcher:
       in:
@@ -16,7 +36,12 @@ steps:
         file_pattern: ' *npt.edr'
         cwl_tool: gmx_energy
         max_times: '5'
-        config: '{"in": {"input_energy_path": "npt.edr", "config": "{\"terms\":  [\"Density\"]}", "output_xvg_path": "density.xvg"}}'
+        config:
+          in:
+            input_energy_path: npt.edr
+            config:
+              terms: [Density]
+            output_xvg_path: density.xvg
 
 wic:
   graphviz:
