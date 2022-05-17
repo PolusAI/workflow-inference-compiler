@@ -15,7 +15,7 @@ import json
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEvent, PatternMatchingEventHandler"""
 
-from .wic_types import GraphReps, Tools, YamlTree, Json
+from .wic_types import GraphReps, Tools, YamlTree, Json, GraphData
 from .main import get_tools_cwl, get_yml_paths
 
 from . import ast, cli, compiler, utils
@@ -71,7 +71,7 @@ def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str, 
 
         yaml_path = f'{cwl_tool}_only.yml'
         yaml_tree = YamlTree(yaml_path, yml)
-        subgraph = GraphReps(graphviz.Digraph(name=yaml_path), nx.DiGraph())
+        subgraph = GraphReps(graphviz.Digraph(name=yaml_path), nx.DiGraph(), GraphData(yaml_path))
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [subgraph], {}, {}, tools_cwl, True, relative_run_path=False)
         rose_tree = compiler_info.rose
         working_dir = Path('.') # Use a new working directory.

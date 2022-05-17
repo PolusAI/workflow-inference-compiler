@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Tuple, NamedTuple
 
-import graphviz
+import json
 import networkx as nx
 
 # See https://mypy.readthedocs.io/en/stable/kinds_of_types.html#type-aliases
@@ -34,12 +34,33 @@ ExplicitEdgeCalls = Dict[str, ExplicitEdgeDef]
 PluginID = int
 StepName1 = str
 DiGraph = Any # graphviz.DiGraph
+
+class GraphData():
+
+    def __init__(self,
+                 name: str,
+                 nodes: List[Tuple[str, Dict]] = [],
+                 edges: List[Tuple[str, str, Dict]] = [],
+                 subgraphs: List[Any] = [],
+                 ranksame: List[str] = []) -> None:
+        # NOTE: See comments in utils.flatten_graphdata() !!!
+        self.name = name
+        self.nodes = nodes
+        self.edges = edges
+        self.subgraphs = subgraphs
+        self.ranksame = ranksame
+
+    def toJSON(self) -> str: # For debugging
+        attrs = {'name': str(self.name), 'nodes': self.nodes, 'edges': self.edges, 'subgraphs': self.subgraphs, 'ranksame': self.ranksame}
+        return json.dumps(attrs, default=lambda o: o.__dict__, indent=2)
+
 # This groups together the classes which represent our graph.
 # Excluding --graph_inline_depth related code, all graph
 # operations should be performed on all representations.
 class GraphReps(NamedTuple):
     graphviz: DiGraph
     networkx: nx.DiGraph
+    graphdata: GraphData
 YamlDSLArgs = Yaml
 
 # Since we cannot store extra tags in CWL files, we need a data structure

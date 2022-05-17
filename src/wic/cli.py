@@ -23,7 +23,7 @@ group_run.add_argument('--cwl_run_slurm', type=bool, required=False, default=Fal
 # For example, if cwl_run_slurm is enabled, you MUST enable cwl_inline_subworkflows!
 # Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
 
-parser.add_argument('--cwl_inline_subworkflows', type=bool, required=('--cwl_run_slurm' in sys.argv), default=('--cwl_run_slurm' in sys.argv),
+parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, default=('--cwl_run_slurm' in sys.argv),
                     help='Before generating the cwl file, inline all subworkflows. Required for --cwl_run_slurm')
 parser.add_argument('--cwl_inference_use_naming_conventions', type=bool, required=False, default=False,
                     help='Enables the use of naming conventions in the inference algorithm')
@@ -32,7 +32,7 @@ parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
 parser.add_argument('--cachedir', type=str, required=False, default='cachedir',
                     help='The directory to save intermediate results; useful with RealtimePlots.py')
 
-parser.add_argument('--compute_url', type=str, required=('--cwl_run_slurm' in sys.argv),
+parser.add_argument('--compute_url', type=str, default='http://compute.ci.aws.labshare.org',
                     help='The URL associated with the labshare slurm driver. Required for --cwl_run_slurm')
 parser.add_argument('--compute_access_token', type=str, required=('--cwl_run_slurm' in sys.argv),
                     help='The access_token used for authentication. Required for --cwl_run_slurm For now, get this manually from https://a-qa.labshare.org/')

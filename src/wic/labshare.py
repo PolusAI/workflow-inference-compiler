@@ -85,7 +85,7 @@ def upload_plugin(compute_url: str, access_token: str, tool: Cwl, name: str) -> 
     r_json = response.json()
 
     # {'error': {'statusCode': 422, 'name': 'UnprocessableEntityError', 'message': 'A Plugin with name pdb and version ... already exists.'}}
-    if (r_json.get('error').get('statusCode') == 422):
+    if (r_json.get('error', {}).get('statusCode', {}) == 422):
         return '-1'
 
     if ('id' not in r_json):
@@ -225,7 +225,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
             print(r_json)
             raise Exception(f'Error! Labshare workflow upload failed for {yaml_stem}.')
         workflow_id = r_json['id'] # hash
-    if is_root:
-        print_plugins(args.compute_url)
+    #if is_root:
+    #    print_plugins(args.compute_url)
 
     return workflow_id
