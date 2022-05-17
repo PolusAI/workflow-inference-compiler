@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess as sub
 from typing import Any, Dict, List
 
+import json
 import graphviz
 import networkx  as nx
 
@@ -351,6 +352,10 @@ def compile_workflow_once(yaml_tree_: YamlTree,
             # Extract input value into separate yml file
             # Replace it here with a new variable name
             arg_val = steps[i][step_key]['in'][arg_key]
+            # Convert native YAML to a JSON-encoded string for specific tags.
+            tags = ['config']
+            if arg_key in tags and isinstance(arg_val, Dict):
+                arg_val = json.dumps(arg_val)
             in_name = f'{step_name_i}___{arg_key}'  # Use triple underscore for namespacing so we can split later # {step_name_i}_input___{arg_key}
             in_type = in_tool[arg_key]['type'].replace('?', '')  # Providing optional arguments makes them required
             in_dict = {'type': in_type}

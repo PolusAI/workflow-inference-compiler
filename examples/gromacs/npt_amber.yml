@@ -9,7 +9,8 @@ steps:
   - process_mdout:
       in:
         input_log_path: '*amb_npt.log'
-        config: '{"terms": ["DENSITY"]}'
+        config:
+          terms: [DENSITY]
         output_dat_path: density.dat
   - cwl_watcher:
       in:
@@ -17,7 +18,12 @@ steps:
         file_pattern: ' *amb_npt.log'
         cwl_tool: process_mdout
         max_times: '20'
-        config: '{"in": {"input_log_path": "amb_npt.log", "config": "{\"terms\":  [\"DENSITY\"]}", "output_dat_path": "density.dat"}}'
+        config:
+          in:
+            input_log_path: amb_npt.log
+            config:
+              terms: [DENSITY]
+            output_dat_path: density.dat
 
 wic:
   graphviz:

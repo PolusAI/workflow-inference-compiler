@@ -5,11 +5,20 @@
 steps:
   - grompp:
       in:
-        config: '{"mdp": {"integrator":"steep", "rvdw":"1.4", "rcoulomb":"1.4", "nsteps":"300", "emstep":"0.0001", "emtol":"100", "nstenergy":"1"}}'
+        config:
+          mdp:
+            integrator: steep
+            rvdw: 1.4
+            rcoulomb: 1.4
+            nsteps: 300
+            emstep: 0.0001
+            emtol: 100
+            nstenergy: 1
   - mdrun:
   - gmx_energy:
       in:
-        config: '{"terms":  ["Potential"]}'
+        config:
+          terms: [Potential]
         output_xvg_path: 'energy_min_steep.xvg'
 
 wic:

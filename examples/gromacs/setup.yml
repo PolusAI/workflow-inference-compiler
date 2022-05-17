@@ -1,20 +1,30 @@
 steps:
 - pdb2gmx:
     in:
-      config: '{"water_type": "spce", "force_field": "amber99sb-ildn", "ignh": "False", "merge": "False"}'
+      config:
+        water_type: spce
+        force_field: amber99sb-ildn
+        ignh: True
+        merge: False
 - editconf:
     in:
-      config: '{"box_type": "cubic", "distance_to_molecule": 1.6}'
+      config:
+        box_type: cubic
+        distance_to_molecule: 1.6
 - solvate:
 - grompp:
     in:
-      config: '{"mdp": {"integrator": "steep"}}'
+      config:
+        mdp:
+          integrator: steep
 - genion:
     in:
       # pH 7.0 = 0.05 concentration, pH 3.6 = 1.50 concentration, pH 2.5 = 4.50 concentration
       # NOTE: At higher salt concentrations, you may need to increase nsteps of
       # steepest descent minimization from 200 to around 300.
-      config: '{"neutral": "True", "concentration": 0.05}' # mol/liter 
+      config:
+        neutral: True
+        concentration: 0.05 # mol/liter 
       output_top_zip_path: '&genion.top'
 
 wic:
