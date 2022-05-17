@@ -10,7 +10,7 @@ from networkx.algorithms import isomorphism
 import yaml
 
 from wic import auto_gen_header
-from wic.wic_types import NodeData, Yaml, YamlTree, GraphReps
+from wic.wic_types import GraphData, NodeData, Yaml, YamlTree, GraphReps
 import wic.cli
 import wic.compiler
 import wic.main
@@ -45,7 +45,8 @@ def test_examples() -> None:
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
         graph_gv.attr(newrank='True')
         graph_nx = nx.DiGraph()
-        graph = GraphReps(graph_gv, graph_nx)
+        graphdata = GraphData(str(yml_path))
+        graph = GraphReps(graph_gv, graph_nx, graphdata)
         compiler_info = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, tools_cwl, True, relative_run_path=True)
         rose_tree = compiler_info.rose
         sub_node_data: NodeData = rose_tree.data
@@ -103,7 +104,8 @@ def test_cwl_embedding_independence() -> None:
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
         graph_gv.attr(newrank='True')
         graph_nx = nx.DiGraph()
-        graph = GraphReps(graph_gv, graph_nx)
+        graphdata = GraphData(str(yml_path))
+        graph = GraphReps(graph_gv, graph_nx, graphdata)
         is_root = True
         compiler_info = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, tools_cwl, is_root, relative_run_path=False)
         rose_tree = compiler_info.rose
@@ -128,7 +130,8 @@ def test_cwl_embedding_independence() -> None:
             graph_fakeroot_gv = graphviz.Digraph(name=f'cluster_{sub_name}')
             graph_fakeroot_gv.attr(newrank='True')
             graph_fakeroot_nx = nx.DiGraph()
-            graph_fakeroot = GraphReps(graph_fakeroot_gv, graph_fakeroot_nx)
+            graphdata_fakeroot = GraphData(str(sub_name))
+            graph_fakeroot = GraphReps(graph_fakeroot_gv, graph_fakeroot_nx, graphdata_fakeroot)
             fake_root = True
             compiler_info_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest.yaml_tree, args, [], [graph_fakeroot], {}, {}, tools_cwl, fake_root, relative_run_path=False)
             sub_node_data_fakeroot: NodeData = compiler_info_fakeroot.rose.data
@@ -196,7 +199,8 @@ def test_inline_subworkflows() -> None:
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
         graph_gv.attr(newrank='True')
         graph_nx = nx.DiGraph()
-        graph = GraphReps(graph_gv, graph_nx)
+        graphdata = GraphData(str(yml_path))
+        graph = GraphReps(graph_gv, graph_nx, graphdata)
         compiler_info = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, tools_cwl, True, relative_run_path=True)
         rose_tree = compiler_info.rose
         sub_node_data: NodeData = rose_tree.data
@@ -211,7 +215,8 @@ def test_inline_subworkflows() -> None:
             inline_graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
             inline_graph_gv.attr(newrank='True')
             inline_graph_nx = nx.DiGraph()
-            inline_graph = GraphReps(inline_graph_gv, inline_graph_nx)
+            inline_graphdata = GraphData(str(yml_path))
+            inline_graph = GraphReps(inline_graph_gv, inline_graph_nx, inline_graphdata)
             inline_compiler_info = wic.compiler.compile_workflow(inline_yaml_tree, args, [], [inline_graph], {}, {}, tools_cwl, True, relative_run_path=True)
             inline_rose_tree = inline_compiler_info.rose
             inline_sub_node_data: NodeData = inline_rose_tree.data

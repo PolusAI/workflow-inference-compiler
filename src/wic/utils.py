@@ -8,7 +8,7 @@ import yaml
 from typing import Any, Dict
 
 from . import auto_gen_header
-from .wic_types import Namespaces, NodeData, Yaml, RoseTree, YamlForest, GraphReps, Tool, Tools, YamlTree
+from .wic_types import GraphData, Json, Namespaces, NodeData, Yaml, RoseTree, YamlForest, GraphReps, Tool, Tools, YamlTree
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -110,13 +110,65 @@ def add_graph_edge(args: argparse.Namespace, graph: GraphReps, nss1: Namespaces,
     edge_node2 = '___'.join(nss2)
     graph_gv = graph.graphviz
     graph_nx = graph.networkx
+    graphdata = graph.graphdata
     # Hide internal self-edges
     if not edge_node1 == edge_node2:
+        attrs = {'color': color}
         if args.graph_label_edges:
-            graph_gv.edge(edge_node1, edge_node2, color=color, label=label)
-        else:
-            graph_gv.edge(edge_node1, edge_node2, color=color)
+            attrs['label'] = label
+
+        graph_gv.edge(edge_node1, edge_node2, **attrs)
     graph_nx.add_edge(edge_node1, edge_node2)
+    graphdata.edges.append((edge_node1, edge_node2, attrs))
+
+
+def flatten_graphdata(graphdata: GraphData, parent: str = '') -> GraphData:
+    subgraphs = [flatten_graphdata(subgraph, str(graphdata.name)) for subgraph in graphdata.subgraphs]
+
+    # NOTE: Even though all of the following default list arguments are [],
+    # you MUST explicitly supply the empty lists!!! Otherwise, after
+    # instantiation, the lists will contain values from previous instances!!!
+    # This shallow copy causes an infinite loop because as we copy nodes,
+    # they end up getting appended to the original lists!
+    # This makes absolutely no sense. Since the lists are defined at the
+    # instance level (NOT the class level), there should be zero sharing!
+    gd = GraphData(str(graphdata.name), [], [], [], []) # This is fine
+    #gd = GraphData(str(graphdata.name)) # This is NOT fine!
+    # i.e. The following statement will NOT print zeros (in the second case)!
+    #print(gd.name, len(gd.nodes), len(gd.edges), len(gd.subgraphs), len(gd.ranksame))
+
+    for subgraph in subgraphs:
+        # We need to add a placeholder node for each subgraph first
+        attrs = {} if parent == '' else {'parent': parent}
+        # NOTE: This does not yet work with args.graph_inline_depth
+        gd.nodes.append((subgraph.name, attrs))
+
+    for subgraph in subgraphs:
+        # Then we can add the nodes and edges from the subgraphs.
+        # (Otherwise, cytoscape won't render the subgraphs correctly.)
+        for (subnode, subattrs) in subgraph.nodes:
+            gd.nodes.append((subnode, subattrs))
+        for (subnode1, subnode2, subattrs) in subgraph.edges:
+            gd.edges.append((subnode1, subnode2, subattrs))
+
+    # Finally, add the nodes and edges from the current graph
+    for (node, attrs) in graphdata.nodes:
+        attrs['parent'] = graphdata.name
+        gd.nodes.append((node, attrs))
+    for (node1, node2, attrs) in graphdata.edges:
+        gd.edges.append((node1, node2, attrs))
+
+    return gd
+
+
+def graphdata_to_cytoscape(graphdata: GraphData) -> Json:
+    nodes = []
+    for (node, attrs) in list(graphdata.nodes):
+        nodes.append({'data': {'id': node, **attrs}})
+    edges = []
+    for (node1, node2, attrs) in list(graphdata.edges):
+        edges.append({'data': {'source': node1, 'target': node2, **attrs}}) # TODO: id?
+    return {'nodes': nodes, 'edges': edges}
 
 
 def partition_by_lowest_common_ancestor(nss1: Namespaces, nss2: Namespaces) -> Tuple[Namespaces, Namespaces]:

@@ -9,7 +9,7 @@ import networkx  as nx
 
 from . import inference
 from . import utils
-from .wic_types import Namespaces, Yaml, Tool, Tools, ExplicitEdgeDefs, ExplicitEdgeCalls, CompilerInfo, WorkflowInputsFile, WorkflowOutputs, InternalOutputs, GraphReps, YamlTree, RoseTree, NodeData, EnvData
+from .wic_types import Namespaces, Yaml, Tool, Tools, ExplicitEdgeDefs, ExplicitEdgeCalls, CompilerInfo, WorkflowInputsFile, WorkflowOutputs, InternalOutputs, GraphReps, YamlTree, RoseTree, NodeData, EnvData, GraphData
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
@@ -63,6 +63,8 @@ def compile_workflow(yaml_tree_: YamlTree,
     # and only once we have reached the fixed point then add them here. Due to
     # labeling and styling and other graphviz metadata that is not trivial, so
     # instead we simply deepcopy and overwite the bodies here.
+    # (NOTE: We now have a separate GraphData structure, so the graphviz and
+    # networkx representations can probably be removed from the recursion.)
     # (Also note that you have to do this element-wise; you cannot simply write
     # subgraphs_ = subgraphs because that will only overwrite the local binding
     # and thus it will not affect the call site of compile_workflow!)
@@ -71,6 +73,10 @@ def compile_workflow(yaml_tree_: YamlTree,
     # regression tests, in which case identical duplication will not matter.
     for i in range(len(subgraphs_)):
         subgraphs_[i].graphviz.body = subgraphs[i].graphviz.body
+        subgraphs_[i].graphdata.name = subgraphs[i].graphdata.name
+        subgraphs_[i].graphdata.nodes = subgraphs[i].graphdata.nodes
+        subgraphs_[i].graphdata.edges = subgraphs[i].graphdata.edges
+        subgraphs_[i].graphdata.subgraphs = subgraphs[i].graphdata.subgraphs
 
     if iter == max_iters:
         import yaml
@@ -166,6 +172,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
     graph = subgraphs[-1] # Get the current graph
     graph_gv = graph.graphviz
     graph_nx = graph.networkx
+    graphdata = graph.graphdata
 
     for i, step_key in enumerate(steps_keys):
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
@@ -186,7 +193,8 @@ def compile_workflow_once(yaml_tree_: YamlTree,
             subgraph_gv.attr(label=label) # str(path)
             subgraph_gv.attr(color='lightblue')  # color of outline
             subgraph_nx = nx.DiGraph()
-            subgraph = GraphReps(subgraph_gv, subgraph_nx)
+            graphdata = GraphData(step_key)
+            subgraph = GraphReps(subgraph_gv, subgraph_nx, graphdata)
 
             steps[i].update({step_key: {}}) # delete yml subtree
             sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i], subgraphs + [subgraph], explicit_edge_defs, explicit_edge_calls, tools, False, relative_run_path)
@@ -312,8 +320,10 @@ def compile_workflow_once(yaml_tree_: YamlTree,
             default_style = 'rounded, filled'
             style = wic_graphviz_step_i.get('style', '')
             style = default_style if style == '' else default_style + ', ' + style
-            graph_gv.node(step_node_name, label=label, shape='box', style=style, fillcolor='lightblue')
+            attrs = {'label': label, 'shape': 'box', 'style': style, 'fillcolor': 'lightblue'}
+            graph_gv.node(step_node_name, **attrs)
             graph_nx.add_node(step_node_name)
+            graphdata.nodes.append((step_node_name, attrs))
         elif not (step_key in subkeys and len(namespaces) < args.graph_inline_depth):
             nssnode = namespaces + [step_name_i]
             # Just like in add_graph_edge(), here we can hide all of the details
@@ -331,8 +341,10 @@ def compile_workflow_once(yaml_tree_: YamlTree,
             default_style = 'rounded, filled'
             style = '' #step_i_wic_graphviz.get('style', '')
             style = default_style if style == '' else default_style + ', ' + style
-            graph_gv.node(step_node_name, label=label, shape='box', style=style, fillcolor='lightblue')
+            attrs = {'label': label, 'shape': 'box', 'style': style, 'fillcolor': 'lightblue'}
+            graph_gv.node(step_node_name, **attrs)
             graph_nx.add_node(step_node_name)
+            graphdata.nodes.append((step_node_name, attrs))
 
         # NOTE: sub_args_provided are handled within the args_required loop below
         for arg_key in args_provided:
@@ -438,7 +450,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     graph_init = subgraphs[len(nss_def_inits)]
                     # Let's use regular blue for explicit edges.
                     # Use constraint=false ?
-                    utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
+                    utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='white')
             else:
                 inputs_workflow.update({in_name: in_dict})
                 in_dict = {**in_dict, 'value': arg_val}
@@ -446,10 +458,13 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                 steps[i][step_key]['in'][arg_key] = in_name
                 if args.graph_show_inputs:
                     input_node_name = '___'.join(namespaces + [step_name_i, arg_key])
-                    graph_gv.node(input_node_name, label=arg_key, shape='box', style='rounded, filled', fillcolor='lightgreen')
+                    attrs = {'label': arg_key, 'shape': 'box', 'style': 'rounded, filled', 'fillcolor': 'lightgreen'}
+                    graph_gv.node(input_node_name, **attrs)
                     graph_gv.edge(input_node_name, step_node_name, color=font_edge_color)
                     graph_nx.add_node(input_node_name)
                     graph_nx.add_edge(input_node_name, step_node_name)
+                    graphdata.nodes.append((input_node_name, attrs))
+                    graphdata.edges.append((input_node_name, step_node_name, {}))
 
         for arg_key in args_required:
             #print('arg_key', arg_key)
@@ -695,11 +710,13 @@ def add_subgraphs(args: argparse.Namespace,
     # Add the cluster subgraphs to the main graph, but we need to add them in
     # reverse order to trick the graphviz layout algorithm.
     for sibling in sibling_subgraphs[::-1]: # Reverse!
-        (sib_graph_gv, sib_graph_nx) = sibling
+        (sib_graph_gv, sib_graph_nx, sib_graphdata) = sibling
         if len(namespaces) < args.graph_inline_depth:
             graph_gv.subgraph(sib_graph_gv)
         graph_nx.add_nodes_from(sib_graph_nx.nodes)
         graph_nx.add_edges_from(sib_graph_nx.edges)
+    for sibling in sibling_subgraphs:
+        graph.graphdata.subgraphs.append(sibling.graphdata)
     # Align the cluster subgraphs using the same rank as the first node of each subgraph.
     # See https://stackoverflow.com/questions/6824431/placing-clusters-on-the-same-rank-in-graphviz
     if len(namespaces) < args.graph_inline_depth:
@@ -707,9 +724,11 @@ def add_subgraphs(args: argparse.Namespace,
         if len(step_1_names_display) > 1:
             nodes_same_rank = '\t{rank=same; ' + '; '.join(step_1_names_display) + '}\n'
             graph_gv.body.append(nodes_same_rank)
+            graph.graphdata.ranksame = step_1_names_display
         if len(steps_ranksame) > 1:
             nodes_same_rank = '\t{rank=same; ' + '; '.join(steps_ranksame) + '}\n'
             graph_gv.body.append(nodes_same_rank)
+            graph.graphdata.ranksame = steps_ranksame
         
 
 
@@ -795,13 +814,17 @@ def get_workflow_outputs(args: argparse.Namespace,
                 if case1 or case2:
                     graph_gv = graph.graphviz
                     graph_nx = graph.networkx
-                    graph_gv.node(output_node_name, label=out_key_no_namespace, shape='box', style='rounded, filled', fillcolor='lightyellow')
+                    graphdata = graph.graphdata
+                    attrs = {'label': out_key_no_namespace, 'shape': 'box', 'style': 'rounded, filled', 'fillcolor': 'lightyellow'}
+                    graph_gv.node(output_node_name, **attrs)
                     if args.graph_label_edges:
                         graph_gv.edge(step_node_name, output_node_name, color=font_edge_color, label=out_key_no_namespace)  # Is labeling necessary?
                     else:
                         graph_gv.edge(step_node_name, output_node_name, color=font_edge_color)
                     graph_nx.add_node(output_node_name)
                     graph_nx.add_edge(step_node_name, output_node_name)
+                    graphdata.nodes.append((output_node_name, attrs))
+                    graphdata.edges.append((step_node_name, output_node_name, {}))
             # NOTE: Unless we are in the root workflow, we always need to
             # output everything. This is because while we are within a
             # subworkflow, we do not yet know if a subworkflow output will be used as
