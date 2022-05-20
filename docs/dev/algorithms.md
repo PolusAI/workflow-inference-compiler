@@ -1,4 +1,5 @@
-# Developer's Guide
+
+# Algorithms
 
 ## Namespacing
 
@@ -32,36 +33,33 @@ Now for the recursive case: If we are in the process of compiling the steps of a
 
 However, there are two major additional points: After compilation, a namespace is prepended to the input and output variables of a subworkflow to guarantee uniqueness. More importantly, from within the subworkflow, it may not be possible to completely determine all inputs concretely; satisfaction of some inputs may need to be deferred.
 
-### Deferred Satisfaction
+## Deferred Satisfaction
 When compiling a subworkflow, inputs which originate in a parent workflow (and are thus external to the subworkflow) are not yet in scope. Thus, we cannot yet make an edge (either explicit or inferred) and the inputs cannot yet be concretely satisfied. So we simply create an intermediate input variable in the intermediate subworkflow(s), and as the recursion unwinds there will eventually be a concrete input in some parent workflow. It is very important to note that deferring inputs does NOT affect the DAGs of any of the parent workflows! (Again, see test_inline_subworkflows()) Also note that deferred intermediate inputs will be namespaced accordingly.
 
-### Explicit Edges
+## Explicit Edges
 
 Explicit edges are handled first, to prevent edge inference from being applied. Whereas the edge inference algorithm operates 'locally', at one level of recursion at a time, the explicit edge algorithm inherently operates 'globally', requiring deferred information to be passed around through the various levels of recursion. (As such, it was actually much more difficult to implement correctly.)
 
 First, when an edge definition site (&) is encountered, its namespaces are stored in explicit_edge_defs. Then, when an edge call site is encountered (*), we compare the namespaces of the definition and call sites using the [lowest common ancestor](https://en.wikipedia.org/wiki/Lowest_common_ancestor) algorithm to see if they have any leading namespaces in common. If we are already in the common namespace, we can immediately apply the definition information. Otherwise, we need to store the information in explicit_edge_calls to be deferred until the recursion reaches the common namespace. (This is the part that was difficult; please be careful when modifying this code!)
 
-### Edge Inference
+## Edge Inference
 
-The edge inference algorithm is actually rather simple: For each input in the current step of a workflow, it checks for compatible outputs in the previous steps. Since most operations presumably desire the most recent compatible output, by default the steps are checked in reverse order and the outputs of each step are also checked in reverse order. For each output, it first checks for matching types and formats. If there is a unique match, then great! Otherwise, it also checks for matching naming conventions. If there is now a unique match, then great! If there are still multiple matches, it chooses the first (i.e. most recent) match. If there are now no matches, it ignores the naming conventions and chooses the first (i.e. most recent) match based on types and formats only.
+Since users may eventually need to know how edge inference works, the edge inference algorithm is in the [user's guide](../userguide.md#edge-inference-algorithm).
 
-Note that there will soon be additional features added to allow users to customize the inference algorithm.
+Again note that if we are in a subworkflow, edge inference may temporarily fail for some inputs and we may need to defer to a parent workflow.
 
-Again note that if we are in a subworkflow, edge inference may fail for some inputs and we may need to defer to a parent workflow.
+### Mathematical Aside
 
-## Git Submodules
+Every DAG has a [topological ordering](https://en.wikipedia.org/wiki/Topological_sorting). Since CWL workflows are DAGs, there must be an associated topological ordering. However, since the input yml DSL only contains a linear sequence of steps and does not contain any edge information, we merely have a [linear ordering](https://en.wikipedia.org/wiki/Total_order). The challenge is to promote the linear ordering to a topological ordering by inferring all of the edges. Since we are initially missing information this is far from unique, so ***`users should always check that edge inference actually produces the intended DAG`***.
 
-The plugins (i.e. CWL adapters) are added to this repo as git submodules. This is because they should be completely independent of the core inference and compilation algorithms and because they should not need to be modified very often.
+## Speculative Compilation
 
-As shown in the README, cloning the main repo will not clone the submodules; you will need to run the following command:
-```
-git submodule init && git submodule update
-```
+The algorithm is actually rather simple: first we attempt to perform edge inference. If it fails, that means there are no outputs that *directly* match the given input. So what happens if we insert an intermediate step? Specifically, the compiler attempts to *transitively* match the input of the current step with the outputs of the intermediate step, and the inputs of the intermediate step with the outputs (plural) that failed to directly match.
 
-Developers should be very careful when using git submodules! The following links explain why:
+Actually, due to implementation details, the compiler temporarily attempts to match a *single* output with the intermediate inputs. At this point we may or may not have a valid file format conversion, so we stop compiling the current subworkflow, tentatively insert the file format conversion, and speculatively re-compile the subworkflow from scratch. If we indeed have a valid conversion, the inference algorithm should now succeed in matching *all* of the outputs, and we are done! This is a rather roundabout way of doing it, but it turned out to be much easier to implement.
 
-* [how do i commit changes in a git submodule](https://stackoverflow.com/questions/5542910/how-do-i-commit-changes-in-a-git-submodule)
-* [how to link git repos](https://stackoverflow.com/questions/36554810/how-to-link-folder-from-a-git-repo-to-another-repo)
-* [git submodule core concepts](https://www.atlassian.com/git/articles/core-concept-workflows-and-tips)
+### Known Issues
 
-"Why not use `git subtree`?" I'm not opposed to alternative git workflows, but I think the independent and static nature of the plugins is well-suited to submodules.
+There is a case where speculative compilation can repeatedly fail, but repeatedly attempt to insert an additional step, and thus go into an infinite loop. For now, I have simply hardcoded a maximum number of iterations, after which an error message is displayed. It should be possible to detect and recover from this error, which I believe is caused when a single match is initially found, but then all matches cannot subsequently be found.
+
+There is a pathological case where speculatively re-compiling has time complexity O(2^n)! This is because file format conversions can happen at any level of recursion, so we may end up re-compiling deeply nested subworkflows unnecessarily. However, this is amenable to dynamic programming techniques, so we should be able to cache the subworkflows and eliminate this problem. Moreover, this pathological case would never occur with any workflows that a human would write.

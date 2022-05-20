@@ -1,9 +1,12 @@
 import argparse
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from . import utils
 from .wic_types import Namespaces, KV, Yaml, Tools, WorkflowInputs, InternalOutputs, GraphReps
+
+# NOTE: This must be initialized in main.py and/or cwl_watcher.py
+renaming_conventions: List[Tuple[str, str]] = None # type: ignore
 
 
 def perform_edge_inference(args: argparse.Namespace,
@@ -85,9 +88,9 @@ def perform_edge_inference(args: argparse.Namespace,
             if break_inference and not namespace_emb_last == namespace_emb_last_break:
                 break # Only break once the namespace changes, i.e. on the next step
             inference_rule = inference_rules.get(out_key, 'default')
-            # Apply 'skip' rule before iteration, to prevent matching
+            # Apply 'continue' rule before iteration, to prevent matching
             # TODO: This currently causes an infinite loop.
-            #if inference_rule == 'skip':
+            #if inference_rule == 'continue':
             #    continue
 
             out_type = out_tool[out_key]['type']
@@ -105,8 +108,8 @@ def perform_edge_inference(args: argparse.Namespace,
             if (out_type == in_type) and out_format in in_formats:
                 format_matches.append((out_key, out_format))
 
-            # Apply 'block' rule after iteration, to allow matching
-            if inference_rule == 'block':
+            # Apply 'break' rule after iteration, to allow matching
+            if inference_rule == 'break':
                 break_inference = True
                 namespace_emb_last_break = namespace_emb_last
 
@@ -138,8 +141,7 @@ def perform_edge_inference(args: argparse.Namespace,
                     # Eventually, the CWL files themselves should be fixed.
                     arg_key_no_namespace = arg_key.split('___')[-1]
                     arg_key_renamed = arg_key_no_namespace.replace('input_', '')
-                    renamings = [('energy_', 'edr_'), ('structure_', 'tpr_'), ('traj_', 'trr_')]
-                    for name1, name2 in renamings:
+                    for name1, name2 in renaming_conventions:
                         arg_key_renamed = arg_key_renamed.replace(name1, name2)
 
                     for out_key, out_format in format_matches:
@@ -198,7 +200,7 @@ def perform_edge_inference(args: argparse.Namespace,
             #print(f'inference i {i} y arg_key {arg_key}')
             return steps_i  # Short circuit
 
-        # Stop performing inference if the inference rule is 'block'
+        # Stop performing inference if the inference rule is 'break'
         if break_inference:
             break
 
@@ -230,9 +232,14 @@ def perform_edge_inference(args: argparse.Namespace,
                 out_tool = tool.cwl['outputs']
                 tool_out_formats = [out_val['format'] for out_key, out_val in out_tool.items() if 'format' in out_val]
 
+                # NOTE: Ideally, the second condition should really check that
+                # ALL required inputs for the intermediate tool match with the
+                # an element of out_formats. Since we cannot easily do that here,
+                # we need to tentatively insert tool into the AST and re-compile.
+                # However, that can easily fail (i.e. if there is one transitive
+                # match). See docs/algorithms.md for more details.
                 if in_format in tool_out_formats and out_format in tool_in_formats:
                     # We may have found a file format conversion.
-                    # We need to tentatively insert tool into the AST and re-compile
                     #print('tool_path, in_format, out_format:', tool_path, in_format, out_format)
                     conversions.append(tool_path)
 

@@ -36,7 +36,7 @@ steps:
   - cwl_watcher:
       in:
         #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
-        file_pattern: ' *prod.trr'
+        file_pattern: '*prod.trr' # This * is a glob wildcard, NOT an explicit edge!
         cwl_tool: analysis_realtime.yml
         max_times: '20'
         config:

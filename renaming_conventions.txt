@@ -1,0 +1,8 @@
+# Comments must be on their own line
+# The biobb CWL files do not always use consistent naming
+# conventions, so we need to perform some renamings here.
+# Eventually, the CWL files themselves should be fixed.
+
+energy_     edr_
+structure_  tpr_
+traj_       trr_

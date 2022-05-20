@@ -11,6 +11,7 @@ from . import auto_gen_header
 from . import ast
 from . import cli
 from . import compiler
+from . import inference
 from . import labshare
 from . import utils
 from .wic_types import Cwl, Yaml, Tool, Tools, YamlTree, GraphReps, GraphData
@@ -94,6 +95,10 @@ def main() -> None:
     utils.make_plugins_DAG(tools_cwl)
     yml_paths = get_yml_paths(Path(args.yml_dir))
     yaml_path = args.yaml
+
+    # Perform initialization (This is not ideal)
+    compiler.inference_rules = dict(utils.read_lines_pairs(Path('inference_rules.txt')))
+    inference.renaming_conventions = utils.read_lines_pairs(Path('renaming_conventions.txt'))
 
     # Inline ALL subworkflows.
     if args.cwl_inline_subworkflows:

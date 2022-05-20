@@ -3,32 +3,31 @@
 Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but users still need to explicitly specify how to connect the steps. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between steps, and it compiles to CWL for execution. The examples are chosen from classical molecular dynamics but like CWL, the software is general purpose and is not limited to any specific domain.
 
 ## Quick Start
+See the [installation guide](docs/installguide.md) for more details, but:
 ```
+git clone --recursive https://github.com/jfennick/workflow_inference_compiler.git
+conda create --name wic
+conda activate wic
+./conda_devtools.sh
 pip install .
-git submodule init && git submodule update
-wic --yaml examples/gromacs/tutorial.yml --cwl_dir . --cwl_output_intermediate_files True --cwl_run_local True
+wic --yaml examples/gromacs/tutorial.yml --cwl_dir . --cwl_run_local True
 ```
-Then, in another terminal, use the following command to view the plots in real-time.
-```
-python WatchdogPlots.py
-```
+That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the workflow, and run it locally.
 
 ![Workflow](examples/gromacs/tutorial.yml.gv.png)
+
+Then, in another terminal, use the following command to view the plots in real-time.
+```
+python RealtimePlots.py
+```
+
 ![Plots](examples/gromacs/plots.png)
 
-The Workflow Inference Compiler is a [Domain Specific Language](https://en.wikipedia.org/wiki/Domain-specific_language) (DSL) based on the [Common Workflow Language](https://www.commonwl.org). CWL is fantastic, but explicitly constructing the Directed Acyclic Graph (DAG) associated with a non-trivial workflow is not so simple. For example, the workflow shown above is based on the following [gromacs tutorial](http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl). Instead of writing raw CWL, you can write your workflows in a much simpler yml DSL.
+The Workflow Inference Compiler is a [Domain Specific Language](https://en.wikipedia.org/wiki/Domain-specific_language) (DSL) based on the [Common Workflow Language](https://www.commonwl.org). CWL is fantastic, but explicitly constructing the Directed Acyclic Graph (DAG) associated with a non-trivial workflow is not so simple. For example, the workflow shown above is based on the following [gromacs tutorial](http://mmb.irbbarcelona.org/webdev/slim/biobb/public/availability/tutorials/cwl). Instead of writing raw CWL, you can write your workflows in a much simpler yml DSL. For technical reasons edge inference is far from unique, so ***`users should always check that edge inference actually produces the intended DAG`***.
 
 ## Edge Inference
 
-The key feature is that in most cases, you do not need to specify any of the edges! They will be automatically inferred for you based on types, file formats, and naming conventions. The above command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the workflow, and run it locally.
-
-### Maths
-
-Every DAG has a [topological ordering](https://en.wikipedia.org/wiki/Topological_sorting). Since CWL workflows are DAGs, there must be an associated topological ordering. However, since the input yml DSL only contains a linear sequence of steps and does not contain any edge information, we merely have a [linear ordering](https://en.wikipedia.org/wiki/Total_order). The challenge is to promote the linear ordering to a topological ordering by inferring all of the edges. Since we are initially missing information this is far from unique, so ***`users should always check that edge inference actually produces the intended DAG`***.
-
-## Explicit Edges
-
-If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See examples/gromacs for a concrete example. Due to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!), these variables will need to be in quotes. (The notation is intended to be nearly identical, but instead of using `'*var'` to refer to the *contents* of `'&var'` it refers to the *path* to `'&var'`.)
+The key feature is that in most cases, you do not need to specify any of the edges! They will be automatically inferred for you based on types, file formats, and naming conventions. For more information, see the [user guide](docs/userguide.md#edge-inference-algorithm) If for some reason edge inference fails, there is a syntax for creating [explicit edges](docs/userguide.md#explicit-edges).
 
 ## Subworkflows
 

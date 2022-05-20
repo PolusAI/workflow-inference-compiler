@@ -18,7 +18,7 @@ from watchdog.events import FileSystemEvent, PatternMatchingEventHandler"""
 from .wic_types import GraphReps, Tools, YamlTree, Json, GraphData
 from .main import get_tools_cwl, get_yml_paths
 
-from . import ast, cli, compiler, utils
+from . import ast, cli, compiler, inference, utils
 
 
 def absolute_paths(json: Json, cachedir_path: Path) -> Json:
@@ -175,6 +175,10 @@ def main() -> None:
     cwl_dir = cachedir_path.parent
     tools_cwl = get_tools_cwl(cwl_dir)
     yml_paths = get_yml_paths(cwl_dir) # TODO: Use cwl_dir for now, but should be yml_dir
+    
+    # Perform initialization (This is not ideal)
+    compiler.inference_rules = dict(utils.read_lines_pairs(cachedir_path.parent / 'inference_rules.txt'))
+    inference.renaming_conventions = utils.read_lines_pairs(cachedir_path.parent / 'renaming_conventions.txt')
 
     """# Make paths in arguments absolute w.r.t the given directory. See below.
     args_vals_new = absolute_paths(args_vals, str(directory))
