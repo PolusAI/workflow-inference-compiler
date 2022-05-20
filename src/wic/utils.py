@@ -13,6 +13,20 @@ from .wic_types import GraphData, Json, Namespaces, NodeData, Yaml, RoseTree, Ya
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
 
+def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
+    lines = []
+    for line in open(filename, 'r').readlines():
+        if line.strip() == '':  # Skip blank lines
+            continue
+        if line.startswith('#'):  # Skip comment lines
+            continue
+        ls = line.split()
+        if not len(ls) == 2:
+            print(line)
+            raise Exception("Error! Line must contain exactly two entries!")
+        lines.append((ls[0], ls[1]))
+    return lines
+
 
 def step_name_str(yaml_stem: str, i: int, step_key: str) -> str:
     """Returns a string which uniquely and hierarchically identifies a step in a workflow
@@ -167,7 +181,7 @@ def graphdata_to_cytoscape(graphdata: GraphData) -> Json:
         nodes.append({'data': {'id': node, **attrs}})
     edges = []
     for (node1, node2, attrs) in list(graphdata.edges):
-        edges.append({'data': {'source': node1, 'target': node2, **attrs}}) # TODO: id?
+        edges.append({'data': {'source': node1, 'target': node2, **attrs}})
     return {'nodes': nodes, 'edges': edges}
 
 

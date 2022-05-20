@@ -2,7 +2,7 @@ import argparse
 import copy
 from pathlib import Path
 import subprocess as sub
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import json
 import graphviz
@@ -14,6 +14,10 @@ from .wic_types import Namespaces, Yaml, Tool, Tools, ExplicitEdgeDefs, Explicit
 
 # Use white for dark backgrounds, black for light backgrounds
 font_edge_color = 'white'
+
+# NOTE: This must be initialized in main.py and/or cwl_watcher.py
+inference_rules: Dict[str, str] = None # type: ignore
+
 
 def compile_workflow(yaml_tree_: YamlTree,
                      args: argparse.Namespace,
@@ -379,7 +383,10 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     # TODO: Show input node?
                 else:
                     raise Exception(f"Error! Multiple definitions of &{arg_val}!")
-            elif arg_val[0] == '*':
+            elif arg_val[0] == '*' and 'cwl_watcher' not in step_key:
+                # NOTE: Exclude cwl_watcher from explicit edge dereferences.
+                # Since cwl_watcher requires explicit filenames for globbing,
+                # we do not want to replace them with internal CWL dependencies!
                 arg_val = arg_val[1:]  # Remove *
                 if not explicit_edge_defs.get(arg_val):
                     if is_root:
@@ -455,8 +462,13 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     graph_init = subgraphs[len(nss_def_inits)]
                     # Let's use regular blue for explicit edges.
                     # Use constraint=false ?
-                    utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='white')
+                    utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
             else:
+                # NOTE: See comment above about excluding cwl_watcher from
+                # explicit edge dereferences.
+                if arg_val[0] == '*' and 'cwl_watcher' in step_key and 'file_pattern' not in arg_key:
+                    arg_val = arg_val[1:] # Remove *, except for file_pattern
+
                 inputs_workflow.update({in_name: in_dict})
                 in_dict = {**in_dict, 'value': arg_val}
                 inputs_file_workflow.update({in_name: in_dict})
@@ -560,11 +572,6 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     # Add inference rules annotations (i.e. for file format conversion)
                     conv_tool = tools[conversion]
                     conv_out_tool = conv_tool.cwl['outputs']
-                    # TODO: Add more inference rules
-                    inference_rules = {
-                        'edam:format_3881': 'skip', 'edam:format_3987': 'skip', # Amber, gromacs (zipped 3880) topology
-                        'edam:format_3878': 'block', 'edam:format_2033': 'block', # Amber, gromacs coordinates
-                    }
                     inference_rules_dict = dict([(out_key, inference_rules.get(out_val['format'], 'default')) for out_key, out_val in conv_out_tool.items() if 'format' in out_val])
                     keystr = f'({i+1}, {conversion})' # The yml file uses 1-based indexing
                     inf_dict = {'wic': {'inference': inference_rules_dict}}

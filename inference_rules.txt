@@ -1,0 +1,10 @@
+# Comments must be on their own line
+# TODO: Add more inference rules
+
+# Amber, gromacs (zipped 3880) topology
+edam:format_3881 continue
+edam:format_3987 continue
+
+# Amber, gromacs coordinates
+edam:format_3878 break
+edam:format_2033 break

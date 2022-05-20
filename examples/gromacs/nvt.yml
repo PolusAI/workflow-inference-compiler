@@ -20,22 +20,26 @@ steps:
             comm-grps: system
   - mdrun:
       in:
-        output_edr_path: 'nvt.edr'
+        output_edr_path: '&nvt.edr' # Explicit edge reference / anchor
+        # (This edge can be inferred, but made explicit for demonstration purposes.)
         #config: {use_gpu: True}
   - gmx_energy:
       in:
+        input_energy_path: '*nvt.edr' # Explicit edge dereference / alias
         config:
           terms: [Temperature]
-        output_xvg_path: 'temperature.xvg'
+        output_xvg_path: temperature.xvg
+# NOTE: explicit edges are not supported with cwl_watcher, and all filenames
+# must be globally unique!
   - cwl_watcher:
       in:
         #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
-        file_pattern: ' *nvt.edr'
+        file_pattern: '*nvt.edr' # This * is a glob wildcard, NOT an explicit edge!
         cwl_tool: gmx_energy
         max_times: '5'
         config:
           in:
-            input_energy_path: nvt.edr
+            input_energy_path: '*nvt.edr' # This * is automatically removed.
             config:
               terms: [Temperature]
             output_xvg_path: temperature.xvg
