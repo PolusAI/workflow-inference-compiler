@@ -81,7 +81,7 @@ def initialize_plots(nrows: int, ncols: int) -> Tuple[matplotlib.pyplot.Figure, 
     # The purpose of calling suptitle is to take up some blank space. suptitle
     # displays a title above all of the subplots, but NOT for the window itself.
     fig.suptitle('')
-    plt.get_current_fig_manager().set_window_title('Real-time Analysis Plots')
+    plt.get_current_fig_manager().set_window_title('Real-time Analysis Plots') # type: ignore
     fig.tight_layout()
     plt.subplots_adjust(left=0.05, wspace=0.24, bottom=0.05, hspace=0.24)
     plt.show(block=False) # type: ignore
