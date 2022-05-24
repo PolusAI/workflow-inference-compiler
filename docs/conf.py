@@ -57,7 +57,7 @@ myst_heading_anchors = 6
 # See https://github.com/executablebooks/MyST-Parser/blob/master/CHANGELOG.md#0170---2022-02-11
 
 autodoc_default_options = {
-    'members': True, # This works locally, but apparently not on readthedocs.
+    'members': True,
     'member-order': 'bysource',
     'special-members': '__init__',
     'undoc-members': True,
