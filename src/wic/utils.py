@@ -223,15 +223,15 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
     return steps_keys
 
 
-def extract_backend(yaml_tree_: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
+def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
     """Chooses a specific backend for a given CWL workflow step.
 
     The backends should be thought of as either 'exactly' identical, or at
     least the same high-level protocol but implemented with a different algorithm.
 
     Args:
-        yaml_tree_ (Yaml): A Yaml AST dict with sub-dicts for each backend.
-        yaml_path (Path): The filepath of yaml_tree_, only used for error reporting.
+        yaml_tree (Yaml): A Yaml AST dict with sub-dicts for each backend.
+        yaml_path (Path): The filepath of yaml_tree, only used for error reporting.
 
     Raises:
         Exception: If the steps: and/or backend: tags are not present.
@@ -239,7 +239,7 @@ def extract_backend(yaml_tree_: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, 
     Returns:
         Tuple[str, Yaml]: The Yaml AST dict of the chosen backend.
     """
-    yaml_tree = copy.deepcopy(yaml_tree_)
+    yaml_tree_copy = copy.deepcopy(yaml_tree)
     backend = ''
     if 'backends' in wic:
         if 'default_backend' in wic:
@@ -251,12 +251,12 @@ def extract_backend(yaml_tree_: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, 
         if backend not in wic['backends']:
             raise Exception(f'Error! No steps for backend {backend} in {yaml_path}!')
         steps = wic['backends'][backend]['steps']
-        yaml_tree.update({'steps': steps})
-    elif 'steps' in yaml_tree:
-        pass # steps = yaml_tree['steps']
+        yaml_tree_copy.update({'steps': steps})
+    elif 'steps' in yaml_tree_copy:
+        pass # steps = yaml_tree_copy['steps']
     else:
         raise Exception(f'Error! No backends and/or steps in {yaml_path}!')
-    return (backend, yaml_tree)
+    return (backend, yaml_tree_copy)
 
 
 def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Path]) -> List[Yaml]:

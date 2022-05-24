@@ -5,6 +5,13 @@ import networkx as nx
 
 # See https://mypy.readthedocs.io/en/stable/kinds_of_types.html#type-aliases
 
+# See https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#confval-autodoc_type_aliases
+# See https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html#confval-napoleon_type_aliases
+# The sphinx autodoc documentation claims type aliases can be added to
+# autodoc_type_aliases in docs/conf.py instead of showing their expansions.
+# However, I can't seem to get it to work.
+# TODO: Consider removing all type aliases in favor of classes.
+
 KV = Dict[str, Any]
 Cwl = KV
 Json = KV

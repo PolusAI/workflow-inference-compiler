@@ -16,7 +16,7 @@ There are several broad categories of workflow platforms; interested readers sho
 
 Our YAMl format inherits all of the advantages of other declarative workflow platforms, first and foremost that declarative workflows can be executed on a variety of platforms, from a laptop up to parallel clusters, cloud computing environments (e.g. AWS), and high performance computing environments.
 
-Declarative formats are more restrictive than writing workflows in a programming language (e.g. Python), but this is actually an advantage because declarative formats allow the compiler to safely perform powerful transformations for the user. (See [backend independence](userguide.md#backend-independence) / [automated file format conversions](userguide.md#automated-file-format-conversions)!)
+Declarative formats are more restrictive than writing workflows in a programming language (e.g. Python), but this is actually an advantage because declarative formats allow the compiler to safely perform powerful transformations for the user. (See [backend independence](userguide.md#backend-independence) / [automated file format conversions](userguide.md#automated-file-format-conversion--speculative-compilation)!)
 
 * No Walled Garden
 
