@@ -19,12 +19,12 @@ font_edge_color = 'white'
 inference_rules: Dict[str, str] = None # type: ignore
 
 
-def compile_workflow(yaml_tree_: YamlTree,
+def compile_workflow(yaml_tree_ast: YamlTree,
                      args: argparse.Namespace,
                      namespaces: Namespaces,
                      subgraphs_: List[GraphReps],
-                     explicit_edge_defs_: ExplicitEdgeDefs,
-                     explicit_edge_calls_: ExplicitEdgeCalls,
+                     explicit_edge_defs: ExplicitEdgeDefs,
+                     explicit_edge_calls: ExplicitEdgeCalls,
                      tools: Tools,
                      is_root: bool,
                      relative_run_path: bool) -> CompilerInfo:
@@ -32,7 +32,7 @@ def compile_workflow(yaml_tree_: YamlTree,
     See https://en.wikipedia.org/wiki/Fixed_point_(mathematics)
 
     Args:
-        yaml_tree_ (YamlTree): A tuple of name and yml AST
+        yaml_tree_ast (YamlTree): A tuple of name and yml AST
         args (Any): all of the other positional arguments for compile_workflow_once
         kwargs (Any): all of the other keyword arguments for compile_workflow_once
 
@@ -40,7 +40,7 @@ def compile_workflow(yaml_tree_: YamlTree,
         CompilerInfo: Contains the data associated with compiled subworkflows (in the Rose Tree) together with mutable cumulative environment information which needs to be passed through the recursion.
     """
     ast_modified = True
-    yaml_tree = yaml_tree_
+    yaml_tree = yaml_tree_ast
     # There ought to be at most one file format conversion between each step.
     # If everything is working correctly, we should thus reach the fixed point
     # in at most n-1 iterations. However, due to the possibility of bugs in the
@@ -49,14 +49,14 @@ def compile_workflow(yaml_tree_: YamlTree,
     iter = 0
     while ast_modified and iter < max_iters:
         subgraphs = copy.deepcopy(subgraphs_) # See comment below!
-        compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs, explicit_edge_defs_, explicit_edge_calls_, tools, is_root, relative_run_path)
+        compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs, explicit_edge_defs, explicit_edge_calls, tools, is_root, relative_run_path)
         node_data: NodeData = compiler_info.rose.data
         ast_modified = not (yaml_tree.yml == node_data.yml)
         if ast_modified:
             #import yaml
             #print(yaml.dump(node_data.yml))
             #print()
-            yaml_tree = YamlTree(yaml_tree_.name, node_data.yml)
+            yaml_tree = YamlTree(yaml_tree_ast.name, node_data.yml)
         iter += 1
 
     # Overwrite subgraphs_ element-wise
@@ -90,12 +90,12 @@ def compile_workflow(yaml_tree_: YamlTree,
     return compiler_info
 
 
-def compile_workflow_once(yaml_tree_: YamlTree,
+def compile_workflow_once(yaml_tree_ast: YamlTree,
                      args: argparse.Namespace,
                      namespaces: Namespaces,
                      subgraphs: List[GraphReps],
-                     explicit_edge_defs_: ExplicitEdgeDefs,
-                     explicit_edge_calls_: ExplicitEdgeCalls,
+                     explicit_edge_defs: ExplicitEdgeDefs,
+                     explicit_edge_calls: ExplicitEdgeCalls,
                      tools: Tools,
                      is_root: bool,
                      relative_run_path: bool) -> CompilerInfo:
@@ -103,12 +103,12 @@ def compile_workflow_once(yaml_tree_: YamlTree,
     Recursively compiles yml workflow definition ASTs to CWL file contents
 
     Args:
-        yaml_tree_ (YamlTree): A tuple of name and yml AST
+        yaml_tree_ast (YamlTree): A tuple of name and yml AST
         args (argparse.Namespace): The command line arguments
         namespaces (Namespaces): Specifies the path in the yml AST to the current subworkflow
         subgraphs (List[Graph]): The graphs associated with the parent workflows of the current subworkflow
-        explicit_edge_defs_ (ExplicitEdgeDefs): Stores the (path, value) of the explicit edge definition sites
-        explicit_edge_calls_ (ExplicitEdgeCalls): Stores the (path, value) of the explicit edge call sites
+        explicit_edge_defs (ExplicitEdgeDefs): Stores the (path, value) of the explicit edge definition sites
+        explicit_edge_calls (ExplicitEdgeCalls): Stores the (path, value) of the explicit edge call sites
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl(). yml files that have been compiled to CWL SubWorkflows are also added during compilation.
         is_root (bool): True if this is the root workflow
         relative_run_path (bool): Controls whether to use subdirectories or just one directory when writing the compiled CWL files to disk
@@ -120,10 +120,10 @@ def compile_workflow_once(yaml_tree_: YamlTree,
         CompilerInfo: Contains the data associated with compiled subworkflows (in the Rose Tree) together with mutable cumulative environment information which needs to be passed through the recursion.
     """
     # NOTE: Use deepcopy so that when we delete wic: we don't modify any call sites
-    (yaml_path, yaml_tree) = copy.deepcopy(yaml_tree_)
+    (yaml_path, yaml_tree) = copy.deepcopy(yaml_tree_ast)
     # We also want another copy of the original AST so that if we need to modify it,
     # we can return the modified AST to the call site and re-compile.
-    (yaml_path_orig, yaml_tree_orig) = copy.deepcopy(yaml_tree_)
+    (yaml_path_orig, yaml_tree_orig) = copy.deepcopy(yaml_tree_ast)
 
     print(' starting', ('  ' * len(namespaces)) + yaml_path)
 
@@ -161,12 +161,12 @@ def compile_workflow_once(yaml_tree_: YamlTree,
     vars_workflow_output_internal = []
 
     # Copy recursive explicit edge variable definitions and call sites.
-    # Unlike the originals which are mutably updated, these are returned unmodified
-    # so that we can test that compilation is embedding independent.
-    explicit_edge_defs = copy.deepcopy(explicit_edge_defs_)
-    explicit_edge_calls = copy.deepcopy(explicit_edge_calls_)
-    explicit_edge_defs_copy = copy.deepcopy(explicit_edge_defs_)
-    explicit_edge_calls_copy = copy.deepcopy(explicit_edge_calls_)
+    explicit_edge_defs_copy = copy.deepcopy(explicit_edge_defs)
+    explicit_edge_calls_copy = copy.deepcopy(explicit_edge_calls)
+    # Unlike the first copies which are mutably updated, these are returned
+    # unmodified so that we can test that compilation is embedding independent.
+    explicit_edge_defs_copy2 = copy.deepcopy(explicit_edge_defs)
+    explicit_edge_calls_copy2 = copy.deepcopy(explicit_edge_calls)
 
     # Collect recursive subworkflow data
     step_1_names = []
@@ -202,7 +202,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
             subgraph = GraphReps(subgraph_gv, subgraph_nx, graphdata)
 
             steps[i].update({step_key: {}}) # delete yml subtree
-            sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i], subgraphs + [subgraph], explicit_edge_defs, explicit_edge_calls, tools, False, relative_run_path)
+            sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i], subgraphs + [subgraph], explicit_edge_defs_copy, explicit_edge_calls_copy, tools, False, relative_run_path)
 
             sub_rose_tree = sub_compiler_info.rose
             rose_tree_list.append(sub_rose_tree)
@@ -243,8 +243,8 @@ def compile_workflow_once(yaml_tree_: YamlTree,
             inputs_namespaced = dict([(f'{step_name_i}___{k}', val) for k, val in sub_env_data.inputs_file_workflow.items()]) # _{step_key}_input___{k}
             inputs_file_workflow.update(inputs_namespaced)
             vars_workflow_output_internal += sub_env_data.vars_workflow_output_internal
-            explicit_edge_defs.update(sub_env_data.explicit_edge_defs)
-            explicit_edge_calls.update(sub_env_data.explicit_edge_calls)
+            explicit_edge_defs_copy.update(sub_env_data.explicit_edge_defs)
+            explicit_edge_calls_copy.update(sub_env_data.explicit_edge_calls)
 
         tool_i = tools[stem].cwl
         utils.make_tool_DAG(stem, tools[stem])
@@ -311,7 +311,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
         # files accordingly.)
         #print(args_required)
 
-        sub_args_provided = [arg for arg in args_required if arg in explicit_edge_calls]
+        sub_args_provided = [arg for arg in args_required if arg in explicit_edge_calls_copy]
         #print(sub_args_provided)
 
         label = step_key
@@ -370,16 +370,16 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                 arg_val = arg_val[1:]  # Remove &
                 #print('arg_key, arg_val', arg_key, arg_val)
                 # NOTE: There can only be one definition, but multiple call sites.
-                if not explicit_edge_defs.get(arg_val):
+                if not explicit_edge_defs_copy.get(arg_val):
                     # if first time encountering arg_val, i.e. if defining
                     inputs_workflow.update({in_name: in_dict})
                     in_dict = {**in_dict, 'value': arg_val}
                     inputs_file_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
-                    explicit_edge_defs.update({arg_val: (namespaces + [step_name_i], arg_key)})
+                    explicit_edge_defs_copy.update({arg_val: (namespaces + [step_name_i], arg_key)})
                     # Add a 'dummy' value to explicit_edge_calls, because
                     # that determines sub_args_provided when the recursion returns.
-                    explicit_edge_calls.update({in_name: (namespaces + [step_name_i], arg_key)})
+                    explicit_edge_calls_copy.update({in_name: (namespaces + [step_name_i], arg_key)})
                     # TODO: Show input node?
                 else:
                     raise Exception(f"Error! Multiple definitions of &{arg_val}!")
@@ -388,7 +388,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                 # Since cwl_watcher requires explicit filenames for globbing,
                 # we do not want to replace them with internal CWL dependencies!
                 arg_val = arg_val[1:]  # Remove *
-                if not explicit_edge_defs.get(arg_val):
+                if not explicit_edge_defs_copy.get(arg_val):
                     if is_root:
                         # TODO: Check this comment.
                         # Even if is_root, we don't want to raise an Exception
@@ -403,9 +403,9 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     steps[i][step_key]['in'][arg_key] = in_name
                     # Add a 'dummy' value to explicit_edge_calls anyway, because
                     # that determines sub_args_provided when the recursion returns.
-                    explicit_edge_calls.update({in_name: (namespaces + [step_name_i], arg_key)})
+                    explicit_edge_calls_copy.update({in_name: (namespaces + [step_name_i], arg_key)})
                 else:
-                    (nss_def_init, var) =  explicit_edge_defs[arg_val]
+                    (nss_def_init, var) =  explicit_edge_defs_copy[arg_val]
 
                     nss_def_embedded = var.split('___')[:-1]
                     nss_call_embedded = arg_key.split('___')[:-1]
@@ -434,7 +434,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                         inputs_workflow.update({in_name: in_dict})
                         steps[i][step_key]['in'][arg_key] = in_name
                         # Store explicit edge call site info up through the recursion.
-                        explicit_edge_calls.update({in_name: explicit_edge_defs[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
+                        explicit_edge_calls_copy.update({in_name: explicit_edge_defs_copy[arg_val]}) # {in_name, (namespaces + [step_name_i], var)} ?
                     elif len(nss_call_tails) == 1:
                         # TODO: Check this comment.
                         # The definition site recursion (only, if any) has completed
@@ -510,7 +510,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                 # we need to pass in the value from the definition site.
                 # Extract the stored defs namespaces from explicit_edge_calls.
                 # (See massive comment above.)
-                (nss_def_init, var) = explicit_edge_calls[arg_key]
+                (nss_def_init, var) = explicit_edge_calls_copy[arg_key]
 
                 nss_def_embedded = var.split('___')[:-1]
                 nss_call_embedded = arg_key.split('___')[:-1]
@@ -534,7 +534,7 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = in_name
                     # Store explicit edge call site info up through the recursion.
-                    explicit_edge_calls.update({in_name: explicit_edge_calls[arg_key]})
+                    explicit_edge_calls_copy.update({in_name: explicit_edge_calls_copy[arg_key]})
                 else:
                     # TODO: Check this comment.
                     # The definition site recursion (only, if any) has completed
@@ -585,9 +585,9 @@ def compile_workflow_once(yaml_tree_: YamlTree,
                     else:
                         yaml_tree_mod.update({'wic': {'steps': {keystr: inf_dict}}})
 
-                    node_data = NodeData(namespaces, yaml_stem, yaml_tree_mod, yaml_tree, {}, explicit_edge_defs_copy, explicit_edge_calls_copy, graph, inputs_workflow, '')
+                    node_data = NodeData(namespaces, yaml_stem, yaml_tree_mod, yaml_tree, {}, explicit_edge_defs_copy2, explicit_edge_calls_copy2, graph, inputs_workflow, '')
                     rose_tree = RoseTree(node_data, rose_tree_list)
-                    env_data = EnvData(inputs_file_workflow, vars_workflow_output_internal, explicit_edge_defs, explicit_edge_calls)
+                    env_data = EnvData(inputs_file_workflow, vars_workflow_output_internal, explicit_edge_defs_copy, explicit_edge_calls_copy)
                     compiler_info = CompilerInfo(rose_tree, env_data)
                     #node_data_dummy = NodeData(None, None, yaml_tree_mod, None, None, None, None, None, None, None)
                     #compiler_info_dummy = CompilerInfo(RoseTree(node_data_dummy, None), None)
@@ -663,9 +663,9 @@ def compile_workflow_once(yaml_tree_: YamlTree,
     print('finishing', ('  ' * len(namespaces)) + yaml_path)
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    node_data = NodeData(namespaces, yaml_stem, yaml_tree_orig, yaml_tree, yaml_inputs, explicit_edge_defs_copy, explicit_edge_calls_copy, graph, inputs_workflow, step_name_1)
+    node_data = NodeData(namespaces, yaml_stem, yaml_tree_orig, yaml_tree, yaml_inputs, explicit_edge_defs_copy2, explicit_edge_calls_copy2, graph, inputs_workflow, step_name_1)
     rose_tree = RoseTree(node_data, rose_tree_list)
-    env_data = EnvData(inputs_file_workflow, vars_workflow_output_internal, explicit_edge_defs, explicit_edge_calls)
+    env_data = EnvData(inputs_file_workflow, vars_workflow_output_internal, explicit_edge_defs_copy, explicit_edge_calls_copy)
     compiler_info = CompilerInfo(rose_tree, env_data)
     return compiler_info
 

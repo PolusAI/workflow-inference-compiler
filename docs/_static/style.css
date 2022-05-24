@@ -1,0 +1,10 @@
+/* Increase default width by 50% */
+div.document {
+    width: 1410px !important;
+}
+div.footer {
+    width: 1410px !important;
+}
+div.body {
+    max-width: 1410px !important;
+}

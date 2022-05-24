@@ -9,3 +9,5 @@ outdir/
 build/
 dist/
 *.egg-info/
+docs/_build/
+.DS_Store

@@ -6,7 +6,7 @@ Tooling is essential to maximizing a developer's productivity and to minimizing 
 
 ## MyPy Type Annotations
 
-The code makes extensive use of mypy type annotations for static analysis. Together with the mypy vscode extension, this gives developers IntelliSense code completion which is absolutely critical. For various reasons mypy isn't perfect, but it's infinitely better than nothing at all. Please read the detailed comments in [wic_types.py](../../src/wic/wic_types.py) for additional considerations w.r.t. [Algebraic Data Types](https://en.wikipedia.org/wiki/Algebraic_data_type).
+The code makes extensive use of mypy type annotations for static analysis. Together with the mypy vscode extension, this gives developers IntelliSense code completion which is absolutely critical. For various reasons mypy isn't perfect, but it's infinitely better than nothing at all. Please read the detailed comments in `wic_types.py` for additional considerations w.r.t. [Algebraic Data Types](https://en.wikipedia.org/wiki/Algebraic_data_type).
 
 ## Docstrings
 
