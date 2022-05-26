@@ -1,3 +1,4 @@
+import copy
 import glob
 import math
 from pathlib import Path
@@ -20,6 +21,14 @@ from watchdog.events import FileSystemEvent, PatternMatchingEventHandler"""
 
 
 def read_tabular_data(filename: Path) -> List[List[float]]:
+    """Reads a tabular data file, skipping comment lines.
+
+    Args:
+        filename (Path): The full path of the file to be read
+
+    Returns:
+        List[List[float]]: The file contents, with comment lines removed.
+    """
     lines = []
     for line in open(filename, 'r').readlines():
         if line.startswith('#'):  # Skip comment lines
@@ -33,14 +42,20 @@ data_glob: List[Tuple[Path, np.ndarray]] = []
 data_glob_changed: bool = False
 
 
-def store_tabular_data(path: Path, use_stem: bool = True) -> None:
+def store_tabular_data(filepath: Path, use_stem: bool = True) -> None:
+    """Reads the tabular data from filepath and stores it in-memory to be plotted asychronously.
+
+    Args:
+        filepath (Path): The tabular data file to be read and stored.
+        use_stem (bool, optional): Only store the filename (without extension). Defaults to True.
+    """
     # Declare global variables locally
     global data_glob
     global data_glob_changed
-    floats = read_tabular_data(path)
+    floats = read_tabular_data(filepath)
     
     if floats == []:
-        print('Skipping empty file', path)
+        print('Skipping empty file', filepath)
         return None
 
     # Check that the array is not ragged; each line must be the same length!
@@ -49,19 +64,19 @@ def store_tabular_data(path: Path, use_stem: bool = True) -> None:
     # When I manually check the files afterwards, the data is all present.
     lengths = [len(x) for x in floats]
     if not all([length == lengths[0] for length in lengths]):
-        print('Warning! Skipping ragged data in', path)
+        print('Warning! Skipping ragged data in', filepath)
         return None
 
     data = np.array(floats)
     if use_stem:
-        path = Path(path.stem)
+        filepath = Path(filepath.stem)
     for i in range(len(data_glob)):
         (p, data_old_) = data_glob[i]
-        if path == p:
-            data_glob[i] = (path, data)
+        if filepath == p:
+            data_glob[i] = (filepath, data)
             data_glob_changed = True
             return None
-    data_glob.append((path, data))
+    data_glob.append((filepath, data))
     data_glob_changed = True
     return None
 
@@ -105,12 +120,23 @@ labels = {
 
 
 def zscore(mean1: float, std1: float, mean2: float, std2: float) -> float:
+    # See https://en.wikipedia.org/wiki/Standard_score
     return abs(mean1 - mean2) / math.sqrt(std1**2 + std2**2)
 
 
-def cluster_intervals_zscore(intervals_: List[Tuple[int, int]], ys: List[float], zscore_cutoff: float = 1) -> List[List[Tuple[int, int]]]:
-    import copy
-    intervals: List[Tuple[int, int]] = copy.deepcopy(intervals_)
+def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: List[float], zscore_cutoff: float = 1) -> List[List[Tuple[int, int]]]:
+    """Performs additional zscore-distance-based clustering of timeseries data which has already been initially segmented using Change Point Detection (via the `ruptures` library).\n
+    The purpose of this extra step is to reduce the dependence of the clusters on the segmentation penalty threshold parameter.
+
+    Args:
+        intervals_ (List[Tuple[int, int]]): The indices which define the intervals in which ys has already been segmented.
+        ys (List[float]): The original timeseries data.
+        zscore_cutoff (float, optional): The test statistic threshold used to determine additional clustering. Defaults to 1.
+
+    Returns:
+        List[List[Tuple[int, int]]]: An updated list of intervals whose corresponding y-data are clustered w.r.t. the zscore distance.
+    """
+    intervals: List[Tuple[int, int]] = copy.deepcopy(intervals_0)
     intervals.sort(key=lambda x: x[1] - x[0], reverse=True) # length of interval
 
     ys_segmented: Dict[Tuple[int, int], List[float]] = {}
@@ -119,7 +145,7 @@ def cluster_intervals_zscore(intervals_: List[Tuple[int, int]], ys: List[float],
 
     # Greedily cluster intervals based on Z-score
     # It hopefully shouldn't matter, but start with the biggest intervals first
-    # (since more I.I.D. data should have smaller standard deviations).
+    # (since more I.I.D. data should have better-estimateo standard deviations).
     clusters_indices: List[List[Tuple[int, int]]] = [[intervals[0]]]
     clusters_stats: List[Tuple[float, float]] = [(np.mean(intervals[0]), np.std(intervals[0]))]
     for i1, i2 in intervals[1:]:
@@ -193,8 +219,6 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                 #print(ys)
 
                 interval_indices_clustered = [[(0, len(xs))]]
-                xs_segmented = [xs]
-                xs_segmented = [ys]
                 changepoints = []
                 min_size=10
                 if len(xs) > min_size:
@@ -348,6 +372,17 @@ def pause_no_show(interval: float) -> None:
 
 
 def file_watcher_glob(cachedir_path: Path, patterns: List[str], prev_files: Dict[str, float]) -> Dict[str, float]:
+    """Determines whether files (specified by the given glob patterns) have been either recently created or modified.\n
+    Note that this is a workaround due to an issue with using standard file-watching libraries.
+
+    Args:
+        cachedir_path (Path): The --cachedir directory of the main workflow.
+        patterns (List[str]): The glob patterns which specifies the files to be watched.
+        prev_files (Dict[str, float]): This should be the return value from the previous function call.
+
+    Returns:
+        Dict[str, float]: A dictionary containing the filepaths and last modification times.
+    """
     changed_files = {}
     file_patterns = [str(cachedir_path / f'**/{pattern}') for pattern in patterns]
     file_paths_all = [glob.glob(fp, recursive=True) for fp in file_patterns]

@@ -2,9 +2,11 @@ import argparse
 import sys
 
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
-parser.add_argument('--yaml', type=str, required=True,
+parser.add_argument('--yaml', type=str, required=(not '--generate_schemas_only' in sys.argv),
                     help='Yaml workflow file')
 
+parser.add_argument('--generate_schemas_only', type=bool, required=False,
+                    help='Generate schemas for the files in --cwl_dir and --yml_dir.')
 parser.add_argument('--cwl_dir', type=str, required=False, default='biobb',
                     help='Directory which contains the CWL CommandLineTools')
 parser.add_argument('--yml_dir', type=str, required=False, default='.',

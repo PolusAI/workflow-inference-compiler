@@ -279,6 +279,18 @@ def perform_edge_inference(args: argparse.Namespace,
 
 
 def get_inference_rules(wic: Yaml, step_key_parent: str) -> Dict[str, str]:
+    """Recursively traverses the wic: metadata annotation AST and extracts any inference rules.\n
+    See docs/userguide.md for more information.
+
+    Args:
+        wic (Yaml): The contents of the wic: metadata annotations tag (if any)
+        step_key_parent (str): The name of one of the steps in the current workflow.
+
+    Returns:
+        Dict[str, str]: A dictionary of the inference rules for the workflow step named step_key_parent.
+    """
+    # NOTE: Here, we simply return all inference rules. The call site then
+    # determines whether to apply any of the rules by doing a lookup.
     if 'steps' in wic.get('wic', {}):
         wic_steps = wic['wic']['steps']
         rules = {}
@@ -287,7 +299,7 @@ def get_inference_rules(wic: Yaml, step_key_parent: str) -> Dict[str, str]:
             namespace = utils.step_name_str(Path(step_key_parent).stem, step_num - 1, step_key)
             rules_child = get_inference_rules(wic_child, step_key)
             for rule_key, rule_val in rules_child.items():
-                rules[namespace + '___' + rule_key] = rule_val
+                rules[namespace + '___' + rule_key] = rule_val # Namespaceing
         return rules
     if 'inference' in wic.get('wic', {}):
         rules = wic['wic']['inference']

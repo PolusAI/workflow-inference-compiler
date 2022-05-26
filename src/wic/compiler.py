@@ -269,6 +269,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         else:
             steps[i] = {step_key: {'run': run_path}}
 
+        # TODO: Add label and doc tags
+
         # Generate intermediate file names between steps.
         # The inputs for a given step need to come from either
         # 1. the input.yaml file for the overall workflow (extract into separate yml file) or
@@ -671,6 +673,15 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
 
 def reindex_wic_steps(wic_steps: Yaml, index: int) -> Yaml:
+    """After inserting a step into a workflow, we need to increment the steps in the wic: metadata annotations tag whose original index is >= the given index.
+
+    Args:
+        wic_steps (Yaml): The steps: subtag of the wic: metadata annotations tag.
+        index (int): The (zero-based) index of the inserted workflow step.
+
+    Returns:
+        Yaml: The updated wic: steps: tag, with the appropriate indices incremented.
+    """
     wic_steps_reindexed = {}
     for keystr, val in wic_steps.items():
         (i, s) = utils.parse_int_string_tuple(keystr)

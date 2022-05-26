@@ -14,6 +14,17 @@ from .wic_types import GraphData, Json, Namespaces, NodeData, Yaml, RoseTree, Ya
 font_edge_color = 'white'
 
 def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
+    """Reads a whitespace-delimited file containing two paired entries per line (i.e. a serialized Dict).
+
+    Args:
+        filename (Path): The full path of the file to be read.
+
+    Raises:
+        Exception: If any non-blank, non-comment lines do not contain exactly two entries.
+
+    Returns:
+        List[Tuple[str, str]]: The file contents, with blank lines and comments removed.
+    """
     lines = []
     for line in open(filename, 'r').readlines():
         if line.strip() == '':  # Skip blank lines
@@ -137,6 +148,15 @@ def add_graph_edge(args: argparse.Namespace, graph: GraphReps, nss1: Namespaces,
 
 
 def flatten_graphdata(graphdata: GraphData, parent: str = '') -> GraphData:
+    """Flattens graphdata by recursively inlineing all subgraphs.
+
+    Args:
+        graphdata (GraphData): A data structure which contains recursive subgraphs and other metadata.
+        parent (str, optional): The name of the parent graph is encoded into the node attributes so that the subgraph information can be preserved after flattening. (Used for cytoscape) Defaults to ''.
+
+    Returns:
+        GraphData: A GraphDath instance with all of the recursive instances inlined
+    """
     subgraphs = [flatten_graphdata(subgraph, str(graphdata.name)) for subgraph in graphdata.subgraphs]
 
     # NOTE: Even though all of the following default list arguments are [],
@@ -176,6 +196,14 @@ def flatten_graphdata(graphdata: GraphData, parent: str = '') -> GraphData:
 
 
 def graphdata_to_cytoscape(graphdata: GraphData) -> Json:
+    """Converts a flattened graph into cytoscape json format.
+
+    Args:
+        graphdata (GraphData): A flattened GraphData instance
+
+    Returns:
+        Json: A Json object compatible with cytoscape.
+    """
     nodes = []
     for (node, attrs) in list(graphdata.nodes):
         nodes.append({'data': {'id': node, **attrs}})
@@ -507,7 +535,14 @@ def make_plugins_DAG(tools: Tools) -> None:
 
 
 def parse_int_string_tuple(string: str) -> Tuple[int, str]:
-    # Parses a string of the form '(int, string)'
+    """Parses a string of the form '(int, string)'
+
+    Args:
+        string (str): A string with the above encoding
+
+    Returns:
+        Tuple[int, str]: The parsed result
+    """
     string_no_parens = string.strip()[1:-1]
     (str1, str2) = string_no_parens.split(',')
     return (int(str1.strip()), str2.strip())
