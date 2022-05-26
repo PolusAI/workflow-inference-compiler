@@ -136,14 +136,14 @@ def wic_tag_schema() -> Json:
 
 
 def wic_main_schema(tools_cwl: Tools, yml_stems: List[str]) -> Json:
-    """The main schema which is used to validate *.yml files.
+    """The main schema which is used to validate yml files.
 
     Args:
         tools_cwl (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         yml_stems (List[str]): The names of the yml workflow definitions found using get_yml_paths()
 
     Returns:
-        Json: The main schema which is used to validate *.yml files.
+        Json: The main schema which is used to validate yml files.
     """
     # NOTE: Use oneOf to allow {}, i.e. no explicit arguments
     tools_refs: List[Json] = [{'oneOf': [{'$ref': f'tools/{tool}.json'}, {}]} for tool in tools_cwl]
@@ -189,14 +189,14 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str]) -> Json:
 
 
 def get_validator(tools_cwl: Tools, yml_stems: List[str], write_to_disk: bool = False) -> Draft202012Validator:
-    """Generates the main schema used to check the *.yml files for correctness and returns a validator.
+    """Generates the main schema used to check the yml files for correctness and returns a validator.
     
     Args:
         tools_cwl (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         yml_stems (List[str]): The names of the yml workflow definitions found using get_yml_paths()
     
     Returns:
-        Draft202012Validator: A validator which is used to check the *.yml files for correctness.
+        Draft202012Validator: A validator which is used to check the yml files for correctness.
     """
     schema_store = {}
     for name, tool in tools_cwl.items():

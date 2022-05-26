@@ -44,7 +44,7 @@ def gromacs_selection_groups() -> Json:
 
 
 def gromacs_mdp_schema() -> Json:
-    """The schema of all gromacs mdp options screen-scrapesd from\n
+    """The schema of all gromacs mdp options screen-scraped from\n
     https://manual.gromacs.org/documentation/current/user-guide/mdp-options.html
 
     Returns:
@@ -65,8 +65,7 @@ def gromacs_mdp_schema() -> Json:
         # Use heuristic to determine most number types
         # NOTE: This does not attempt to determine lists/arrays of numbers.
 
-        # TODO: Improve this regex: there should be at most one minus sign and one decimal place.
-        number_in_parens_pattern = '.*\\(-*[0-9]+\.*[0-9]*\\).*'
+        number_in_parens_pattern = '.*\\(-?[0-9]+\\.?[0-9]*\\).*'
         m = re.match(number_in_parens_pattern, desc)
 
         # TODO: Triple-check that all of the mdp keys which ought to be numeric
