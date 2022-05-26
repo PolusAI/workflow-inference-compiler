@@ -6,6 +6,7 @@ Scientific computing can be difficult in practice due to various complex softwar
 See the [installation guide](docs/installguide.md) for more details, but:
 ```
 git clone --recursive https://github.com/jfennick/workflow_inference_compiler.git
+cd workflow_inference_compiler
 conda create --name wic
 conda activate wic
 ./conda_devtools.sh

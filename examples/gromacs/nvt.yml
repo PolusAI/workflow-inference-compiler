@@ -6,7 +6,7 @@ steps:
             integrator: sd
             rvdw: 1.0
             rcoulomb: 1.0
-            coulombtype: pme
+            coulombtype: PME
             nsteps: 10000
             dt: 0.002
             tc-grps: system
@@ -16,7 +16,7 @@ steps:
             nstxout: 1000
             nstenergy: 10
             define: -DPOSRES
-            comm-mode: linear
+            comm-mode: Linear
             comm-grps: system
   - mdrun:
       in:

@@ -231,3 +231,7 @@ wic:
                     output_tpr_path: '&min.tpr'
 ...
 ```
+
+## Known Issues
+
+To avoid having to deal with relative file paths in YAML files, all CWL CommandLineTool and YAML filenames are currently required to be globally unique. In other words, you should not have both `yml_filename.yml` and `subdir/yml_filename.yml` within the root directory `--yml_dir` (and similar for \*.cwl). This will likely change in the future, but for now it is very convenient. If your YAML filenames are *not* unique, the message `Overwriting <filestem>` will be printed during compilation, referring to the fact that the in-memory representation (only) is being overwritten. That message may also be printed when performing [speculative compilation](dev/algorithms.md#speculative-compilation), but in that case it is expected and should not be considered a warning.
