@@ -69,14 +69,14 @@ def get_tools_cwl(cwl_dir: Path) -> Tools:
 
 def get_yml_paths(yml_dir: Path) -> Dict[str, Path]:
     """Uses glob() to find all of the yml workflow definition files within any subdirectory of yml_dir
-    NOTE: This function assumes all \*.yml files found are workflow definition files,
-    so do not mix regular \*.yml files and workflow files in the same root directory.
+    NOTE: This function assumes all yml files found are workflow definition files,
+    so do not mix regular yml files and workflow files in the same root directory.
 
     Args:
         yml_dir (Path): The subdirectory in which to search for yml files
 
     Returns:
-        Dict[str, Path]: A dict containing the filepath stem and filepath of each \*.yml file
+        Dict[str, Path]: A dict containing the filepath stem and filepath of each yml file
     """
     # Glob all of the yml files too, so we don't have to deal with relative paths.
     pattern_yml = str(yml_dir / '**/*.yml')
