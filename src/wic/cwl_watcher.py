@@ -80,7 +80,8 @@ def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
             root_yaml_tree = {'wic': wic_steps, 'steps': [{cwl_tool: None}]}
             #print('root_yaml_tree')
             #print(yaml.dump(root_yaml_tree))
-            yaml_tree_raw = ast.read_AST_from_disk(YamlTree(yaml_path, root_yaml_tree), yml_paths, tools_cwl, validator)
+            y_t = YamlTree(yaml_path, root_yaml_tree)
+            yaml_tree_raw = ast.read_ast_from_disk(y_t, yml_paths, tools_cwl, validator)
             yaml_tree = ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
             yml = yaml_tree.yml
         else:
@@ -194,6 +195,7 @@ def file_watcher_glob(cachedir_path: Path, pattern: str, prev_files: Dict[str, f
 
 
 def main() -> None:
+    """See docs/userguide.md#real-time-analysis--speculative-execution"""
     print('cwl_watcher sys.argv', sys.argv)
     # TODO: check that 1,3,5, are --cachedir_path, --file_pattern, --cwl_tool
     # or switch to argparse

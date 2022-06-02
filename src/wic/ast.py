@@ -14,7 +14,7 @@ from .wic_types import Namespaces, Yaml, Tools, YamlTree, YamlForest
 # TODO: Check for inline-ing subworkflows more than once and, if there are not
 # any modifications from any parent dsl args, use yaml anchors and aliases.
 # That way, we should be able to serialize back to disk without duplication.
-def read_AST_from_disk(yaml_tree_tuple: YamlTree,
+def read_ast_from_disk(yaml_tree_tuple: YamlTree,
                        yml_paths: Dict[str, Path],
                        tools: Tools,
                        validator: Draft202012Validator) -> YamlTree:
@@ -38,8 +38,11 @@ def read_AST_from_disk(yaml_tree_tuple: YamlTree,
     if 'backends' in wic['wic']:
         # Recursively expand each backend, but do NOT choose a specific backend.
         # Require back_name to be .yml? For now, yes.
-        backends_trees_dict = dict([read_AST_from_disk(YamlTree(back_name, back), yml_paths, tools, validator) for back_name, back in wic['wic']['backends'].items()])
-        yaml_tree['wic']['backends'] = backends_trees_dict
+        backends_trees = []
+        for back_name, back in wic['wic']['backends'].items():
+            backends_tree = read_ast_from_disk(YamlTree(back_name, back), yml_paths, tools, validator)
+            backends_trees.append(backends_tree)
+        yaml_tree['wic']['backends'] = dict(backends_trees)
         return YamlTree(yaml_name, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -61,7 +64,8 @@ def read_AST_from_disk(yaml_tree_tuple: YamlTree,
 
             validator.validate(sub_yaml_tree_raw)
 
-            (step_key_, sub_yml_tree) = read_AST_from_disk(YamlTree(step_key, sub_yaml_tree_raw), yml_paths, tools, validator)
+            y_t = YamlTree(step_key, sub_yaml_tree_raw)
+            (step_key_, sub_yml_tree) = read_ast_from_disk(y_t, yml_paths, tools, validator)
 
             # inine sub_yml_tree; Since we are using a top-level wic: key,
             # there shouldn't be any key collisions, but we should check.
@@ -102,8 +106,11 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
     if 'backends' in wic['wic']:
         # Recursively expand each backend, but do NOT choose a specific backend.
         # Require back_name to be .yml? For now, yes.
-        backends_trees_dict = dict([merge_yml_trees(YamlTree(back_name, back), wic_parent, tools) for back_name, back in wic['wic']['backends'].items()])
-        yaml_tree['wic']['backends'] = backends_trees_dict
+        backends_trees = []
+        for back_name, back in wic['wic']['backends'].items():
+            backends_tree = merge_yml_trees(YamlTree(back_name, back), wic_parent, tools)
+            backends_trees.append(backends_tree)
+        yaml_tree['wic']['backends'] = dict(backends_trees)
         return YamlTree(yaml_name, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -117,7 +124,8 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
             sub_yml_tree_initial = steps[i][step_key]
             sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
 
-            (step_key_, sub_yml_tree) = merge_yml_trees(YamlTree(step_key, sub_yml_tree_initial), sub_wic, tools)
+            y_t = YamlTree(step_key, sub_yml_tree_initial)
+            (step_key_, sub_yml_tree) = merge_yml_trees(y_t, sub_wic, tools)
             # Now mutably overwrite the self args with the merged args
             steps[i][step_key] = sub_yml_tree
 
@@ -160,7 +168,11 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
 
     wic = {'wic': yaml_tree.get('wic', {})}
     if 'backends' in wic['wic']:
-        backends_forest_dict = dict([(back_name, tree_to_forest(YamlTree(back_name, back), tools)) for back_name, back in wic['wic']['backends'].items()])
+        backends_forest_list = []
+        for back_name, back in wic['wic']['backends'].items():
+            backend_forest = (back_name, tree_to_forest(YamlTree(back_name, back), tools))
+            backends_forest_list.append(backend_forest)
+        backends_forest_dict = dict(backends_forest_list)
         return YamlForest(YamlTree(yaml_name, yaml_tree), backends_forest_dict)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -200,7 +212,10 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
     if 'backends' in wic['wic']:
         # Use yaml_name (instead of back_name) and do not append to namespace_init.
-        sub_namespaces_list = [get_inlineable_subworkflows(YamlTree(yaml_name, back), tools, namespaces_init) for back_name, back in wic['wic']['backends'].items()]
+        sub_namespaces_list = []
+        for back_name, back in wic['wic']['backends'].items():
+            sub_namespaces = get_inlineable_subworkflows(YamlTree(yaml_name, back), tools, namespaces_init)
+            sub_namespaces_list.append(sub_namespaces)
         return utils.flatten(sub_namespaces_list)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -217,7 +232,8 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
         if step_key in subkeys:
             sub_yml_tree = steps[i][step_key]
 
-            sub_namespaces = get_inlineable_subworkflows(YamlTree(step_key, sub_yml_tree), tools, namespaces_init + [step_name_i])
+            y_t = YamlTree(step_key, sub_yml_tree)
+            sub_namespaces = get_inlineable_subworkflows(y_t, tools, namespaces_init + [step_name_i])
             namespaces += sub_namespaces
 
     return namespaces
@@ -242,8 +258,11 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
     wic = {'wic': yaml_tree.get('wic', {})}
     if 'backends' in wic['wic']:
         # Pass namespaces through unmodified
-        backends_trees_dict = dict([inline_subworkflow(YamlTree(back_name, back), tools, namespaces) for back_name, back in wic['wic']['backends'].items()])
-        yaml_tree['wic']['backends'] = backends_trees_dict
+        backends_trees = []
+        for back_name, back in wic['wic']['backends'].items():
+            backend_tree = inline_subworkflow(YamlTree(back_name, back), tools, namespaces)
+            backends_trees.append(backend_tree)
+        yaml_tree['wic']['backends'] = dict(backends_trees)
         return YamlTree(yaml_name, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -267,7 +286,8 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
                     # subsequent steps in this workflow? No, except for wic: steps:
                 else:
                     # Strip off one initial namespace
-                    (step_key_, sub_yml_tree) = inline_subworkflow(YamlTree(step_key, sub_yml_tree), tools, namespaces[1:])
+                    y_t = YamlTree(step_key, sub_yml_tree)
+                    (step_key_, sub_yml_tree) = inline_subworkflow(y_t, tools, namespaces[1:])
                     # TODO: re-index wic: steps: ? We probably should, although
                     # inlineing after merging should not affect CWL args.
                     # Re-indexing could be tricky w.r.t. overloading.

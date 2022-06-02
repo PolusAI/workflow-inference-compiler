@@ -94,13 +94,13 @@ def gromacs_mdp_schema() -> Json:
         #print(result.prettify())
 
         prefix = 'mdp-'
-        id = result.dt['id'][len(prefix):] # remove prefix
+        name = result.dt['id'][len(prefix):] # remove prefix
         desc = result.dd
 
         # Escape html tags in description with double quotes for json serialization.
         # NOTE: This may be related to the following issue:
         # https://github.com/redhat-developer/vscode-yaml/issues/381
-        mdp[id] = {'type': gettype(id, str(desc)), 'description': f'"{desc}"'} # placeholder schema
+        mdp[name] = {'type': gettype(name, str(desc)), 'description': f'"{desc}"'} # placeholder schema
 
         # Look for sub-tags / enumerated values
         # <dl class="std mdp-value">
@@ -111,14 +111,14 @@ def gromacs_mdp_schema() -> Json:
         for subresult in subresultset:
             #print(subresult.prettify())
 
-            prefix = f'mdp-value-{id}-'
-            valueid = subresult.dt['id'][len(prefix):] # remove prefix
+            prefix = f'mdp-value-{name}-'
+            valuename = subresult.dt['id'][len(prefix):] # remove prefix
             valuedesc = subresult.dd
 
             # It looks like all the numeric types are at the root level.
             # i.e. we probably don't need gettype() here.
-            schema = {'type': gettype(valueid, str(valuedesc)), # 'title': '',
-                      'const': valueid, 'description': f'"{valuedesc}"'}
+            schema = {'type': gettype(valuename, str(valuedesc)), # 'title': '',
+                      'const': valuename, 'description': f'"{valuedesc}"'}
             values_schemas.append(schema)
 
         # Escape html tags in description with double quotes for json serialization.
@@ -126,15 +126,15 @@ def gromacs_mdp_schema() -> Json:
         # https://github.com/redhat-developer/vscode-yaml/issues/381
         if values_schemas != []:
             # NOTE: Use oneOf instead of enum so we can add descriptions to each value
-            mdp[id] = {'oneOf': values_schemas, 'description': f'"{desc}"'}
-            #mdp[id] = {'type': 'string', 'enum': [s['const'] for s in values_schemas]}
+            mdp[name] = {'oneOf': values_schemas, 'description': f'"{desc}"'}
+            #mdp[name] = {'type': 'string', 'enum': [s['const'] for s in values_schemas]}
 
         # Overwrite some cases that are handled incorrectly above
-        if id == 'nstlist':
-            mdp[id] = {'type': 'number', 'description': f'"{desc}"'}
-        if id == 'rot-fit-method0':
-            mdp[id] = {'type': 'string', 'enum': ['rmsd', 'norm', 'potential']}
-        if 'userint' in id or 'userreal' in id:
-            mdp[id] = {'type': 'number', 'description': f'"{desc}"'}
+        if name == 'nstlist':
+            mdp[name] = {'type': 'number', 'description': f'"{desc}"'}
+        if name == 'rot-fit-method0':
+            mdp[name] = {'type': 'string', 'enum': ['rmsd', 'norm', 'potential']}
+        if 'userint' in name or 'userreal' in name:
+            mdp[name] = {'type': 'number', 'description': f'"{desc}"'}
 
     return mdp

@@ -40,7 +40,12 @@ def remove_dollar(tree: Cwl) -> Cwl:
     return tree_no_dollar
 
 
-def print_request(request: requests.PreparedRequest) -> None:
+def pretty_print_request(request: requests.PreparedRequest) -> None:
+    """pretty prints a requests.PreparedRequest
+
+    Args:
+        request (requests.PreparedRequest): The request to be printed
+    """
     print('request.headers', request.headers)
     body = request.body
     if body is not None:
@@ -91,7 +96,7 @@ def upload_plugin(compute_url: str, access_token: str, tool: Cwl, name: str) -> 
         return '-1'
 
     if 'id' not in r_json:
-        print_request(response.request)
+        pretty_print_request(response.request)
         print('post response')
         print(r_json)
         raise Exception(f'Error! Labshare plugin upload failed for {name}.')
@@ -193,7 +198,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         j = r_json
         print(f"id {j.get('id')} class {j.get('class')} name {j.get('name')}")
         if 'id' not in r_json:
-            print_request(response.request)
+            pretty_print_request(response.request)
             print(r_json)
             raise Exception(f'Error! Labshare workflow upload failed for {yaml_stem}.')
         workflow_id = r_json['id'] # hash
@@ -222,7 +227,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         j = r_json
         print(f"id {j.get('id')} class {j.get('class')} name {j.get('name')}")
         if 'id' not in r_json:
-            print_request(response.request)
+            pretty_print_request(response.request)
             print(r_json)
             raise Exception(f'Error! Labshare workflow upload failed for {yaml_stem}.')
         workflow_id = r_json['id'] # hash
