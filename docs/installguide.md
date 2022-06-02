@@ -133,7 +133,7 @@ We also *highly* recommend you add the following line to settings.json, which "C
 },
 ```
 
-Using the default value of true, IntelliSense will additionally suggest any text whatsoever that you have previously entered in the current yml file (or other yml files). Of course, even if you select a bad suggestion, IntelliSense will immediately validate it against the schema and prominently highlight any invalid text with a red underline. But in this case it's better to simply disable that particular vscode feature.
+Using the default value of true, IntelliSense will additionally suggest any text whatsoever that you have previously entered in the current yml file (or other yml files). Of course, even if you select a bad suggestion, IntelliSense will immediately validate it against the schema and prominently highlight any invalid text with a red underline. Moreover, the very first thing the compiler does is use a separate validation implementation to check for errors in the yml files. But in this case it's better to simply disable that particular vscode feature.
 
 ### known issues
 

@@ -52,13 +52,13 @@ def gromacs_mdp_schema() -> Json:
     """
     gromacs_mdp_html_file = 'gromacs_mdp.html'
     if Path(gromacs_mdp_html_file).exists():
-        with open(gromacs_mdp_html_file, 'r') as f:
+        with open(gromacs_mdp_html_file, mode='r', encoding='utf-8') as f:
             html_content = f.read()
     else:
         mdp_url = 'https://manual.gromacs.org/documentation/current/user-guide/mdp-options.html'
         response = requests.get(mdp_url)
         html_content = response.text # cache this locally
-        with open(gromacs_mdp_html_file, 'w') as f:
+        with open(gromacs_mdp_html_file, mode='w', encoding='utf-8') as f:
             f.write(html_content)
 
     def gettype(key: str, desc: str) -> str:
@@ -103,7 +103,7 @@ def gromacs_mdp_schema() -> Json:
         mdp[id] = {'type': gettype(id, str(desc)), 'description': f'"{desc}"'} # placeholder schema
 
         # Look for sub-tags / enumerated values
-        # <dl class="std mdp-value"> 
+        # <dl class="std mdp-value">
         subsoup = BeautifulSoup(str(result), "html.parser")
         subresultset = subsoup.find_all(name='dl', attrs={'class': 'std mdp-value'})
 
@@ -117,12 +117,14 @@ def gromacs_mdp_schema() -> Json:
 
             # It looks like all the numeric types are at the root level.
             # i.e. we probably don't need gettype() here.
-            values_schemas.append({'type': gettype(valueid, str(valuedesc)), 'const': valueid, 'description': f'"{valuedesc}"'}) # 'title': '', 
+            schema = {'type': gettype(valueid, str(valuedesc)), # 'title': '',
+                      'const': valueid, 'description': f'"{valuedesc}"'}
+            values_schemas.append(schema)
 
         # Escape html tags in description with double quotes for json serialization.
         # NOTE: This may be related to the following issue:
         # https://github.com/redhat-developer/vscode-yaml/issues/381
-        if not values_schemas == []:
+        if values_schemas != []:
             # NOTE: Use oneOf instead of enum so we can add descriptions to each value
             mdp[id] = {'oneOf': values_schemas, 'description': f'"{desc}"'}
             #mdp[id] = {'type': 'string', 'enum': [s['const'] for s in values_schemas]}
@@ -134,5 +136,5 @@ def gromacs_mdp_schema() -> Json:
             mdp[id] = {'type': 'string', 'enum': ['rmsd', 'norm', 'potential']}
         if 'userint' in id or 'userreal' in id:
             mdp[id] = {'type': 'number', 'description': f'"{desc}"'}
-        
+
     return mdp

@@ -56,7 +56,7 @@ def read_AST_from_disk(yaml_tree_tuple: YamlTree,
                 raise Exception(f'Error! {yaml_path} does not exist or is not a .yml file.')
 
             # Load the high-level yaml sub workflow file.
-            with open(yaml_path, 'r') as y:
+            with open(yaml_path, mode='r', encoding='utf-8') as y:
                 sub_yaml_tree_raw: Yaml = yaml.safe_load(y.read())
 
             validator.validate(sub_yaml_tree_raw)
@@ -93,7 +93,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
 
     # Check for top-level yml dsl args
     wic_self = {'wic': yaml_tree.get('wic', {})}
-    wic = merge(wic_self, wic_parent, strategy=Strategy.TYPESAFE_REPLACE) # TYPESAFE_ADDITIVE ? 
+    wic = merge(wic_self, wic_parent, strategy=Strategy.TYPESAFE_REPLACE) # TYPESAFE_ADDITIVE ?
     # Here we want to ADD wic: as a top-level yaml tag.
     # In the compilation phase, we want to remove it.
     yaml_tree['wic'] = wic['wic']
@@ -125,7 +125,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
         # provided CWL args passed in from the parent, if any.
         # (At this point, any DSL args provided from the parent(s) should have
         # all of the initial yml tags removed, leaving only CWL tags remaining.)
-        if not (step_key in subkeys):
+        if step_key not in subkeys:
             clt_args = wic_steps.get(f'({i+1}, {step_key})', {})
             if 'wic' in clt_args:
                 # Do NOT add yml tags to the raw CWL!
@@ -209,7 +209,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
     # All subworkflows except backends are inlineable.
     inlineable = wic.get('inlineable', True)
-    namespaces = [namespaces_init] if inlineable and not (namespaces_init == []) else []
+    namespaces = [namespaces_init] if inlineable and namespaces_init != [] else []
 
     for i, step_key in enumerate(steps_keys):
         yaml_stem = Path(yaml_name).stem

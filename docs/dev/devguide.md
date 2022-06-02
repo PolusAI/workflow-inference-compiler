@@ -31,7 +31,7 @@ Developers should be very careful when using git submodules! The following links
 
 ### Bad User Inputs
 
-There is currently not a lot of error checking regarding sanitizing bad user inputs. For example, in the very near future we plan on formalizing the YAML schema and performing validation, but that is not implemented yet. I'm sure there are plenty of other ways in which users can crash the system, so we need to make an effort to find these cases and do more error checking.
+Although we now have a formal YAML schema and perform validation, I'm sure there are plenty of other ways in which users can crash the system, so we need to make an effort to find these cases and do more error checking.
 
 ### Uniqueness and Dict keys
 

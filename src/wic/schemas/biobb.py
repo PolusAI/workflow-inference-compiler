@@ -62,7 +62,8 @@ def biobb_selection_schema() -> Json:
 
     groups_schemas = [{'type': 'string', 'const': group, 'description': desc} for group, desc in gromacs_selection_groups().items()]
     # NOTE: Use oneOf instead of enum so we can add descriptions to each value
-    groups = {'oneOf': groups_schemas, 'description': '(“System”) Group where the rms will be performed. If input_index_path provided, check the file for the accepted values.'}
+    desc = '(“System”) Group where the rms will be performed. If input_index_path provided, check the file for the accepted values.'
+    groups = {'oneOf': groups_schemas, 'description': desc}
     #groups = {'type': 'string', 'enum': [s['const'] for s in groups_schemas]}
     # NOTE: This schema appears to trigger some kind of a bug in the vscode YAML
     # extension. Specifically, IntelliSense code completion will not work when
@@ -89,7 +90,7 @@ def biobb_gmx_energy_schema() -> Json:
     terms_list = ['Angle', 'Proper-Dih.', 'Improper-Dih.', 'LJ-14', 'Coulomb-14',
         'LJ-(SR)', 'Coulomb-(SR)', 'Coul.-recip.', 'Position-Rest.', 'Potential',
         'Kinetic-En.', 'Total-Energy', 'Temperature', 'Pressure', 'Constr.-rmsd',
-        'Box-X', 'Box-Y', 'Box-Z', 'Volume', 'Density', 'pV', 'Enthalpy', 'Vir-XX', 
+        'Box-X', 'Box-Y', 'Box-Z', 'Volume', 'Density', 'pV', 'Enthalpy', 'Vir-XX',
         'Vir-XY', 'Vir-XZ', 'Vir-YX', 'Vir-YY', 'Vir-YZ', 'Vir-ZX', 'Vir-ZY',
         'Vir-ZZ', 'Pres-XX', 'Pres-XY', 'Pres-XZ', 'Pres-YX', 'Pres-YY',
         'Pres-YZ', 'Pres-ZX', 'Pres-ZY', 'Pres-ZZ', 'Surf*SurfTen', 'Box-Vel-XX',
@@ -130,7 +131,8 @@ def biobb_solvate_schema() -> Json:
         Json: A schema for gromacs solvate options.
     """
     # See https://biobb-md.readthedocs.io/en/latest/gromacs.html#module-gromacs.solvate
-    shell = {'type': 'number', 'description': '(0.0) [0~100|0.1] Thickness in nanometers of optional water layer around solute.'}
+    desc = '(0.0) [0~100|0.1] Thickness in nanometers of optional water layer around solute.'
+    shell = {'type': 'number', 'description': desc}
 
     schema = default_schema()
     schema['properties'] = {'shell': shell,
@@ -145,9 +147,15 @@ def biobb_editconf_schema() -> Json:
         Json: A schema for gromacs editconf options.
     """
     # See https://biobb-md.readthedocs.io/en/latest/gromacs.html#module-gromacs.editconf
-    distance_to_molecule = {'type': 'number', 'description': '(1.0) [0~100|0.1] Distance of the box from the outermost atom in nm. ie 1.0nm = 10 Angstroms.'}
+    desc = '(1.0) [0~100|0.1] Distance of the box from the outermost atom in nm. ie 1.0nm = 10 Angstroms.'
+    distance_to_molecule = {'type': 'number', 'description': desc}
     box_vals = ['cubic', 'triclinic', 'dodecahedron', 'octahedron']
-    box_type = {'type': 'string', 'enum': box_vals, 'description': '(“cubic”) Geometrical shape of the solvent box. Values: cubic (rectangular box with all sides equal), triclinic (triclinic box), dodecahedron (rhombic dodecahedron), octahedron (truncated octahedron).'}
+    desc = """(“cubic”) Geometrical shape of the solvent box. Values:
+    cubic (rectangular box with all sides equal),
+    triclinic (triclinic box),
+    dodecahedron (rhombic dodecahedron),
+    octahedron (truncated octahedron)."""
+    box_type = {'type': 'string', 'enum': box_vals, 'description': desc}
     center_molecule = {'type': 'bolean', 'description': '(True) Center molecule in the box.'}
 
     schema = default_schema()
@@ -175,7 +183,7 @@ def biobb_mdrun_schema() -> Json:
     use_gpu = {'type': 'boolean', 'description': '(False) Use settings appropriate for GPU. Adds: -nb gpu -pme gpu'}
     gpu_id = {'type': 'string', 'description': '(None) List of unique GPU device IDs available to use.'}
     gpu_tasks = {'type': 'string', 'description': '(None) List of GPU device IDs, mapping each PP task on each node to a device.'}
-    
+
     schema = default_schema()
     schema['properties'] = {'mpi_bin': mpi_bin, 'mpi_np': mpi_np,
         'mpi_flags': mpi_flags, 'checkpoint_time': checkpoint_time,
@@ -199,11 +207,12 @@ def biobb_pdb2gmx_schema() -> Json:
               'gromos43a2', 'gromos54a7', 'gromos43a1', 'amberGS', 'gromos53a5',
               'amber99sb', 'amber03', 'amber99sb-ildn', 'oplsaa', 'amber94',
               'amber99sb-star-ildn-mut']
-    force_field = {'type': 'string', 'enum': ffvals, 'description': '(“amber99sb-ildn”) Force field to be used during the conversion.'}
+    desc = '(“amber99sb-ildn”) Force field to be used during the conversion.'
+    force_field = {'type': 'string', 'enum': ffvals, 'description': desc}
     ignh = {'type': 'boolean', 'description': '(False) Should pdb2gmx ignore the hydrogens in the original structure.'}
     his = {'type': 'string', 'description': '(None) Histidine protonation array.'}
     merge = {'type': 'boolean', 'description': '(False) Merge all chains into a single molecule.'}
-    
+
     schema = default_schema()
     schema['properties'] = {'water_type': water_type, 'force_field': force_field,
         'ignh': ignh, 'his': his, 'merge': merge,

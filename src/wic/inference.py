@@ -31,15 +31,19 @@ def perform_edge_inference(args: argparse.Namespace,
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         steps_keys (List[str]): The name of each step in the current CWL workflow
         yaml_stem (str): The name (filename without extension) of the current CWL workflow
-        i (int): The (zero-based) step number w.r.t. the current subworkflow. Since we are trying to infer inputs from previous outputs, this will not perform any inference (again, w.r.t. the current subworkflow) if i == 0.
+        i (int): The (zero-based) step number w.r.t. the current subworkflow.\n
+        Since we are trying to infer inputs from previous outputs, this will not\n
+        perform any inference (again, w.r.t. the current subworkflow) if i == 0.
         steps_i (KV): The i-th component of the steps: tag of the current CWL workflow
         arg_key (str): The name of the CWL input tag that needs a concrete input value inferred
         graph (GraphReps): A tuple of a GraphViz DiGraph and a networkx DiGraph
         is_root (bool): True if this is the root workflow (for debugging only)
         namespaces (Namespaces): Specifies the path in the AST of the current subworkflow
-        vars_workflow_output_internal (InternalOutputs): Keeps track of output variables which are internal to the root workflow, but not necessarily to subworkflows.
+        vars_workflow_output_internal (InternalOutputs): Keeps track of output\n
+        variables which are internal to the root workflow, but not necessarily to subworkflows.
         inputs_workflow (WorkflowInputs): Keeps track of CWL inputs: variables for the current workflow.
-        in_name_in_inputs_file_workflow (bool): Used to determine whether failure to find a match should be considered an error.
+        in_name_in_inputs_file_workflow (bool): Used to determine whether\n
+        failure to find a match should be considered an error.
         conversions (List[str]): If exact inference fails, a list of possible file format conversions is stored here.
         wic_steps (Yaml): The metadata associated with the given workflow.
 
@@ -85,7 +89,7 @@ def perform_edge_inference(args: argparse.Namespace,
         for out_key in out_keys:
             namespaces_embedded = out_key.split('___')
             namespace_emb_last = '' if len(namespaces_embedded) <= 1 else namespaces_embedded[:-1][-1]  # -2?
-            if break_inference and not namespace_emb_last == namespace_emb_last_break:
+            if break_inference and namespace_emb_last != namespace_emb_last_break:
                 break # Only break once the namespace changes, i.e. on the next step
             inference_rule = inference_rules.get(out_key, 'default')
             # Apply 'continue' rule before iteration, to prevent matching
@@ -211,7 +215,8 @@ def perform_edge_inference(args: argparse.Namespace,
     # solutions typically increases exponentially with the number of variables.
     # APE forces the user to manually choose which solution is correct. We want
     # to find unique solutions (if possible), so limit to n=1 inserted steps.
-    out_formats = [out_format for attempted_matches in attempted_matches_all for (out_key_, out_format) in attempted_matches]
+    out_formats = [out_format for attempted_matches in attempted_matches_all
+                              for (out_key_, out_format) in attempted_matches]
     #print('out_formats', out_formats)
     for in_format in in_formats:
         for out_format in out_formats:

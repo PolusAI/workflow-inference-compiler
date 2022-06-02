@@ -2,7 +2,7 @@ import argparse
 import sys
 
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
-parser.add_argument('--yaml', type=str, required=(not '--generate_schemas_only' in sys.argv),
+parser.add_argument('--yaml', type=str, required=('--generate_schemas_only' not in sys.argv),
                     help='Yaml workflow file')
 
 parser.add_argument('--generate_schemas_only', type=bool, required=False,
@@ -48,4 +48,4 @@ parser.add_argument('--graph_show_inputs', type=bool, required=False, default=Fa
 parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
                     help='Add nodes to the graph representing the workflow outputs.')
 parser.add_argument('--graph_inline_depth', type=int, required=False, default=sys.maxsize,
-                    help='Controls the depth of subgraphs which are displayed separately or positioned within the main graph.')
+                    help='Controls the depth of subgraphs which are displayed.')

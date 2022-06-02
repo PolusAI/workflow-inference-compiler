@@ -16,4 +16,8 @@ I am personally guilty of the occasional mega-commit, so I will strive to improv
 
 ## Testing and CI/CD
 
-Before pushing, please run `pytest -m 'not slow'` or preferably the full `pytest`.
+Before pushing, please run `pytest --cov -m 'not slow'` or preferably the full `pytest --cov`.
+
+## .gitignore
+
+We have a `.gitignore` file to prevent developers from accidentally pushing certain files. However, .gitignore files are somewhat fragile and should not really be relied upon. In other words, please avoid `git add *` and please use `git status` to check that you are *only* adding the specific files you intend to add.

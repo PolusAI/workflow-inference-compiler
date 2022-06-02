@@ -1,0 +1,22 @@
+# See https://pylint.pycqa.org/en/latest/user_guide/configuration/all-options.html
+
+[MAIN]
+
+# TODO: Add class and module docstrings.
+disable=missing-class-docstring, missing-module-docstring, dangerous-default-value, pointless-string-statement
+
+[FORMAT]
+
+# Regexp for a line that is allowed to be longer than the limit.
+# TODO: This is supposed to match URLs, but it isn't quite right
+ignore-long-lines=^\s*(# )?<?https?://\S+>?$
+
+# Maximum number of characters on a single line.
+max-line-length=120
+
+# Maximum number of lines in a module.
+max-module-lines=750
+
+# Good variable names which should always be accepted, separated by a comma
+# Default i,j,k,ex,Run,_
+good-names=i,j,k,ex,Run,_,x,y,f,r,m,am,e,s
