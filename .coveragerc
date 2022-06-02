@@ -1,0 +1,3 @@
+[report]
+# Increase this threshold as we increase coverage.
+fail_under = 60.00

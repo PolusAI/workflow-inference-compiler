@@ -1,4 +1,5 @@
 import argparse
+import copy
 from pathlib import Path
 from typing import Dict, List
 
@@ -84,11 +85,12 @@ def upload_plugin(compute_url: str, access_token: str, tool: Cwl, name: str) -> 
                              json = compute_plugin)
     r_json = response.json()
 
-    # {'error': {'statusCode': 422, 'name': 'UnprocessableEntityError', 'message': 'A Plugin with name pdb and version ... already exists.'}}
-    if (r_json.get('error', {}).get('statusCode', {}) == 422):
+    # {'error': {'statusCode': 422, 'name': 'UnprocessableEntityError',
+    # 'message': 'A Plugin with name pdb and version ... already exists.'}}
+    if r_json.get('error', {}).get('statusCode', {}) == 422:
         return '-1'
 
-    if ('id' not in r_json):
+    if 'id' not in r_json:
         print_request(response.request)
         print('post response')
         print(r_json)
@@ -135,7 +137,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
     yaml_stem = sub_node_data.name
     cwl_tree = sub_node_data.compiled_cwl
     yaml_inputs = sub_node_data.workflow_inputs_file
-    
+
     sub_rose_trees: Dict[str, RoseTree] = dict([(r.data.name, r) for r in rose_tree.sub_trees])
     #print(list(sub_rose_trees))
 
@@ -154,7 +156,6 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
 
     # Convert the compiled yaml file to json for labshare Compute.
     # Replace 'run' with plugin:id
-    import copy
     cwl_tree_run = copy.deepcopy(cwl_tree_no_dollar)
     for i, step_key in enumerate(steps_keys):
         stem = Path(step_key).stem

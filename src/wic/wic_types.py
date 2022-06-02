@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Tuple, NamedTuple
 
-import json
 import networkx as nx
 
 # See https://mypy.readthedocs.io/en/stable/kinds_of_types.html#type-aliases
@@ -57,9 +56,6 @@ class GraphData():
         self.subgraphs = subgraphs
         self.ranksame = ranksame
 
-    def toJSON(self) -> str: # For debugging
-        attrs = {'name': str(self.name), 'nodes': self.nodes, 'edges': self.edges, 'subgraphs': self.subgraphs, 'ranksame': self.ranksame}
-        return json.dumps(attrs, default=lambda o: o.__dict__, indent=2)
 
 # This groups together the classes which represent our graph.
 # Excluding --graph_inline_depth related code, all graph

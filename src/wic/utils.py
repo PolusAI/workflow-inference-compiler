@@ -26,7 +26,7 @@ def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
         List[Tuple[str, str]]: The file contents, with blank lines and comments removed.
     """
     lines = []
-    for line in open(filename, 'r').readlines():
+    for line in open(filename, mode='r', encoding='utf-8').readlines():
         if line.strip() == '':  # Skip blank lines
             continue
         if line.startswith('#'):  # Skip comment lines
@@ -112,7 +112,9 @@ def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, keyval: List[str]) -> 
     return add_yamldict_keyval(steps_i, step_key, 'out', keyval) # type: ignore
 
 
-def add_graph_edge(args: argparse.Namespace, graph: GraphReps, nss1: Namespaces, nss2: Namespaces, label: str, color: str = font_edge_color) -> None:
+def add_graph_edge(args: argparse.Namespace, graph: GraphReps,
+                   nss1: Namespaces, nss2: Namespaces,
+                   label: str, color: str = font_edge_color) -> None:
     """Adds edges to (all of) our graph representations, with the ability to
     collapse all nodes below a given depth to a single node.
 
@@ -152,7 +154,8 @@ def flatten_graphdata(graphdata: GraphData, parent: str = '') -> GraphData:
 
     Args:
         graphdata (GraphData): A data structure which contains recursive subgraphs and other metadata.
-        parent (str, optional): The name of the parent graph is encoded into the node attributes so that the subgraph information can be preserved after flattening. (Used for cytoscape) Defaults to ''.
+        parent (str, optional): The name of the parent graph is encoded into the node attributes so that\n
+        the subgraph information can be preserved after flattening. (Used for cytoscape) Defaults to ''.
 
     Returns:
         GraphData: A GraphDath instance with all of the recursive instances inlined
@@ -301,7 +304,7 @@ def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Path]) 
         List[Yaml]: The recursively inlined contents of the given yml workflow.
     """
     # Load the high-level yaml workflow file.
-    with open(Path(yaml_path), 'r') as y:
+    with open(Path(yaml_path), mode='r', encoding='utf-8') as y:
         yaml_tree: Yaml = yaml.safe_load(y.read())
 
     wic = yaml_tree.get('wic', {})
@@ -386,7 +389,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
             back_name = wic['wic']['backend']
         if back_name == '':
             print_forest(forest)
-            raise Exception(f'Error! No backend in yaml forest!\n')
+            raise Exception('Error! No backend in yaml forest!\n')
         yaml_tree_back: YamlTree = forest.sub_forests[back_name].yaml_tree
         step_1 = yaml_tree_back.yml['steps'][0]
         step_name_1 = list(step_1.keys())[0]
@@ -434,13 +437,13 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
     # Dump the compiled CWL file contents to disk.
     # Use sort_keys=False to preserve the order of the steps.
     yaml_content = yaml.dump(cwl_tree, sort_keys=False, line_break='\n', indent=2)
-    with open(path / filename_cwl, 'w') as w:
+    with open(path / filename_cwl, mode='w', encoding='utf-8') as w:
         w.write('#!/usr/bin/env cwl-runner\n')
         w.write(auto_gen_header)
         w.write(''.join(yaml_content))
 
     yaml_content = yaml.dump(yaml_inputs, sort_keys=False, line_break='\n', indent=2)
-    with open(path / filename_yml, 'w') as inp:
+    with open(path / filename_yml, mode='w', encoding='utf-8') as inp:
         inp.write(auto_gen_header)
         inp.write(yaml_content)
 

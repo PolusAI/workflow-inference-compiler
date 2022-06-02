@@ -35,10 +35,18 @@ We have a small number of integration / regression tests located in `tests/`. Th
 
 In addition to the above tests, we need to add some unit tests. Due to the highly recursive nature of the compilation algorithm, it has proven difficult to test functions in isolation. There will probably need to be some refactoring to facilitate this.
 
+### Code Coverage
+
+We are using the pytest-cov code coverage plugin to make sure our tests are exercising most of the code. See `.coveragerc` for details. To generate a coverage report, simply use the `--cov` flag as shown below.
+
 ## CI/CD
 
-Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `pytest`. Before pushing, please run `pytest -m 'not slow'` or preferably the full `pytest`.
+Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `pytest --cov`. Before pushing, please run `pytest --cov -m 'not slow'` or preferably the full `pytest --cov`.
 
-## Line Lengths
+## Linting
 
-I personally don't mind excessively long lines at all, but others may feel more strongly on this. Side-by-side diffs certainly look better with a maximum line length, but the occasional line wrap doesn't bother me. That said, I use `"python.formatting.blackArgs": ["--line-length", "120"],` in my `.vscode/settings.json`
+We use pylint to check the code for style, formatting, and common mistakes. See `.pylintrc` for our configuration. We will soon be adding pylint to the CI/CD.
+
+### Line Lengths
+
+We are currently using `max-line-length=120`, although there are still some cases where lines exceed that length. Some developers feel strongly about a hard maximum of 100 or even 80 characters; we can try to accomodate a lower limit as necessary.
