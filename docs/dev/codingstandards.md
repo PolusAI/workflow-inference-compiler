@@ -41,11 +41,11 @@ We are using the pytest-cov code coverage plugin to make sure our tests are exer
 
 ## CI/CD
 
-Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `pytest --cov`. Before pushing, please run `pytest --cov -m 'not slow'` or preferably the full `pytest --cov`.
+Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `mypy .`, `pylint src/ tests/`, and `pytest --cov`. Before pushing, please run `pytest --cov -m 'not slow'` or preferably the full `pytest --cov`.
 
 ## Linting
 
-We use pylint to check the code for style, formatting, and common mistakes. See `.pylintrc` for our configuration. We will soon be adding pylint to the CI/CD.
+We use pylint to check the code for style, formatting, and common mistakes. See `.pylintrc` for our configuration.
 
 ### Line Lengths
 

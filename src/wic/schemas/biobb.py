@@ -60,7 +60,10 @@ def biobb_selection_schema() -> Json:
     # See https://biobb-analysis.readthedocs.io/en/latest/gromacs.html#module-gromacs.gmx_rgyr
     xvg = {'type': 'str', 'enum': ['xmgrace', 'xmgr', 'none'], 'description': '(“none”) XVG plot formatting.'}
 
-    groups_schemas = [{'type': 'string', 'const': group, 'description': desc} for group, desc in gromacs_selection_groups().items()]
+    groups_schemas = []
+    for group, desc in gromacs_selection_groups().items():
+        g_s = {'type': 'string', 'const': group, 'description': desc}
+        groups_schemas.append(g_s)
     # NOTE: Use oneOf instead of enum so we can add descriptions to each value
     desc = '(“System”) Group where the rms will be performed. If input_index_path provided, check the file for the accepted values.'
     groups = {'oneOf': groups_schemas, 'description': desc}

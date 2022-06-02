@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 
 from . import utils
+from . import utils_cwl
 from .wic_types import Namespaces, KV, Yaml, Tools, WorkflowInputs, InternalOutputs, GraphReps
 
 # NOTE: This must be initialized in main.py and/or cwl_watcher.py
@@ -104,7 +105,7 @@ def perform_edge_inference(args: argparse.Namespace,
                 out_format = out_tool[out_key]['format']
                 out_dict['format'] = out_format
             if out_format == '':
-                print(f'Warning! No output format! Cannot possibly match!')
+                print('Warning! No output format! Cannot possibly match!')
                 print(f'out_key {out_key}')
             #print('out_key, out_format, rule', out_key, out_format, inference_rule)
             attempted_matches.append((out_key, out_format))
@@ -155,7 +156,9 @@ def perform_edge_inference(args: argparse.Namespace,
                             name_matches.append((out_key, out_format))
 
                     if len(name_matches) == 0:
-                        #print(f'Found multiple outputs with compatible types and formats (but no matching names) for input {arg_key}')
+                        #s = f"""Found multiple outputs with compatible types and formats
+                        #(but no matching names) for input {arg_key}"""
+                        #print(s)
                         #for m in format_matches:
                         #    print(m)
                         #print(f'Arbitrarily choosing the first match {format_matches[0][0]}')
@@ -171,7 +174,9 @@ def perform_edge_inference(args: argparse.Namespace,
                         out_key = name_matches[0][0]
                         #print('unique match', out_key)
                     else:
-                        #print(f'Found multiple outputs with compatible types and formats (and multiple matching names) for input {arg_key}')
+                        #s = f"""Found multiple outputs with compatible types and formats
+                        #(and multiple matching names) for input {arg_key}"""
+                        #print(s)
                         #for m in name_matches:
                         #    print(m)
                         #print(f'Arbitrarily choosing the first match {name_matches[0][0]}')
@@ -200,7 +205,7 @@ def perform_edge_inference(args: argparse.Namespace,
             utils.add_graph_edge(args, graph, nss1, nss2, label)
 
             arg_keyval = {arg_key: arg_val}
-            steps_i = utils.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
+            steps_i = utils_cwl.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
             #print(f'inference i {i} y arg_key {arg_key}')
             return steps_i  # Short circuit
 
@@ -232,7 +237,8 @@ def perform_edge_inference(args: argparse.Namespace,
                     continue
 
                 in_tool = tool.cwl['inputs']
-                tool_in_formats = utils.flatten([arg_val['format'] for arg_key, arg_val in in_tool.items() if 'format' in arg_val])
+                tool_in_formats = [arg_val['format'] for arg_key, arg_val in in_tool.items() if 'format' in arg_val]
+                tool_in_formats_flat = utils.flatten(tool_in_formats)
 
                 out_tool = tool.cwl['outputs']
                 tool_out_formats = [out_val['format'] for out_key, out_val in out_tool.items() if 'format' in out_val]
@@ -243,7 +249,7 @@ def perform_edge_inference(args: argparse.Namespace,
                 # we need to tentatively insert tool into the AST and re-compile.
                 # However, that can easily fail (i.e. if there is one transitive
                 # match). See docs/algorithms.md for more details.
-                if in_format in tool_out_formats and out_format in tool_in_formats:
+                if in_format in tool_out_formats and out_format in tool_in_formats_flat:
                     # We may have found a file format conversion.
                     #print('tool_path, in_format, out_format:', tool_path, in_format, out_format)
                     conversions.append(tool_path)
@@ -251,7 +257,8 @@ def perform_edge_inference(args: argparse.Namespace,
     match = False
     if not match:
         #print(f'inference i {i} n arg_key {arg_key}')
-        in_name = f'{step_name_i}___{arg_key}'  # Use triple underscore for namespacing so we can split later # {step_name_i}_input___{arg_key}
+        # Use triple underscore for namespacing so we can split later
+        in_name = f'{step_name_i}___{arg_key}' # {step_name_i}_input___{arg_key}
 
         # This just means we need to defer to the parent workflow.
         # There will actually be an error only if no parent supplies an
@@ -261,8 +268,8 @@ def perform_edge_inference(args: argparse.Namespace,
             # NOTE: The following print statement is a bit misleading because
             # we don't print out any attempted matches in the recursive case.
             print('number of attempted matches ', len(utils.flatten(attempted_matches_all)))
-            for am in attempted_matches_all:
-                for m in am:
+            for a_m in attempted_matches_all:
+                for m in a_m:
                     print(m)
 
         # Add an input name to this subworkflow (only). Do not add to
@@ -275,7 +282,7 @@ def perform_edge_inference(args: argparse.Namespace,
         inputs_workflow.update({in_name: in_dict})
 
         arg_keyval = {arg_key: in_name}
-        steps_i = utils.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
+        steps_i = utils_cwl.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
         return steps_i
 
     # Add an explicit return statement here so mypy doesn't complain.

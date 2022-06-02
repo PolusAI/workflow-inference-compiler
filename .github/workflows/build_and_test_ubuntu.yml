@@ -60,9 +60,16 @@ jobs:
       working-directory: ${{github.workspace}}
       run: python3 setup.py install
 
+    - name: Run MyPy
+      working-directory: ${{github.workspace}}
+      run: mypy .
+
+    - name: Run PyLint
+      working-directory: ${{github.workspace}}
+      # NOTE: See fail-under threshold in .pylintrc
+      run: pylint src/ tests/
+
     - name: Run PyTest
       working-directory: ${{github.workspace}}
+      # NOTE: See fail_under threshold in .coveragerc
       run: pytest --cov
-
-      # TODO: run mypy
-      # TODO: run pylint
