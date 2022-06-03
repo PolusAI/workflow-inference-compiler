@@ -52,7 +52,7 @@ def cwl_tool_schema(name: str, tool: Tool) -> Json:
 
         # Add type information, with exceptions
         valtype = valtype.replace('?', '')
-        if (not (valtype == '' or valtype == 'File') and # Json does not have a File type
+        if (not (valtype in ['', 'File']) and # Json does not have a File type
             not (key == 'config') and name in config_schemas):  # Exclude config schemas
             inputs_props[key]['type'] = valtype
 

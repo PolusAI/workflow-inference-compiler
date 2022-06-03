@@ -6,8 +6,8 @@ from typing import Dict, List
 import requests
 import yaml
 
+from . import __version__, utils
 from .wic_types import KV, Cwl, NodeData, RoseTree, Tools
-from . import utils, __version__
 
 
 def delete_previously_uploaded(args: argparse.Namespace, plugins_or_pipelines: str, name: str) -> None:
@@ -143,7 +143,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
     cwl_tree = sub_node_data.compiled_cwl
     yaml_inputs = sub_node_data.workflow_inputs_file
 
-    sub_rose_trees: Dict[str, RoseTree] = dict([(r.data.name, r) for r in rose_tree.sub_trees])
+    sub_rose_trees: Dict[str, RoseTree] = {r.data.name: r for r in rose_tree.sub_trees}
     #print(list(sub_rose_trees))
 
     steps = cwl_tree['steps']

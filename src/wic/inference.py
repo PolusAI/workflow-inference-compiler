@@ -1,13 +1,13 @@
 import argparse
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
-from . import utils
-from . import utils_cwl
-from .wic_types import Namespaces, KV, Yaml, Tools, WorkflowInputs, InternalOutputs, GraphReps
+from . import utils, utils_cwl
+from .wic_types import (KV, GraphReps, InternalOutputs, Namespaces, Tools,
+                        WorkflowInputs, Yaml)
 
 # NOTE: This must be initialized in main.py and/or cwl_watcher.py
-renaming_conventions: List[Tuple[str, str]] = None # type: ignore
+renaming_conventions: List[Tuple[str, str]] = []
 
 
 def perform_edge_inference(args: argparse.Namespace,

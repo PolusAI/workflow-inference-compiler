@@ -37,7 +37,8 @@ parser.add_argument('--cachedir', type=str, required=False, default='cachedir',
 parser.add_argument('--compute_url', type=str, default='http://compute.ci.aws.labshare.org',
                     help='The URL associated with the labshare slurm driver. Required for --cwl_run_slurm')
 parser.add_argument('--compute_access_token', type=str, required=('--cwl_run_slurm' in sys.argv),
-                    help='The access_token used for authentication. Required for --cwl_run_slurm For now, get this manually from https://a-qa.labshare.org/')
+                    help="""The access_token used for authentication. Required for --cwl_run_slurm
+                    For now, get this manually from https://a-qa.labshare.org/""")
 
 parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
                     help='Label the graph edges with the name of the intermediate input/output.')
@@ -49,3 +50,5 @@ parser.add_argument('--graph_show_outputs', type=bool, required=False, default=F
                     help='Add nodes to the graph representing the workflow outputs.')
 parser.add_argument('--graph_inline_depth', type=int, required=False, default=sys.maxsize,
                     help='Controls the depth of subgraphs which are displayed.')
+parser.add_argument('--graph_dark_theme', type=bool, default=False,
+                    help='Changees the color of the fonts and edges from white to black.')

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Tuple
 
 import networkx as nx
 

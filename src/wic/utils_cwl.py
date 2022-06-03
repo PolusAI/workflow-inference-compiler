@@ -3,10 +3,8 @@ from pathlib import Path
 from typing import Dict, List
 
 from . import utils
-from .wic_types import Namespaces, Yaml, WorkflowOutputs, InternalOutputs, GraphReps, Tools
-
-# Use white for dark backgrounds, black for light backgrounds
-font_edge_color = 'white'
+from .wic_types import (GraphReps, InternalOutputs, Namespaces, Tools,
+                        WorkflowOutputs, Yaml)
 
 
 def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys: List[str], subkeys: List[str]) -> None:
@@ -57,9 +55,11 @@ def add_yamldict_keyval(steps_i: Yaml, step_key: str, in_out: str, keyval: Yaml)
     return steps_i
 
 def add_yamldict_keyval_in(steps_i: Yaml, step_key: str, keyval: Yaml) -> Yaml:
+    """add_yamldict_keyval partially applied with in_out='in' """
     return add_yamldict_keyval(steps_i, step_key, 'in', keyval)
 
 def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, keyval: List[str]) -> Yaml:
+    """add_yamldict_keyval partially applied with in_out='out' """
     return add_yamldict_keyval(steps_i, step_key, 'out', keyval) # type: ignore
 
 
@@ -104,11 +104,13 @@ def get_workflow_outputs(args: argparse.Namespace,
             # Avoid duplicating intermediate outputs in GraphViz
             out_key_no_namespace = out_key.split('___')[-1]
             if args.graph_show_outputs:
-                case1 = (tool_i['class'] == 'Workflow') and (not out_key in [var.replace('/', '___') for var in vars_workflow_output_internal])
+                vars_nss = [var.replace('/', '___') for var in vars_workflow_output_internal]
+                case1 = (tool_i['class'] == 'Workflow') and (not out_key in vars_nss)
                 # Avoid duplicating outputs from subgraphs in parent graphs.
                 output_node_name = '___'.join(namespaces + [step_name_i, out_key])
+                lengths_off_by_one = (len(step_node_name.split('___')) + 1 == len(output_node_name.split('___')))
                 # TODO: check is_root here
-                case1 = case1 and not is_root and (len(step_node_name.split('___')) + 1 == len(output_node_name.split('___')))
+                case1 = case1 and not is_root and lengths_off_by_one
                 case2 = (tool_i['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
                 if case1 or case2:
                     graph_gv = graph.graphviz
@@ -117,8 +119,10 @@ def get_workflow_outputs(args: argparse.Namespace,
                     attrs = {'label': out_key_no_namespace, 'shape': 'box',
                              'style': 'rounded, filled', 'fillcolor': 'lightyellow'}
                     graph_gv.node(output_node_name, **attrs)
+                    font_edge_color = 'black' if args.graph_dark_theme else 'white'
                     if args.graph_label_edges:
-                        graph_gv.edge(step_node_name, output_node_name, color=font_edge_color, label=out_key_no_namespace)  # Is labeling necessary?
+                        graph_gv.edge(step_node_name, output_node_name, color=font_edge_color,
+                                      label=out_key_no_namespace)  # Is labeling necessary?
                     else:
                         graph_gv.edge(step_node_name, output_node_name, color=font_edge_color)
                     graph_nx.add_node(output_node_name)
