@@ -1,24 +1,22 @@
 import argparse
 import copy
-from pathlib import Path
+import json
 import subprocess as sub
+from pathlib import Path
 from typing import Dict, List
 
-import json
 import graphviz
-import networkx  as nx
+import networkx as nx
 import yaml
 
-from . import inference
-from . import utils
-from . import utils_cwl
-from .wic_types import Namespaces, Yaml, Tool, Tools, ExplicitEdgeDefs, ExplicitEdgeCalls, CompilerInfo, WorkflowInputsFile, WorkflowOutputs, InternalOutputs, GraphReps, YamlTree, RoseTree, NodeData, EnvData, GraphData
-
-# Use white for dark backgrounds, black for light backgrounds
-font_edge_color = 'white'
+from . import inference, utils, utils_cwl
+from .wic_types import (CompilerInfo, EnvData, ExplicitEdgeCalls,
+                        ExplicitEdgeDefs, GraphData, GraphReps, Namespaces,
+                        NodeData, RoseTree, Tool, Tools, WorkflowInputsFile,
+                        Yaml, YamlTree)
 
 # NOTE: This must be initialized in main.py and/or cwl_watcher.py
-inference_rules: Dict[str, str] = None # type: ignore
+inference_rules: Dict[str, str] = {}
 
 
 def compile_workflow(yaml_tree_ast: YamlTree,
@@ -53,9 +51,11 @@ def compile_workflow(yaml_tree_ast: YamlTree,
     i = 0
     while ast_modified and i < max_iters:
         subgraphs = copy.deepcopy(subgraphs_) # See comment below!
-        compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs, explicit_edge_defs, explicit_edge_calls, tools, is_root, relative_run_path)
+        compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs,
+                                              explicit_edge_defs, explicit_edge_calls,
+                                              tools, is_root, relative_run_path)
         node_data: NodeData = compiler_info.rose.data
-        ast_modified = not (yaml_tree.yml == node_data.yml)
+        ast_modified = not yaml_tree.yml == node_data.yml
         if ast_modified:
             #import yaml
             #print(yaml.dump(node_data.yml))
@@ -81,11 +81,11 @@ def compile_workflow(yaml_tree_ast: YamlTree,
     # we are only using the networkx graphs to do an isomorphism check in the
     # regression tests, in which case identical duplication will not matter.
     for i, subgraph_ in enumerate(subgraphs_):
-        subgraphs_[i].graphviz.body = subgraphs[i].graphviz.body
-        subgraphs_[i].graphdata.name = subgraphs[i].graphdata.name
-        subgraphs_[i].graphdata.nodes = subgraphs[i].graphdata.nodes
-        subgraphs_[i].graphdata.edges = subgraphs[i].graphdata.edges
-        subgraphs_[i].graphdata.subgraphs = subgraphs[i].graphdata.subgraphs
+        subgraph_.graphviz.body = subgraphs[i].graphviz.body
+        subgraph_.graphdata.name = subgraphs[i].graphdata.name
+        subgraph_.graphdata.nodes = subgraphs[i].graphdata.nodes
+        subgraph_.graphdata.edges = subgraphs[i].graphdata.edges
+        subgraph_.graphdata.subgraphs = subgraphs[i].graphdata.subgraphs
 
     if i == max_iters:
         print(yaml.dump(node_data.yml))
@@ -219,7 +219,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             sub_node_data: NodeData = sub_rose_tree.data
             sub_env_data = sub_compiler_info.env
 
-            ast_modified = not (sub_yaml_tree.yml == sub_node_data.yml)
+            ast_modified = not sub_yaml_tree.yml == sub_node_data.yml
             if ast_modified:
                 # Propagate the updated yaml_tree (and wic: tags) upwards.
                 # Since we already called ast.merge_yml_trees() before initally
@@ -261,7 +261,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             explicit_edge_calls_copy.update(sub_env_data.explicit_edge_calls)
 
         tool_i = tools[stem].cwl
-        utils.make_tool_dag(stem, tools[stem])
+        utils.make_tool_dag(stem, tools[stem], args.graph_dark_theme)
 
         # Add run tag, using relative or flat-directory paths
         # NOTE: run: path issues were causing test_cwl_embedding_independence()
@@ -311,13 +311,13 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or
                                                             in_tool[arg]['type'][-1] == '?')]
         elif tool_i['class'] == 'Workflow':
-            args_required = [arg for arg in in_tool]
+            args_required = list(in_tool)
 
             # Add the inputs. For now, assume that all sub-workflows have been
             # auto-generated from a previous application of this script, and
             # thus that all of their transitive inputs have been satisfied.
             # (i.e. simply combine the input yml files using the cat command.)
-            steps[i][step_key]['in'] = dict([(key, key) for key in args_required])
+            steps[i][step_key]['in'] = {key: key for key in args_required}
         else:
             raise Exception('Unknown class', tool_i['class'])
 
@@ -497,6 +497,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     input_node_name = '___'.join(namespaces + [step_name_i, arg_key])
                     attrs = {'label': arg_key, 'shape': 'box', 'style': 'rounded, filled', 'fillcolor': 'lightgreen'}
                     graph_gv.node(input_node_name, **attrs)
+                    font_edge_color = 'black' if args.graph_dark_theme else 'white'
                     graph_gv.edge(input_node_name, step_node_name, color=font_edge_color)
                     graph_nx.add_node(input_node_name)
                     graph_nx.add_edge(input_node_name, step_node_name)
@@ -628,7 +629,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         for out_key, out_dict in tool_i['outputs'].items():
             out_keyvals[out_key] = {'type': out_dict['type'], 'format': out_dict['format']}
             #print(out_key, out_keyvals[out_key])
-        if out_keyvals == {}: # FYI this should never happen
+        if not out_keyvals: # FYI out_keyvals should never be {}
             print(f'Error! no outputs for step {step_key}')
         outputs_workflow.append(out_keyvals)
 
@@ -653,7 +654,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
-    workflow_outputs = utils_cwl.get_workflow_outputs(args, namespaces, is_root, yaml_stem, steps, outputs_workflow, vars_workflow_output_internal, graph, tools, step_node_name)
+    workflow_outputs = utils_cwl.get_workflow_outputs(args, namespaces, is_root, yaml_stem,
+        steps, outputs_workflow, vars_workflow_output_internal, graph, tools, step_node_name)
     yaml_tree.update({'outputs': workflow_outputs})
 
     # Finally, rename the steps to be unique
@@ -689,7 +691,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     if args.cwl_validate:
         print(f'Validating {yaml_stem}.cwl ...')
         cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
-        sub.run(cmd)
+        # Do we want to check here and immediately fail?
+        # The root workflow will be validated anyway.
+        sub.run(cmd, check=False)
 
     print('finishing', ('  ' * len(namespaces)) + yaml_path)
     # Note: We do not necessarily need to return inputs_workflow.

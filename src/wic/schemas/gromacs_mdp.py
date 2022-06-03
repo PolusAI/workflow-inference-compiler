@@ -22,7 +22,8 @@ def gromacs_selection_groups() -> Json:
         'MainChain': 'protein main chain atoms: N; C-alpha; C and O; including oxygens in C-terminus',
         'MainChain+Cb': 'protein main chain atoms including C-beta',
         'MainChain+H': 'protein main chain atoms including backbone amide hydrogens and hydrogens on the N-terminus',
-        'SideChain': 'protein side chain atoms: that is all atoms except N; C-alpha; C; O; backbone amide hydrogens and oxygens in C-terminus and hydrogens on the N-terminus',
+        'SideChain': """protein side chain atoms: that is all atoms except N; C-alpha; C; O;
+        backbone amide hydrogens and oxygens in C-terminus and hydrogens on the N-terminus""",
         'SideChain-H': 'protein side chain atoms excluding all hydrogens',
         'Prot-Masses': 'protein atoms excluding dummy masses',
         'non-Protein': 'all non-protein atoms',
@@ -81,8 +82,7 @@ def gromacs_mdp_schema() -> Json:
 
         if m or key in explicit:
             return 'number'
-        else:
-            return 'string'
+        return 'string'
 
     mdp: Json = {}
 
@@ -124,7 +124,7 @@ def gromacs_mdp_schema() -> Json:
         # Escape html tags in description with double quotes for json serialization.
         # NOTE: This may be related to the following issue:
         # https://github.com/redhat-developer/vscode-yaml/issues/381
-        if values_schemas != []:
+        if len(values_schemas) > 0:
             # NOTE: Use oneOf instead of enum so we can add descriptions to each value
             mdp[name] = {'oneOf': values_schemas, 'description': f'"{desc}"'}
             #mdp[name] = {'type': 'string', 'enum': [s['const'] for s in values_schemas]}

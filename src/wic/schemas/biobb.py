@@ -1,5 +1,5 @@
 from ..wic_types import Json
-from .gromacs_mdp import gromacs_selection_groups, gromacs_mdp_schema
+from .gromacs_mdp import gromacs_mdp_schema, gromacs_selection_groups
 
 # The following schema are used to provide IntelliSense code completion for
 # the biob config: tags. The CWL tools that appear in the examples/ have been
@@ -24,6 +24,7 @@ def default_schema(url: bool = False) -> Json:
 
 
 def biobb_container_schema() -> Json:
+    # pylint: disable=line-too-long
     """A schema for common container-related options.
 
     Returns:
@@ -65,7 +66,8 @@ def biobb_selection_schema() -> Json:
         g_s = {'type': 'string', 'const': group, 'description': desc}
         groups_schemas.append(g_s)
     # NOTE: Use oneOf instead of enum so we can add descriptions to each value
-    desc = '(“System”) Group where the rms will be performed. If input_index_path provided, check the file for the accepted values.'
+    desc = """(“System”) Group where the rms will be performed.
+    If input_index_path provided, check the file for the accepted values."""
     groups = {'oneOf': groups_schemas, 'description': desc}
     #groups = {'type': 'string', 'enum': [s['const'] for s in groups_schemas]}
     # NOTE: This schema appears to trigger some kind of a bug in the vscode YAML
@@ -169,6 +171,7 @@ def biobb_editconf_schema() -> Json:
 
 
 def biobb_mdrun_schema() -> Json:
+    # pylint: disable=line-too-long
     """A schema for gromacs mdrun options.
 
     Returns:

@@ -1,10 +1,10 @@
 import glob
 import json
 import os
-from pathlib import Path
 import subprocess as sub
 import sys
 import time
+from pathlib import Path
 from typing import Dict, List
 from unittest.mock import patch
 
@@ -12,29 +12,28 @@ import graphviz
 import networkx as nx
 from jsonschema import Draft202012Validator
 
+from . import ast, cli, compiler, inference, utils
+from .main import get_tools_cwl, get_yml_paths
+from .schemas import wic_schema
+from .wic_types import GraphData, GraphReps, Json, Tools, YamlTree
+
 """from watchdog.observers import Observer
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEvent, PatternMatchingEventHandler"""
 
-from .wic_types import GraphReps, Tools, YamlTree, Json, GraphData
-from .main import get_tools_cwl, get_yml_paths
-from .schemas import wic_schema
 
-from . import ast, cli, compiler, inference, utils
-
-
-def absolute_paths(json: Json, cachedir_path: Path) -> Json:
-    """Recursively searches for paths in json and makes them absolute by prepending cachedir_path.
+def absolute_paths(config: Json, cachedir_path: Path) -> Json:
+    """Recursively searches for paths in config and makes them absolute by prepending cachedir_path.
 
     Args:
-        json (Json): The contents of the YAML cwl_watcher config: tag.
+        config (Json): The contents of the YAML cwl_watcher config: tag.
         cachedir_path (Path): The --cachedir directory of the main workflow.
 
     Returns:
         Json: The contents of the YAML cwl_watcher config: tag, with all paths prepended with cachedir_path.
     """
     new_json: Json = {}
-    for key, val in json.items():
+    for key, val in config.items():
         if isinstance(val, Dict):
             new_val = absolute_paths(val, cachedir_path)
         else:
@@ -102,7 +101,8 @@ def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
         yaml_path = f'{cwl_tool}_only.yml'
         yaml_tree = YamlTree(yaml_path, yml)
         subgraph = GraphReps(graphviz.Digraph(name=yaml_path), nx.DiGraph(), GraphData(yaml_path))
-        compiler_info = compiler.compile_workflow(yaml_tree, args, [], [subgraph], {}, {}, tools_cwl, True, relative_run_path=False)
+        compiler_info = compiler.compile_workflow(yaml_tree, args, [], [subgraph], {}, {},
+                                                  tools_cwl, True, relative_run_path=False)
         rose_tree = compiler_info.rose
         working_dir = Path('.') # Use a new working directory.
         # Can also use `directory_realtime` at the risk of overwriting other files.
@@ -124,7 +124,7 @@ def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
         #proc = sub.run(self.cmd, cwd=working_dir)
         #cmd = self.cmd
         print('Running', cmd)
-        proc = sub.run(cmd, cwd=working_dir)
+        proc = sub.run(cmd, cwd=working_dir, check=False) # See below!
         print('inner cwltool completed')
         # Don't check the return code because the file may not exist yet, or
         # because speculative execution may fail for any number of reasons.
@@ -252,7 +252,8 @@ def main() -> None:
             for file in changed_files:
                 if file_pattern[1:] in file:
                     print(file)
-                    rerun_cwltool(Path(file).parent, cachedir_path, cwl_tool , args_vals, tools_cwl, yml_paths, validator)
+                    rerun_cwltool(Path(file).parent, cachedir_path, cwl_tool,
+                                  args_vals, tools_cwl, yml_paths, validator)
             prev_files = {**prev_files, **changed_files}
 
             time.sleep(1.0) # Wait at least 1 second so we don't just spin.

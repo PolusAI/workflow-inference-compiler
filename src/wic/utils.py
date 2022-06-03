@@ -7,10 +7,9 @@ import graphviz
 import yaml
 
 from . import auto_gen_header
-from .wic_types import GraphData, Json, Namespaces, NodeData, Yaml, RoseTree, YamlForest, GraphReps, Tool, Tools, YamlTree
+from .wic_types import (GraphData, GraphReps, Json, Namespaces, NodeData,
+                        RoseTree, Tool, Tools, Yaml, YamlForest, YamlTree)
 
-# Use white for dark backgrounds, black for light backgrounds
-font_edge_color = 'white'
 
 def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
     """Reads a whitespace-delimited file containing two paired entries per line (i.e. a serialized Dict).
@@ -24,17 +23,18 @@ def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
     Returns:
         List[Tuple[str, str]]: The file contents, with blank lines and comments removed.
     """
-    lines = []
-    for line in open(filename, mode='r', encoding='utf-8').readlines():
-        if line.strip() == '':  # Skip blank lines
-            continue
-        if line.startswith('#'):  # Skip comment lines
-            continue
-        l_s = line.split()
-        if not len(l_s) == 2:
-            print(line)
-            raise Exception("Error! Line must contain exactly two entries!")
-        lines.append((l_s[0], l_s[1]))
+    with open(filename, mode='r', encoding='utf-8') as f:
+        lines = []
+        for line in f.readlines():
+            if line.strip() == '':  # Skip blank lines
+                continue
+            if line.startswith('#'):  # Skip comment lines
+                continue
+            l_s = line.split()
+            if not len(l_s) == 2:
+                print(line)
+                raise Exception("Error! Line must contain exactly two entries!")
+            lines.append((l_s[0], l_s[1]))
     return lines
 
 
@@ -73,15 +73,15 @@ def parse_step_name_str(step_name: str) -> Tuple[str, int, str]:
                         + 'yaml_stem and step_key should not contain any double underscores.')
     try:
         i = int(vals[2])
-    except:
+    except Exception as ex:
         raise Exception(f"Error! {step_name} is not of the format \n"
-                        + '{yaml_stem}__step__{i+1}__{step_key}')
+                        + '{yaml_stem}__step__{i+1}__{step_key}') from ex
     return (vals[0], i-1, vals[3])
 
 
 def add_graph_edge(args: argparse.Namespace, graph: GraphReps,
                    nss1: Namespaces, nss2: Namespaces,
-                   label: str, color: str = font_edge_color) -> None:
+                   label: str, color: str = '') -> None:
     """Adds edges to (all of) our graph representations, with the ability to
     collapse all nodes below a given depth to a single node.
 
@@ -96,8 +96,10 @@ def add_graph_edge(args: argparse.Namespace, graph: GraphReps,
         nss1 (Namespaces): The namespaces associated with the first node
         nss2 (Namespaces): The namespaces associated with the second node
         label (str): The edge label
-        color (str, optional): The edge color Defaults to font_edge_color
+        color (str, optional): The edge color
     """
+    if color == '':
+        color = 'black' if args.graph_dark_theme else 'white'
     nss1 = nss1[:(1 + args.graph_inline_depth)]
     edge_node1 = '___'.join(nss1)
     nss2 = nss2[:(1 + args.graph_inline_depth)]
@@ -200,8 +202,7 @@ def partition_by_lowest_common_ancestor(nss1: Namespaces, nss2: Namespaces) -> T
     if nss1[0] == nss2[0]: # Keep going
         (nss1_heads, nss1_tails) = partition_by_lowest_common_ancestor(nss1[1:], nss2[1:])
         return ([nss1[0]] + nss1_heads, nss1_tails)
-    else:
-        return ([], nss1)
+    return ([], nss1)
 
 
 def get_steps_keys(steps: List[Yaml]) -> List[str]:
@@ -368,8 +369,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
         if Path(step_name_1).suffix == '.yml':
             # Choose a specific backend
             return flatten_forest(forest.sub_forests[back_name])
-        else:
-            return [forest]
+        return [forest]
 
     forests = list(forest.sub_forests.values())
     sub_forests = [flatten_forest(f) for f in forests]
@@ -440,29 +440,30 @@ def recursively_delete_dict_key(key: str, obj: Any) -> Any:
     """
     if isinstance(obj, List):
         return [recursively_delete_dict_key(key, x) for x in obj]
-    elif isinstance(obj, Dict):
+    if isinstance(obj, Dict):
         new_dict = {}
         for key_ in obj.keys():
             if not key_ == key: # i.e. effectively delete key
                 new_dict[key_] = recursively_delete_dict_key(key, obj[key_])
         return new_dict
-    else:
-        return obj
+    return obj
 
 
-def make_tool_dag(tool_stem: str, tool: Tool) -> None:
+def make_tool_dag(tool_stem: str, tool: Tool, graph_dark_theme: bool) -> None:
     """Uses the `dot` executable from the graphviz package to make a Directed
     Acyclic Graph corresponding to the given CWL CommandLineTool
 
     Args:
         tool_stem (str): The name of the Tool
         tool (Tool): The CWL ComandLineTool
+        graph_dark_theme (bool): See args.graph_dark_theme
     """
     (tool_path, tool_cwl) = tool
     yaml_path = f'autogenerated/DAG/{tool_path}'
     Path(yaml_path).parent.mkdir(parents=True, exist_ok=True)
     graph = graphviz.Digraph(name=yaml_path)
     graph.attr(bgcolor="transparent") # Useful for making slides
+    font_edge_color = 'black' if graph_dark_theme else 'white'
     graph.attr(fontcolor=font_edge_color)
     graph.attr(rankdir='LR')
     attrs = {'shape':'box', 'style':'rounded, filled'}
@@ -482,12 +483,13 @@ def make_tool_dag(tool_stem: str, tool: Tool) -> None:
     graph.render(format='png')
 
 
-def make_plugins_dag(tools: Tools) -> None:
+def make_plugins_dag(tools: Tools, graph_dark_theme: bool) -> None:
     """Uses the `neato` executable from the graphviz package to make a Directed
     Acyclic Graph consisting of a node for each CWL CommandLineTool and no edges.
 
     Args:
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        graph_dark_theme (bool): See args.graph_dark_theme
     """
     # NOTE: Do not use the default 'dot' engine. Use neato / fdp / sfdp
     # and set pack=0 to remove the massive blank space around each node.
@@ -503,6 +505,7 @@ def make_plugins_dag(tools: Tools) -> None:
         graph.engine = 'neato'
         graph.attr(pack='0')
         graph.attr(bgcolor="transparent") # Useful for making slides
+        font_edge_color = 'black' if graph_dark_theme else 'white'
         graph.attr(fontcolor=font_edge_color)
         for tool in list(tools)[i*num_tools_half:(i+1)*num_tools_half]:
             (tool_path, tool_cwl) = tools[tool]
