@@ -62,12 +62,14 @@ jobs:
 
     - name: Run MyPy
       working-directory: ${{github.workspace}}
-      run: mypy .
+      # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
+      # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
+      run: mypy src/ tests/ *.py
 
     - name: Run PyLint
       working-directory: ${{github.workspace}}
       # NOTE: See fail-under threshold in .pylintrc
-      run: pylint src/ tests/
+      run: pylint src/ tests/ *.py
 
     - name: Run PyTest
       working-directory: ${{github.workspace}}

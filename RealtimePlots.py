@@ -1,3 +1,4 @@
+# pylint: disable=C0103, global-statement
 import copy
 import glob
 import math
@@ -29,11 +30,12 @@ def read_tabular_data(filename: Path) -> List[List[float]]:
     Returns:
         List[List[float]]: The file contents, with comment lines removed.
     """
-    lines = []
-    for line in open(filename, 'r').readlines():
-        if line.startswith('#'):  # Skip comment lines
-            continue
-        lines.append([float(x) for x in line.strip().split()])
+    with open(filename, mode='r', encoding='utf-8') as f:
+        lines = []
+        for line in f.readlines():
+            if line.startswith('#'):  # Skip comment lines
+                continue
+            lines.append([float(x) for x in line.strip().split()])
     return lines
 
 
@@ -50,11 +52,10 @@ def store_tabular_data(filepath: Path, use_stem: bool = True) -> None:
         use_stem (bool, optional): Only store the filename (without extension). Defaults to True.
     """
     # Declare global variables locally
-    global data_glob
     global data_glob_changed
     floats = read_tabular_data(filepath)
-    
-    if floats == []:
+
+    if len(floats) == 0:
         print('Skipping empty file', filepath)
         return None
 
@@ -70,9 +71,9 @@ def store_tabular_data(filepath: Path, use_stem: bool = True) -> None:
     data = np.array(floats)
     if use_stem:
         filepath = Path(filepath.stem)
-    for i in range(len(data_glob)):
-        (p, data_old_) = data_glob[i]
-        if filepath == p:
+    for i , dataglob_i in enumerate(data_glob):
+        (pathold, data_old_) = dataglob_i
+        if filepath == pathold:
             data_glob[i] = (filepath, data)
             data_glob_changed = True
             return None
@@ -113,28 +114,33 @@ labels = {
     'energy_total.xvg': ('Total Energy', 'time (ps)', 'energy (kJ / mol)'),
     'rmsd_xray_mainchain.xvg': ('Mainchain RMSD w.r.t. Xray', 'time (ps)', 'rmsd (nm)'),
     'rmsd_equil_mainchain.xvg': ('Mainchain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
-    'rmsd_equil_mainchain.xvg': ('Mainchain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
     'rmsd_equil_sidechain.xvg': ('Sidechain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
     'radius_gyration.xvg': ('Radius of Gyration', 'time (ps)', 'radius (nm)'),
 }
 
 
 def zscore(mean1: float, std1: float, mean2: float, std2: float) -> float:
-    # See https://en.wikipedia.org/wiki/Standard_score
+    """See https://en.wikipedia.org/wiki/Standard_score"""
     return abs(mean1 - mean2) / math.sqrt(std1**2 + std2**2)
 
 
-def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: List[float], zscore_cutoff: float = 1) -> List[List[Tuple[int, int]]]:
-    """Performs additional zscore-distance-based clustering of timeseries data which has already been initially segmented using Change Point Detection (via the `ruptures` library).\n
-    The purpose of this extra step is to reduce the dependence of the clusters on the segmentation penalty threshold parameter.
+def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: List[float],
+                             zscore_cutoff: float = 1) -> List[List[Tuple[int, int]]]:
+    """Performs additional zscore-distance-based clustering of timeseries data
+    which has already been initially segmented using Change Point Detection
+    (via the `ruptures` library). The purpose of this extra step is to reduce
+    the dependence of the clusters on the segmentation penalty threshold parameter.
 
     Args:
-        intervals_ (List[Tuple[int, int]]): The indices which define the intervals in which ys has already been segmented.
+        intervals_ (List[Tuple[int, int]]): The indices which define the intervals
+        in which ys has already been segmented.
         ys (List[float]): The original timeseries data.
-        zscore_cutoff (float, optional): The test statistic threshold used to determine additional clustering. Defaults to 1.
+        zscore_cutoff (float, optional): The test statistic threshold used to
+        determine additional clustering. Defaults to 1.
 
     Returns:
-        List[List[Tuple[int, int]]]: An updated list of intervals whose corresponding y-data are clustered w.r.t. the zscore distance.
+        List[List[Tuple[int, int]]]: An updated list of intervals whose
+        corresponding y-data are clustered w.r.t. the zscore distance.
     """
     intervals: List[Tuple[int, int]] = copy.deepcopy(intervals_0)
     intervals.sort(key=lambda x: x[1] - x[0], reverse=True) # length of interval
@@ -186,7 +192,6 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
     nrows = len(axes2d)
     ncols = len(axes2d[0])
     # Declare global variables locally
-    global data_glob
     global data_glob_changed
     if data_glob_changed:
         #print('updating plots')
@@ -204,12 +209,12 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
             for idx_y_col in col_indices:
                 if len(data.shape) == 2:
                     xs = data[:,0]
-                    ys = data[:,idx_y_col] 
+                    ys = data[:,idx_y_col]
                 elif len(data.shape) == 1:
                     #print('path', path)
                     #print('data', data)
                     ys = data[:]
-                    xs = np.array([x for x in range(len(ys))])
+                    xs = np.array(list(range(len(ys))))
                 else:
                     print('Error! data.shape is not of length 1 or 2:', data.shape)
                     print('path', path)
@@ -266,9 +271,11 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     ymax = max(ys[int(len(ys)/100):])
                     if plot_histogram:
                         if np.isfinite(ymin) and np.isfinite(ymax):
-                            ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
+                            ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True, # type: ignore
+                                    histtype='barstacked', bins='sqrt', color=colors) # type: ignore
                         else:
-                            ax.hist(ys_segmented, stacked=True, density=True, histtype='barstacked', bins='sqrt', color=colors) # type: ignore
+                            ax.hist(ys_segmented, stacked=True, density=True, # type: ignore
+                                    histtype='barstacked', bins='sqrt', color=colors) # type: ignore
                         ax.set_xlim(xmin=0)
 
                         filename = Path(path).stem + '.xvg'
@@ -338,7 +345,8 @@ def pause_no_show(interval: float) -> None:
     show() rudely brings the window to the foreground, which interrupts the user.
 
     Args:
-        interval (float): 
+        interval (float): Delay execution for a given number of seconds.
+        The argument may be a floating point number for subsecond precision.
     """
     manager = _pylab_helpers.Gcf.get_active()
     if manager is not None:
@@ -388,24 +396,25 @@ def file_watcher_glob(cachedir_path: Path, patterns: List[str], prev_files: Dict
     file_paths_all = [glob.glob(fp, recursive=True) for fp in file_patterns]
     file_paths_flat = [path for fps in file_paths_all for path in fps]
     for file in file_paths_flat:
-        time = os.path.getmtime(file)
+        mtime = os.path.getmtime(file)
         if file not in prev_files:
             # created
-            changed_files[file] = time
-        elif time > prev_files[file]:
+            changed_files[file] = mtime
+        elif mtime > prev_files[file]:
             # modified
-            changed_files[file] = time
+            changed_files[file] = mtime
     return changed_files
 
 figure_closed = False
 
 def on_close(event) -> None: # type: ignore
+    """This event handler is used to terminate the polling loop when the matplotlib figure is closed."""
     global figure_closed
     figure_closed = True
 
 
 def main() -> None:
-    global figure_closed
+    """See udocs/userguide.md#real-time-plots"""
     cachedir_path = sys.argv[1] if len(sys.argv) > 1 else '.'
     file_patterns = sys.argv[2:] if len(sys.argv) > 2 else ['*.xvg', '*.dat']
 
