@@ -38,6 +38,7 @@ jobs:
         conda list
         conda config --show-sources
         conda config --show
+        conda install cwltool
         ./conda_devtools.sh
 
     - name: Install System Graphviz (NOT python3-graphviz)
