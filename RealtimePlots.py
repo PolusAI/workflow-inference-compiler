@@ -124,7 +124,7 @@ def zscore(mean1: float, std1: float, mean2: float, std2: float) -> float:
     return abs(mean1 - mean2) / math.sqrt(std1**2 + std2**2)
 
 
-def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: List[float],
+def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: np.ndarray,
                              zscore_cutoff: float = 1) -> List[List[Tuple[int, int]]]:
     """Performs additional zscore-distance-based clustering of timeseries data
     which has already been initially segmented using Change Point Detection
@@ -134,7 +134,7 @@ def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: List[float]
     Args:
         intervals_ (List[Tuple[int, int]]): The indices which define the intervals
         in which ys has already been segmented.
-        ys (List[float]): The original timeseries data.
+        ys (np.ndarray): The original timeseries data.
         zscore_cutoff (float, optional): The test statistic threshold used to
         determine additional clustering. Defaults to 1.
 
@@ -155,7 +155,7 @@ def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: List[float]
     clusters_indices: List[List[Tuple[int, int]]] = [[intervals[0]]]
     clusters_stats: List[Tuple[float, float]] = [(np.mean(intervals[0]), np.std(intervals[0]))]
     for i1, i2 in intervals[1:]:
-        ys_seg = ys_segmented[(i1, i2)]
+        ys_seg = np.array(ys_segmented[(i1, i2)])
 
         z_scores = []
         for i, (mean_c, std_c) in enumerate(clusters_stats):
@@ -175,7 +175,7 @@ def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: List[float]
         clusters_stats = []
         for cluster_indices in clusters_indices:
             ys_cluster = [ys_segmented[i1_i2] for i1_i2 in cluster_indices]
-            ys_cluster_flat = [x for y in ys_cluster for x in y]
+            ys_cluster_flat = np.array([x for y in ys_cluster for x in y])
             cluster_stats = (np.mean(ys_cluster_flat), np.std(ys_cluster_flat))
             clusters_stats.append(cluster_stats)
 
@@ -270,7 +270,7 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     ymin = min(ys[int(len(ys)/100):])
                     ymax = max(ys[int(len(ys)/100):])
                     if plot_histogram:
-                        if np.isfinite(ymin) and np.isfinite(ymax):
+                        if not (np.isnan(ymin) or np.isnan(ymax)):
                             ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True, # type: ignore
                                     histtype='barstacked', bins='sqrt', color=colors) # type: ignore
                         else:
@@ -290,7 +290,7 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                             ax.set_ylabel('frequency')
                     else:
                         ax.set_xlim(min(xs), max(xs))
-                        if np.isfinite(ymin) and np.isfinite(ymax):
+                        if not (np.isnan(ymin) or np.isnan(ymax)):
                             ax.set_ylim(ymin, ymax)
 
                         # See https://stackoverflow.com/questions/39753282/scatter-plot-with-single-pixel-marker-in-matplotlib
@@ -306,7 +306,7 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                             # The following is somewhat ad-hoc (based on the above condition)
                             # but currently produces visually appealing results.
                             std_ys = np.std(ys)
-                            sfactor = np.abs(np.mean(ys))
+                            sfactor = abs(np.mean(ys))
                             if std_ys < 1.0: # if 'rmsd' in Path(path).stem or 'gyration' in Path(path).stem:
                                 sfactor = math.sqrt(sfactor)
                             if 'total' in Path(path).stem:
