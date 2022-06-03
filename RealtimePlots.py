@@ -145,18 +145,18 @@ def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: np.ndarray,
     intervals: List[Tuple[int, int]] = copy.deepcopy(intervals_0)
     intervals.sort(key=lambda x: x[1] - x[0], reverse=True) # length of interval
 
-    ys_segmented: Dict[Tuple[int, int], List[float]] = {}
+    ys_segmented: Dict[Tuple[int, int], np.ndarray] = {}
     for (i1, i2) in intervals:
         ys_segmented[(i1, i2)] = ys[i1:i2]
 
     # Greedily cluster intervals based on Z-score
     # It hopefully shouldn't matter, but start with the biggest intervals first
-    # (since more I.I.D. data should have better-estimateo standard deviations).
+    # (since more I.I.D. data should have better-estimated standard deviations).
     clusters_indices: List[List[Tuple[int, int]]] = [[intervals[0]]]
-    init_cluster = np.array(ys_segmented[intervals[0]])
+    init_cluster = ys_segmented[intervals[0]]
     clusters_stats: List[Tuple[float, float]] = [(np.mean(init_cluster), np.std(init_cluster))]
     for i1, i2 in intervals[1:]:
-        ys_seg = np.array(ys_segmented[(i1, i2)])
+        ys_seg = ys_segmented[(i1, i2)]
 
         z_scores = []
         for i, (mean_c, std_c) in enumerate(clusters_stats):
@@ -176,7 +176,7 @@ def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: np.ndarray,
         clusters_stats = []
         for cluster_indices in clusters_indices:
             ys_cluster = [ys_segmented[i1_i2] for i1_i2 in cluster_indices]
-            ys_cluster_flat = np.array([x for y in ys_cluster for x in y])
+            ys_cluster_flat = np.concatenate(ys_cluster)
             cluster_stats = (np.mean(ys_cluster_flat), np.std(ys_cluster_flat))
             clusters_stats.append(cluster_stats)
 
