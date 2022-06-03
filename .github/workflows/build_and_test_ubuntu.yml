@@ -28,7 +28,7 @@ jobs:
         activate-environment: wic
         channels: conda-forge
 
-    - name: Install Common Workflow Language
+    - name: Install System Dependencies from Conda
 # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
 #      run: sudo apt install cwltool
 # Use conda to install cwltool (version 3.1.20220224085855)
@@ -38,18 +38,15 @@ jobs:
         conda list
         conda config --show-sources
         conda config --show
-        conda install cwltool
-
-    - name: Install System Graphviz (NOT python3-graphviz)
-      run: sudo apt install graphviz
+        ./conda_devtools.sh
 
     - name: Setup Python
       uses: actions/setup-python@v2
       with:
         python-version: "3.x"
 
-    - name: Install Dependencies
-      run: python -m pip install --upgrade graphviz pyyaml pytest pytest-cov mypy pylint
+    - name: Install Python Dependencies from pip
+      run: python -m pip install --upgrade graphviz
 # NOTE: This 'graphviz' refers to the python bindings to the underlying
 # system binary graphviz package (i.e. the `dot` executable) which we need to 
 # install separately using either `conda install graphviz` or `sudo apt install graphviz`.
