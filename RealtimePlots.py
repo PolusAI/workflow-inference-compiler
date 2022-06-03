@@ -153,7 +153,8 @@ def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: np.ndarray,
     # It hopefully shouldn't matter, but start with the biggest intervals first
     # (since more I.I.D. data should have better-estimateo standard deviations).
     clusters_indices: List[List[Tuple[int, int]]] = [[intervals[0]]]
-    clusters_stats: List[Tuple[float, float]] = [(np.mean(intervals[0]), np.std(intervals[0]))]
+    init_cluster = np.array(ys_segmented[intervals[0]])
+    clusters_stats: List[Tuple[float, float]] = [(np.mean(init_cluster), np.std(init_cluster))]
     for i1, i2 in intervals[1:]:
         ys_seg = np.array(ys_segmented[(i1, i2)])
 
