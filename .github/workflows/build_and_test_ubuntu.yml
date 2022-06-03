@@ -41,7 +41,7 @@ jobs:
         ./conda_devtools.sh
 
     - name: Install System Graphviz (NOT python3-graphviz)
-       run: sudo apt install graphviz
+      run: sudo apt install graphviz
 
     - name: Setup Python
       uses: actions/setup-python@v2
