@@ -1,5 +1,5 @@
 steps:
-# Since setup.yml also calls min.yml, if we directly pass &min.tpr to grompp in
+# Since setup_vac_min.yml also calls min.yml, if we directly pass &min.tpr to grompp in
 # steep.yml, then there will be a copy of &min.tpr at each call site.
 # We only want to make a reference to min.tpr after minimizing in solvent,
 # (i.e. immediately before molecular dynamics) so we can extract &min.tpr

@@ -1,0 +1,12 @@
+# Comments must be on their own line
+# This file contains a list of directories to search for yml workflow files.
+# It is assumed that within each directory, all of the yml filenames within it
+# are unique (i.e. including subdirectories).
+# Namespaces can be used to disambiguate name collisions between directories.
+# (The namespaces which appear here can be used in the wic: metadata tags.)
+# By default, each directory is associated with the namespace 'global', as shown.
+
+# Namespace Directory
+global      examples/
+# foo       a/relative/path/
+# bar       /an/absolute/path/

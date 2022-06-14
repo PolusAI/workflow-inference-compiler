@@ -24,7 +24,10 @@ Yaml = KV
 class Tool(NamedTuple):
     run_path: str
     cwl: Cwl
-Tools = Dict[str, Tool]
+class StepId(NamedTuple):
+    stem: str # filename without extension
+    plugin_ns: str # left column of yml_paths.txt
+Tools = Dict[StepId, Tool]
 
 # NOTE: Please read the Namespacing section of docs/devguide.md !!!
 Namespace = str
@@ -120,8 +123,8 @@ class CompilerInfo(NamedTuple):
 # backend, it contains the subworkflows. If there are backends, it contains
 # each backend. For now, these are mutually exclusive, so it should be okay.
 class YamlTree(NamedTuple):
-    name: str
+    step_id: StepId
     yml: Yaml
 class YamlForest(NamedTuple):
     yaml_tree: YamlTree
-    sub_forests: Dict[str, Any] # Any = YamlForest
+    sub_forests: Dict[StepId, Any] # Any = YamlForest

@@ -19,7 +19,7 @@ In subworkflows, we also discard the *leading* namespaces from the parent workfl
 
 This is absolutely critical to ensuring that the CWL files corresponding to Subworkflows are completely independent of their embedding into a parent Workflow. This is one of the main design criteria, so do not mess this up!!! In fact, you can't mess this up because of test_cwl_embedding_independence()
 
-(FYI, we are forced to store this info in specially encoded strings because the CWL schema does not allow us to add extra tags. Specially encoded strings are almost never the right answer, but for now I don't see any other way.)
+(FYI, we are forced to store this info in specially encoded strings because the CWL schema does not allow us to add extra tags. Specially encoded strings are almost never the right answer, but for now I don't see any other way. Also note that the Galaxy workflow platform uses a nearly identical specially encoded string scheme, although their indexing starts at zero.)
 
 On the other hand, GraphViz and NetworkX require all names to be globally unique, so by default we do not truncate the namespaces when constructing graphs. However, --graph_inline_depth allows users to hide irrelevant details by collapsing all subgraphs below the given depth to a singe node. This is implemented by simply truncating the *trailing* namespaces. Thus, keeping track of namespaces allows us to trivially implement two key features.
 

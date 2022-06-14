@@ -7,7 +7,7 @@ import requests
 import yaml
 
 from . import __version__, utils
-from .wic_types import KV, Cwl, NodeData, RoseTree, Tools
+from .wic_types import KV, Cwl, NodeData, RoseTree, StepId, Tools
 
 
 def delete_previously_uploaded(args: argparse.Namespace, plugins_or_pipelines: str, name: str) -> None:
@@ -140,6 +140,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
 
     sub_node_data: NodeData = rose_tree.data
     yaml_stem = sub_node_data.name
+    yaml_tree = sub_node_data.yml
     cwl_tree = sub_node_data.compiled_cwl
     yaml_inputs = sub_node_data.workflow_inputs_file
 
@@ -155,16 +156,23 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         steps_keys.append(step_key)
     #print(steps_keys)
 
-    #subkeys = [key for key in steps_keys if key not in tools]
+    #tools_stems = [stepid.stem for stepid in tools]
+    #subkeys = [key for key in steps_keys if key not in tools_stems]
 
     cwl_tree_no_dollar = remove_dollar(cwl_tree)
+
+    wic = yaml_tree.get('wic', {})
+    wic_steps = wic.get('steps', {})
 
     # Convert the compiled yaml file to json for labshare Compute.
     # Replace 'run' with plugin:id
     cwl_tree_run = copy.deepcopy(cwl_tree_no_dollar)
     for i, step_key in enumerate(steps_keys):
+        sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
+        plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
         stem = Path(step_key).stem
-        tool_i = tools[stem].cwl
+        step_id = StepId(stem, plugin_ns_i)
+        tool_i = tools[step_id].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
 
         #if step_key in subkeys: # and not is_root, but the former implies the latter

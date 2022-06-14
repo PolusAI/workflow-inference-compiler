@@ -6,11 +6,11 @@ parser.add_argument('--yaml', type=str, required=('--generate_schemas_only' not 
                     help='Yaml workflow file')
 
 parser.add_argument('--generate_schemas_only', type=bool, required=False,
-                    help='Generate schemas for the files in --cwl_dir and --yml_dir.')
-parser.add_argument('--cwl_dir', type=str, required=False, default='biobb',
-                    help='Directory which contains the CWL CommandLineTools')
-parser.add_argument('--yml_dir', type=str, required=False, default='.',
-                    help='Directory which contains the YAML Workflows')
+                    help='Generate schemas for the files in --cwl_dirs_file and --yml_dirs_file.')
+parser.add_argument('--cwl_dirs_file', type=str, required=False, default='cwl_dirs.txt',
+                    help='Configuration file which lists the directories which contains the CWL CommandLineTools')
+parser.add_argument('--yml_dirs_file', type=str, required=False, default='yml_dirs.txt',
+                    help='Configuration file which lists the directories which contains the YAML Workflows')
 # Change default to True for now. See comment in compiler.py
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
