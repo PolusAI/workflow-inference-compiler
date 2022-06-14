@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from . import utils, utils_cwl
-from .wic_types import (KV, GraphReps, InternalOutputs, Namespaces, Tools,
+from .wic_types import (KV, GraphReps, InternalOutputs, Namespaces, StepId, Tools,
                         WorkflowInputs, Yaml)
 
 # NOTE: This must be initialized in main.py and/or cwl_watcher.py
@@ -22,7 +22,7 @@ def perform_edge_inference(args: argparse.Namespace,
                            vars_workflow_output_internal: InternalOutputs,
                            inputs_workflow: WorkflowInputs,
                            in_name_in_inputs_file_workflow: bool,
-                           conversions: List[str],
+                           conversions: List[StepId],
                            wic_steps: Yaml) -> KV:
     """This function implements the core edge inference feature.
     NOTE: steps_i, vars_workflow_output_internal, inputs_workflow are mutably updated.
@@ -45,7 +45,7 @@ def perform_edge_inference(args: argparse.Namespace,
         inputs_workflow (WorkflowInputs): Keeps track of CWL inputs: variables for the current workflow.
         in_name_in_inputs_file_workflow (bool): Used to determine whether\n
         failure to find a match should be considered an error.
-        conversions (List[str]): If exact inference fails, a list of possible file format conversions is stored here.
+        conversions (List[StepId]): If exact inference fails, a list of possible file format conversions is stored here.
         wic_steps (Yaml): The metadata associated with the given workflow.
 
     Returns:
@@ -57,7 +57,10 @@ def perform_edge_inference(args: argparse.Namespace,
     # instead of figuring out how to replace('structure_', 'gro_') for
     # gmx_trjconv_str only, just require the user to specify filename.
     step_key = steps_keys[i]
-    tool_i = tools[Path(step_key).stem].cwl
+    wic_step_i = wic_steps.get(f'({i+1}, {steps_keys[i]})', {})
+    plugin_ns_i = wic_step_i.get('wic', {}).get('namespace', 'global')
+    step_id_i = StepId(Path(step_key).stem, plugin_ns_i)
+    tool_i = tools[step_id_i].cwl
     step_name_i = utils.step_name_str(yaml_stem, i, step_key)
 
     in_tool = tool_i['inputs']
@@ -73,7 +76,10 @@ def perform_edge_inference(args: argparse.Namespace,
     attempted_matches_all = []
     break_inference = False
     for j in range(0, i)[::-1]:  # Reverse order!
-        tool_j = tools[Path(steps_keys[j]).stem].cwl
+        wic_step_j = wic_steps.get(f'({j+1}, {steps_keys[j]})', {})
+        plugin_ns_j = wic_step_j.get('wic', {}).get('namespace', 'global')
+        step_id_j = StepId(Path(steps_keys[j]).stem, plugin_ns_j)
+        tool_j = tools[step_id_j].cwl
         out_tool = tool_j['outputs']
         # NOTE: The outputs of a CommandLineTool are all made available
         # simultaneously. Although that is technically also true for subworkflows,
@@ -84,7 +90,6 @@ def perform_edge_inference(args: argparse.Namespace,
         out_keys = list(tool_j['outputs'])[::-1] # Reverse order!
         format_matches = []
         attempted_matches = []
-        wic_step_j = wic_steps.get(f'({j+1}, {steps_keys[j]})', {})
         inference_rules = get_inference_rules(wic_step_j, Path(steps_keys[j]).stem)
         namespace_emb_last_break = ''
         for out_key in out_keys:
@@ -229,11 +234,11 @@ def perform_edge_inference(args: argparse.Namespace,
             if in_format == out_format:
                 continue
 
-            for tool_path, tool in tools.items():
+            for step_id, tool in tools.items():
                 # For now, let's restrict to a whitelist of known file format
                 # conversions. Otherwise, there are way too many solutions.
                 # (In principle, this can be used to insert arbitrary subworkflows.)
-                if not tool_path.startswith('conversion_'):
+                if not step_id.stem.startswith('conversion_'):
                     continue
 
                 in_tool = tool.cwl['inputs']
@@ -251,8 +256,8 @@ def perform_edge_inference(args: argparse.Namespace,
                 # match). See docs/algorithms.md for more details.
                 if in_format in tool_out_formats and out_format in tool_in_formats_flat:
                     # We may have found a file format conversion.
-                    #print('tool_path, in_format, out_format:', tool_path, in_format, out_format)
-                    conversions.append(tool_path)
+                    #print('step_id.stem, in_format, out_format:', step_id.stem, in_format, out_format)
+                    conversions.append(step_id)
 
     match = False
     if not match:

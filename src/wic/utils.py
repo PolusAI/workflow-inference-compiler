@@ -1,6 +1,7 @@
 import argparse
 import copy
 from pathlib import Path
+import subprocess as sub
 from typing import Any, Dict, List, Tuple
 
 import graphviz
@@ -8,7 +9,7 @@ import yaml
 
 from . import auto_gen_header
 from .wic_types import (GraphData, GraphReps, Json, Namespaces, NodeData,
-                        RoseTree, Tool, Tools, Yaml, YamlForest, YamlTree)
+                        RoseTree, StepId, Tool, Tools, Yaml, YamlForest, YamlTree)
 
 
 def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
@@ -247,9 +248,16 @@ def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Y
             backend = wic['backend']
         if backend == '':
             raise Exception(f'Error! No backend in {yaml_path}!')
-        if backend not in wic['backends']:
-            raise Exception(f'Error! No steps for backend {backend} in {yaml_path}!')
-        steps = wic['backends'][backend]['steps']
+
+
+        plugin_ns = wic.get('namespace', 'global')
+        stepid = StepId(backend, plugin_ns)
+        if stepid not in wic['backends']:
+            print(yaml.dump(yaml_tree))
+            print(yaml.dump(wic))
+            print(wic['backends'])
+            raise Exception(f'Error! No steps for backend {stepid} in {yaml_path}!')
+        steps = wic['backends'][stepid]['steps']
         yaml_tree_copy.update({'steps': steps})
     elif 'steps' in yaml_tree_copy:
         pass # steps = yaml_tree_copy['steps']
@@ -258,7 +266,7 @@ def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Y
     return (backend, yaml_tree_copy)
 
 
-def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Path]) -> List[Yaml]:
+def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Dict[str, Path]]) -> List[Yaml]:
     """Recursively inlines the contents of ALL of the yml sub-workflows. (deprecated)
 
     This function is deprecated and will soon be replaced with a better implementation.
@@ -266,7 +274,7 @@ def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Path]) 
     Args:
         yaml_path (Path): The filepath of the yml workflow.
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
-        yml_paths (Dict[str, Path]): The yml workflow definitions found using get_yml_paths()
+        yml_paths (Dict[str, Dict[str, Path]]): The yml workflow definitions found using get_yml_paths()
 
     Returns:
         List[Yaml]: The recursively inlined contents of the given yml workflow.
@@ -278,18 +286,30 @@ def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Path]) 
     wic = yaml_tree.get('wic', {})
     (back_name_, yaml_tree) = extract_backend(yaml_tree, wic, yaml_path)
     steps = yaml_tree['steps']
+    wic_steps = wic['wic'].get('steps', {})
 
     # Get the dictionary key (i.e. the name) of each step.
     steps_keys = []
     for step in steps:
         steps_keys += list(step)
 
-    subkeys = [key for key in steps_keys if key not in tools]
+    tools_stems = [stepid.stem for stepid in tools]
+    subkeys = [key for key in steps_keys if key not in tools_stems]
 
     steps_all = []
     for i, step_key in enumerate(steps_keys):
         if step_key in subkeys:
-            path = yml_paths[Path(step_key).stem]
+            # NOTE: See comments in read_ast_from_disk()
+            sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
+            plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
+
+            paths_ns_i = yml_paths.get(plugin_ns_i, {})
+            if paths_ns_i == {}:
+                raise Exception(f'Error! namespace {plugin_ns_i} not found in yaml paths. Check yml_dirs.txt')
+            if Path(step_key).stem not in paths_ns_i:
+                raise Exception(f'Error! {Path(step_key).stem} not found in namespace {plugin_ns_i}.')
+            path = paths_ns_i[Path(step_key).stem]
+
             steps_i = inline_sub_steps(path, tools, yml_paths)
         else:
             steps_i = [steps[i]]
@@ -330,7 +350,7 @@ def pretty_print_forest(forest: YamlForest) -> None:
     Args:
         forest (YamlForest): The forest to be printed
     """
-    print(forest.yaml_tree.name)
+    print(forest.yaml_tree.step_id)
     print(yaml.dump(forest.yaml_tree.yml))
     print(yaml.dump(forest.sub_forests))
 
@@ -352,6 +372,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
         return []
     yaml_tree = forest.yaml_tree.yml
     wic = {'wic': yaml_tree.get('wic', {})}
+    plugin_ns = wic['wic'].get('namespace', 'global')
 
     if 'backends' in wic['wic']:
         #pretty_print_forest(forest)
@@ -363,12 +384,13 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
         if back_name == '':
             pretty_print_forest(forest)
             raise Exception('Error! No backend in yaml forest!\n')
-        yaml_tree_back: YamlTree = forest.sub_forests[back_name].yaml_tree
+        step_id = StepId(back_name, plugin_ns)
+        yaml_tree_back: YamlTree = forest.sub_forests[step_id].yaml_tree
         step_1 = yaml_tree_back.yml['steps'][0]
         step_name_1 = list(step_1.keys())[0]
         if Path(step_name_1).suffix == '.yml':
             # Choose a specific backend
-            return flatten_forest(forest.sub_forests[back_name])
+            return flatten_forest(forest.sub_forests[step_id])
         return [forest]
 
     forests = list(forest.sub_forests.values())
@@ -621,3 +643,17 @@ def get_step_name_1(step_1_names: List[str],
         step_name_1 = f'"{step_name_1}"'
 
     return step_name_1
+
+
+def copy_config_files() -> None:
+    """Copies the following configuration files to the current working directory:\n
+    cwl_dirs.txt, yml_dirs.txt, renaming_conventions.txt, inference_rules.txt
+    """
+    files = ['cwl_dirs.txt', 'yml_dirs.txt', 'renaming_conventions.txt', 'inference_rules.txt']
+    src_dir = Path(__file__).parent
+    cwd = Path('.')
+
+    for file in files:
+        if not (cwd / file).exists():
+            cmd = ['cp', str(src_dir / file), str(cwd / file)]
+            sub.run(cmd, check=True)

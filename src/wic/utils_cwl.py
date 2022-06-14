@@ -3,21 +3,30 @@ from pathlib import Path
 from typing import Dict, List
 
 from . import utils
-from .wic_types import (GraphReps, InternalOutputs, Namespaces, Tools,
+from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tools,
                         WorkflowOutputs, Yaml)
 
 
-def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys: List[str], subkeys: List[str]) -> None:
+def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
+                                      wic_steps: Yaml, subkeys: List[str]) -> None:
     """Adds a SubworkflowFeatureRequirement if there are any subworkflows
 
     Args:
         yaml_tree (Yaml): A tuple of name and yml AST
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         steps_keys (List[str]): The name of each step in the current CWL workflow
+        wic_steps (Yaml): The metadata assocated with the workflow steps
         subkeys (List[str]): The keys associated with subworkflows
     """
     # If there is at least one subworkflow, add a SubworkflowFeatureRequirement
-    subs = [tools[Path(key).stem].cwl['class'] == 'Workflow' for key in steps_keys if key not in subkeys]
+    subs = []
+    for i, step_key in enumerate(steps_keys):
+        sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
+        plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
+        if step_key not in subkeys:
+            step_id = StepId(Path(step_key).stem, plugin_ns_i)
+            sub = tools[step_id].cwl['class'] == 'Workflow'
+            subs.append(sub)
     if (not subkeys == []) or any(subs):
         subworkreq = 'SubworkflowFeatureRequirement'
         subworkreqdict = {subworkreq: {'class': subworkreq}}
@@ -68,6 +77,7 @@ def get_workflow_outputs(args: argparse.Namespace,
                          is_root: bool,
                          yaml_stem: str,
                          steps: List[Yaml],
+                         wic_steps: Yaml,
                          outputs_workflow: WorkflowOutputs,
                          vars_workflow_output_internal: InternalOutputs,
                          graph: GraphReps,
@@ -81,6 +91,7 @@ def get_workflow_outputs(args: argparse.Namespace,
         is_root (bool): True if this is the root workflow
         yaml_stem (str): The name of the current subworkflow (stem of the yaml filepath)
         steps (List[Yaml]): The steps: tag of a CWL workflow
+        wic_steps (Yaml): The metadata assocated with the workflow steps
         outputs_workflow (WorkflowOutputs): Contains the contents of the out: tags for each step.
         vars_workflow_output_internal (InternalOutputs): Keeps track of output\n
         variables which are internal to the root workflow, but not necessarily to subworkflows.
@@ -95,8 +106,11 @@ def get_workflow_outputs(args: argparse.Namespace,
     workflow_outputs = {}
     steps_keys = utils.get_steps_keys(steps)
     for i, step_key in enumerate(steps_keys):
+        sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
+        plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
         stem = Path(step_key).stem
-        tool_i = tools[stem].cwl
+        step_id = StepId(stem, plugin_ns_i)
+        tool_i = tools[step_id].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         out_keys = steps[i][step_key]['out']
         for out_key in out_keys:

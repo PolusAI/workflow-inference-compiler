@@ -6,6 +6,20 @@ Recall for a moment the vague instructions your PhD advisor hastily scribbled on
 
 See [overview](overview.md)
 
+## Plugins
+
+Before we get started, we will need to configure the compiler with plugins. ('Plugins' are either CWL CommandLineTools or YAML workflow files.) By default, the compiler will search for plugins within the directories and subdirectories listed in `cwl_dirs.txt` and `yml_dirs.txt`. To enable additional plugins, simply download the plugins and add additional lines to these files. 
+
+```
+# Namespace Directory
+global      biobb/
+global      cwl_adapters/
+# foo       a/relative/path/
+# bar       /an/absolute/path/
+```
+
+To avoid having to deal with relative file paths in YAML files, all plugin names (e.g. `mdrun` & `gmx_energy` below) are required to be unique. See [plugin namespaces](userguide.md#plugin-namespaces) for details.
+
 ## Edge Inference Algorithm
 
 The edge inference algorithm is actually rather simple: For each input in the current step of a workflow, it checks for compatible outputs in the previous steps. Since most operations presumably desire the most recent compatible output, by default the steps are checked in reverse order and the outputs of each step are also checked in reverse order. For each output, it first checks for matching types and formats. If there is a unique match, then great! If there are multiple matches, it tentatively chooses the first (i.e. most recent) match. For technical reasons edge inference is far from unique, so ***`users should always check that edge inference actually produces the intended DAG`***.
@@ -89,6 +103,10 @@ The most common use case of backend independence is to swap out 'identical' subw
 When using backend independence, it will often require file format conversion steps. The compiler can now automatically insert these steps into the workflow! For details on the algorithm, see [speculative compilation](dev/algorithms.md#speculative-compilation). In short, if inference fails, we insert a file format conversion and try again.
 
 For now, the possible file format conversions are limited to a whitelist of known good steps whose names start with `conversion_`. However, there is no fundamental reason to limit this speculative complation strategy to only file format conversions. In fact, we can automatically insert arbitrary subworkflows!
+
+#### Known issues
+
+Note however that while conversion_*.cwl files can come from pre-compiled yml subworkflows, it is currently necessary to find & replace all instances of triple underscores ___ with double underscores __. (This is because triple underscores are reserved/interpreted by the compiler as ‘internal’ namespaceing, and in this case we want to treat pre-compiled yml files as a black box. See the [dev guide](dev/algorithms.md#namespacing) for the gory details.)
 
 ## Real-time analysis / Speculative Execution
 
@@ -232,6 +250,24 @@ wic:
 ...
 ```
 
-## Known Issues
+## Plugin Namespaces
 
-To avoid having to deal with relative file paths in YAML files, all CWL CommandLineTool and YAML filenames are currently required to be globally unique. In other words, you should not have both `yml_filename.yml` and `subdir/yml_filename.yml` within the root directory `--yml_dir` (and similar for \*.cwl). This will likely change in the future, but for now it is very convenient. If your YAML filenames are *not* unique, the message `Overwriting <filestem>` will be printed during compilation, referring to the fact that the in-memory representation (only) is being overwritten. That message may also be printed when performing [speculative compilation](dev/algorithms.md#speculative-compilation), but in that case it is expected and should not be considered a warning.
+Namespaces can be used to distinguish two different plugins with the same name from different sources. For example, suppose a collaborator has shared an alternative minimization protocol, which we have downloaded to `bar/min.yml`. We can use their protocol by adding the line `foo    bar/` to `yml_dirs.txt` and annotating the call site in `basic.yml` with `namespace: foo` as shown below.
+
+```yaml
+...
+wic:
+  graphviz:
+    label: Molecular Dynamics
+  steps:
+    (1, min.yml):
+      wic:
+        namespace: foo
+...
+```
+
+### Known Issues
+
+Note that within a single namespace, names are still required to be unique. If your CWL and/or YAML filenames are *not* unique, the message `Warning: overwriting <filestem> in namespace <namespace>` will be printed during compilation, referring to the fact that the in-memory representation (only) is being overwritten. This will likely cause severe problems, so please heed this particular warning!
+
+On the other hand, that message may also be printed when performing [speculative compilation](dev/algorithms.md#speculative-compilation), but in that case it is expected and should not be considered a warning.

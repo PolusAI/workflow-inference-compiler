@@ -12,3 +12,5 @@ dist/
 docs/_build/
 .DS_Store
 .coverage
+*_absolute.txt
+gromacs_mdp.html
