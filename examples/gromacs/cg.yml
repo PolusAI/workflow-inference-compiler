@@ -6,7 +6,7 @@ steps:
             integrator: cg
             rvdw: 1.4
             rcoulomb: 1.4
-            nsteps: 300
+            nsteps: 1000
             emstep: 0.01
             emtol: 10
             nstenergy: 1

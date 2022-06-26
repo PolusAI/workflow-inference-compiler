@@ -1,0 +1,20 @@
+steps:  
+  - cwl_watcher:
+      in:
+        #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
+        file_pattern: '*prod.trr' # This * is a glob wildcard, NOT an explicit edge!
+        cwl_tool: analysis_realtime_protein.yml
+        max_times: '20'
+        config:
+          '(1, gmx_rms)': {in: {input_structure_path: prod.tpr, input_traj_path: prod.trr}}
+          '(2, gmx_rms)': {in: {input_structure_path: prod.tpr, input_traj_path: prod.trr}}
+          '(3, gmx_rms)': {in: {input_structure_path: min.tpr, input_traj_path: prod.trr}}
+          '(4, gmx_rgyr)': {in: {input_structure_path: min.tpr, input_traj_path: prod.trr}}
+          '(5, gmx_energy)': {in: {input_energy_path: prod.edr}}
+
+wic:
+  steps:
+    (1, cwl_watcher):
+      wic:
+        graphviz:
+          style: invis # Make this node invisible

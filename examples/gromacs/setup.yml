@@ -1,20 +1,22 @@
 steps:
-- pdb2gmx:
-    in:
-      config:
-        water_type: spce
-        force_field: amber99sb-ildn
-        ignh: True
-        merge: False
 - editconf:
     in:
+      input_crd_path: '*complex_vac.pdb'
       config:
         box_type: cubic
-        distance_to_molecule: 1.6
+        distance_to_molecule: 1.0
 - solvate:
+    in:
+      input_top_zip_path: '*complex_vac.zip'
+      output_crd_path: '&solvate.gro'
+      output_top_zip_path: '&solvate.zip'
 - grompp:
     in:
+      input_crd_path: '*solvate.gro'
+      input_top_zip_path: '*solvate.zip'
       config:
+        # "Warning: atom name nnn in *.top and *.gro does not match"
+        maxwarn: 1 # Be careful that this doesn't hide other errors!
         mdp:
           integrator: steep
 - genion:
@@ -26,31 +28,28 @@ steps:
         neutral: True
         concentration: 0.05 # mol/liter 
       output_top_zip_path: '&genion.top'
+      output_crd_path: '&genion.gro'
 
 wic:
   graphviz:
     label: System Setup
     ranksame:
-    - (1, pdb2gmx)
-    - (5, genion)
+    - (1, editconf)
+    - (4, genion)
   steps:
-    (1, pdb2gmx):
-      wic:
-        graphviz:
-          label: 'Generate\nInitial\nTopology'
-    (2, editconf):
+    (1, editconf):
       wic:
         graphviz:
           label: 'Initialize\nPeriodic Box'
-    (3, solvate):
+    (2, solvate):
       wic:
         graphviz:
           label: 'Add Water\nSolvent'
-    (4, grompp):
+    (3, grompp):
       wic:
         graphviz:
           label: 'Update\nTopology'
-    (5, genion):
+    (4, genion):
       wic:
         graphviz:
           label: 'Neutralize &\nAdd Ions'

@@ -71,7 +71,10 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
             if paths_ns_i == {}:
                 raise Exception(f'Error! namespace {plugin_ns} not found in yaml paths. Check yml_dirs.txt')
             if stem not in paths_ns_i:
-                raise Exception(f'Error! {stem} not found in namespace {plugin_ns}.')
+                msg = f'Error! {stem} not found in namespace {plugin_ns}.'
+                if stem == 'in':
+                    msg += f'\n(Check that you have properly indented the `in` tag in {step_id.stem})'
+                raise Exception(msg)
             yaml_path = paths_ns_i[stem]
 
             if not (yaml_path.exists() and yaml_path.suffix == '.yml'):
@@ -219,12 +222,14 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
 
 def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
                                 tools: Tools,
+                                backend: bool = False,
                                 namespaces_init: Namespaces = []) -> List[Namespaces]:
     """Traverses a yml AST and finds all subworkflows which can be inlined into their parent workflow.
 
     Args:
         yaml_tree_tuple (YamlTree): A tuple of name and yml AST
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        backend (bool): True if the immediate parent workflow is a backend.
         namespaces_init (Namespaces): The initial subworkflow to start the traversal ([] == root)
 
     Returns:
@@ -240,7 +245,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
         # Use yaml_name (instead of back_name) and do not append to namespace_init.
         sub_namespaces_list = []
         for stepid, back in wic['wic']['backends'].items():
-            sub_namespaces = get_inlineable_subworkflows(YamlTree(stepid, back), tools, namespaces_init)
+            sub_namespaces = get_inlineable_subworkflows(YamlTree(stepid, back), tools, True, namespaces_init)
             sub_namespaces_list.append(sub_namespaces)
         return utils.flatten(sub_namespaces_list)
 
@@ -251,7 +256,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
     # All subworkflows except backends are inlineable.
     inlineable = wic.get('inlineable', True)
-    namespaces = [namespaces_init] if inlineable and namespaces_init != [] else []
+    namespaces = [namespaces_init] if inlineable and namespaces_init != [] and not backend else []
 
     for i, step_key in enumerate(steps_keys):
         yaml_stem = Path(yaml_name).stem
@@ -260,7 +265,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
             sub_yml_tree = steps[i][step_key]
 
             y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
-            sub_namespaces = get_inlineable_subworkflows(y_t, tools, namespaces_init + [step_name_i])
+            sub_namespaces = get_inlineable_subworkflows(y_t, tools, False, namespaces_init + [step_name_i])
             namespaces += sub_namespaces
 
     return namespaces

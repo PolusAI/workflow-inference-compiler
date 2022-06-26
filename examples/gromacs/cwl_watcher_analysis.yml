@@ -1,0 +1,12 @@
+wic:
+  default_backend: protein
+  backends:
+    protein:
+      steps:
+        - cwl_watcher_protein.yml:
+    complex:
+      steps:
+        - cwl_watcher_complex.yml:
+  graphviz:
+    label: 'Real-time\nAnalysis'
+    style: invis # Make this graph (and all subgraphs) invisible

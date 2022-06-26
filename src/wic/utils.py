@@ -108,6 +108,7 @@ def add_graph_edge(args: argparse.Namespace, graph: GraphReps,
     graph_gv = graph.graphviz
     graph_nx = graph.networkx
     graphdata = graph.graphdata
+    attrs = {}
     # Hide internal self-edges
     if edge_node1 != edge_node2:
         attrs = {'color': color}

@@ -1,0 +1,38 @@
+steps:
+- pdb:
+    in:
+      output_pdb_path: protein_models.pdb
+      #config: {pdb_code: 1aki} # from tutorial
+      #config: {pdb_code: 1enh} # "Structural Studies of the Engrailed Homeodomain" https://pubs.acs.org/doi/10.1021/acs.jpcb.8b02144
+
+      # Chignolin model mini-protein
+      #config: {pdb_code: 1uao} # "10 residue folded peptide designed by segment statistics" http://dx.doi.org/10.1016/j.str.2004.05.022
+
+      # Trp-cage model mini-protein (use 1l2y; 2m7d 2m7c 6d37 have chainbreaks and 6d37 is a hexamer)
+      config: {pdb_code: 1l2y} # "Designing a 20-residue protein." http://dx.doi.org/10.1038/nsb798
+      #config: {pdb_code: 2m7d} # "Folding Dynamics and Pathways of the Trp-Cage Miniproteins" https://doi.org/10.1021/bi501021r
+      #config: {pdb_code: 2m7c} # "Circular Permutation of the Trp-cage: Fold Rescue upon Addition of a Hydrophobic Staple" http://dx.doi.org/10.1039/C3RA43674H
+      #config: {pdb_code: 6d37} # "Trp-cage tr16b R16Nva : Elimination of pH Dependent Interactions" https://doi.org/10.1002/bip.23260
+
+      # Other model mini-proteins
+      #config: {pdb_code: 5kwp} # "Accurate de novo design of hyperstable constrained peptides." http://dx.doi.org/10.1038/nature19791
+      #config: {pdb_code: 6b17} # "Design of a short thermally stable alpha-helix embedded in a macrocycle" http://dx.doi.org/10.1002/cbic.201800026
+      #config: {pdb_code: 1bzv} # "The solution structure of a superpotent B-chain-shortened single-replacement insulin analogue." http://dx.doi.org/10.1110/ps.8.3.499
+- extract_model:
+    in:
+      config:
+        models: [1]
+      output_structure_path: '&protein.pdb'
+
+wic:
+  graphviz:
+    label: Molecular\nModeling
+  steps:
+    (1, pdb):
+      wic:
+        graphviz:
+          label: 'Download\nPDB Code'
+    (2, extract_model):
+      wic:
+        graphviz:
+          label: 'Extract Model'

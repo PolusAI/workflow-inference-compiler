@@ -1,0 +1,34 @@
+steps:
+  - obabel_convert_pdb:
+      in:
+        input_path: '*conformer.mol2'
+        output_pdb_path: '&ligand_keywords.pdbqt'
+        # NOTE: Use the following pdbqt format-specific write options (see `obabel -Hpdbqt`):
+        # r  Output as a rigid molecule (i.e. no branches or torsion tree)
+        # h  Preserve hydrogens
+        # n  Preserve atom names
+        # Otherwise, we will get the grompp atom name warning (see below).
+        # NOTE: These arguments must be given individually; they cannot be concatenated together.
+        # (e.g. -xrhn) Otherwise, all but the first argument will be silently ignored!
+        # Ligands may be rigid or flexible in autodock. Instead of using -xr here,
+        # we can strip out the flexibility keywords below.
+        # arg1: -xr
+        arg2: -xh
+        arg3: -xn
+  - bash_pdb:
+      in:
+      # Remove the MODEL and ENDMDL keywords.
+      # Even if there is actually only one model, autodock simply looks for MODEL and ENDMDL.
+      # Unfortunately, all of the errors crash with the same cryptic message:
+      # Parse error on line ... in file ".../ligand.pdbqt": Unknown or inappropriate tag
+        script: ../scripts/pdbqt_remove_keywords.sh
+        input_pdb_path: '*ligand_keywords.pdbqt'
+        output_pdb_path: '&ligand_flex.pdbqt'
+  - bash_pdb:
+      in:
+      # Add ROOT, ENDROOT, TORSDOF keywords (if necessary).
+      # Unfortunately, all of the errors crash with the same cryptic message:
+      # Parse error on line ... in file ".../ligand.pdbqt": Unknown or inappropriate tag
+        script: ../scripts/pdbqt_remove_flex.sh
+        input_pdb_path: '*ligand_flex.pdbqt'
+        output_pdb_path: '&ligand_rigid.pdbqt'

@@ -127,6 +127,7 @@ def wic_tag_schema() -> Json:
 
     backend = {'type': 'string'}
     default_backend = {'type': 'string'}
+    inlineable = {'type': 'boolean'}
 
     schema = default_schema(url=True)
     schema['$id'] = 'wic_tag'
@@ -136,7 +137,7 @@ def wic_tag_schema() -> Json:
     schema['description'] = 'Use steps: to recursively overload / pass parameters.\nUse graphviz: to modify the DAGs.'
     schema['properties'] = {'graphviz': graphviz, 'steps': steps, 'backend': backend,
                             'backends': backends, 'default_backend': default_backend,
-                            'namespace': namespace}
+                            'namespace': namespace, 'inlineable': inlineable}
     return schema
 
 
