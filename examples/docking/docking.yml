@@ -1,0 +1,142 @@
+steps:
+# Ligand
+# NOTE: Searching for conformers tends to cause the ligand to curl up into a ball.
+# Although this lowers its energy in isolation, the decreased surface area tends
+# to weaken the binding free energy! (as reported by autodock vina)
+  - extract_ligand_find_conformer.yml:
+#  - extract_ligand_minimize_only.yml:
+
+# NOTE: We converted to mol2 format above because it allows explicit charges.
+# Thus, if we only infer charges once and then preserve them, we don't have to
+# worry about using different charges in autodock vs molecular dynamics.
+# It also stores explicit bond order info, so the topology will be identical.
+# (Also note that we did NOT convert to pdb and then to pdbqt, because that loses both!)
+
+# NOTE: Rename all residues to MOL before calling acpypye. Otherwise, acpype crashes with:
+# "ERROR: more than one residue detected '{'UNL', 'MOL'}'"
+  - python3_mol2_to_mol2:
+      in:
+        script: ../scripts/rename_residues_MOL.py
+        input_mol2_path: '*ligand_min.mol2'
+        output_mol2_path: '&conformer.mol2'
+
+# NOTE: minimize before calling acpype so 1. tleap complains less about close contacts:
+# /usr/local/bin/teLeap: Warning!
+# Close contact of 1.418311 angstroms between .R<UNL 1>.A<CG 8> and .R<UNL 1>.A<HD2 30>
+# and 2. acpype doesn't complain about 'ERROR: Atoms TOO alone (> 3.0 Ang.)'
+# (acpype suggests using --force, but it's better to just minimize.)
+  - acpype:
+    # NOTE: We are using our own acpypye CWL adapter (NOT the biobb version) so
+    # we have the choice of using charges from the mol2 file.
+      in:
+        input_path: '*conformer.mol2' # Do NOT use '*decoy_ligand.pdb'
+        output_path_itp: '&ligand_GMX.itp'
+        # NOTE: Although we don't need the *.itp topology file yet, we
+        # need to use these coordinates with autodock because they are
+        # sorted to agree with the *.itp topoogy include file.
+        # Otherwise, we will get the grompp atom name warning (see below).
+        output_path_gro: '&ligand_GMX.gro'
+        output_path_top: '&ligand_GMX.top'
+        #charge_method: user # take charges from mol2 file
+
+# Receptor
+  - download_pdb.yml:
+  - pdb4amber_run: # NOTE: See comments below w.r.t. pdb2gmx
+      in:
+        input_pdb_path: '*protein.pdb'
+        output_pdb_path: '&receptor_pdb4amber.pdb'
+  - str_check_add_hydrogens:
+      in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
+        input_structure_path: '*receptor_pdb4amber.pdb'
+        config: '{"charges": "False", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
+        output_structure_path: '&receptor_hydrogens.pdb'
+  - str_check_add_hydrogens:
+      in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
+        input_structure_path: '*receptor_pdb4amber.pdb'
+        config: '{"charges": "True", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
+        output_structure_path: '&receptor_hydrogens.pdbqt'
+  - obabel_convert_pdb:
+      in:
+        input_path: '*receptor_pdb4amber.pdb'
+        output_pdb_path: '&receptor_rigid.pdbqt'
+        # NOTE: Use the following pdbqt format-specific write options (see `obabel -Hpdbqt`):
+        # r  Output as a rigid molecule (i.e. no branches or torsion tree)
+        # h  Preserve hydrogens
+        # n  Preserve atom names
+        # Otherwise, we will get the grompp atom name warning (see below).
+        # NOTE: These arguments must be given individually; they cannot be concatenated together.
+        # (e.g. -xrhn) Otherwise, all but the first argument will be silently ignored!
+        # Receptors *can* be flexible in autodock, but it is more complicated
+        # than for ligands, so for now make receptors rigid.
+        arg1: -xr
+        arg2: -xh
+        arg3: -xn
+
+# Docking
+  - convert_ligand_mol2_to_pdbqt_obabel.yml:
+#  - convert_ligand_mol2_to_pdbqt_mdanalysis.yml: # generates ligand_rigid.pdbqt only
+
+  - box:
+      in:
+        input_pdb_path: '*receptor_pdb4amber.pdb' # pdb, not pdbqt
+        output_pdb_path: '&box.pdb'
+        config: '{"offset": "20"}' # Default of 2 Angstroms can cause autodock to not find any solutions.
+  - autodock_vina_run:
+      in:
+        input_ligand_pdbqt_path: '*ligand_flex.pdbqt'
+        #input_ligand_pdbqt_path: '*ligand_rigid.pdbqt'
+        input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+        input_box_path: '*box.pdb'
+        output_pdbqt_path: '&decoys_ligand.pdbqt'
+        output_log_path: '&vina.log'
+  - extract_model_pdbqt:
+      in:
+        input_pdbqt_path: '*decoys_ligand.pdbqt'
+        output_pdbqt_path: '&decoy_ligand.pdbqt'
+        config:
+          model: 1
+  - babel_convert:
+      in:
+        input_path: '*decoy_ligand.pdbqt'
+        output_path: '&decoy_ligand.pdb'
+
+# Molecular Dynamics Setup
+#  - leap_gen_top:
+  - pdb2gmx:
+      in:
+        input_pdb_path: '*receptor_hydrogens.pdb'
+        output_crd_path: '&receptor.gro' # See comment below!
+        # Also note that using .g96 format does NOT sort the atoms (within each
+        # residue) in the crd file, but atoms in the top file are always sorted.
+        # Thus, grompp will warn you that the atom names do not match:
+        # "Warning: atom name nnn in *.top and *.g96 does not match"
+        output_top_zip_path: '&receptor.zip'
+        config:
+          water_type: spce
+          force_field: amber99sb-ildn
+          ignh: True
+# NOTE: Setting ignh to True removes all existing hydrogens, and adds new
+# hydrogens based on residue templates. This can cause problems for titratable
+# residues such as Cysteine, Histidine, etc. In other words, if your pdb file
+# contains residues named CYS which are actually in the CYX protonation state,
+# pdb2gmx will fail to add the extra hydrogen atom! This is a problem because
+# if you try to do a good job and explicitly add hydrogens beforehand (using
+# e.g. str_check_add_hydrogens, babel_add_hydrogens, reduce_add_hydrogens, etc)
+# they may use different heuristics and correctly add the hydrogen atom. Thus,
+# the number of atoms in the coordinate and topology files will not be the same!
+# The solution is to call pdb4amber first, which will fix the residue names.
+          merge: False
+  - append_ligand:
+      in:
+        input_itp_path: '*ligand_GMX.itp'
+        input_top_zip_path: '*receptor.zip'
+        output_top_zip_path: '&complex_vac.zip'
+  - babel_convert:
+      in:
+        input_path: '*receptor.gro'
+        output_path: '&receptor_gro.pdb'
+  - cat_pdb:
+      in:
+        input_structure1: '*receptor_gro.pdb' # '*receptor_hydrogens.pdb'
+        input_structure2: '*decoy_ligand.pdb'
+        output_structure_path: '&complex_vac.pdb'

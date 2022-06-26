@@ -12,7 +12,7 @@ steps:
             nsteps: 10000
             dt: 0.002
             tc-grps: system
-            ref-t: 498
+            ref-t: 298
             tau-t: 2
             constraints: h-bonds
             nstxout: 100
@@ -33,18 +33,7 @@ steps:
         output_trr_path: '&prod.trr' # Explicitly specify for cwl_watcher
         output_edr_path: '&prod.edr'
         #config: '{use_gpu: True}'
-  - cwl_watcher:
-      in:
-        #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
-        file_pattern: '*prod.trr' # This * is a glob wildcard, NOT an explicit edge!
-        cwl_tool: analysis_realtime.yml
-        max_times: '20'
-        config:
-          '(1, gmx_rms)': {in: {input_structure_path: prod.tpr, input_traj_path: prod.trr}}
-          '(2, gmx_rms)': {in: {input_structure_path: prod.tpr, input_traj_path: prod.trr}}
-          '(3, gmx_rms)': {in: {input_structure_path: min.tpr, input_traj_path: prod.trr}}
-          '(4, gmx_rgyr)': {in: {input_structure_path: min.tpr, input_traj_path: prod.trr}}
-          '(5, gmx_energy)': {in: {input_energy_path: prod.edr}}
+  - cwl_watcher_analysis.yml:
 
 wic:
   graphviz:
@@ -58,8 +47,9 @@ wic:
       wic:
         graphviz:
           label: 'Molecular\nDynamics'
-    (3, cwl_watcher):
+    (3, cwl_watcher_analysis.yml):
       wic:
+        backend: protein
         graphviz:
           label: 'Real-time\nAnalysis'
           style: invis # Make this node invisible

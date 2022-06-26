@@ -47,7 +47,7 @@ DiGraph = Any # graphviz.DiGraph
 class GraphData():
 
     def __init__(self,
-                 name: str,
+                 name: str, # TODO: Should this be StepId?
                  nodes: List[Tuple[str, Dict]] = [],
                  edges: List[Tuple[str, str, Dict]] = [],
                  subgraphs: List[Any] = [],

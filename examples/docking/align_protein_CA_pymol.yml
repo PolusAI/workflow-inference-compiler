@@ -1,0 +1,26 @@
+steps:
+  - pymol_align_protein_CA:
+      in:
+        script:  ../scripts/align_protein_CA_pymol.py
+        input_1_path: '*receptor_gro.pdb'
+        input_2_path: '*decoy_ligand_1.pdb'
+        input_3_path: '*npt.gro' # Do NOT use prod.gro!
+        # It is only written after the final timestep and thus cannot possibly be used for realtime analysis!
+        input_4_path: '*prod.trr'
+        # pymol only supports saving to pdb format which does not support storing the time of each frame.
+        output_file_path: '&prod_align_protein_CA.pdb'
+  - gmx_rms_nofit:
+      in:
+        input_structure_path: '*npt.gro' # '*prod.tpr' ?
+        input_traj_path: '*prod_align_protein_CA.pdb'
+        input_index_path: '*MOL.ndx'
+        # Which causes the first column of this file to be all zeros
+        # (which ruins the timeseries plot, but not the histogram)
+        output_xvg_path: '&rmsd_equil_ligand_notime.txt' # Use .txt to avoid plotting
+  - bash_xvg:
+      in:
+        script: ../scripts/replace_first_column.sh
+        # But we can recover the time column by copying it from another xvg file.
+        input_xvg1_path: '*rmsd_equil_ligand_notime.txt'
+        input_xvg2_path: '*rmsd_equil_mainchain.xvg'
+        output_xvg_path: '&rmsd_equil_ligand_no_fit.xvg'

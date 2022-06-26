@@ -1,68 +1,13 @@
-# NOTE: The biobb gmx_rms CWL adapter does not support the -b flag
-# (See https://manual.gromacs.org/documentation/current/onlinehelp/gmx-rms.html)
-# This causes the rmsd w.r.t. the last equil timestep to start at exactly zero,
-# which distorts the comparison between the xray and equil cases.
-# NOTE: Most paths can be inferred, but explicitly specify them anyway because
-# for cwl_watcher and so we can re-order steps in analysis.
-steps:
-  - gmx_rms:
-      in:
-        input_traj_path: '*prod.trr'
-        config:
-          selection: MainChain
-        output_xvg_path: 'rmsd_equil_mainchain.xvg'
-  - gmx_rms:
-      in:
-        input_traj_path: '*prod.trr'
-        config:
-          selection: SideChain
-        output_xvg_path: 'rmsd_equil_sidechain.xvg'
-  - gmx_rms:
-      in:
-        input_traj_path: '*prod.trr'
-        config:
-          selection: MainChain
-        output_xvg_path: 'rmsd_xray_mainchain.xvg'
-        input_structure_path: '*min.tpr'
-  - gmx_rgyr:
-      in:
-        input_traj_path: '*prod.trr'
-        config:
-          selection: MainChain
-        output_xvg_path: 'radius_gyration.xvg'
-        input_structure_path: '*min.tpr'
-  - gmx_energy:
-      in:
-        input_energy_path: '*prod.edr'
-        config:
-          terms: [Total-Energy]
-        output_xvg_path: 'energy_total.xvg'
-
 wic:
+  default_backend: protein
+  backends:
+    protein:
+      steps:
+        - analysis_realtime_protein.yml:
+    complex:
+      steps:
+        - analysis_realtime_complex.yml:
   graphviz:
-    label: Realtime Analysis
-    ranksame:
-    - (1, gmx_rms)
-    - (2, gmx_rms)
-    - (3, gmx_rms)
-  steps:
-    (1, gmx_rms):
-      wic:
-        graphviz:
-          label: Mainchain RMSD\nw.r.t. Equil Coords
-    (2, gmx_rms):
-      wic:
-        graphviz:
-          label: Sidechain RMSD\nw.r.t. Equil Coords
-    (3, gmx_rms):
-      wic:
-        graphviz:
-          label: Mainchain RMSD\nw.r.t. X-ray Coords
-    (4, gmx_rgyr):
-      wic:
-        graphviz:
-          label: Radius of\nGyration
-    (5, gmx_energy):
-      wic:
-        graphviz:
-          label: Analyze & Plot\nEnergy\nTimeseries
+    label: Real-time Analysis
+    #style: invis # Do NOT make this graph invisible, because 
+    # it will cause all subgraphs to be invisible (but not nodes!).

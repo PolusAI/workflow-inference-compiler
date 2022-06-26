@@ -88,6 +88,17 @@ inputs:
       position: 7
       prefix: --yml_dirs_file
 
+  root_workflow_yml_path:
+    label: The full absolute path to the root workflow yml file.
+    doc: |
+      The full absolute path to the root workflow yml file.
+    type: string
+    format:
+    - edam:format_2330 # 'Textual format'
+    inputBinding:
+      position: 8
+      prefix: --root_workflow_yml_path
+
 outputs:
   output_log_path:
     label: Path to the output log file

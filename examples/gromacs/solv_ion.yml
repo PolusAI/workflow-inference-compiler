@@ -5,9 +5,16 @@ steps:
           box_type: cubic
           distance_to_molecule: 1.0
   - solvate:
+      in:
+        input_top_zip_path: '*complex_vac.zip'
+        output_crd_path: '&solvate.gro'
+        output_top_zip_path: '&solvate.zip'
   - grompp:
       in:
+        input_crd_path: '*solvate.gro'
+        input_top_zip_path: '*solvate.zip'
         config:
+          maxwarn: 1 # net charge != 0
           mdp:
             integrator: steep
   - genion:

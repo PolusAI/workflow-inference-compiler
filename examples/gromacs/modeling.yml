@@ -1,50 +1,27 @@
 steps:
-- pdb:
-    in:
-      output_pdb_path: xray.pdb
-      #config: {pdb_code: 1aki} # from tutorial
-      #config: {pdb_code: 1enh} # "Structural Studies of the Engrailed Homeodomain" https://pubs.acs.org/doi/10.1021/acs.jpcb.8b02144
-
-      # Chignolin model mini-protein
-      #config: {pdb_code: 1uao} # "10 residue folded peptide designed by segment statistics" http://dx.doi.org/10.1016/j.str.2004.05.022
-
-      # Trp-cage model mini-protein (use 1l2y; 2m7d 2m7c 6d37 have chainbreaks and 6d37 is a hexamer)
-      config: {pdb_code: 1l2y} # "Designing a 20-residue protein." http://dx.doi.org/10.1038/nsb798
-      #config: {pdb_code: 2m7d} # "Folding Dynamics and Pathways of the Trp-Cage Miniproteins" https://doi.org/10.1021/bi501021r
-      #config: {pdb_code: 2m7c} # "Circular Permutation of the Trp-cage: Fold Rescue upon Addition of a Hydrophobic Staple" http://dx.doi.org/10.1039/C3RA43674H
-      #config: {pdb_code: 6d37} # "Trp-cage tr16b R16Nva : Elimination of pH Dependent Interactions" https://doi.org/10.1002/bip.23260
-
-      # Other model mini-proteins
-      #config: {pdb_code: 5kwp} # "Accurate de novo design of hyperstable constrained peptides." http://dx.doi.org/10.1038/nature19791
-      #config: {pdb_code: 6b17} # "Design of a short thermally stable alpha-helix embedded in a macrocycle" http://dx.doi.org/10.1002/cbic.201800026
-      #config: {pdb_code: 1bzv} # "The solution structure of a superpotent B-chain-shortened single-replacement insulin analogue." http://dx.doi.org/10.1110/ps.8.3.499
-- extract_model:
-    in:
-      config:
-        models: [1]
-      output_structure_path: xray_1.pdb
+- download_pdb.yml:
 - structure_check:
     in:
-      output_summary_path: structure_check_xray.json
+      output_summary_path: structure_check_protein.json
 # Requires modeller license
 #- fix_backbone:
 #    in:
-#      output_pdb_path: xray_fix_backbone.pdb
+#      output_pdb_path: protein_fix_backbone.pdb
 #- structure_check:
 #    in:
-#      output_summary_path: structure_check_xray_fix_backbone.json
+#      output_summary_path: structure_check_protein_fix_backbone.json
 - fix_amides:
     in:
-      output_pdb_path: xray_fix_amides.pdb
+      output_pdb_path: protein_fix_amides.pdb
 - structure_check:
     in:
-      output_summary_path: structure_check_xray_fix_amides.json
+      output_summary_path: structure_check_protein_fix_amides.json
 - fix_side_chain:
     in:
-      output_pdb_path: xray_fix_side_chain.pdb
+      output_pdb_path: protein_fix_side_chain.pdb
 - structure_check:
     in:
-      output_summary_path: structure_check_xray_fix_side_chain.json
+      output_summary_path: structure_check_protein_fix_side_chain.json
 - str_check_add_hydrogens:
     in:
       config:
@@ -52,51 +29,60 @@ steps:
         mode: auto # mode = auto, list, ph (must use ph mode to set ph!)
         ph: 7.4
         keep_canonical_resnames: False
-      output_structure_path: xray_hydrogens.pdb
+      output_structure_path: protein_hydrogens.pdb
 - structure_check:
     in:
-      output_summary_path: structure_check_xray_hydrogens.json
+      output_summary_path: structure_check_protein_hydrogens.json
+- pdb2gmx:
+    in:
+      output_crd_path: '&complex_vac.pdb'
+      output_top_zip_path: '&complex_vac.zip'
+      config:
+        water_type: spce
+        force_field: amber99sb-ildn
+        ignh: True
+        merge: False
 
 wic:
   graphviz:
     label: Molecular\nModeling
-    ranksame:
-    - (1, pdb)
-    - (8, str_check_add_hydrogens)
+#    ranksame:
+#    - (1, download_pdb.yml)
+#    - (9, pdb2gmx)
   steps:
-    (1, pdb):
+    (1, download_pdb.yml):
       wic:
         graphviz:
-          label: 'Download\nPDB Code'
-    (2, extract_model):
-      wic:
-        graphviz:
-          label: 'Extract Model'
-    (3, structure_check):
+          label: 'Download\nProtein Model'
+    (2, structure_check):
       wic:
         graphviz:
           label: 'Structure\nCheck'
-    (4, fix_amides):
+    (3, fix_amides):
       wic:
         graphviz:
           label: 'Fix Amides'
-    (5, structure_check):
+    (4, structure_check):
       wic:
         graphviz:
           label: 'Structure\nCheck'
-    (6, fix_side_chain):
+    (5, fix_side_chain):
       wic:
         graphviz:
           label: 'Fix Side Chains'
-    (7, structure_check):
+    (6, structure_check):
       wic:
         graphviz:
           label: 'Structure\nCheck'
-    (8, str_check_add_hydrogens):
+    (7, str_check_add_hydrogens):
       wic:
         graphviz:
           label: 'Add Hydrogens'
-    (9, structure_check):
+    (8, structure_check):
       wic:
         graphviz:
           label: 'Structure\nCheck'
+    (9, pdb2gmx):
+      wic:
+        graphviz:
+          label: 'Generate\nInitial\nTopology'

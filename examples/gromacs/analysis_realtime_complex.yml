@@ -1,0 +1,85 @@
+# NOTE: The biobb gmx_rms CWL adapter does not support the -b flag
+# (See https://manual.gromacs.org/documentation/current/onlinehelp/gmx-rms.html)
+# This causes the rmsd w.r.t. the last equil timestep to start at exactly zero,
+# which distorts the comparison between the xray and equil cases.
+# NOTE: Most paths can be inferred, but explicitly specify them anyway because
+# for cwl_watcher and so we can re-order steps in analysis.
+steps:
+  - gmxselect: # NOTE: make_ndx does NOT work! (It erroneously selects all of the atoms.)
+      in:
+        input_structure_path: '*min.tpr'
+        config: '{"selection": "resname MOL"}'
+        output_ndx_path: '&MOL.ndx'
+  - gmx_rms:
+      in:
+        input_structure_path: '*prod.tpr'
+        input_traj_path: '*prod.trr'
+        config:
+          selection: resname_MOL
+        input_index_path: '*MOL.ndx'
+        output_xvg_path: 'rmsd_equil_ligand_fit.xvg'
+  - gmx_rms:
+      in:
+        input_structure_path: '*prod.tpr'
+        input_traj_path: '*prod.trr'
+        config:
+          selection: MainChain
+        output_xvg_path: 'rmsd_equil_mainchain.xvg'
+  - gmx_rms:
+      in:
+        input_structure_path: '*min.tpr'
+        input_traj_path: '*prod.trr'
+        config:
+          selection: MainChain
+        output_xvg_path: '&rmsd_xray_mainchain.xvg'
+# Align the trajectory with MDAnalysis.
+  - python3_align_protein_CA:
+      in:
+        script:  ../scripts/align_protein_CA_mda.py
+        input_gro_path: '*npt.gro'
+        input_trr_path: '*prod.trr'
+        output_trr_path: '&prod_align_protein_CA.trr'
+  - gmx_rms_nofit:
+      in:
+        input_structure_path: '*npt.gro' # '*prod.tpr' ?
+        input_traj_path: '*prod_align_protein_CA.trr'
+        input_index_path: '*MOL.ndx'
+        output_xvg_path: '&rmsd_equil_ligand_no_fit.xvg'
+# We can also align the trajectory with pymol, but it currently has an O(N^2) performance issue.
+# However, pymol's alignment algorithm rejects outliers, which may be useful for
+# flexible protein targets with floppy tails.
+#  - align_protein_CA_pymol.yml:
+
+wic:
+  graphviz:
+    #label: Real-time Analysis
+    style: invis # Make this subgraph invisible (but NOT the parent graph).
+    ranksame:
+    - (1, gmxselect)
+    - (2, gmx_rms)
+    - (6, gmx_rms_nofit)
+  steps:
+    (1, gmxselect):
+      wic:
+        graphviz:
+          label: Select Ligand\nResidue Indices
+    (2, gmx_rms):
+      wic:
+        graphviz:
+          label: Ligand RMSD (fit)\nw.r.t. Equil Coords
+    (3, gmx_rms):
+      wic:
+        graphviz:
+          label: Mainchain RMSD\nw.r.t. Equil Coords
+    (4, gmx_rms):
+      wic:
+        graphviz:
+          label: Mainchain RMSD\nw.r.t. X-ray Coords
+    (5, python3_align_protein_CA):
+      wic:
+        graphviz:
+          label: Align Trajectory\nw.r.t. Protein CA
+    (6, gmx_rms_nofit):
+      wic:
+        graphviz:
+          label: Ligand RMSD (no fit)\nw.r.t. Equil Coords

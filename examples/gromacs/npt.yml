@@ -9,3 +9,5 @@ wic:
         - npt_amber.yml:
   graphviz:
     label: Constant\nPressure
+    #style: invis # Do NOT make this graph invisible, because 
+    # it will cause all subgraphs to be invisible (but not nodes!).

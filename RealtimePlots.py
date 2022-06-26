@@ -35,6 +35,8 @@ def read_tabular_data(filename: Path) -> List[List[float]]:
         for line in f.readlines():
             if line.startswith('#'):  # Skip comment lines
                 continue
+            if line.startswith('@'):  # Skip xmgrace directives
+                continue
             lines.append([float(x) for x in line.strip().split()])
     return lines
 
@@ -116,6 +118,8 @@ labels = {
     'rmsd_equil_mainchain.xvg': ('Mainchain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
     'rmsd_equil_sidechain.xvg': ('Sidechain RMSD w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
     'radius_gyration.xvg': ('Radius of Gyration', 'time (ps)', 'radius (nm)'),
+    'rmsd_equil_ligand_fit.xvg': ('Ligand RMSD (fit) w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
+    'rmsd_equil_ligand_no_fit.xvg': ('Ligand RMSD (no fit) w.r.t. Equil', 'time (ps)', 'rmsd (nm)'),
 }
 
 

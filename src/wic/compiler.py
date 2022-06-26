@@ -207,10 +207,13 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # get the label (if any) from the subworkflow
             step_i_wic_graphviz = sub_yaml_tree.yml.get('wic', {}).get('graphviz', {})
             label = step_i_wic_graphviz.get('label', step_key)
+            style = step_i_wic_graphviz.get('style', '')
 
             subgraph_gv = graphviz.Digraph(name=f'cluster_{step_key}')
             subgraph_gv.attr(label=label) # str(path)
             subgraph_gv.attr(color='lightblue')  # color of outline
+            if style != '':
+                subgraph_gv.attr(style=style)
             subgraph_nx = nx.DiGraph()
             graphdata = GraphData(step_key)
             subgraph = GraphReps(subgraph_gv, subgraph_nx, graphdata)
@@ -303,14 +306,26 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
         # cachedir_path needs to be an absolute path, but for reproducibility
         # we don't want users' home directories in the yml files.
-        if 'cwl_watcher' in step_key:
+        if 'cwl_watcher' == step_key:
+            if 'in' not in steps[i][step_key]:
+                steps[i][step_key]['in'] = {}
+
             cachedir_path = Path(args.cachedir).absolute()
             #print('setting cachedir_path to', cachedir_path)
+            steps[i][step_key]['in']['root_workflow_yml_path'] = str(Path(args.yaml).parent.absolute())
+
             steps[i][step_key]['in']['cachedir_path'] = str(cachedir_path)
             cwl_dirs_file_abs = str(Path(args.cwl_dirs_file).absolute())[:-4] + '_absolute.txt'
             steps[i][step_key]['in']['cwl_dirs_file'] = cwl_dirs_file_abs
             yml_dirs_file_abs = str(Path(args.yml_dirs_file).absolute())[:-4] + '_absolute.txt'
             steps[i][step_key]['in']['yml_dirs_file'] = yml_dirs_file_abs
+
+            # Add a 'dummy' values to explicit_edge_calls, because
+            # that determines sub_args_provided when the recursion returns.
+            arg_keys_ = ['root_workflow_yml_path', 'cachedir_path', 'cwl_dirs_file', 'yml_dirs_file']
+            for arg_key_ in arg_keys_:
+                in_name_ = f'{step_name_i}___{arg_key_}' # {step_name_i}_input___{arg_key}
+                explicit_edge_calls_copy.update({in_name_: (namespaces + [step_name_i], arg_key_)})
 
             # NOTE: Make the paths within *_dirs_file absolute here
             ns_paths = utils.read_lines_pairs(Path(args.yml_dirs_file))
@@ -703,6 +718,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     print(f'formats: {in_format}')
                     print(f'Choosing {in_format[0]}')
                 in_format = in_format[0]
+            # path = Path(in_dict['value']).name # NOTE: Use .name ?
             new_keyval = {key: {'class': 'File', 'path': in_dict['value'], 'format': in_format}}
         elif 'string' == in_dict['type']:
             # We cannot store string values as a dict, so use type: ignore
