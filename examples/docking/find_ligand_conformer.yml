@@ -1,19 +1,13 @@
 steps:
-  - obabel_convert_sdf:
-      in:
-        model: "1" # NOTE: Need quotes here due to explicit edges &* string syntax
-        input_path: ../data/NCIOpen.sdf
-        output_sdf_path: '&ligand.sdf'
-        # "-r	Remove all but the largest contiguous fragment (strip salts)"
-        arg1: -r
-        # NOTE: We could use -h or -p <ph> here to add hydrogens, but obgen can add hydrogens.
-        # However, the resulting conformers are not the same! It is unclear if it is
-        # better to explicitly add hydrogens here or let obgen do it.
-        # arg2: -h
-        # arg2: -p 7.4
+  # NOTE: We could use -h or -p <ph> in obabel to add hydrogens, but obgen can add hydrogens.
+  # However, the resulting conformers are not the same! It is unclear if it is
+  # better to explicitly add hydrogens in obabel or let obgen do it.
+  # arg2: -h
+  # arg2: -p 7.4
   - obgen:
       in:
-        input_path: '*ligand.sdf'
+        input_path:
+          source: '*ligand.sdf'
         # obgen adds hydrogens, minimizes, searches for the lowest energy conformer,
         # then minimizes again.
         output_sdf_path: '&ligand_min.sdf'

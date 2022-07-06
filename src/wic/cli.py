@@ -15,6 +15,11 @@ parser.add_argument('--yml_dirs_file', type=str, required=False, default='yml_di
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
 
+parser.add_argument('--parallel', type=bool, required=False, default=False,
+                    help='''When running locally, execute independent steps in parallel.
+                    \nThis is required for real-time analysis, but it may cause issues with
+                    \nhanging (particularly when scattering). See user guide for details.''')
+
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--cwl_run_local', type=bool, required=False, default=False,
                     help='After generating the cwl file(s), run it on localhost.')
