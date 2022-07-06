@@ -472,6 +472,23 @@ def recursively_delete_dict_key(key: str, obj: Any) -> Any:
     return obj
 
 
+def recursively_contains_dict_key(key: str, obj: Any) -> bool:
+    """Recursively checks whether obj contains entries with the given key.
+
+    Args:
+        key (str): The key to be checked
+        obj (Any): The object from which to check the key.
+
+    Returns:
+        bool: True if key is found, else False.
+    """
+    if isinstance(obj, List):
+        return any([recursively_delete_dict_key(key, x) for x in obj])
+    if isinstance(obj, Dict):
+        return (key in obj.keys()) or any(recursively_contains_dict_key(key, val) for val in obj.values())
+    return False
+
+
 def make_tool_dag(tool_stem: str, tool: Tool, graph_dark_theme: bool) -> None:
     """Uses the `dot` executable from the graphviz package to make a Directed
     Acyclic Graph corresponding to the given CWL CommandLineTool

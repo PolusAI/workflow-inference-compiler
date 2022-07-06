@@ -254,8 +254,8 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
     tools_stems = [stepid.stem for stepid in tools]
     subkeys = [key for key in steps_keys if key not in tools_stems]
 
-    # All subworkflows except backends are inlineable.
-    inlineable = wic.get('inlineable', True)
+    # All subworkflows are inlineable, except backends and scattered subworkflows.
+    inlineable = wic['wic'].get('inlineable', True)
     namespaces = [namespaces_init] if inlineable and namespaces_init != [] and not backend else []
 
     for i, step_key in enumerate(steps_keys):

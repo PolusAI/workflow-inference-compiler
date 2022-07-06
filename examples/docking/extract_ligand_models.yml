@@ -1,0 +1,67 @@
+steps:
+- obabel_extract_models_sdf:
+    in:
+      input_path: ../data/NCIOpen.sdf
+      output_sdf_path: '&ligands.sdf'
+      first_model: "1"
+      last_model: "2"
+      arg1: -r
+# NOTE: We need to extract the models first, before splitting them into separate files.
+# If we try to do both simultaneously, obabel ignores -f and -l and outputs ALL models.
+- obabel_split_sdf:
+    in:
+      input_path: '*ligands.sdf'
+      output_sdf_path: '&ligand.sdf' # Array type
+      arg1: -m
+- docking.yml:
+# NOTE: Do not add scattering arguments here, add them to the wic: metadata annotations.
+# (We want this information at the call site, not inserted within the subworkflow.)
+
+wic:
+  steps:
+    (3, docking.yml):
+      scatter: [__index__]
+      in:
+        # Define an auxilary input variable to use in valueFrom; it is NOT actually an input!
+        # (The 'unused' input will generate a warning at runtime.)
+        __index__: # NOTE: Currently need to use double underscores.
+          source: [0, 1] # NOTE: Use zero-based indexing! See comment below.
+          type: int[]
+        # Note that since we want to scatter over the entire subworkflow, we do
+        # not want to go any deeper into the syntax tree / call stack, i.e. we
+        # do not want to pass '*ligand.sdf' all the way through to input_path.
+        # NOTE: We (currently) have to use the auto-generated input name to reference the call site.
+        docking__step__1__find_ligand_conformer.yml___find_ligand_conformer__step__1__obgen___input_path:
+          source: '*ligand.sdf'
+          valueFrom: $(self[inputs.__index__]) # self refers to the array of input values
+      wic:
+        # Scattering changes the input/output types and thus creates a barrier to inlineing.
+        inlineable: False
+        steps:
+          (1, find_ligand_conformer.yml):
+            wic:
+              # Since the above name refers to an embedded subworkflow, is NOT inlineing-invariant.
+              # Thus, if we want the tests to pass, we also need to disable inlineing here.
+              inlineable: False
+
+
+# Beware 0 vs 1 -based indexing! JavaScript (and thus CWL) uses 0-based indices.
+# If you accidentally use 1-based indices, the last array access will be out of
+# bounds and return null, which causes the following nasty error message:
+
+# Cannot make job: Expression evaluation error:
+# Expecting value: line 1 column 1 (char 0)
+# script was:
+# ...
+#     "index": 2
+# };
+# var self = [
+# ...
+# ];
+# var runtime = {
+#     "tmpdir": null,
+#     "outdir": null
+# };
+# (function(){return ((self[inputs.__index__]));})()
+# stdout was: 'undefined'
+# stderr was: ''

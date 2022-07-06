@@ -1,4 +1,5 @@
 import argparse
+import copy
 from pathlib import Path
 from typing import Dict, List
 
@@ -7,9 +8,9 @@ from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tools,
                         WorkflowOutputs, Yaml)
 
 
-def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
-                                      wic_steps: Yaml, subkeys: List[str]) -> None:
-    """Adds a SubworkflowFeatureRequirement if there are any subworkflows
+def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
+                           wic_steps: Yaml, subkeys: List[str]) -> None:
+    """Adds any necessary CWL requirements
 
     Args:
         yaml_tree (Yaml): A tuple of name and yml AST
@@ -18,24 +19,41 @@ def maybe_add_subworkflow_requirement(yaml_tree: Yaml, tools: Tools, steps_keys:
         wic_steps (Yaml): The metadata assocated with the workflow steps
         subkeys (List[str]): The keys associated with subworkflows
     """
-    # If there is at least one subworkflow, add a SubworkflowFeatureRequirement
-    subs = []
+    bools = []
+    subwork = []
+    scatter = []
+    stepinp = []
     for i, step_key in enumerate(steps_keys):
         sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
-        plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
+
         if step_key not in subkeys:
+            plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
             step_id = StepId(Path(step_key).stem, plugin_ns_i)
             sub = tools[step_id].cwl['class'] == 'Workflow'
-            subs.append(sub)
-    if (not subkeys == []) or any(subs):
-        subworkreq = 'SubworkflowFeatureRequirement'
-        subworkreqdict = {subworkreq: {'class': subworkreq}}
+            bools.append(sub)
+
+        if 'scatter' in sub_wic:
+            scatter = ['ScatterFeatureRequirement']
+
+        in_step = yaml_tree['steps'][i][step_key].get('in')
+        sub_wic_copy = copy.deepcopy(sub_wic)
+        if 'wic' in sub_wic_copy:
+            del sub_wic_copy['wic']
+        if (utils.recursively_contains_dict_key('valueFrom', in_step) or
+            utils.recursively_contains_dict_key('valueFrom', sub_wic_copy)):
+            stepinp = ['StepInputExpressionRequirement', 'InlineJavascriptRequirement']
+
+    if (not subkeys == []) or any(bools):
+        subwork = ['SubworkflowFeatureRequirement']
+
+    reqs = subwork + scatter + stepinp
+    if reqs:
+        reqsdict: Dict[str, Dict] = {r: {} for r in reqs}
         if 'requirements' in yaml_tree:
-            if not subworkreq in yaml_tree['requirements']:
-                new_reqs = dict(list(yaml_tree['requirements'].items()) + list(subworkreqdict))
-                yaml_tree['requirements'].update(new_reqs)
+            new_reqs = dict(list(yaml_tree['requirements'].items()) + list(reqsdict))
+            yaml_tree['requirements'].update(new_reqs)
         else:
-            yaml_tree['requirements'] = subworkreqdict
+            yaml_tree['requirements'] = reqsdict
 
 
 def add_yamldict_keyval(steps_i: Yaml, step_key: str, in_out: str, keyval: Yaml) -> Yaml:
@@ -161,6 +179,10 @@ def get_workflow_outputs(args: argparse.Namespace,
             #print('out_name', out_name)
 
         for out_key, out_dict in outputs_workflow[i].items():
+            if 'scatter' in sub_wic:
+                # Promote scattered output types to arrays
+                out_dict['type'] = (out_dict['type'] + '[]').replace('?[]', '[]?')
+
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             out_var = f'{step_name_i}/{out_key}'
             workflow_outputs.update({out_name: {**out_dict, 'outputSource': out_var}})

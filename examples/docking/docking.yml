@@ -3,8 +3,8 @@ steps:
 # NOTE: Searching for conformers tends to cause the ligand to curl up into a ball.
 # Although this lowers its energy in isolation, the decreased surface area tends
 # to weaken the binding free energy! (as reported by autodock vina)
-  - extract_ligand_find_conformer.yml:
-#  - extract_ligand_minimize_only.yml:
+  - find_ligand_conformer.yml:
+#  - minimize_ligand_only.yml:
 
 # NOTE: We converted to mol2 format above because it allows explicit charges.
 # Thus, if we only infer charges once and then preserve them, we don't have to
@@ -94,7 +94,7 @@ steps:
         input_pdbqt_path: '*decoys_ligand.pdbqt'
         output_pdbqt_path: '&decoy_ligand.pdbqt'
         config:
-          model: 1
+          model: 1 # NOTE: score, rmsd l.b., rmsd u.b. stored in REMARK lines
   - babel_convert:
       in:
         input_path: '*decoy_ligand.pdbqt'
