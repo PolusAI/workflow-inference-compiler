@@ -4,6 +4,9 @@ wic:
     protein:
       steps:
         - analysis_realtime_protein.yml:
+    ligand:
+      steps:
+        - analysis_realtime_ligand.yml:
     complex:
       steps:
         - analysis_realtime_complex.yml:

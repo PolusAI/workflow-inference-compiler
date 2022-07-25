@@ -181,10 +181,28 @@ def get_workflow_outputs(args: argparse.Namespace,
         for out_key, out_dict in outputs_workflow[i].items():
             if 'scatter' in sub_wic:
                 # Promote scattered output types to arrays
-                out_dict['type'] = (out_dict['type'] + '[]').replace('?[]', '[]?')
+                if isinstance(out_dict['type'], Dict):
+                    out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
+                else:
+                    out_dict['type'] = (out_dict['type'] + '[]').replace('?[]', '[]?')
 
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             out_var = f'{step_name_i}/{out_key}'
             workflow_outputs.update({out_name: {**out_dict, 'outputSource': out_var}})
         #print('workflow_outputs', workflow_outputs)
+    # NOTE: The fix_conflicts 'feature' of cwltool prevents files from being
+    # overwritten by appending _2, _3 etc.
+    # The problem is that these renamed files now no longer match the glob
+    # patterns in the outputBinding tags, thus they are not copied to the
+    # final output folder in relocateOutputs() and/or stage_files().
+    # Note that this error is not detected using --validate.
+    # One workaround is to simply output all files.
+    # TODO: glob "." is still returning null; need to use InitialWorkDirRequirement??
+    output_all = {'output_all':
+                    {'type':
+                        {'type': 'array',
+                         'items': ['Directory', 'File']},
+                     'outputBinding': {'glob': '\".\""'},
+                     'format': 'edam:format_2330'}} # 'Textual format'
+    workflow_outputs.update(output_all) # type: ignore
     return workflow_outputs

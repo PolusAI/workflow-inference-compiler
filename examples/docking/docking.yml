@@ -38,6 +38,17 @@ steps:
         output_path_gro: '&ligand_GMX.gro'
         output_path_top: '&ligand_GMX.top'
         #charge_method: user # take charges from mol2 file
+# NOTE: acpype doesn't add forcefield or water topology #include lines.
+  - bash_top:
+      in:
+        script: ../scripts/gmx_add_topology_includes.sh
+        input_top_path: '*ligand_GMX.top'
+        output_top_path: '&ligand_GMX_includes.top'
+  - zip_top:
+      in:
+        input_top_path: '*ligand_GMX_includes.top'
+        input_itp_path: '*ligand_GMX.itp'
+        output_top_zip_path: '&ligand_GMX.zip'
 
 # Receptor
   - download_pdb.yml:

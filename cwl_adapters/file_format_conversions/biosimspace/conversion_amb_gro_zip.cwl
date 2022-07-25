@@ -16,7 +16,7 @@ steps:
       input_top_path: amb_gro_zip__step__1__bss_amb_gro/output_top_path
     out:
     - output_top_zip_path
-cwlVersion: v1.2
+cwlVersion: v1.0
 class: Workflow
 $namespaces:
   edam: https://edamontology.org/

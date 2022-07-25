@@ -221,7 +221,9 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         }
         # Need to add owner and/or additionalProp1 ?
         # Need to remove headers and/or requirements? i.e.
-        #yaml_tree['cwlVersion'] = 'v1.2' # Use 1.2 to support conditional workflows
+        # Use 1.0 because cromwell only supports 1.0 and we are not using 1.1 / 1.2 features.
+        # Eventually we will want to use 1.2 to support conditional workflows
+        #yaml_tree['cwlVersion'] = 'v1.0'
         #yaml_tree['class'] = 'Workflow'
         #yaml_tree['requirements'] = subworkreqdict
 

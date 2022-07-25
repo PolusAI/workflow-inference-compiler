@@ -1,0 +1,8 @@
+steps:
+  - setup.yml:
+  - basic.yml:
+  - analysis.yml:
+
+wic:
+  graphviz:
+    label: Molecular Dynamics Stability Analysis

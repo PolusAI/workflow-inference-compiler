@@ -18,29 +18,29 @@ inputs:
     inputBinding:
       position: 1
 
-  input_pdb_path:
+  input_top_path:
     type: File
     format:
-    - edam:format_1476
+    - edam:format_3880
     inputBinding:
       position: 2
 
-  output_pdb_path:
+  output_top_path:
     type: string
     format:
-    - edam:format_1476
+    - edam:format_2330 # 'Textual format'
 #    inputBinding:
 #      position: 3
 
 outputs:
-  output_pdb_path:
+  output_top_path:
     type: File
-    format: edam:format_1476
+    format: edam:format_3880
     streamable: true
     outputBinding:
-      glob: $(inputs.output_pdb_path)
+      glob: $(inputs.output_top_path)
 
-stdout: $(inputs.output_pdb_path)
+stdout: $(inputs.output_top_path)
 
 $namespaces:
   edam: https://edamontology.org/

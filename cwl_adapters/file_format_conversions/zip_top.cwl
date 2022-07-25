@@ -3,13 +3,13 @@ cwlVersion: v1.0
 
 class: CommandLineTool
 
-label: zips a gromacs topology TOP file (and posre.itp).
+label: zips a gromacs topology TOP file (and/or itp include file).
 
 doc: |-
-  zips a gromacs topology TOP file (and posre.itp).
+  zips a gromacs topology TOP file (and/or itp include file).
 
 baseCommand: zip
-arguments: ['system.zip']
+arguments: ["-j", $(inputs.output_top_zip_path)] # junk (don't record) directory names
 
 inputs:
   input_top_path:
@@ -26,7 +26,26 @@ inputs:
     inputBinding:
       position: 1
 
-# TODO: Add posre.itp
+  input_itp_path:
+    label: Input topology include file
+    doc: |-
+      Input topology include file
+      Type: string
+      File type: input
+      Accepted formats: top
+      Example file: https://github.com/bioexcel/biobb_md/raw/master/biobb_md/test/data/gromacs/mdrun.top
+    type: File
+    format:
+    - edam:format_3883
+    inputBinding:
+      position: 2
+    default: posre.itp
+
+  output_top_zip_path:
+    label: Output zip file
+    type: string
+    format: edam:format_2330 # 'textual format'
+    default: system.zip
 
 outputs:
   output_top_zip_path:
@@ -40,7 +59,7 @@ outputs:
     type: File
     format: edam:format_3987
     outputBinding:
-      glob: system.zip
+      glob: $(inputs.output_top_zip_path)
 
 $namespaces:
   edam: https://edamontology.org/

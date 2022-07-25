@@ -16,7 +16,7 @@ steps:
     out:
     - output_top_path
     - output_crd_path
-cwlVersion: v1.2
+cwlVersion: v1.0
 class: Workflow
 $namespaces:
   edam: https://edamontology.org/
