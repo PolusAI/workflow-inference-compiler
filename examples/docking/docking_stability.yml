@@ -1,25 +1,26 @@
 steps:
 - docking.yml:
-- setup.yml:
-- basic.yml:
-- analysis.yml:
+- stability.yml:
 
 wic:
   graphviz:
     label: Docking + MD Stability Analysis
   steps:
-    (3, basic.yml):
+    (2, stability.yml):
       wic:
         steps:
-          (3, prod.yml):
+          (2, basic.yml):
             wic:
               steps:
-                (3, cwl_watcher_analysis.yml):
+                (3, prod.yml):
                   wic:
-                    backend: complex
-    (4, analysis.yml):
-      wic:
-        steps:
-          (1, analysis_realtime.yml):
+                    steps:
+                      (3, cwl_watcher_analysis.yml):
+                        wic:
+                          backend: complex
+          (3, analysis.yml):
             wic:
-              backend:  complex
+              steps:
+                (1, analysis_realtime.yml):
+                  wic:
+                    backend:  complex

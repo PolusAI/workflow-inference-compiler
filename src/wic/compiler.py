@@ -153,7 +153,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     subkeys = [key for key in steps_keys if key not in tools_stems]
 
     # Add headers
-    yaml_tree['cwlVersion'] = 'v1.2' # Use 1.2 to support conditional workflows
+    # Use 1.0 because cromwell only supports 1.0 and we are not using 1.1 / 1.2 features.
+    # Eventually we will want to use 1.2 to support conditional workflows
+    yaml_tree['cwlVersion'] = 'v1.0'
     yaml_tree['class'] = 'Workflow'
     yaml_tree['$namespaces'] = {'edam': 'https://edamontology.org/'}
     yaml_tree['$schemas'] = ['https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl']
@@ -176,6 +178,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     # unmodified so that we can test that compilation is embedding independent.
     explicit_edge_defs_copy2 = copy.deepcopy(explicit_edge_defs)
     explicit_edge_calls_copy2 = copy.deepcopy(explicit_edge_calls)
+    # Yet another copy for checkpointing
+    explicit_edge_defs_chk = {}
+    explicit_edge_calls_chk = {}
 
     # Collect recursive subworkflow data
     step_1_names = []
@@ -217,6 +222,16 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             subgraph_nx = nx.DiGraph()
             graphdata = GraphData(step_key)
             subgraph = GraphReps(subgraph_gv, subgraph_nx, graphdata)
+
+            # Checkpoint / restore environment
+            if wic_step_i.get('wic', {}).get('environment', '') == 'checkpoint':
+                #print('checkpointing environment')
+                explicit_edge_defs_chk = copy.deepcopy(explicit_edge_defs_copy)
+                explicit_edge_calls_chk = copy.deepcopy(explicit_edge_calls_copy)
+            if wic_step_i.get('wic', {}).get('environment', '') == 'restore':
+                #print('restoring environment')
+                explicit_edge_defs_copy = copy.deepcopy(explicit_edge_defs_chk) # deepcopy?
+                explicit_edge_calls_copy = copy.deepcopy(explicit_edge_calls_chk) # deepcopy?
 
             steps[i].update({step_key: {}}) # delete yml subtree
             sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i],
@@ -357,7 +372,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         #print(list(in_tool.keys()))
         if tool_i['class'] == 'CommandLineTool':
             args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or
-                                                            in_tool[arg]['type'][-1] == '?')]
+                 (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?'))]
         elif tool_i['class'] == 'Workflow':
             args_required = list(in_tool)
 
@@ -432,7 +447,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # Convert native YAML to a JSON-encoded string for specific tags.
             tags = ['config']
             if arg_key in tags and isinstance(arg_val, Dict):
-                arg_val = {'source': json.dumps(arg_val)}
+                arg_val = json.dumps(arg_val) # Do NOT wrap in {'source': ...}
             # Use triple underscore for namespacing so we can split later
             in_name = f'{step_name_i}___{arg_key}' # {step_name_i}_input___{arg_key}
 
@@ -445,12 +460,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 steps[i][step_key]['in'][arg_key] = {'source': in_name}
                 continue
 
-            in_type = in_tool[arg_key]['type'].replace('?', '')  # Providing optional arguments makes them required
+            in_type = in_tool[arg_key]['type']
+            if isinstance(in_type, str):
+                in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
             in_dict = {'type': in_type}
             if 'format' in in_tool[arg_key]:
                 in_format = in_tool[arg_key]['format']
                 in_dict['format'] = in_format
-            if arg_val['source'][0] == '&':
+            if isinstance(arg_val, Dict) and arg_val['source'][0] == '&':
                 arg_val['source'] = arg_val['source'][1:]  # Remove &
                 #print('arg_key, arg_val['source']', arg_key, arg_val['source'])
                 # NOTE: There can only be one definition, but multiple call sites.
@@ -467,7 +484,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     # TODO: Show input node?
                 else:
                     raise Exception(f"Error! Multiple definitions of &{arg_val['source']}!")
-            elif arg_val['source'][0] == '*' and 'cwl_watcher' not in step_key:
+            elif isinstance(arg_val, Dict) and arg_val['source'][0] == '*' and 'cwl_watcher' not in step_key:
                 # NOTE: Exclude cwl_watcher from explicit edge dereferences.
                 # Since cwl_watcher requires explicit filenames for globbing,
                 # we do not want to replace them with internal CWL dependencies!
@@ -555,7 +572,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             else:
                 # NOTE: See comment above about excluding cwl_watcher from
                 # explicit edge dereferences.
-                if arg_val['source'][0] == '*' and 'cwl_watcher' in step_key and 'file_pattern' not in arg_key:
+                if (isinstance(arg_val, Dict) and arg_val['source'][0] == '*' and
+                    'cwl_watcher' in step_key and 'file_pattern' not in arg_key):
                     arg_val['source'] = arg_val['source'][1:] # Remove *, except for file_pattern
 
                 inputs_workflow.update({in_name: in_dict})
@@ -755,7 +773,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # TODO: Check for all valid types?
         else:
             # We cannot store string values as a dict, so use type: ignore
-            new_keyval = {key: in_dict['value']['source']} # type: ignore
+            arg_val = in_dict['value']
+            new_val = arg_val['source'] if isinstance(arg_val, Dict) else arg_val
+            new_keyval = {key: new_val}
         #else:
         #    raise Exception(f"Error! Unknown type: {in_dict['type']}")
         yaml_inputs.update(new_keyval)

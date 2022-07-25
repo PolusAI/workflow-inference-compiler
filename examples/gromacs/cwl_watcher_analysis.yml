@@ -4,6 +4,9 @@ wic:
     protein:
       steps:
         - cwl_watcher_protein.yml:
+    ligand:
+      steps:
+        - cwl_watcher_ligand.yml:
     complex:
       steps:
         - cwl_watcher_complex.yml:

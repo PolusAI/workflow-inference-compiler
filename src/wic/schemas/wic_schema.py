@@ -51,7 +51,8 @@ def cwl_tool_schema(name: str, tool: Tool) -> Json:
         #    required.append(key)
 
         # Add type information, with exceptions
-        valtype = valtype.replace('?', '')
+        if isinstance(valtype, str):
+            valtype = valtype.replace('?', '')
         if (not (valtype in ['', 'File']) and # Json does not have a File type
             not (key == 'config') and name in config_schemas):  # Exclude config schemas
             inputs_props[key]['type'] = valtype
@@ -130,6 +131,7 @@ def wic_tag_schema() -> Json:
     backend = {'type': 'string'}
     default_backend = {'type': 'string'}
     inlineable = {'type': 'boolean'}
+    environment = {'type': 'string'}
 
     schema = default_schema(url=True)
     schema['$id'] = 'wic_tag'
@@ -139,7 +141,7 @@ def wic_tag_schema() -> Json:
     schema['description'] = 'Use steps: to recursively overload / pass parameters.\nUse graphviz: to modify the DAGs.'
     schema['properties'] = {'graphviz': graphviz, 'steps': steps, 'backend': backend,
                             'backends': backends, 'default_backend': default_backend,
-                            'namespace': namespace, 'inlineable': inlineable}
+                            'namespace': namespace, 'inlineable': inlineable, 'environment': environment}
     return schema
 
 

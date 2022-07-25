@@ -1,0 +1,17 @@
+steps:  
+  - cwl_watcher:
+      in:
+        #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
+        file_pattern: '*prod.trr' # This * is a glob wildcard, NOT an explicit edge!
+        cwl_tool: analysis_realtime_ligand.yml
+        max_times: '20'
+        config:
+          '(1, gmxselect)': {in: {input_structure_path: min.tpr}}
+          '(2, gmx_rms)': {in: {input_structure_path: prod.tpr, input_traj_path: prod.trr}}
+
+wic:
+  steps:
+    (1, cwl_watcher):
+      wic:
+        graphviz:
+          style: invis # Make this node invisible

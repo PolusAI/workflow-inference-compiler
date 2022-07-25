@@ -65,7 +65,8 @@ def perform_edge_inference(args: argparse.Namespace,
 
     in_tool = tool_i['inputs']
     in_type = in_tool[arg_key]['type']
-    in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
+    if isinstance(in_type, str):
+        in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
     in_dict = {'type': in_type}
     in_formats = []
     if 'format' in in_tool[arg_key]:
@@ -208,7 +209,8 @@ def perform_edge_inference(args: argparse.Namespace,
             label = out_key_no_namespace if tool_j['class'] == 'Workflow' else out_key
             utils.add_graph_edge(args, graph, nss1, nss2, label)
 
-            arg_val = {'source': f'{step_name_j}/{out_key}'}
+            #arg_val = {'source': f'{step_name_j}/{out_key}'}
+            arg_val = f'{step_name_j}/{out_key}'
             arg_keyval = {arg_key: arg_val}
             steps_i = utils_cwl.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
             #print(f'inference i {i} y arg_key {arg_key}')
@@ -286,7 +288,8 @@ def perform_edge_inference(args: argparse.Namespace,
         # which should match in the parent workflow.
         inputs_workflow.update({in_name: in_dict})
 
-        arg_keyval = {arg_key: {'source': in_name}}
+        #arg_keyval = {arg_key: {'source': in_name}}
+        arg_keyval = {arg_key: in_name}
         steps_i = utils_cwl.add_yamldict_keyval_in(steps_i, step_key, arg_keyval)
         return steps_i
 

@@ -1,5 +1,6 @@
 import argparse
 import copy
+import json
 from pathlib import Path
 import subprocess as sub
 from typing import Any, Dict, List, Tuple
@@ -402,6 +403,15 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     dfs = flatten(dfs_lists)
     return dfs
 
+# snakeyaml (a cromwell dependency) refuses to parse yaml files with more than
+# 50 anchors/aliases to prevent Billion Laughs attacks.
+# See https://en.wikipedia.org/wiki/Billion_laughs_attack
+# Solution: Inline the contents of the aliases into the anchors.
+# See https://ttl255.com/yaml-anchors-and-aliases-and-how-to-disable-them/#override
+class NoAliasDumper(yaml.SafeDumper):
+    def ignore_aliases(self, data: Any) -> bool:
+        return True
+
 
 def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> None:
     """Writes the compiled CWL files and their associated yml inputs files to disk.
@@ -421,6 +431,20 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
     cwl_tree = node_data.compiled_cwl
     yaml_inputs = node_data.workflow_inputs_file
 
+    # NOTE: As part of the scatter feature we introduced the use of 'source',
+    # but in some cases (biobb 'config' tag) it is not being removed correctly
+    # in the compiler, so as a last resort remove it here.
+    yaml_inputs_no_source = {}
+    for key, val in yaml_inputs.items():
+        try:
+            if isinstance(val, str):
+                val_dict = json.loads(val)
+                if 'source' in val_dict:
+                    val = val_dict['source']
+        except Exception as e:
+            pass
+        yaml_inputs_no_source[key] = val
+
     path.mkdir(parents=True, exist_ok=True)
     if relative_run_path:
         filename_cwl = f'{yaml_stem}.cwl'
@@ -431,13 +455,13 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
 
     # Dump the compiled CWL file contents to disk.
     # Use sort_keys=False to preserve the order of the steps.
-    yaml_content = yaml.dump(cwl_tree, sort_keys=False, line_break='\n', indent=2)
+    yaml_content = yaml.dump(cwl_tree, sort_keys=False, line_break='\n', indent=2, Dumper=NoAliasDumper)
     with open(path / filename_cwl, mode='w', encoding='utf-8') as w:
         w.write('#!/usr/bin/env cwl-runner\n')
         w.write(auto_gen_header)
         w.write(''.join(yaml_content))
 
-    yaml_content = yaml.dump(yaml_inputs, sort_keys=False, line_break='\n', indent=2)
+    yaml_content = yaml.dump(yaml_inputs_no_source, sort_keys=False, line_break='\n', indent=2, Dumper=NoAliasDumper)
     with open(path / filename_yml, mode='w', encoding='utf-8') as inp:
         inp.write(auto_gen_header)
         inp.write(yaml_content)
