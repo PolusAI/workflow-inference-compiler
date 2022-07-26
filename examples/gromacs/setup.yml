@@ -4,7 +4,7 @@ steps:
       input_crd_path: '*complex_vac.pdb'
       config:
         box_type: cubic
-        distance_to_molecule: 1.0
+        distance_to_molecule: 1.2
 - solvate:
     in:
       input_top_zip_path: '*complex_vac.zip'
