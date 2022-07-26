@@ -386,16 +386,17 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
         if back_name == '':
             pretty_print_forest(forest)
             raise Exception('Error! No backend in yaml forest!\n')
+        sub_forests_dict = dict(forest.sub_forests)
         step_id = StepId(back_name, plugin_ns)
-        yaml_tree_back: YamlTree = forest.sub_forests[step_id].yaml_tree
+        yaml_tree_back: YamlTree = sub_forests_dict[step_id].yaml_tree
         step_1 = yaml_tree_back.yml['steps'][0]
         step_name_1 = list(step_1.keys())[0]
         if Path(step_name_1).suffix == '.yml':
             # Choose a specific backend
-            return flatten_forest(forest.sub_forests[step_id])
+            return flatten_forest(sub_forests_dict[step_id])
         return [forest]
 
-    forests = list(forest.sub_forests.values())
+    forests = [f[1] for f in forest.sub_forests]
     sub_forests = [flatten_forest(f) for f in forests]
     # Use depth first search flattening to match flatten_rose_tree()
     #bfs = forests + flatten(sub_forests)

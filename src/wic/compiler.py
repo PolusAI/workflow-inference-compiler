@@ -195,6 +195,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
     #plugin_ns = wic['wic'].get('namespace', 'global')
 
+    tools_lst: List[Tool] = []
+
     for i, step_key in enumerate(steps_keys):
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         stem = Path(step_key).stem
@@ -271,16 +273,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
             sibling_subgraphs.append(sub_node_data.graph) # TODO: Just subgraph?
             step_1_names.append(sub_node_data.step_name_1)
-            # Add compiled cwl file contents to tools
-            # NOTE: We need to consider what to do when stem is not unique.
-            # This can happen when two yml files in different subdirectories
-            # have the same stem, and it can also happen when we reuse a
-            # subworkflow but due to parameter passing the compiled CWL is different.
-            if stepid in tools:
-                # NOTE: This occurs during speculative compilation, where it is probably fine.
-                # Otherwise, this probably indicates a namespaceing issue.
-                print(f'Warning: overwriting {stepid.stem} in namespace {stepid.plugin_ns}')
-            tools[stepid] = Tool(stem + '.cwl', sub_node_data.compiled_cwl)
+            tool_i = Tool(stem + '.cwl', sub_node_data.compiled_cwl)
 
             # Initialize the above from recursive values.
             # Do not initialize inputs_workflow. See comment below.
@@ -295,14 +288,16 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             vars_workflow_output_internal += sub_env_data.vars_workflow_output_internal
             explicit_edge_defs_copy.update(sub_env_data.explicit_edge_defs)
             explicit_edge_calls_copy.update(sub_env_data.explicit_edge_calls)
+        else:
+            tool_i = tools[stepid]
+        tools_lst.append(tool_i)
 
-        tool_i = tools[stepid].cwl
-        utils.make_tool_dag(stem, tools[stepid], args.graph_dark_theme)
+        utils.make_tool_dag(stem, tool_i, args.graph_dark_theme)
 
         # Add run tag, using relative or flat-directory paths
         # NOTE: run: path issues were causing test_cwl_embedding_independence()
         # to fail, so I simply ignore the run tag in that test.
-        run_path = tools[stepid].run_path
+        run_path = tool_i.run_path
         if relative_run_path:
             if step_key in subkeys:
                 run_path = step_name_i + '/' + run_path
@@ -368,12 +363,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             args_provided = list(steps[i][step_key]['in'])
         #print(args_provided)
 
-        in_tool = tool_i['inputs']
+        in_tool = tool_i.cwl['inputs']
         #print(list(in_tool.keys()))
-        if tool_i['class'] == 'CommandLineTool':
+        if tool_i.cwl['class'] == 'CommandLineTool':
             args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or
                  (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?'))]
-        elif tool_i['class'] == 'Workflow':
+        elif tool_i.cwl['class'] == 'Workflow':
             args_required = list(in_tool)
 
             # Add the inputs. For now, assume that all sub-workflows have been
@@ -388,7 +383,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     if key not in steps[i][step_key]['in']:
                         steps[i][step_key]['in'][key] = key
         else:
-            raise Exception('Unknown class', tool_i['class'])
+            raise Exception('Unknown class', tool_i.cwl['class'])
 
         # Note: Some config tags are not required in the cwl files, but are in
         # fact required in the python source code! See check_mandatory_property
@@ -405,7 +400,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             label = step_name_i
         step_node_name = '___'.join(namespaces + [step_name_i])
 
-        if not tool_i['class'] == 'Workflow':
+        if not tool_i.cwl['class'] == 'Workflow':
             wic_graphviz_step_i = wic_step_i.get('wic', {}).get('graphviz', {})
             label = wic_graphviz_step_i.get('label', label)
             default_style = 'rounded, filled'
@@ -659,7 +654,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             else:
                 conversions: List[StepId] = []
                 in_name_in_inputs_file_workflow: bool = (in_name in inputs_file_workflow)
-                steps[i] = inference.perform_edge_inference(args, tools, steps_keys,
+                steps[i] = inference.perform_edge_inference(args, tools, tools_lst, steps_keys,
                     yaml_stem, i, steps[i], arg_key, graph, is_root, namespaces,
                     vars_workflow_output_internal, inputs_workflow,
                     in_name_in_inputs_file_workflow, conversions, wic_steps)
@@ -713,14 +708,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # Note: Add all output tags for now, but depending on config options,
         # not all output files will be generated. This may cause an error.
         out_keyvals = {}
-        for out_key, out_dict in tool_i['outputs'].items():
+        for out_key, out_dict in tool_i.cwl['outputs'].items():
             out_keyvals[out_key] = {'type': out_dict['type'], 'format': out_dict['format']}
             #print(out_key, out_keyvals[out_key])
         if not out_keyvals: # FYI out_keyvals should never be {}
             print(f'Error! no outputs for step {step_key}')
         outputs_workflow.append(out_keyvals)
 
-        steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i['outputs']))
+        steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs']))
 
         #print()
 
@@ -742,7 +737,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
     workflow_outputs = utils_cwl.get_workflow_outputs(args, namespaces, is_root, yaml_stem,
-        steps, wic_steps, outputs_workflow, vars_workflow_output_internal, graph, tools, step_node_name)
+        steps, wic_steps, outputs_workflow, vars_workflow_output_internal, graph, tools_lst, step_node_name)
     yaml_tree.update({'outputs': workflow_outputs})
 
     # Finally, rename the steps to be unique

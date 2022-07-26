@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from . import utils
-from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tools,
+from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
                         WorkflowOutputs, Yaml)
 
 
@@ -99,7 +99,7 @@ def get_workflow_outputs(args: argparse.Namespace,
                          outputs_workflow: WorkflowOutputs,
                          vars_workflow_output_internal: InternalOutputs,
                          graph: GraphReps,
-                         tools: Tools,
+                         tools_lst: List[Tool],
                          step_node_name: str) -> Dict[str, Dict[str, str]]:
     """Chooses a subset of the CWL outputs: to actually output
 
@@ -114,7 +114,7 @@ def get_workflow_outputs(args: argparse.Namespace,
         vars_workflow_output_internal (InternalOutputs): Keeps track of output\n
         variables which are internal to the root workflow, but not necessarily to subworkflows.
         graph (GraphReps): A tuple of a GraphViz DiGraph and a networkx DiGraph
-        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        tools_lst (List[Tool]): A list of the CWL CommandLineTools or compiled subworkflows for the current workflow.
         step_node_name (str): The namespaced name of the current step
 
     Returns:
@@ -124,11 +124,7 @@ def get_workflow_outputs(args: argparse.Namespace,
     workflow_outputs = {}
     steps_keys = utils.get_steps_keys(steps)
     for i, step_key in enumerate(steps_keys):
-        sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
-        plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
-        stem = Path(step_key).stem
-        step_id = StepId(stem, plugin_ns_i)
-        tool_i = tools[step_id].cwl
+        tool_i = tools_lst[i].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         out_keys = steps[i][step_key]['out']
         for out_key in out_keys:
@@ -178,6 +174,7 @@ def get_workflow_outputs(args: argparse.Namespace,
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             #print('out_name', out_name)
 
+        sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
         for out_key, out_dict in outputs_workflow[i].items():
             if 'scatter' in sub_wic:
                 # Promote scattered output types to arrays

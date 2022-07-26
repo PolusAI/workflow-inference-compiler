@@ -18,6 +18,10 @@ from wic import auto_gen_header
 from wic.schemas import wic_schema
 from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree
 
+# Due to the computational complexity of the graph isomorphism problem, we
+# need to manually exclude large workflows.
+# See https://en.wikipedia.org/wiki/Graph_isomorphism_problem
+large_workflows = ['dsb', 'dsb1', 'elm']
 
 @pytest.mark.slow
 def test_examples() -> None:
@@ -116,6 +120,7 @@ def test_cwl_embedding_independence() -> None:
     tuples = [(yml_path_str, yml_path)
             for yml_namespace, yml_paths_dict in yml_paths.items()
             for yml_path_str, yml_path in yml_paths_dict.items()]
+    tuples = [(s, p) for (s, p) in tuples if s not in large_workflows] # See top-level comment above!
     for yml_path_str, yml_path in tuples:
         # Load the high-level yaml workflow file.
         with open(yml_path, mode='r', encoding='utf-8') as y:
@@ -157,6 +162,7 @@ def test_cwl_embedding_independence() -> None:
         # and check that the generated CWL is identical. In other words,
         # check that the generated CWL of a subworkflow is independent of its
         # embedding into a parent workflow.
+        assert len(node_data_lst[1:]) == len(yaml_forest_lst)
         for sub_node_data, sub_yaml_forest in zip(node_data_lst[1:], yaml_forest_lst):
             sub_name = sub_node_data.name
             assert sub_yaml_forest.yaml_tree.step_id.stem == sub_name + '.yml'
@@ -209,8 +215,9 @@ def test_cwl_embedding_independence() -> None:
             # Check that the subgraphs are isomorphic.
             sub_graph_nx = sub_node_data.graph.networkx
             sub_graph_fakeroot_nx = sub_node_data_fakeroot.graph.networkx
+            #assert isomorphism.faster_could_be_isomorphic(sub_graph_nx, sub_graph_fakeroot_nx)
             g_m = isomorphism.GraphMatcher(sub_graph_nx, sub_graph_fakeroot_nx)
-            assert g_m.is_isomorphic()
+            assert g_m.is_isomorphic() # See top-level comment above!
 
 
 def test_inline_subworkflows() -> None:
@@ -233,6 +240,7 @@ def test_inline_subworkflows() -> None:
     tuples = [(yml_path_str, yml_path)
             for yml_namespace, yml_paths_dict in yml_paths.items()
             for yml_path_str, yml_path in yml_paths_dict.items()]
+    tuples = [(s, p) for (s, p) in tuples if s not in large_workflows] # See top-level comment above!
     for yml_path_str, yml_path in tuples:
         # Load the high-level yaml workflow file.
         with open(yml_path, mode='r', encoding='utf-8') as y:
@@ -282,5 +290,6 @@ def test_inline_subworkflows() -> None:
             # Check that the subgraphs are isomorphic.
             sub_graph_nx = sub_node_data.graph.networkx
             sub_graph_fakeroot_nx = inline_sub_node_data.graph.networkx
+            #assert isomorphism.faster_could_be_isomorphic(sub_graph_nx, sub_graph_fakeroot_nx)
             g_m = isomorphism.GraphMatcher(sub_graph_nx, sub_graph_fakeroot_nx)
-            assert g_m.is_isomorphic()
+            assert g_m.is_isomorphic() # See top-level comment above!

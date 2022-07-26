@@ -13,13 +13,13 @@ steps:
       input_path: '*ligands.sdf'
       output_sdf_path: '&ligand.sdf' # Array type
       arg1: -m
-- docking_stability_both.yml:
+- dsb.yml:
 # NOTE: Do not add scattering arguments here, add them to the wic: metadata annotations.
 # (We want this information at the call site, not inserted within the subworkflow.)
 
 wic:
   steps:
-    (3, docking_stability_both.yml):
+    (3, dsb.yml):
       scatter: [__index__]
       in:
         # Define an auxilary input variable to use in valueFrom; it is NOT actually an input!
@@ -31,7 +31,7 @@ wic:
         # not want to go any deeper into the syntax tree / call stack, i.e. we
         # do not want to pass '*ligand.sdf' all the way through to input_path.
         # NOTE: We (currently) have to use the auto-generated input name to reference the call site.
-        docking_stability_both__step__1__docking.yml___docking__step__1__find_ligand_conformer.yml___find_ligand_conformer__step__1__obgen___input_path:
+        dsb__step__1__docking.yml___docking__step__1__flc.yml___flc__step__1__obgen___input_path:
           source: '*ligand.sdf'
           valueFrom: $(self[inputs.__index__]) # self refers to the array of input values
       wic:
@@ -42,7 +42,7 @@ wic:
             wic:
               inlineable: False
               steps:
-                (1, find_ligand_conformer.yml):
+                (1, flc.yml):
                   wic:
                     # Since the above name refers to an embedded subworkflow, is NOT inlineing-invariant.
                     # Thus, if we want the tests to pass, we also need to disable inlineing here.

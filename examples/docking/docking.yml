@@ -3,7 +3,7 @@ steps:
 # NOTE: Searching for conformers tends to cause the ligand to curl up into a ball.
 # Although this lowers its energy in isolation, the decreased surface area tends
 # to weaken the binding free energy! (as reported by autodock vina)
-  - find_ligand_conformer.yml:
+  - flc.yml:
 #  - minimize_ligand_only.yml:
 
 # NOTE: We converted to mol2 format above because it allows explicit charges.

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from . import utils, utils_cwl
-from .wic_types import (KV, GraphReps, InternalOutputs, Namespaces, StepId, Tools,
+from .wic_types import (KV, GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
                         WorkflowInputs, Yaml)
 
 # NOTE: This must be initialized in main.py and/or cwl_watcher.py
@@ -11,7 +11,9 @@ renaming_conventions: List[Tuple[str, str]] = []
 
 
 def perform_edge_inference(args: argparse.Namespace,
-                           tools: Tools, steps_keys: List[str],
+                           tools: Tools,
+                           tools_lst: List[Tool],
+                           steps_keys: List[str],
                            yaml_stem: str,
                            i: int,
                            steps_i: KV,
@@ -30,6 +32,7 @@ def perform_edge_inference(args: argparse.Namespace,
     Args:
         args (argparse.Namespace): The command line arguments
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+        tools_lst (List[Tool]): A list of the CWL CommandLineTools or compiled subworkflows for the current workflow.
         steps_keys (List[str]): The name of each step in the current CWL workflow
         yaml_stem (str): The name (filename without extension) of the current CWL workflow
         i (int): The (zero-based) step number w.r.t. the current subworkflow.\n
@@ -57,13 +60,10 @@ def perform_edge_inference(args: argparse.Namespace,
     # instead of figuring out how to replace('structure_', 'gro_') for
     # gmx_trjconv_str only, just require the user to specify filename.
     step_key = steps_keys[i]
-    wic_step_i = wic_steps.get(f'({i+1}, {steps_keys[i]})', {})
-    plugin_ns_i = wic_step_i.get('wic', {}).get('namespace', 'global')
-    step_id_i = StepId(Path(step_key).stem, plugin_ns_i)
-    tool_i = tools[step_id_i].cwl
+    tool_i = tools_lst[i]
     step_name_i = utils.step_name_str(yaml_stem, i, step_key)
 
-    in_tool = tool_i['inputs']
+    in_tool = tool_i.cwl['inputs']
     in_type = in_tool[arg_key]['type']
     if isinstance(in_type, str):
         in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
@@ -78,17 +78,15 @@ def perform_edge_inference(args: argparse.Namespace,
     break_inference = False
     for j in range(0, i)[::-1]:  # Reverse order!
         wic_step_j = wic_steps.get(f'({j+1}, {steps_keys[j]})', {})
-        plugin_ns_j = wic_step_j.get('wic', {}).get('namespace', 'global')
-        step_id_j = StepId(Path(steps_keys[j]).stem, plugin_ns_j)
-        tool_j = tools[step_id_j].cwl
-        out_tool = tool_j['outputs']
+        tool_j = tools_lst[j]
+        out_tool = tool_j.cwl['outputs']
         # NOTE: The outputs of a CommandLineTool are all made available
         # simultaneously. Although that is technically also true for subworkflows,
         # the CommandLineTools within the subworkflow are certainly ordered,
         # and so we definitely want to use reverse order here. As mentioned,
         # it doesn't necessarily make sense for CommandLineTools, but the
         # important thing is that we just define the order for users some way.
-        out_keys = list(tool_j['outputs'])[::-1] # Reverse order!
+        out_keys = list(tool_j.cwl['outputs'])[::-1] # Reverse order!
         format_matches = []
         attempted_matches = []
         inference_rules = get_inference_rules(wic_step_j, Path(steps_keys[j]).stem)
@@ -193,7 +191,7 @@ def perform_edge_inference(args: argparse.Namespace,
             step_name_j = utils.step_name_str(yaml_stem, j, steps_keys[j])
 
             # We also need to keep track of the 'internal' output variables
-            if tool_j['class'] == 'Workflow':
+            if tool_j.cwl['class'] == 'Workflow':
                 vars_workflow_output_internal.append(out_key)
             else:
                 vars_workflow_output_internal.append(f'{step_name_j}/{out_key}')
@@ -206,7 +204,7 @@ def perform_edge_inference(args: argparse.Namespace,
             nss2 = namespaces + [step_name_i] + nss_embedded2
             # TODO: check this
             out_key_no_namespace = out_key.split('___')[-1]
-            label = out_key_no_namespace if tool_j['class'] == 'Workflow' else out_key
+            label = out_key_no_namespace if tool_j.cwl['class'] == 'Workflow' else out_key
             utils.add_graph_edge(args, graph, nss1, nss2, label)
 
             #arg_val = {'source': f'{step_name_j}/{out_key}'}
