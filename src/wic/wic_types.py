@@ -119,12 +119,9 @@ class CompilerInfo(NamedTuple):
 # If we need to insert steps (i.e. file format conversions), that will happen
 # after edge inference, so there should not be a uniqueness issue w.r.t. step
 # number re-indexing.
-# NOTE: This Dict is currently performing double-duty: if there is only one
-# backend, it contains the subworkflows. If there are backends, it contains
-# each backend. For now, these are mutually exclusive, so it should be okay.
 class YamlTree(NamedTuple):
     step_id: StepId
     yml: Yaml
 class YamlForest(NamedTuple):
     yaml_tree: YamlTree
-    sub_forests: Dict[StepId, Any] # Any = YamlForest
+    sub_forests: List[Tuple[StepId, Any]] # Any = YamlForest

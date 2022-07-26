@@ -171,8 +171,6 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
         plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
         stem = Path(step_key).stem
-        step_id = StepId(stem, plugin_ns_i)
-        tool_i = tools[step_id].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
 
         #if step_key in subkeys: # and not is_root, but the former implies the latter
@@ -184,6 +182,8 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
             # i.e. If this is either a primitive CommandLineTool and/or
             # a 'primitive' Workflow that we did NOT recursively generate.
             delete_previously_uploaded(args, 'plugins', stem)
+            step_id = StepId(stem, plugin_ns_i)
+            tool_i = tools[step_id].cwl
             plugin_id = upload_plugin(args.compute_url, access_token, tool_i, stem)
             run_val = f'plugin:{stem}:{__version__}'
         cwl_tree_run['steps'][step_name_i]['run'] = run_val

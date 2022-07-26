@@ -1,9 +1,62 @@
 steps:
-- obabel_extract_models_sdf:
-    in:
-      input_path: ../data/NCIOpen.sdf
-      output_sdf_path: '&ligand.sdf' # singular
-      first_model: "1"
-      last_model: "1"
-      arg1: -r
-- docking_stability_both.yml:
+- docking.yml:
+- stability.yml:
+- stability.yml:
+
+wic:
+  graphviz:
+    label: Docking + MD Stability Analysis
+  steps:
+    (2, stability.yml):
+      wic:
+        inlineable: False
+        environment: checkpoint
+        steps:
+          (2, basic.yml):
+            wic:
+              steps:
+                (3, prod.yml):
+                  wic:
+                    steps:
+                      (3, cwl_watcher_analysis.yml):
+                        wic:
+                          backend: complex
+          (3, analysis.yml):
+            wic:
+              steps:
+                (1, analysis_realtime.yml):
+                  wic:
+                    backend: complex
+                (2, analysis_final.yml):
+                  wic:
+                    backend: complex
+    (3, stability.yml):
+      in:
+        stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path:
+          source: '*ligand_GMX.gro'
+          valueFrom: $(self)
+        stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path:
+          source: '*ligand_GMX.zip'
+          valueFrom: $(self)
+      wic:
+        inlineable: False
+        environment: restore
+        steps:
+          (2, basic.yml):
+            wic:
+              steps:
+                (3, prod.yml):
+                  wic:
+                    steps:
+                      (3, cwl_watcher_analysis.yml):
+                        wic:
+                          backend: ligand
+          (3, analysis.yml):
+            wic:
+              steps:
+                (1, analysis_realtime.yml):
+                  wic:
+                    backend: ligand
+                (2, analysis_final.yml):
+                  wic:
+                    backend: ligand

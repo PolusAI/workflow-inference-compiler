@@ -195,8 +195,7 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
         for stepid, back in wic['wic']['backends'].items():
             backend_forest = (stepid, tree_to_forest(YamlTree(stepid, back), tools))
             backends_forest_list.append(backend_forest)
-        backends_forest_dict = dict(backends_forest_list)
-        return YamlForest(YamlTree(step_id, yaml_tree), backends_forest_dict)
+        return YamlForest(YamlTree(step_id, yaml_tree), backends_forest_list)
 
     steps: List[Yaml] = yaml_tree['steps']
     wic_steps = wic['wic'].get('steps', {})
@@ -204,7 +203,7 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
     tools_stems = [stepid.stem for stepid in tools]
     subkeys = [key for key in steps_keys if key not in tools_stems]
 
-    yaml_forest_dict = {}
+    yaml_forest_list = []
 
     for i, step_key in enumerate(steps_keys):
 
@@ -215,9 +214,9 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
             sub_yaml_tree = steps[i][step_key]
             sub_yml_forest = tree_to_forest(YamlTree(StepId(step_key, plugin_ns_i), sub_yaml_tree), tools)
             (sub_yml_tree_step_id, sub_yml_tree_) = sub_yml_forest.yaml_tree
-            yaml_forest_dict[sub_yml_tree_step_id] = sub_yml_forest
+            yaml_forest_list.append((sub_yml_tree_step_id, sub_yml_forest))
 
-    return YamlForest(YamlTree(step_id, yaml_tree), yaml_forest_dict)
+    return YamlForest(YamlTree(step_id, yaml_tree), yaml_forest_list)
 
 
 def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
