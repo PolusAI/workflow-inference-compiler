@@ -226,14 +226,22 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             subgraph = GraphReps(subgraph_gv, subgraph_nx, graphdata)
 
             # Checkpoint / restore environment
-            if wic_step_i.get('wic', {}).get('environment', '') == 'checkpoint':
+            if wic_step_i.get('wic', {}).get('environment', {}).get('action', '') == 'checkpoint':
                 #print('checkpointing environment')
                 explicit_edge_defs_chk = copy.deepcopy(explicit_edge_defs_copy)
                 explicit_edge_calls_chk = copy.deepcopy(explicit_edge_calls_copy)
-            if wic_step_i.get('wic', {}).get('environment', '') == 'restore':
+            if wic_step_i.get('wic', {}).get('environment', {}).get('action', '') == 'restore':
+                save_defs = wic_step_i.get('wic', {}).get('environment', {}).get('save_defs', [])
+                merge_keyvals_defs = {}
+                #merge_keyvals_calls = {}
+                for key in save_defs:
+                    merge_keyvals_defs[key] = explicit_edge_defs_copy[key]
+                    #merge_keyvals_calls[key] = explicit_edge_calls_copy[key]
                 #print('restoring environment')
                 explicit_edge_defs_copy = copy.deepcopy(explicit_edge_defs_chk) # deepcopy?
                 explicit_edge_calls_copy = copy.deepcopy(explicit_edge_calls_chk) # deepcopy?
+                explicit_edge_defs_copy.update(merge_keyvals_defs)
+                #explicit_edge_calls_copy.update(merge_keyvals_calls)
 
             steps[i].update({step_key: {}}) # delete yml subtree
             sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i],

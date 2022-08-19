@@ -25,3 +25,6 @@ wic:
                 (1, grompp):
                   in:
                     output_tpr_path: '&min.tpr'
+                (2, mdrun):
+                  in:
+                    output_crd_path: '&min.gro'

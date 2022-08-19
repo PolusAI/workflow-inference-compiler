@@ -131,7 +131,14 @@ def wic_tag_schema() -> Json:
     backend = {'type': 'string'}
     default_backend = {'type': 'string'}
     inlineable = {'type': 'boolean'}
-    environment = {'type': 'string'}
+
+    environment_props: Json = {}
+    environment_props['action'] = {'type': 'string'}
+    environment_props['save_defs'] = {'type': 'array'}
+    environment_props['save_defs']['items'] = {'type': 'string'}
+
+    environment = default_schema()
+    environment['properties'] = environment_props
 
     schema = default_schema(url=True)
     schema['$id'] = 'wic_tag'

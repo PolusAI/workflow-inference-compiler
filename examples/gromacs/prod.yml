@@ -24,7 +24,7 @@ steps:
             comm-mode: linear
             comm-grps: system
         output_tpr_path: '&prod.tpr'
-        input_top_zip_path: '*genion.top'  # Use the original topology file so
+        input_top_zip_path: '*genion.zip'  # Use the original topology file so
 # we don't have to question whether the topology gets messed up after file format conversions.
 # (In fact, it is not exactly identical!)
   - mdrun:
