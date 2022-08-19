@@ -27,7 +27,7 @@ steps:
       config:
         neutral: True
         concentration: 0.05 # mol/liter 
-      output_top_zip_path: '&genion.top'
+      output_top_zip_path: '&genion.zip'
       output_crd_path: '&genion.gro'
 
 wic:

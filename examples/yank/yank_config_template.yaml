@@ -1,0 +1,97 @@
+---
+options:
+  verbose: no
+  resume_setup: yes
+  resume_simulation: yes
+
+  pressure: 1*atmosphere
+  #platform: OpenCL # CUDA # For now, only CPU platform available with Docker
+  constraints: HBonds
+  anisotropic_dispersion_cutoff: auto
+
+  minimize: yes # Even though we already did MD stability analysis, use yes due to absurd settings below.
+  minimize_max_iterations: 10 # default 1000
+  number_of_equilibration_iterations: 20 # default 0
+  default_number_of_iterations: 10 #500  # default 5000
+  default_nsteps_per_iteration: 50 # default 500; this is absurdly small due to CPU platform
+  default_timestep: 2*femtoseconds
+  checkpoint_interval: 10
+  switch_phase_interval: 10 # NOTE: must be >= checkpoint_interval, else infinite loop!
+  start_from_trailblaze_samples: no # yes generates NaNs!
+
+  alchemical_pme_treatment: exact # direct-space does NOT work for charged ligands!
+  annihilate_electrostatics: yes
+  annihilate_sterics: no
+
+oe_charges: &oe_charges
+  antechamber:
+    charge_method: bcc
+
+common_PME: &common_PME
+  nonbonded_method: PME
+  clearance: 12*angstroms
+  nonbonded_cutoff: 11*angstroms
+  switch_distance: 10*angstroms
+  ewald_error_tolerance: 1.0e-4
+  negative_ion: Cl-
+
+common_tip4pew: &common_tip4pew
+  <<: *common_PME
+  solvent_model: tip4pew
+  leap:
+    parameters: [leaprc.water.tip4pew]
+
+common_spce: &common_spce
+  <<: *common_PME
+  solvent_model: spce
+  leap:
+    parameters: [leaprc.water.spce]
+
+explicit_50mM_acetate_55: &explicit_50mM_acetate_55
+  positive_ion: Na+
+  ionic_strength: 43.44*millimolar
+
+solvents:
+  tip4pew_50mM_acetate_55:
+    <<: *common_tip4pew
+    <<: *explicit_50mM_acetate_55
+  spce_50mM_acetate_55:
+    <<: *common_spce
+    <<: *explicit_50mM_acetate_55
+  implicit:
+    nonbonded_method: NoCutoff
+    implicit_solvent: OBC2
+    implicit_solvent_salt_conc: 55*millimolar
+
+common_system: &common_system
+#  leap:
+#    parameters: [leaprc.protein.ff14SB, leaprc.gaff]
+  leap:
+    parameters: [oldff/leaprc.ff99SBildn, leaprc.gaff]
+
+protocols:
+  binding-auto:
+    complex:
+      alchemical_path: auto
+      trailblazer_options:
+        n_equilibration_iterations: 10
+        n_samples_per_state: 5
+        thermodynamic_distance: 2.0 # default 1.0; use 0.5 for accuracy
+        distance_tolerance: 0.01
+    solvent:
+      alchemical_path: auto
+      trailblazer_options:
+        n_equilibration_iterations: 10
+        n_samples_per_state: 5
+        thermodynamic_distance: 2.0 # default 1.0; use 0.5 for accuracy
+        distance_tolerance: 0.01
+
+samplers:
+  repex:
+    type: ReplicaExchangeSampler
+    online_analysis_interval: 10
+    online_analysis_minimum_iterations: 10
+    online_analysis_target_error: 0.1
+
+# NOTE: yank_wrapper.py will add the following tags:
+# experiments, experiment_name, systems / molecules

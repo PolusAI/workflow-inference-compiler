@@ -21,7 +21,7 @@ steps:
       in:
         config:
           neutral: True
-        output_top_zip_path: '&genion.top'
+        output_top_zip_path: '&genion.zip'
 # Use &filename to create a reference to an output. Inputs in later steps can
 # use *filename to dereference the filename and create an explicit edge.
 wic:

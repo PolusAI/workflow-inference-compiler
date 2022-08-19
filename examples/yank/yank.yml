@@ -1,0 +1,44 @@
+# TODO: auto-generate the multiple phases
+steps:
+# NOTE: We do not need a setup_only phase; we already did the setup.
+ - yank_trailblaze:
+     in:
+       phase: trailblaze
+       input_dir_path: []
+       yaml: ../yank/yank_config_template.yaml
+       input_complex_top_zip_path: '*genion_complex.zip'
+       input_complex_crd_path: '*prod_complex.gro'
+       input_ligand_top_zip_path: '*genion_ligand.zip'
+       input_ligand_crd_path: '*prod_ligand.gro'
+ - yank_equil_prod:
+     in:
+       phase: equilibration
+       yaml: ../yank/yank_config_template.yaml
+       input_complex_top_zip_path: '*genion_complex.zip'
+       input_complex_crd_path: '*prod_complex.gro'
+       input_ligand_top_zip_path: '*genion_ligand.zip'
+       input_ligand_crd_path: '*prod_ligand.gro'
+ - yank_equil_prod:
+     in:
+       phase: production
+       yaml: ../yank/yank_config_template.yaml
+       input_complex_top_zip_path: '*genion_complex.zip'
+       input_complex_crd_path: '*prod_complex.gro'
+       input_ligand_top_zip_path: '*genion_ligand.zip'
+       input_ligand_crd_path: '*prod_ligand.gro'
+ - yank_analyze:
+     in:
+       phase: analyze
+       yaml: ../yank/yank_config_template.yaml
+       input_complex_top_zip_path: '*genion_complex.zip'
+       input_complex_crd_path: '*prod_complex.gro'
+       input_ligand_top_zip_path: '*genion_ligand.zip'
+       input_ligand_crd_path: '*prod_ligand.gro'
+ - yank_analyze_report:
+     in:
+       phase: report
+       yaml: ../yank/yank_config_template.yaml
+       input_complex_top_zip_path: '*genion_complex.zip'
+       input_complex_crd_path: '*prod_complex.gro'
+       input_ligand_top_zip_path: '*genion_ligand.zip'
+       input_ligand_crd_path: '*prod_ligand.gro'
