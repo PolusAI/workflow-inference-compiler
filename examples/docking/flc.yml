@@ -22,3 +22,16 @@ steps:
         # u               Do not write formal charge information in UNITY records
         # NOTE: This issue may also be related
         # https://github.com/openbabel/openbabel/issues/2435
+
+wic:
+  graphviz:
+    label: Find Ligand\nConformers
+  steps:
+    (1, obgen):
+      wic:
+        graphviz:
+          label: Generate Lowest\nEnergy Conformer
+    (2, obabel_convert_mol2):
+      wic:
+        graphviz:
+          label: Convert Ligand\nsdf to mol2

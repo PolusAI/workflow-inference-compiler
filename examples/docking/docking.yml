@@ -151,3 +151,72 @@ steps:
         input_structure1: '*receptor_gro.pdb' # '*receptor_hydrogens.pdb'
         input_structure2: '*decoy_ligand.pdb'
         output_structure_path: '&complex_vac.pdb'
+
+wic:
+   graphviz:
+     label: Cheminformatics + Docking + Initial Topology Setup
+   steps:
+     (2, python3_mol2_to_mol2):
+       wic:
+         graphviz:
+           label: Rename Ligand\nResidues to MOL
+     (3, acpype):
+       wic:
+         graphviz:
+           label: Generate Ligand\nParameters & Topology
+     (4, bash_top):
+       wic:
+         graphviz:
+           label: Fix Gromacs\n Topology Includes
+     (5, zip_top):
+       wic:
+         graphviz:
+           label: Zip Topology/Files
+     (7, pdb4amber_run):
+       wic:
+         graphviz:
+           label: Fix Residue Names\n(pdb4amber)
+     (8, str_check_add_hydrogens):
+       wic:
+         graphviz:
+           label: Add Hydrogen Atoms\nReceptor (no charges)
+     (9, str_check_add_hydrogens):
+       wic:
+         graphviz:
+           label: Add Hydrogen Atoms\nReceptor (w/ charges)
+     (10, obabel_convert_pdb):
+       wic:
+         graphviz:
+           label: Convert Receptor\npdb to pdbqt
+     (12, box):
+       wic:
+         graphviz:
+           label: Get Receptor\nBounding Box
+     (13, autodock_vina_run):
+       wic:
+         graphviz:
+           label: Perform Docking
+     (14, extract_model_pdbqt):
+       wic:
+         graphviz:
+           label: Extract Best\nDocking Pose
+     (15, babel_convert):
+       wic:
+         graphviz:
+           label: Convert Complex\npdb to pdbqt
+     (16, pdb2gmx):
+       wic:
+         graphviz:
+           label: Generate Initial\nReceptor Topology
+     (17, append_ligand):
+       wic:
+         graphviz:
+           label: Append Ligand Topology\nto Receptor Topology
+     (18, babel_convert):
+       wic:
+         graphviz:
+           label: Convert Receptor\ngro to pdb
+     (19, cat_pdb):
+       wic:
+         graphviz:
+           label: Append Ligand Coordinates\nto Receptor Coordinates

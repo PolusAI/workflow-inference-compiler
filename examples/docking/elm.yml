@@ -19,6 +19,14 @@ steps:
 
 wic:
   steps:
+    (1, obabel_extract_models_sdf):
+      wic:
+        graphviz:
+          label: Choose Ligands from\nCheminformatics Database
+    (2, obabel_split_sdf):
+      wic:
+        graphviz:
+          label: Split Ligands into\nSeparate Files
     (3, dsb.yml):
       scatter: [__index__]
       in:
