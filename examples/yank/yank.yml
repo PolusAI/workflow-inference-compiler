@@ -42,3 +42,28 @@ steps:
        input_complex_crd_path: '*prod_complex.gro'
        input_ligand_top_zip_path: '*genion_ligand.zip'
        input_ligand_crd_path: '*prod_ligand.gro'
+
+wic:
+  graphviz:
+    label: Binding Free Energy
+  steps:
+    (1, yank_trailblaze):
+      wic:
+        graphviz:
+          label: Find Alchemical\nLambda Windows
+    (2, yank_equil_prod):
+      wic:
+        graphviz:
+          label: Equilibration
+    (3, yank_equil_prod):
+      wic:
+        graphviz:
+          label: Production
+    (4, yank_analyze):
+      wic:
+        graphviz:
+          label: Analyze Binding\nFree Energy only
+    (5, yank_analyze_report):
+      wic:
+        graphviz:
+          label: Generate Analysis\nReport Notebook

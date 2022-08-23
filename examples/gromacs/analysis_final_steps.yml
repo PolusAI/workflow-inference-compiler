@@ -27,11 +27,15 @@ wic:
   graphviz:
     label: Final Analysis
   steps:
-    (1, gmx_image):
+    (1, gmxselect):
+      wic:
+        graphviz:
+          label: Select Atom Indices
+    (2, gmx_image):
       wic:
         graphviz:
           label: Wrap Periodic\nFinal Coordinates
-    (2, gmx_trjconv_str):
+    (3, gmx_trjconv_str):
       wic:
         graphviz:
           label: Extract Protein\nFinal Coordinates

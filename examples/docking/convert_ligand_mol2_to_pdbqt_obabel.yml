@@ -32,3 +32,20 @@ steps:
         script: ../scripts/pdbqt_remove_flex.sh
         input_pdb_path: '*ligand_flex.pdbqt'
         output_pdb_path: '&ligand_rigid.pdbqt'
+
+wic:
+  graphviz:
+    label: Convert Ligand\nmol2 to Autodock pdbqt
+  steps:
+    (1, obabel_convert_pdb):
+      wic:
+        graphviz:
+          label: Convert Ligand\nmol2 to Autodock pdbqt
+    (2, bash_pdb):
+      wic:
+        graphviz:
+          label: Remove Keywords
+    (3, bash_pdb):
+      wic:
+        graphviz:
+          label: Remove Flexibility\nAnnotations
