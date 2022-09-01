@@ -39,7 +39,10 @@ parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
 parser.add_argument('--cachedir', type=str, required=False, default='cachedir',
                     help='The directory to save intermediate results; useful with RealtimePlots.py')
 
-parser.add_argument('--compute_url', type=str, default='http://compute.ci.aws.labshare.org',
+aws_url = 'http://compute.ci.aws.labshare.org'
+ncats_url = 'https://compute.scb-ncats.io/'
+
+parser.add_argument('--compute_url', type=str, default=ncats_url,
                     help='The URL associated with the labshare slurm driver. Required for --cwl_run_slurm')
 parser.add_argument('--compute_access_token', type=str, required=('--cwl_run_slurm' in sys.argv),
                     help="""The access_token used for authentication. Required for --cwl_run_slurm

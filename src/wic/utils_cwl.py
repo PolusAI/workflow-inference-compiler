@@ -174,9 +174,9 @@ def get_workflow_outputs(args: argparse.Namespace,
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             #print('out_name', out_name)
 
-        sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
+        wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
         for out_key, out_dict in outputs_workflow[i].items():
-            if 'scatter' in sub_wic:
+            if 'scatter' in wic_step_i:
                 # Promote scattered output types to arrays
                 if isinstance(out_dict['type'], Dict):
                     out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
@@ -199,7 +199,7 @@ def get_workflow_outputs(args: argparse.Namespace,
                     {'type':
                         {'type': 'array',
                          'items': ['Directory', 'File']},
-                     'outputBinding': {'glob': '\".\""'},
+                     'outputBinding': {'glob': '\".\"'},
                      'format': 'edam:format_2330'}} # 'Textual format'
     workflow_outputs.update(output_all) # type: ignore
     return workflow_outputs
