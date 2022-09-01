@@ -536,6 +536,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     # up the call stack until they reach the common namespace.
                     if (len(nss_call_tails) == 1 or
                         'valueFrom' in arg_val): # TODO: This is a temporary hack to implement scattering.
+                        #'scatter' in wic_step_i): # TODO: Figure out why this doesn't work.
                         # TODO: Check this comment.
                         # The definition site recursion (only, if any) has completed
                         # and we are already in the common namespace, thus
@@ -579,10 +580,15 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     'cwl_watcher' in step_key and 'file_pattern' not in arg_key):
                     arg_val['source'] = arg_val['source'][1:] # Remove *, except for file_pattern
 
+                if 'scatter' in wic_step_i:
+                    in_dict['type'] += '[]' # Promote scattered input types to arrays
                 inputs_workflow.update({in_name: in_dict})
                 in_dict = {**in_dict, 'value': arg_val}
                 inputs_file_workflow.update({in_name: in_dict})
-                steps[i][step_key]['in'][arg_key] = {'source': in_name}
+                new_val = {'source': in_name}
+                if 'scatter' in wic_step_i:
+                    new_val = {**arg_val, **new_val}
+                steps[i][step_key]['in'][arg_key] = new_val
                 if args.graph_show_inputs:
                     input_node_name = '___'.join(namespaces + [step_name_i, arg_key])
                     attrs = {'label': arg_key, 'shape': 'box', 'style': 'rounded, filled', 'fillcolor': 'lightgreen'}
@@ -740,7 +746,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     step_name_1 = utils.get_step_name_1(step_1_names, yaml_stem, namespaces, steps_keys, subkeys)
 
     # Add the provided inputs of each step to the workflow inputs
-    yaml_tree.update({'inputs': inputs_workflow})
+    inputs_combined = {**yaml_tree.get('inputs', {}), **inputs_workflow}
+    yaml_tree.update({'inputs': inputs_combined})
 
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
