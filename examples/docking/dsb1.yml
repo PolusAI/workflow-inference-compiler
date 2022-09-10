@@ -6,4 +6,5 @@ steps:
       first_model: "1"
       last_model: "1"
       arg1: -r
+- receptor.yml:
 - dsb.yml:
