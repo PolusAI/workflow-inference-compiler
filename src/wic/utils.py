@@ -268,59 +268,6 @@ def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Y
     return (backend, yaml_tree_copy)
 
 
-def inline_sub_steps(yaml_path: Path, tools: Tools, yml_paths: Dict[str, Dict[str, Path]]) -> List[Yaml]:
-    """Recursively inlines the contents of ALL of the yml sub-workflows. (deprecated)
-
-    This function is deprecated and will soon be replaced with a better implementation.
-
-    Args:
-        yaml_path (Path): The filepath of the yml workflow.
-        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
-        yml_paths (Dict[str, Dict[str, Path]]): The yml workflow definitions found using get_yml_paths()
-
-    Returns:
-        List[Yaml]: The recursively inlined contents of the given yml workflow.
-    """
-    # Load the high-level yaml workflow file.
-    with open(Path(yaml_path), mode='r', encoding='utf-8') as y:
-        yaml_tree: Yaml = yaml.safe_load(y.read())
-
-    wic = yaml_tree.get('wic', {})
-    (back_name_, yaml_tree) = extract_backend(yaml_tree, wic, yaml_path)
-    steps = yaml_tree['steps']
-    wic_steps = wic['wic'].get('steps', {})
-
-    # Get the dictionary key (i.e. the name) of each step.
-    steps_keys = []
-    for step in steps:
-        steps_keys += list(step)
-
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = [key for key in steps_keys if key not in tools_stems]
-
-    steps_all = []
-    for i, step_key in enumerate(steps_keys):
-        if step_key in subkeys:
-            # NOTE: See comments in read_ast_from_disk()
-            sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
-            plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
-
-            paths_ns_i = yml_paths.get(plugin_ns_i, {})
-            if paths_ns_i == {}:
-                raise Exception(f'Error! namespace {plugin_ns_i} not found in yaml paths. Check yml_dirs.txt')
-            if Path(step_key).stem not in paths_ns_i:
-                raise Exception(f'Error! {Path(step_key).stem} not found in namespace {plugin_ns_i}.')
-            path = paths_ns_i[Path(step_key).stem]
-
-            steps_i = inline_sub_steps(path, tools, yml_paths)
-        else:
-            steps_i = [steps[i]]
-        steps_all.append(steps_i)
-
-    steps_all_flattened = [step for steps in steps_all for step in steps]
-    return steps_all_flattened
-
-
 def flatten(lists: List[List[Any]]) -> List[Any]:
     """Concatenates a list of lists into a single list.
 

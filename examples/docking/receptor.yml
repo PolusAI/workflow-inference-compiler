@@ -1,0 +1,103 @@
+steps:
+  - download_pdb.yml:
+  - pdb4amber_run: # NOTE: See comments below w.r.t. pdb2gmx
+      in:
+        input_pdb_path: '*protein.pdb'
+        output_pdb_path: '&receptor_pdb4amber.pdb'
+  - str_check_add_hydrogens:
+      in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
+        input_structure_path: '*receptor_pdb4amber.pdb'
+        config: '{"charges": "False", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
+        output_structure_path: '&receptor_hydrogens.pdb'
+  - str_check_add_hydrogens:
+      in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
+        input_structure_path: '*receptor_pdb4amber.pdb'
+        config: '{"charges": "True", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
+        output_structure_path: '&receptor_hydrogens.pdbqt'
+  - obabel_convert_pdb:
+      in:
+        input_path: '*receptor_pdb4amber.pdb'
+        output_pdb_path: '&receptor_rigid.pdbqt'
+        # NOTE: Use the following pdbqt format-specific write options (see `obabel -Hpdbqt`):
+        # r  Output as a rigid molecule (i.e. no branches or torsion tree)
+        # h  Preserve hydrogens
+        # n  Preserve atom names
+        # Otherwise, we will get the grompp atom name warning (see below).
+        # NOTE: These arguments must be given individually; they cannot be concatenated together.
+        # (e.g. -xrhn) Otherwise, all but the first argument will be silently ignored!
+        # Receptors *can* be flexible in autodock, but it is more complicated
+        # than for ligands, so for now make receptors rigid.
+        arg1: -xr
+        arg2: -xh
+        arg3: -xn
+
+# Docking setup
+  - box:
+      in:
+        input_pdb_path: '*receptor_pdb4amber.pdb' # pdb, not pdbqt
+        output_pdb_path: '&box.pdb'
+        config: '{"offset": "20"}' # Default of 2 Angstroms can cause autodock to not find any solutions.
+
+# Molecular Dynamics setup
+#  - leap_gen_top:
+  - pdb2gmx:
+      in:
+        input_pdb_path: '*receptor_hydrogens.pdb'
+        output_crd_path: '&receptor.gro' # See comment below!
+        # Also note that using .g96 format does NOT sort the atoms (within each
+        # residue) in the crd file, but atoms in the top file are always sorted.
+        # Thus, grompp will warn you that the atom names do not match:
+        # "Warning: atom name nnn in *.top and *.g96 does not match"
+        output_top_zip_path: '&receptor.zip'
+        config:
+          water_type: spce
+          force_field: amber99sb-ildn
+          ignh: True
+# NOTE: Setting ignh to True removes all existing hydrogens, and adds new
+# hydrogens based on residue templates. This can cause problems for titratable
+# residues such as Cysteine, Histidine, etc. In other words, if your pdb file
+# contains residues named CYS which are actually in the CYX protonation state,
+# pdb2gmx will fail to add the extra hydrogen atom! This is a problem because
+# if you try to do a good job and explicitly add hydrogens beforehand (using
+# e.g. str_check_add_hydrogens, babel_add_hydrogens, reduce_add_hydrogens, etc)
+# they may use different heuristics and correctly add the hydrogen atom. Thus,
+# the number of atoms in the coordinate and topology files will not be the same!
+# The solution is to call pdb4amber first, which will fix the residue names.
+          merge: False
+  - babel_convert:
+      in:
+        input_path: '*receptor.gro'
+        output_path: '&receptor_gro.pdb'
+
+wic:
+   graphviz:
+     label: Receptor Modeling + Docking + Initial Topology Setup
+   steps:
+     (2, pdb4amber_run):
+       wic:
+         graphviz:
+           label: Fix Residue Names\n(pdb4amber)
+     (3, str_check_add_hydrogens):
+       wic:
+         graphviz:
+           label: Add Hydrogen Atoms\nReceptor (no charges)
+     (4, str_check_add_hydrogens):
+       wic:
+         graphviz:
+           label: Add Hydrogen Atoms\nReceptor (w/ charges)
+     (5, obabel_convert_pdb):
+       wic:
+         graphviz:
+           label: Convert Receptor\npdb to pdbqt
+     (6, box):
+       wic:
+         graphviz:
+           label: Get Receptor\nBounding Box
+     (7, pdb2gmx):
+       wic:
+         graphviz:
+           label: Generate Initial\nReceptor Topology
+     (8, babel_convert):
+       wic:
+         graphviz:
+           label: Convert Receptor\ngro to pdb

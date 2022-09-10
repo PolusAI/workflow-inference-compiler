@@ -45,11 +45,14 @@ wic:
                   wic:
                     backend: complex
     (3, stability.yml):
+      # TODO: Figure out how to make these inlineing-invariant
       in:
         stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path:
+        #stability__step__1__editconf___input_crd_path:
           source: '*ligand_GMX.gro'
           valueFrom: $(self)
         stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path:
+        #stability__step__2__solvate___input_top_zip_path:
           source: '*ligand_GMX.zip'
           valueFrom: $(self)
       wic:
