@@ -27,7 +27,8 @@ def compile_workflow(yaml_tree_ast: YamlTree,
                      explicit_edge_calls: ExplicitEdgeCalls,
                      tools: Tools,
                      is_root: bool,
-                     relative_run_path: bool) -> CompilerInfo:
+                     relative_run_path: bool,
+                     testing: bool) -> CompilerInfo:
     """fixed-point wrapper around compile_workflow_once\n
     See https://en.wikipedia.org/wiki/Fixed_point_(mathematics)
 
@@ -53,7 +54,7 @@ def compile_workflow(yaml_tree_ast: YamlTree,
         subgraphs = copy.deepcopy(subgraphs_) # See comment below!
         compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs,
                                               explicit_edge_defs, explicit_edge_calls,
-                                              tools, is_root, relative_run_path)
+                                              tools, is_root, relative_run_path, testing)
         node_data: NodeData = compiler_info.rose.data
         ast_modified = not yaml_tree.yml == node_data.yml
         if ast_modified:
@@ -101,7 +102,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                      explicit_edge_calls: ExplicitEdgeCalls,
                      tools: Tools,
                      is_root: bool,
-                     relative_run_path: bool) -> CompilerInfo:
+                     relative_run_path: bool,
+                     testing: bool) -> CompilerInfo:
     """STOP: Have you read the Developer's Guide?? docs/devguide.md\n
     Recursively compiles yml workflow definition ASTs to CWL file contents
 
@@ -117,6 +119,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         is_root (bool): True if this is the root workflow
         relative_run_path (bool): Controls whether to use subdirectories or\n
         just one directory when writing the compiled CWL files to disk
+        testing: Used to disable some optional features which are unnecessary for testing.
 
     Raises:
         Exception: If any errors occur
@@ -246,7 +249,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             steps[i].update({step_key: {}}) # delete yml subtree
             sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i],
                                                  subgraphs + [subgraph], explicit_edge_defs_copy,
-                                                 explicit_edge_calls_copy, tools, False, relative_run_path)
+                                                 explicit_edge_calls_copy, tools, False, relative_run_path, testing)
 
             sub_rose_tree = sub_compiler_info.rose
             rose_tree_list.append(sub_rose_tree)
@@ -300,7 +303,11 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             tool_i = tools[stepid]
         tools_lst.append(tool_i)
 
-        utils.make_tool_dag(stem, tool_i, args.graph_dark_theme)
+        if not testing:
+            # Disable for testing because when testing in parallel, the *.gv Graphviz files
+            # can be written/read to/from disk simultaneously, which results in
+            # intermittent 'syntax errors'.
+            utils.make_tool_dag(stem, tool_i, args.graph_dark_theme)
 
         # Add run tag, using relative or flat-directory paths
         # NOTE: run: path issues were causing test_cwl_embedding_independence()
