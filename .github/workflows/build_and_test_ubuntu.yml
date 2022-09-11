@@ -75,4 +75,4 @@ jobs:
     - name: Run PyTest
       working-directory: ${{github.workspace}}
       # NOTE: See fail_under threshold in .coveragerc
-      run: pytest --cov
+      run: pytest --cov --workers 4

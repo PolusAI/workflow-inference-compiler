@@ -117,7 +117,7 @@ def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
         yaml_tree = YamlTree(stepid, yml)
         subgraph = GraphReps(graphviz.Digraph(name=yaml_path), nx.DiGraph(), GraphData(yaml_path))
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [subgraph], {}, {},
-                                                  tools_cwl, True, relative_run_path=False)
+                                                  tools_cwl, True, relative_run_path=False, testing=False)
         rose_tree = compiler_info.rose
         working_dir = Path('.') # Use a new working directory.
         # Can also use `directory_realtime` at the risk of overwriting other files.
