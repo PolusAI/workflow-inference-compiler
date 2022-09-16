@@ -8,7 +8,12 @@ steps:
       in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
         input_structure_path: '*receptor_pdb4amber.pdb'
         config: '{"charges": "False", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
-        output_structure_path: '&receptor_hydrogens.pdb'
+        output_structure_path: '&receptor_hydrogens_terminal.pdb'
+  - python3_pdb_to_pdb:
+      in:
+        script: /remove_terminal_residue_name_prefixes.py # NOTE: Initial / required
+        input_pdb_path: '*receptor_hydrogens_terminal.pdb'
+        output_pdb_path: '&receptor_hydrogens.pdb'
   - str_check_add_hydrogens:
       in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
         input_structure_path: '*receptor_pdb4amber.pdb'

@@ -10,11 +10,13 @@ doc: |
 
 baseCommand: bash
 
+hints:
+  DockerRequirement:
+    dockerPull: jakefennick/scripts
+
 inputs: 
   script:
-    type: File
-    format:
-    - edam:format_2330 # 'Textual format'
+    type: string
     inputBinding:
       position: 1
 

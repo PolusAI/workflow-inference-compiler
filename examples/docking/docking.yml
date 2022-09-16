@@ -16,7 +16,7 @@ steps:
 # "ERROR: more than one residue detected '{'UNL', 'MOL'}'"
   - python3_mol2_to_mol2:
       in:
-        script: ../scripts/rename_residues_MOL.py
+        script: /rename_residues_MOL.py # NOTE: Initial / required
         input_mol2_path: '*ligand_min.mol2'
         output_mol2_path: '&conformer.mol2'
 
@@ -33,7 +33,7 @@ steps:
         output_path_itp: '&ligand_GMX.itp'
         # NOTE: Although we don't need the *.itp topology file yet, we
         # need to use these coordinates with autodock because they are
-        # sorted to agree with the *.itp topoogy include file.
+        # sorted to agree with the *.itp topology include file.
         # Otherwise, we will get the grompp atom name warning (see below).
         output_path_gro: '&ligand_GMX.gro'
         output_path_top: '&ligand_GMX.top'
@@ -41,7 +41,7 @@ steps:
 # NOTE: acpype doesn't add forcefield or water topology #include lines.
   - bash_top:
       in:
-        script: ../scripts/gmx_add_topology_includes.sh
+        script: /gmx_add_topology_includes.sh # NOTE: Initial / required
         input_top_path: '*ligand_GMX.top'
         output_top_path: '&ligand_GMX_includes.top'
   - zip_top:
