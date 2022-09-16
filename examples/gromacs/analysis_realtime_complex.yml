@@ -35,7 +35,7 @@ steps:
 # Align the trajectory with MDAnalysis.
   - python3_align_protein_CA:
       in:
-        script:  ../scripts/align_protein_CA_mda.py
+        script: /align_protein_CA_mda.py # NOTE: Initial / required
         input_gro_path: '*npt.gro'
         input_trr_path: '*prod.trr'
         output_trr_path: '&prod_align_protein_CA.trr'

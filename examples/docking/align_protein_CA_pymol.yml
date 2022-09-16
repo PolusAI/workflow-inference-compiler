@@ -1,7 +1,6 @@
 steps:
   - pymol_align_protein_CA:
       in:
-        script:  ../scripts/align_protein_CA_pymol.py
         input_1_path: '*receptor_gro.pdb'
         input_2_path: '*decoy_ligand_1.pdb'
         input_3_path: '*npt.gro' # Do NOT use prod.gro!
@@ -19,7 +18,7 @@ steps:
         output_xvg_path: '&rmsd_equil_ligand_notime.txt' # Use .txt to avoid plotting
   - bash_xvg:
       in:
-        script: ../scripts/replace_first_column.sh
+        script: /replace_first_column.sh # NOTE: Initial / required
         # But we can recover the time column by copying it from another xvg file.
         input_xvg1_path: '*rmsd_equil_ligand_notime.txt'
         input_xvg2_path: '*rmsd_equil_mainchain.xvg'

@@ -11,12 +11,16 @@ doc: |-
 baseCommand: python3
 arguments: [$(inputs.script), '--output_top_format', 'GroTop', '--output_crd_format', 'Gro87']
 
+hints:
+  DockerRequirement:
+    dockerPull: jakefennick/biosimspace
+
 inputs:
   script:
-    type: File
-    default:
-      class: File
-      location: conversion.py
+    type: string
+    inputBinding:
+      position: 1
+    default: /conversion.py # NOTE: Initial / required
 
   input_top_path:
     label: Input topology file (AMBER ParmTop)

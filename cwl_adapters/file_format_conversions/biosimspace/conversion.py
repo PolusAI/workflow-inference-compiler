@@ -1,6 +1,5 @@
 import argparse
 import os
-from pathlib import Path
 import sys
 
 import BioSimSpace as BSS
@@ -31,9 +30,8 @@ def main() -> None:
         sys.exit(1)
 
     input_filenames = [args.input_top_path, args.input_crd_path]
-    # TODO: Automatically find GROMACS_PATH
-    #properties = {'GROMACS_PATH': '/home/ec2-user/gromacs-2020.6/share/top/'}
-    properties = {'GROMACS_PATH': '/Users/jakefennick/opt/anaconda3/envs/wic/share/gromacs/top/'}
+    # This path is w.r.t. the Docker image jakefennick/biosimspace
+    properties = {'GROMACS_PATH': '/miniconda/share/gromacs/top/'}
     system = BSS.IO.readMolecules(input_filenames, properties)
 
     output_file_formats = [args.output_top_format, args.output_crd_format]
@@ -48,7 +46,6 @@ def main() -> None:
         os.rename(f'{prefix}.rst7', f'{prefix}.inpcrd')
     # BioSimSpace automatically renames *.GroTop to *.top
     # BioSimSpace automatically renames *.Gro87 to *.gro
-    
 
 
 if __name__ == '__main__':

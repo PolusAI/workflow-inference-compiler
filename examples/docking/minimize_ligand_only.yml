@@ -15,6 +15,6 @@ steps:
   - bash_mol2:
       in:
         # Perform an initial minimization (only), i.e. do not search for conformers.
-        script: ../scripts/obminimize.sh
+        script: /obminimize.sh # NOTE: Initial / required
         input_mol2_path: '*ligand.mol2'
         output_mol2_path: '&ligand_min.mol2'
