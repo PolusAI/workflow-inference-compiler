@@ -33,8 +33,12 @@ wic:
       wic:
         inlineable: False
     (4, ligand_modeling_docking.yml):
+      wic:
+        inlineable: False
       scatter: [ligand_modeling_docking__step__1__flc.yml___flc__step__1__obgen___input_path]
     (6, ligand_topol_params.yml):
+      wic:
+        inlineable: False
       scatter: [ligand_topol_params__step__1__obabel_convert_mol2___input_path]
     (7, stability.yml):
       scatter: [stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path,
