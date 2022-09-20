@@ -1,0 +1,48 @@
+FROM ubuntu:22.04
+
+# Install miniconda
+# Note that the version of conda (py38) needs to be compatible with pymol-bundle
+# See https://anaconda.org/schrodinger/pymol/files
+RUN apt-get update && apt-get install -y wget
+RUN MINICONDA="Miniconda3-py38_4.12.0-Linux-x86_64.sh" && \
+    wget --quiet https://repo.continuum.io/miniconda/$MINICONDA && \
+    bash $MINICONDA -b -p /miniconda && \
+    rm -f $MINICONDA
+ENV PATH /miniconda/bin:$PATH
+
+# NOTE: gromacs tends to use bleeding edge dependencies and pymol tends to lag behind.
+# They currently cannot be installed simultaneously due to dependency conflicts.
+# However, we really only need the gromacs topology files, which are not
+# deleted when you uninstall gromacs. Thus, the workaround is to simply install
+# gromacs and then immediately uninstall it.
+RUN conda install -c conda-forge gromacs
+RUN conda remove gromacs
+# Let's make a version-independent symlink.
+# (This is unnecessary if you leave gromacs installed.)
+RUN mkdir -p /miniconda/share/gromacs/
+RUN ln -s /miniconda/pkgs/gromacs-2022.2-nompi_hca75aac_100/share/gromacs/top/ /miniconda/share/gromacs/
+
+RUN conda install -c conda-forge -c schrodinger pymol-bundle
+# If you want to use the GUI, also install
+# pip install PyQt5
+
+RUN conda install -c conda-forge wget libarchive
+# bsdtar is installed with libarchive; see download_data.sh
+
+RUN conda install -c conda-forge openbabel
+# RUN conda install -c conda-forge mdanalysis
+
+# NOTE: Due to a trivial bug in MDAnalysis, running a MDAnalysis script within Docker currently requires my fork.
+# See https://github.com/MDAnalysis/mdanalysis/pull/3832
+RUN apt-get install -y git g++
+# Use the following command to make sure we always have the latest version.
+# See https://stackoverflow.com/questions/35134713/disable-cache-for-specific-run-commands
+ADD "https://api.github.com/repos/jfennick/mdanalysis/commits?per_page=1" latest_commit
+#RUN pip install -e git+https://github.com/jfennick/mdanalysis/tree/develop/package#egg=mdanalysis
+RUN git clone https://github.com/jfennick/mdanalysis.git && cd mdanalysis/package && pip install .
+
+ADD *.sh .
+ADD *.py .
+ADD Dockerfile_scripts .
+
+RUN ./download_data.sh

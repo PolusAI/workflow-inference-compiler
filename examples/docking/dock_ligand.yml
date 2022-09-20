@@ -1,0 +1,21 @@
+steps:
+  - prepare_ligand_docking.yml:
+  - autodock_vina_run:
+      in:
+        input_ligand_pdbqt_path: '*ligand_flex.pdbqt'
+        #input_ligand_pdbqt_path: '*ligand_rigid.pdbqt'
+        input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+        input_box_path: '*box.pdb'
+        output_pdbqt_path: '&decoys_ligand.pdbqt'
+        output_log_path: '&vina.log'
+  - obabel_split_pdbqt:
+      in:
+        #input_path: '*decoys_ligand.pdbqt' # Scalar type
+        #input_path:
+        #  source: ~autodock_vina_batch/output_batch_pdbqt_path
+        output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
+        arg1: -m
+        arg2: -xh
+        arg3: -xn
+      #out:
+      #  output_pdb_path: # 2D Array type due to scattering

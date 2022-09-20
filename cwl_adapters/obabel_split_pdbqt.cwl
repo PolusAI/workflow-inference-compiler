@@ -9,6 +9,10 @@ doc: |-
   Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
 
 baseCommand: obabel
+#arguments: ["-m"]
+# -m Produces multiple output files, to allow:
+#     Splitting: e.g.        obabel infile.mol -O new.smi -m
+#       puts each molecule into new1.smi new2.smi etc
 
 # NOTE: The version of openbabel in this container is old; This may or may not cause problems.
 # See https://github.com/openbabel/openbabel/issues/2435
@@ -16,29 +20,10 @@ hints:
   DockerRequirement:
     dockerPull: quay.io/biocontainers/biobb_chemistry:3.7.0--pyhdfd78af_0
 
+requirements:
+  InlineJavascriptRequirement: {}
+
 inputs:
-  first_molecule:
-    label: Index of the first molecule (1-based)
-    doc: |-
-      Input Index of the first molecule (1-based)
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      prefix: -f
-
-  last_molecule:
-    label: Index of the last molecule (1-based)
-    doc: |-
-      Input Index of the last molecule (1-based)
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      prefix: -l
-
   input_path:
     label: Path to the input file
     doc: |-
@@ -73,20 +58,20 @@ inputs:
     inputBinding:
       position: 1
 
-  output_sdf_path:
+  output_pdb_path:
     label: Path to the output file
     doc: |-
       Path to the output file
       Type: string
       File type: output
-      Accepted formats: sdf
+      Accepted formats: pdb
     type: string
     format:
-    - edam:format_3814 # sdf
+    - edam:format_1476 # pdb
     inputBinding:
       position: 2
       prefix: -O
-    default: system.sdf
+    default: system.pdb
 
   arg1:
     label: Additional arguments
@@ -98,7 +83,6 @@ inputs:
     - edam:format_2330 # 'Textual format'
     inputBinding:
       position: 3
-    default: ""
 
   arg2:
     label: Additional arguments
@@ -149,14 +133,14 @@ inputs:
     default: ""
 
 outputs:
-  output_sdf_path:
+  output_pdb_path:
     label: Path to the output file
     doc: |-
       Path to the output file
-    type: File
+    type: File[]
     outputBinding:
-      glob: $(inputs.output_sdf_path)
-    format: edam:format_3814 # sdf
+      glob: "$(inputs.output_pdb_path.slice(0, -6))*.pdbqt" # e.g. "ligand.pdb" -> "ligand*.pdb"
+    format: edam:format_1476 # pdb
 
 $namespaces:
   edam: https://edamontology.org/

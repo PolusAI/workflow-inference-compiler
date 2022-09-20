@@ -1,0 +1,59 @@
+steps:
+- obabel_extract_models_sdf:
+    in:
+      input_path: ../data/NCIOpen.sdf
+      output_sdf_path: '&ligands.sdf'
+      first_molecule: "1"
+      last_molecule: "1"
+      arg1: -r
+- receptor.yml:
+- obgen:
+    in:
+      input_path:
+        source: '*ligands.sdf'
+      # obgen adds hydrogens, minimizes, searches for the lowest energy conformer,
+      # then minimizes again.
+      output_sdf_path: '&ligand_min.sdf'
+- assign_partial_charges.yml:
+- autodock_vina_batch:
+    in:
+      input_batch_pdbqt_path: '*ligand_split.pdbqt' # Array type
+      input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+      input_box_path: '*box.pdb'
+      #output_batch_pdbqt_path: '&decoys_ligand.pdbqt' # Array type
+      output_log_path: '&vina.log'
+- obabel_split_pdbqt:
+    in:
+      #input_path: '*decoys_ligand.pdbqt' # Scalar type
+      #input_path:
+      #  source: ~autodock_vina_batch/output_batch_pdbqt_path
+      output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
+      arg1: -m
+      arg2: -xh
+      arg3: -xn
+    #out:
+    #  output_pdb_path: # 2D Array type due to scattering
+- autodock_vina_filter:
+    in:
+      input_log_path: '*vina.log'
+      docking_score_cutoff: -4.0
+      max_num_decoys_per_ligand: 1
+      max_num_decoys_total: 1
+      input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
+      #input_batch_pdbqt_path: ~obabel_split_pdbqt/output_pdb_path # Not necessary if using explicit edge
+      output_batch_pdbqt_path: '&ligand.pdbqt'
+- dock_pype.yml:
+
+wic:
+  steps:
+    (1, obabel_extract_models_sdf):
+      wic:
+        graphviz:
+          label: Choose Ligands from\nCheminformatics Database
+    (2, receptor.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue
+    (6, obabel_split_pdbqt):
+      scatter: [input_path]
+    (8, dock_pype.yml):
+      scatter: [dock_pype__step__1__obabel_convert_mol2___input_path]

@@ -3,8 +3,13 @@ conda install -c conda-forge wget libarchive # bsdtar is installed with libarchi
 conda install -c conda-forge -c schrodinger pymol-bundle
 # If you want to use the GUI, also install
 # pip install PyQt5
+# At runtime, CWL uses the Docker image jakefennick/scripts
 
-conda install -c conda-forge -c michellab biosimspace
+# Comment out biosimspace because it is a massive dependency,
+# and for the very limited use case of file format conversions, we don't use
+# enough of the API to justify installing it for IDE support.
+#conda install -c conda-forge -c michellab biosimspace
+# At runtime, CWL uses the Docker image jakefennick/biosimspace
 
 conda install -c conda-forge cwltool graphviz openbabel mdanalysis
 

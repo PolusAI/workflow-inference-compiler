@@ -9,7 +9,6 @@ doc: |-
   Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
 
 baseCommand: obabel
-arguments: ["-f", $(inputs.model), "-l", $(inputs.model)] # first and last
 
 # NOTE: The version of openbabel in this container is old; This may or may not cause problems.
 # See https://github.com/openbabel/openbabel/issues/2435
@@ -18,15 +17,27 @@ hints:
     dockerPull: quay.io/biocontainers/biobb_chemistry:3.7.0--pyhdfd78af_0
 
 inputs:
-  model:
-    label: Index of the model (1-based)
+  first_molecule:
+    label: Index of the first molecule (1-based)
     doc: |-
-      Input Index of the model (1-based)
+      Input Index of the first molecule (1-based)
       Type: string
-    type: string
+    type: string?
     format:
     - edam:format_2330 # 'Textual format'
-    default: "1"
+    inputBinding:
+      prefix: -f
+
+  last_molecule:
+    label: Index of the last molecule (1-based)
+    doc: |-
+      Input Index of the last molecule (1-based)
+      Type: string
+    type: string?
+    format:
+    - edam:format_2330 # 'Textual format'
+    inputBinding:
+      prefix: -l
 
   input_path:
     label: Path to the input file
