@@ -104,7 +104,10 @@ wic:
           label: Choose Ligands from\nCheminformatics Database
     (2, receptor.yml):
       wic:
-        inlineable: False # Due to yml wic tag inlineing issue
+        inlineable: False
+    (4, assign_partial_charges.yml):
+      wic:
+        inlineable: False
     (6, obabel_split_pdbqt):
       scatter: [input_path]
     (8, obabel_convert_mol2):
