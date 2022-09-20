@@ -2,7 +2,7 @@ steps:
 - docking.yml:
 - stability.yml:
 - stability.yml:
-- yank.yml:
+#- yank.yml:
 
 wic:
   graphviz:

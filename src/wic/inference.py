@@ -68,6 +68,13 @@ def perform_edge_inference(args: argparse.Namespace,
     if isinstance(in_type, str):
         in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
     in_dict = {'type': in_type}
+
+    wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
+    if arg_key in wic_step_i.get('scatter', []):
+        in_dict['type'] = utils_cwl.canonicalize_type(in_dict['type'])
+        # Promote scattered input types to arrays
+        in_dict['type'] = {'type': 'array', 'items': in_dict['type']}
+
     in_formats = []
     if 'format' in in_tool[arg_key]:
         in_formats = in_tool[arg_key]['format']
@@ -104,6 +111,12 @@ def perform_edge_inference(args: argparse.Namespace,
 
             out_type = out_tool[out_key]['type']
             out_dict = {'type': out_type}
+
+            if 'scatter' in wic_step_j:
+                out_dict['type'] = utils_cwl.canonicalize_type(out_dict['type'])
+                # Promote scattered output types to arrays
+                out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
+
             out_format = ''
             if 'format' in out_tool[out_key]:
                 out_format = out_tool[out_key]['format']
@@ -114,7 +127,7 @@ def perform_edge_inference(args: argparse.Namespace,
             #print('out_key, out_format, rule', out_key, out_format, inference_rule)
             attempted_matches.append((out_key, out_format))
             # Great! We found an 'exact' type and format match.
-            if (out_type == in_type) and out_format in in_formats:
+            if (out_dict['type'] == in_dict['type']) and out_format in in_formats:
                 format_matches.append((out_key, out_format))
 
             # Apply 'break' rule after iteration, to allow matching

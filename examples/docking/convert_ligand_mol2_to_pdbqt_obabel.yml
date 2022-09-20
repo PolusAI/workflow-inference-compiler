@@ -15,7 +15,23 @@ steps:
         # arg1: -xr
         arg2: -xh
         arg3: -xn
+        # NOTE: There is no way to preserve the order of the atoms. Indeed, the
+        # structure of the pdbqt flexibiity annotations forces atoms in the same
+        # branch of the torsion tree to be listed sequentially in the pdbqt file.
+        # This loses topological information, in particular bond order.
+        # TODO: After docking, we need to extract the coordinates (only) from
+        # the decoys and combine them with the original topology information.
+        # The alternative is to 'just' use openbabel, but that uses heuristics
+        # to guess the bond orders, which are far from perfect. We need the correct
+        # bond order information when generating the MD parameters with e.g. acpype.
+        # The topology doesn't depend on the coordinates, so why don't we just use
+        # the original mol2 file with acpype (i.e. before docking)? The problem is
+        # that in gromacs (specifically append_ligand and cat_pdb), the order of
+        # the atoms in the topology and coordinate files must match. If not, this
+        # effectively permutes the ligand coordinates. This causes the energy
+        # to be massive, which you can easily see in the first minimization plot.
   - bash_pdb:
+  # NOTE: obabel_split_pdbqt coincidentally also removes keywords.
       in:
       # Remove the MODEL and ENDMDL keywords.
       # Even if there is actually only one model, autodock simply looks for MODEL and ENDMDL.

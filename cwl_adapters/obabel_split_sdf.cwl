@@ -20,6 +20,9 @@ hints:
   DockerRequirement:
     dockerPull: quay.io/biocontainers/biobb_chemistry:3.7.0--pyhdfd78af_0
 
+requirements:
+  InlineJavascriptRequirement: {}
+
 inputs:
   input_path:
     label: Path to the input file

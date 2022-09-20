@@ -3,8 +3,8 @@ steps:
     in:
       input_path: ../data/NCIOpen.sdf
       output_sdf_path: '&ligand.sdf' # singular
-      first_model: "1"
-      last_model: "1"
+      first_molecule: "1"
+      last_molecule: "1"
       arg1: -r
 - receptor.yml:
 - dsb.yml:

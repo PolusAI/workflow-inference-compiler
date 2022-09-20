@@ -1,0 +1,166 @@
+steps:
+- obabel_extract_models_sdf:
+    in:
+      input_path: ../data/NCIOpen.sdf
+      output_sdf_path: '&ligands.sdf'
+      first_molecule: "1"
+      last_molecule: "1"
+      arg1: -r
+- receptor.yml:
+- obgen:
+    in:
+      input_path:
+        source: '*ligands.sdf'
+      # obgen adds hydrogens, minimizes, searches for the lowest energy conformer,
+      # then minimizes again.
+      output_sdf_path: '&ligand_min.sdf'
+- assign_partial_charges.yml:
+- autodock_vina_batch:
+    in:
+      input_batch_pdbqt_path: '*ligand_split.pdbqt' # Array type
+      input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+      input_box_path: '*box.pdb'
+      #output_batch_pdbqt_path: '&decoys_ligand.pdbqt' # Array type
+      output_log_path: '&vina.log'
+- obabel_split_pdbqt:
+    in:
+      #input_path: '*decoys_ligand.pdbqt' # Scalar type
+      #input_path:
+      #  source: ~autodock_vina_batch/output_batch_pdbqt_path
+      output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
+      arg1: -m
+      arg2: -xh
+      arg3: -xn
+    #out:
+    #  output_pdb_path: # 2D Array type due to scattering
+- autodock_vina_filter:
+    in:
+      input_log_path: '*vina.log'
+      docking_score_cutoff: -4.0
+      max_num_decoys_per_ligand: 1
+      max_num_decoys_total: 1
+      input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
+      #input_batch_pdbqt_path: ~obabel_split_pdbqt/output_pdb_path # Not necessary if using explicit edge
+      output_batch_pdbqt_path: '&ligand.pdbqt'
+- obabel_convert_mol2:
+    in:
+      input_path: '*ligand.pdbqt'
+      output_mol2_path: '&decoy.mol2'
+      arg1: '-xu'
+- python3_mol2_to_mol2:
+    in:
+      script: /rename_residues_MOL.py # NOTE: Initial / required
+      input_mol2_path: '*decoy.mol2'
+      output_mol2_path: '&decoy_MOL.mol2'
+- acpype:
+  # NOTE: We are using our own acpypye CWL adapter (NOT the biobb version) so
+  # we have the choice of using charges from the mol2 file.
+    in:
+      input_path: '*decoy_MOL.mol2' # Do NOT use '*decoy_ligand.pdb'
+      output_path_itp: '&ligand_GMX.itp'
+      # NOTE: Although we don't need the *.itp topology file yet, we
+      # need to use these coordinates with autodock because they are
+      # sorted to agree with the *.itp topology include file.
+      # Otherwise, we will get the grompp atom name warning (see below).
+      output_path_gro: '&ligand_GMX.gro'
+      output_path_top: '&ligand_GMX.top'
+      #charge_method: user # take charges from mol2 file
+# NOTE: acpype doesn't add forcefield or water topology #include lines.
+- bash_top:
+    in:
+      script: /gmx_add_topology_includes.sh # NOTE: Initial / required
+      input_top_path: '*ligand_GMX.top'
+      output_top_path: '&ligand_GMX_includes.top'
+- zip_top:
+    in:
+      input_top_path: '*ligand_GMX_includes.top'
+      input_itp_path: '*ligand_GMX.itp'
+      output_top_zip_path: '&ligand_GMX.zip'
+- babel_convert:
+    in:
+      input_path: '*ligand_GMX.gro' #'*decoy_ligand.pdbqt'
+      output_path: '&decoy_ligand.pdb'
+
+# Molecular Dynamics combine receptor & ligand
+- append_ligand:
+    in:
+      input_itp_path: '*ligand_GMX.itp'
+      input_top_zip_path: '*receptor.zip'
+      output_top_zip_path: '&complex_vac.zip'
+- cat_pdb:
+    in:
+      input_structure1: '*receptor_gro.pdb' # '*receptor_hydrogens.pdb'
+      input_structure2: '*decoy_ligand.pdb'
+      output_structure_path: '&complex_vac.pdb'
+- stability.yml:
+# NOTE: Do not add scattering arguments here, add them to the wic: metadata annotations.
+# (We want this information at the call site, not inserted within the subworkflow.)
+
+wic:
+  steps:
+    (1, obabel_extract_models_sdf):
+      wic:
+        graphviz:
+          label: Choose Ligands from\nCheminformatics Database
+    (2, receptor.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue
+    (6, obabel_split_pdbqt):
+      scatter: [input_path]
+    (8, obabel_convert_mol2):
+      scatter: [input_path]
+    (9, python3_mol2_to_mol2):
+      scatter: [input_mol2_path]
+    (10, acpype):
+      scatter: [input_path]
+    (11, bash_top):
+      scatter: [input_top_path]
+    (12, zip_top):
+      scatter: [input_top_path, input_itp_path]
+      scatterMethod: dotproduct
+    (13, babel_convert):
+      scatter: [input_path]
+    (14, append_ligand):
+      scatter: [input_itp_path]
+    (15, cat_pdb):
+      scatter: [input_structure2]
+
+    (16, stability.yml):
+      scatter: [stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path,
+                stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path]
+      scatterMethod: dotproduct
+      wic:
+        inlineable: False
+        environment:
+          action: checkpoint
+        steps:
+          (1, setup.yml):
+            wic:
+              steps:
+                (4, genion):
+                  in:
+                    output_top_zip_path: '&genion_complex.zip'
+          (2, basic.yml):
+            wic:
+              steps:
+                (3, prod.yml):
+                  wic:
+                    steps:
+                      (1, grompp):
+                        in:
+                          input_top_zip_path: '*genion_complex.zip'
+                      (2, mdrun):
+                        in:
+                          output_crd_path: '&prod_complex.gro'
+                      (3, cwl_watcher_analysis.yml):
+                        wic:
+                          backend: complex
+          (3, analysis.yml):
+            wic:
+              steps:
+                (1, analysis_realtime.yml):
+                  wic:
+                    backend: complex
+                (2, analysis_final.yml):
+                  wic:
+                    backend: complex

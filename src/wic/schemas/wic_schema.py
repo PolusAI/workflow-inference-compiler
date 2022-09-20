@@ -104,9 +104,11 @@ def wic_tag_schema() -> Json:
     in_props: Json = {} # TODO: Add yml specific properties
 
     scatter_props: Json = {} # TODO: Add yml specific properties
+    scatterMethod_props: Json = {}
 
     choices = default_schema()
-    choices['properties'] = {'in': in_props, 'wic': recursive_ref, 'scatter': scatter_props}
+    choices['properties'] = {'in': in_props, 'wic': recursive_ref, 'scatter': scatter_props,
+                             'scatterMethod': scatterMethod_props}
 
     # See https://json-schema.org/understanding-json-schema/reference/object.html#patternproperties
     # NOTE: This recursive schema is correct, as determined by jsonschema.validate()

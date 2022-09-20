@@ -1,0 +1,23 @@
+steps:
+- obabel_convert_mol2:
+    in:
+      input_path: '*ligand_min.sdf'
+      output_mol2_path: '&ligand_min.mol2'
+      arg1: '-xu'
+# NOTE: If we directly convert from sdf to pdbqt, openbabel will NOT add
+# partial charges! We have to factor through mol2 format to trigger the
+# partial charge heuristics code path. This does affect the docking scores!
+- obabel_convert_pdb:
+    in:
+      input_path: '*ligand_min.mol2' #'*conformer.mol2'
+      output_pdb_path: '&ligand_keywords.pdbqt'
+      arg2: -xh
+      arg3: -xn
+# NOTE: obabel_split_pdbqt coincidentally also removes keywords.
+- obabel_split_pdbqt:
+    in:
+      input_path: '*ligand_keywords.pdbqt'
+      output_pdb_path: '&ligand_split.pdbqt' # Array type
+      arg1: -m
+      arg2: -xh
+      arg3: -xn

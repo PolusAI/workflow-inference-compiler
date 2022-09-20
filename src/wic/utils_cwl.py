@@ -1,7 +1,7 @@
 import argparse
 import copy
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from . import utils
 from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
@@ -177,11 +177,9 @@ def get_workflow_outputs(args: argparse.Namespace,
         wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
         for out_key, out_dict in outputs_workflow[i].items():
             if 'scatter' in wic_step_i:
+                out_dict['type'] = canonicalize_type(out_dict['type'])
                 # Promote scattered output types to arrays
-                if isinstance(out_dict['type'], Dict):
-                    out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
-                else:
-                    out_dict['type'] = (out_dict['type'] + '[]').replace('?[]', '[]?')
+                out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
 
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             out_var = f'{step_name_i}/{out_key}'
@@ -203,3 +201,26 @@ def get_workflow_outputs(args: argparse.Namespace,
                      'format': 'edam:format_2330'}} # 'Textual format'
     workflow_outputs.update(output_all) # type: ignore
     return workflow_outputs
+
+
+def canonicalize_type(type_obj: Any) -> Any:
+    """Recursively desugars the CWL type: field into a canonical normal form.\n
+    In particular, CWL automatically desugars File[] into {'type': 'array', 'items': File},
+    but File[][] causes a syntax error! Etc.
+
+    Args:
+        type_obj (Any): An object that is a syntactic hodgepodge of valid CWL types.
+
+    Returns:
+        Any: The JSON canonical normal form associated with type_obj
+    """
+    if isinstance(type_obj, str):
+        if len(type_obj) >= 1 and type_obj[-1:] == '?':
+            return ['null', canonicalize_type(type_obj[:-1])]
+        if len(type_obj) >= 2 and type_obj[-2:] == '[]':
+            return {'type': 'array', 'items': canonicalize_type(type_obj[:-2])}
+    if isinstance(type_obj, Dict):
+        if type_obj.get('type') == 'array':
+            return {**type_obj, 'items': canonicalize_type(type_obj['items'])}
+    return type_obj
+            

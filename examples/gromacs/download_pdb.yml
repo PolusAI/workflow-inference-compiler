@@ -1,3 +1,9 @@
+#inputs:
+#  model:
+#    type: int
+#    format:
+#    - edam:format_1476
+
 steps:
 - pdb:
     in:
@@ -9,7 +15,7 @@ steps:
       #config: {pdb_code: 1uao} # "10 residue folded peptide designed by segment statistics" http://dx.doi.org/10.1016/j.str.2004.05.022
 
       # Trp-cage model mini-protein (use 1l2y; 2m7d 2m7c 6d37 have chainbreaks and 6d37 is a hexamer)
-      config: {pdb_code: 1l2y} # "Designing a 20-residue protein." http://dx.doi.org/10.1038/nsb798
+      #config: {pdb_code: 1l2y} # "Designing a 20-residue protein." http://dx.doi.org/10.1038/nsb798
       #config: {pdb_code: 2m7d} # "Folding Dynamics and Pathways of the Trp-Cage Miniproteins" https://doi.org/10.1021/bi501021r
       #config: {pdb_code: 2m7c} # "Circular Permutation of the Trp-cage: Fold Rescue upon Addition of a Hydrophobic Staple" http://dx.doi.org/10.1039/C3RA43674H
       #config: {pdb_code: 6d37} # "Trp-cage tr16b R16Nva : Elimination of pH Dependent Interactions" https://doi.org/10.1002/bip.23260
@@ -18,6 +24,10 @@ steps:
       #config: {pdb_code: 5kwp} # "Accurate de novo design of hyperstable constrained peptides." http://dx.doi.org/10.1038/nature19791
       #config: {pdb_code: 6b17} # "Design of a short thermally stable alpha-helix embedded in a macrocycle" http://dx.doi.org/10.1002/cbic.201800026
       #config: {pdb_code: 1bzv} # "The solution structure of a superpotent B-chain-shortened single-replacement insulin analogue." http://dx.doi.org/10.1110/ps.8.3.499
+
+      # Trypsin
+      #config: {pdb_code: 1trn} # Dimer. This does not download residue 151, but residue 151 is in the pdb file if you download it using a web browser! ???
+      config: {pdb_code: 1ntp}
 - extract_model:
     in:
       config:
