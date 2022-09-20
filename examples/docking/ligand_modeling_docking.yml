@@ -1,0 +1,44 @@
+steps:
+# Ligand
+# NOTE: Searching for conformers tends to cause the ligand to curl up into a ball.
+# Although this lowers its energy in isolation, the decreased surface area tends
+# to weaken the binding free energy! (as reported by autodock vina)
+  - flc.yml:
+#  - minimize_ligand_only.yml:
+
+# NOTE: We converted to mol2 format above because it allows explicit charges.
+# Thus, if we only infer charges once and then preserve them, we don't have to
+# worry about using different charges in autodock vs molecular dynamics.
+# It also stores explicit bond order info, so the topology will be identical.
+# (Also note that we did NOT convert to pdb and then to pdbqt, because that loses both!)
+
+# NOTE: Rename all residues to MOL before calling acpypye. Otherwise, acpype crashes with:
+# "ERROR: more than one residue detected '{'UNL', 'MOL'}'"
+  - python3_mol2_to_mol2:
+      in:
+        script: /rename_residues_MOL.py # NOTE: Initial / required
+        input_mol2_path: '*ligand_min.mol2'
+        output_mol2_path: '&conformer.mol2'
+
+# Docking
+  - convert_ligand_mol2_to_pdbqt_obabel.yml:
+#  - convert_ligand_mol2_to_pdbqt_mdanalysis.yml: # generates ligand_rigid.pdbqt only
+  - autodock_vina_run:
+      in:
+        input_ligand_pdbqt_path: '*ligand_flex.pdbqt'
+        #input_ligand_pdbqt_path: '*ligand_rigid.pdbqt'
+        input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+        input_box_path: '*box.pdb'
+        output_pdbqt_path: '&decoys_ligand.pdbqt'
+        output_log_path: '&vina.log'
+  - obabel_split_pdbqt:
+      in:
+        #input_path: '*decoys_ligand.pdbqt' # Scalar type
+        #input_path:
+        #  source: ~autodock_vina_batch/output_batch_pdbqt_path
+        output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
+        arg1: -m
+        arg2: -xh
+        arg3: -xn
+      #out:
+      #  output_pdb_path: # 2D Array type due to scattering

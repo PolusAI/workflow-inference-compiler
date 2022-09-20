@@ -42,7 +42,8 @@ steps:
       input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
       #input_batch_pdbqt_path: ~obabel_split_pdbqt/output_pdb_path # Not necessary if using explicit edge
       output_batch_pdbqt_path: '&ligand.pdbqt'
-- dock_pype.yml:
+- ligand_topol_params.yml: # scatter
+- stability.yml: # scatter
 
 wic:
   steps:
@@ -52,8 +53,56 @@ wic:
           label: Choose Ligands from\nCheminformatics Database
     (2, receptor.yml):
       wic:
-        inlineable: False # Due to yml wic tag inlineing issue
+        inlineable: False
+    (4, assign_partial_charges.yml):
+      wic:
+        inlineable: False
     (6, obabel_split_pdbqt):
       scatter: [input_path]
-    (8, dock_pype.yml):
-      scatter: [dock_pype__step__1__obabel_convert_mol2___input_path]
+    (8, ligand_topol_params.yml):
+      wic:
+        inlineable: False
+      scatter: [ligand_topol_params__step__1__obabel_convert_mol2___input_path]
+    (9, stability.yml):
+      scatter: [stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path,
+                stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path]
+      scatterMethod: dotproduct
+      wic:
+        inlineable: False
+        graphviz:
+          label: Docking + MD Stability Analysis + Binding Free Energy
+        steps:
+          (1, stability.yml):
+            wic:
+              inlineable: False
+              steps:
+                (1, setup.yml):
+                  wic:
+                    steps:
+                      (4, genion):
+                        in:
+                          output_top_zip_path: '&genion_complex.zip'
+                (2, basic.yml):
+                  wic:
+                    steps:
+                      (3, prod.yml):
+                        wic:
+                          steps:
+                            (1, grompp):
+                              in:
+                                input_top_zip_path: '*genion_complex.zip'
+                            (2, mdrun):
+                              in:
+                                output_crd_path: '&prod_complex.gro'
+                            (3, cwl_watcher_analysis.yml):
+                              wic:
+                                backend: complex
+                (3, analysis.yml):
+                  wic:
+                    steps:
+                      (1, analysis_realtime.yml):
+                        wic:
+                          backend: complex
+                      (2, analysis_final.yml):
+                        wic:
+                          backend: complex

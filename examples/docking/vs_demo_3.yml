@@ -6,13 +6,13 @@ steps:
         first_molecule: "1"
         last_molecule: "1"
         arg1: -r
+  - receptor.yml:
   - obabel_split_sdf:
       in:
   #      input_path: '*ligands.sdf'
         output_sdf_path: '&ligand.sdf' # Array type
         arg1: -m
-  - receptor.yml:
-  - dock_ligand.yml: # scatter
+  - ligand_modeling_docking.yml: # scatter
   - autodock_vina_filter:
       in:
         input_log_paths: '*vina.log' # NOTE: plural
@@ -21,16 +21,60 @@ steps:
         max_num_decoys_total: 1
         input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
         #input_batch_pdbqt_path: ~obabel_split_pdbqt/output_pdb_path # Not necessary if using explicit edge
-        output_batch_pdbqt_path: '&decoy_ligand.pdbqt'
-  - prepare_complex.yml: # scatter
+        output_batch_pdbqt_path: '&ligand.pdbqt'
+  - ligand_topol_params.yml: # scatter
+  - stability.yml: # scatter
 
 wic:
-   graphviz:
-     label: Cheminformatics + Docking + Initial Topology Setup
-   steps:
-     (4, dock_ligand.yml):
-       scatter: [dock_ligand__step__1__prepare_ligand_docking.yml___prepare_ligand_docking__step__1__flc.yml___flc__step__1__obgen___input_path]
-     (6, prepare_complex.yml):
-       scatter: [prepare_complex__step__1__babel_convert___input_path,
-                 prepare_complex__step__2__obabel_convert_mol2___input_path]
-       scatterMethod: dotproduct
+  graphviz:
+    label: Cheminformatics + Docking + Initial Topology Setup
+  steps:
+    (2, receptor.yml):
+      wic:
+        inlineable: False
+    (4, ligand_modeling_docking.yml):
+      scatter: [ligand_modeling_docking__step__1__flc.yml___flc__step__1__obgen___input_path]
+    (6, ligand_topol_params.yml):
+      scatter: [ligand_topol_params__step__1__obabel_convert_mol2___input_path]
+    (7, stability.yml):
+      scatter: [stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path,
+                stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path]
+      scatterMethod: dotproduct
+      wic:
+        graphviz:
+          label: Docking + MD Stability Analysis + Binding Free Energy
+        steps:
+          (1, stability.yml):
+            wic:
+              inlineable: False
+              steps:
+                (1, setup.yml):
+                  wic:
+                    steps:
+                      (4, genion):
+                        in:
+                          output_top_zip_path: '&genion_complex.zip'
+                (2, basic.yml):
+                  wic:
+                    steps:
+                      (3, prod.yml):
+                        wic:
+                          steps:
+                            (1, grompp):
+                              in:
+                                input_top_zip_path: '*genion_complex.zip'
+                            (2, mdrun):
+                              in:
+                                output_crd_path: '&prod_complex.gro'
+                            (3, cwl_watcher_analysis.yml):
+                              wic:
+                                backend: complex
+                (3, analysis.yml):
+                  wic:
+                    steps:
+                      (1, analysis_realtime.yml):
+                        wic:
+                          backend: complex
+                      (2, analysis_final.yml):
+                        wic:
+                          backend: complex
