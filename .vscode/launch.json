@@ -1,0 +1,12 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "wic",
+			"type": "python",
+			"request": "launch",
+			"args": ["--yaml", "${file}"],
+			"module": "wic.main"
+		},
+	]
+}

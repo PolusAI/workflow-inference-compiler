@@ -29,7 +29,7 @@ max-module-lines=750
 
 # Good variable names which should always be accepted, separated by a comma
 # Default i,j,k,ex,Run,_
-good-names=i,j,k,ex,Run,_,x,xs,y,ys,i1,i2,f,r,w,m,e,s,d,ax
+good-names=i,j,k,ex,Run,_,x,xs,y,ys,i1,i2,f,r,w,m,e,s,d,ax,t
 
 [MISCELLANEOUS]
 

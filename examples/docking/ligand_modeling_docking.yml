@@ -1,9 +1,17 @@
+inputs:
+  sdf_path:
+    type: File
+    format:
+    - edam:format_3814
+
 steps:
 # Ligand
 # NOTE: Searching for conformers tends to cause the ligand to curl up into a ball.
 # Although this lowers its energy in isolation, the decreased surface area tends
 # to weaken the binding free energy! (as reported by autodock vina)
   - flc.yml:
+      in:
+        sdf_path: ~sdf_path
 #  - minimize_ligand_only.yml:
 
 # NOTE: We converted to mol2 format above because it allows explicit charges.
@@ -29,16 +37,11 @@ steps:
         #input_ligand_pdbqt_path: '*ligand_rigid.pdbqt'
         input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
         input_box_path: '*box.pdb'
-        output_pdbqt_path: '&decoys_ligand.pdbqt'
+#        output_pdbqt_path: '&decoys_ligand.pdbqt'
         output_log_path: '&vina.log'
-  - obabel_split_pdbqt:
+  - split_pdbqt:
       in:
-        #input_path: '*decoys_ligand.pdbqt' # Scalar type
-        #input_path:
-        #  source: ~autodock_vina_batch/output_batch_pdbqt_path
+#        input_path: '*decoys_ligand.pdbqt' # Scalar type
         output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
-        arg1: -m
-        arg2: -xh
-        arg3: -xn
       #out:
       #  output_pdb_path: # 2D Array type due to scattering

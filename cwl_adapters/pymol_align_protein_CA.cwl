@@ -50,7 +50,8 @@ inputs:
       Path to the output file
     type: string
     format:
-    - edam:format_1476
+    - edam:format_1476 # pdb
+    default: system.pdb
 
 outputs:
   output_file_path:
@@ -58,7 +59,7 @@ outputs:
     doc: |-
       Path to the output file
     type: File
-    format: edam:format_1476
+    format: edam:format_1476 # pdb
     outputBinding:
       glob: $(inputs.output_file_path)
 

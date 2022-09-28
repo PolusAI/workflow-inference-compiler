@@ -3,16 +3,12 @@ cwlVersion: v1.0
 
 class: CommandLineTool
 
-label: This class is a wrapper of the Open Babel tool.
+label: Uses openbabel to add hydrogens and minimize a small molecule, search for the lowest energy conformer, then minimize again.
 
-doc: |-
-  Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
+doc: |
+  Uses openbabel to add hydrogens and minimize a small molecule, search for the lowest energy conformer, then minimize again.
 
-baseCommand: obabel
-#arguments: ["-m"]
-# -m Produces multiple output files, to allow:
-#     Splitting: e.g.        obabel infile.mol -O new.smi -m
-#       puts each molecule into new1.smi new2.smi etc
+baseCommand: obgen
 
 # NOTE: The version of openbabel in this container is old; This may or may not cause problems.
 # See https://github.com/openbabel/openbabel/issues/2435
@@ -23,7 +19,7 @@ hints:
 requirements:
   InlineJavascriptRequirement: {}
 
-inputs:
+inputs: 
   input_path:
     label: Path to the input file
     doc: |-
@@ -59,40 +55,20 @@ inputs:
       position: 1
 
   output_sdf_path:
-    label: Path to the output file
-    doc: |-
-      Path to the output file
-      Type: string
-      File type: output
-      Accepted formats: sdf
     type: string
     format:
     - edam:format_3814 # sdf
-    inputBinding:
-      position: 2
-      prefix: -O
     default: system.sdf
-
-  arg1:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 3
 
 outputs:
   output_sdf_path:
-    label: Path to the output file
-    doc: |-
-      Path to the output file
-    type: File[]
-    outputBinding:
-      glob: "$(inputs.output_sdf_path.slice(0, -4))*.sdf" # e.g. "ligand.sdf" -> "ligand*.sdf"
+    type: File
     format: edam:format_3814 # sdf
+    streamable: true
+    outputBinding:
+      glob: $(inputs.output_sdf_path)
+
+stdout: $(inputs.output_sdf_path)
 
 $namespaces:
   edam: https://edamontology.org/

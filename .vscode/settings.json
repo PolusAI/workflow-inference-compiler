@@ -1,5 +1,5 @@
 {
-    "mypy.dmypyExecutable": "dmypy",
+    "mypy.runUsingActiveInterpreter": true,
     "python.linting.mypyEnabled": true,
     "python.linting.pylintEnabled": true,
     "gitlens.hovers.enabled": false,

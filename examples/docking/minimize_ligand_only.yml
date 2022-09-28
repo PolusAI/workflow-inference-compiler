@@ -1,17 +1,10 @@
 steps:
-  - obabel_convert_mol2:
+  - convert_mol2:
       in:
         input_path: '*ligand.sdf'
         output_mol2_path: '&ligand.mol2'
-        arg1: '-xu'
-        arg2: -h # add hydrogens
-        # arg2: -p 7.4
-        # NOTE: -xu is required because the antechamber mol2 parser is broken.
-        # See https://github.com/alanwilter/acpype/issues/25
-        # From `obabel -Hmol2`
-        # u               Do not write formal charge information in UNITY records
-        # NOTE: This issue may also be related
-        # https://github.com/openbabel/openbabel/issues/2435
+        arg1: -h # add hydrogens
+        # arg1: -p 7.4
   - bash_mol2:
       in:
         # Perform an initial minimization (only), i.e. do not search for conformers.

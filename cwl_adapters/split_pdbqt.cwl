@@ -9,10 +9,35 @@ doc: |-
   Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
 
 baseCommand: obabel
-#arguments: ["-m"]
+#Usage: 
+#obabel[-i<input-type>] <infilename> [-o<output-type>] -O<outfilename> [Options]
+#...
+#Options, other than -i -o -O -m, must come after the input files.
+arguments: [$(inputs.input_path), "-o", "pdbqt", "-O", $(inputs.output_pdb_path), "-m", "-xh", "-xn"]
+# NOTE: These arguments must be given individually; they cannot be concatenated together.
+# (e.g. -xrhn) Otherwise, all but the first argument will be silently ignored!
+
 # -m Produces multiple output files, to allow:
 #     Splitting: e.g.        obabel infile.mol -O new.smi -m
 #       puts each molecule into new1.smi new2.smi etc
+# ...
+# pdbqt  AutoDock PDBQT format
+# Reads and writes AutoDock PDBQT (Protein Data Bank, Partial Charge (Q), & Atom Type (T)) format
+# Note that the torsion tree is by default. Use the ``r`` write option
+# to prevent this.
+
+#Read Options, e.g. -ab
+#  b  Disable automatic bonding
+#  d  Input file is in dlg (AutoDock docking log) format
+
+#Write Options, e.g. -xr
+#  b  Enable automatic bonding
+#  r  Output as a rigid molecule (i.e. no branches or torsion tree)
+#  c  Combine separate molecular pieces of input into a single rigid molecule (requires "r" option or will have no effect)
+#  s  Output as a flexible residue
+#  p  Preserve atom indices from input file (default is to renumber atoms sequentially)
+#  h  Preserve hydrogens
+#  n  Preserve atom names
 
 # NOTE: The version of openbabel in this container is old; This may or may not cause problems.
 # See https://github.com/openbabel/openbabel/issues/2435
@@ -55,82 +80,18 @@ inputs:
     - edam:format_2033
     - edam:format_2332
     - edam:format_3875
-    inputBinding:
-      position: 1
 
   output_pdb_path:
     label: Path to the output file
     doc: |-
       Path to the output file
-      Type: string
+      Type: string?
       File type: output
       Accepted formats: pdb
-    type: string
+    type: string?
     format:
     - edam:format_1476 # pdb
-    inputBinding:
-      position: 2
-      prefix: -O
-    default: system.pdb
-
-  arg1:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 3
-
-  arg2:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 4
-    default: ""
-
-  arg3:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 5
-    default: ""
-
-  arg4:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 6
-    default: ""
-
-  arg5:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 7
-    default: ""
+    default: system.pdbqt
 
 outputs:
   output_pdb_path:

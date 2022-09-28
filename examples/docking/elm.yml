@@ -1,66 +1,43 @@
 steps:
-- obabel_extract_models_sdf:
+- setup_receptor.yml:
+    in:
+      pdb_id: 1uao #1ntp
+- extract_molecules_sdf:
     in:
       input_path: ../data/NCIOpen.sdf
-      output_sdf_path: '&ligands.sdf'
+#      output_sdf_path: '&ligands.sdf'
       first_molecule: "1"
-      last_molecule: "2"
-      arg1: -r
+      last_molecule: "1"
 # NOTE: We need to extract the models first, before splitting them into separate files.
 # If we try to do both simultaneously, obabel ignores -f and -l and outputs ALL models.
-- obabel_split_sdf:
-    in:
-      input_path: '*ligands.sdf'
-      output_sdf_path: '&ligand.sdf' # Array type
-      arg1: -m
-- receptor.yml:
+- split_sdf:
+#    in:
+#      input_path: '*ligands.sdf'
+#      output_sdf_path: '&ligand.sdf' # Array type
 - dsb.yml:
+    scatter: [sdf_path]
+#    in:
+#      sdf_path: '*ligand.sdf'
 # NOTE: Do not add scattering arguments here, add them to the wic: metadata annotations.
 # (We want this information at the call site, not inserted within the subworkflow.)
 
 wic:
   steps:
-    (1, obabel_extract_models_sdf):
+    (1, setup_receptor.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue
+    (2, extract_molecules_sdf):
       wic:
         graphviz:
           label: Choose Ligands from\nCheminformatics Database
-    (2, obabel_split_sdf):
+    (3, split_sdf):
       wic:
         graphviz:
           label: Split Ligands into\nSeparate Files
-    (3, receptor.yml):
-      wic:
-        inlineable: False # Due to yml wic tag inlineing issue
     (4, dsb.yml):
-      scatter: [__index__]
-      in:
-        # Define an auxilary input variable to use in valueFrom; it is NOT actually an input!
-        # (The 'unused' input will generate a warning at runtime.)
-        __index__: # NOTE: Currently need to use double underscores.
-          source: [0, 1] # NOTE: Use zero-based indexing! See comment below.
-          type: int[]
-        # Note that since we want to scatter over the entire subworkflow, we do
-        # not want to go any deeper into the syntax tree / call stack, i.e. we
-        # do not want to pass '*ligand.sdf' all the way through to input_path.
-        # NOTE: We (currently) have to use the auto-generated input name to reference the call site.
-        dsb__step__1__docking.yml___docking__step__1__flc.yml___flc__step__1__obgen___input_path:
-        #dsb__step__1__obgen___input_path:
-          source: '*ligand.sdf'
-          valueFrom: $(self[inputs.__index__]) # self refers to the array of input values
       wic:
         # Scattering changes the input/output types and thus creates a barrier to inlineing.
         inlineable: False
-        steps:
-          (1, docking.yml):
-            wic:
-              inlineable: False #True
-              steps:
-                (1, flc.yml):
-                  wic:
-                    # Since the above name refers to an embedded subworkflow, is NOT inlineing-invariant.
-                    # Thus, if we want the tests to pass, we also need to disable inlineing here.
-                    inlineable: False #True
-
 
 # Beware 0 vs 1 -based indexing! JavaScript (and thus CWL) uses 0-based indices.
 # If you accidentally use 1-based indices, the last array access will be out of

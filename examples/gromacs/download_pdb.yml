@@ -1,13 +1,18 @@
-#inputs:
-#  model:
-#    type: int
-#    format:
-#    - edam:format_1476
+inputs:
+  pdb_id:
+    type: string
+    format:
+    - edam:format_1476
 
 steps:
+- config_tag_pdb:
+    in:
+      pdb_id: ~pdb_id
+      output_config_string: '&pdb_id_str'
 - pdb:
     in:
       output_pdb_path: protein_models.pdb
+      config: '*pdb_id_str'
       #config: {pdb_code: 1aki} # from tutorial
       #config: {pdb_code: 1enh} # "Structural Studies of the Engrailed Homeodomain" https://pubs.acs.org/doi/10.1021/acs.jpcb.8b02144
 
@@ -27,7 +32,8 @@ steps:
 
       # Trypsin
       #config: {pdb_code: 1trn} # Dimer. This does not download residue 151, but residue 151 is in the pdb file if you download it using a web browser! ???
-      config: {pdb_code: 1ntp}
+      #config: {pdb_code: 1ntp}
+      #config: {pdb_code: 1bty} # "IndexError: list index out of range" in str_check_add_hydrogens
 - extract_model:
     in:
       config:

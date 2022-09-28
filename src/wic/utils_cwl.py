@@ -32,7 +32,7 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
             sub = tools[step_id].cwl['class'] == 'Workflow'
             bools.append(sub)
 
-        if 'scatter' in sub_wic:
+        if 'scatter' in yaml_tree['steps'][i][step_key]:
             scatter = ['ScatterFeatureRequirement']
 
         in_step = yaml_tree['steps'][i][step_key].get('in')
@@ -95,7 +95,6 @@ def get_workflow_outputs(args: argparse.Namespace,
                          is_root: bool,
                          yaml_stem: str,
                          steps: List[Yaml],
-                         wic_steps: Yaml,
                          outputs_workflow: WorkflowOutputs,
                          vars_workflow_output_internal: InternalOutputs,
                          graph: GraphReps,
@@ -109,7 +108,6 @@ def get_workflow_outputs(args: argparse.Namespace,
         is_root (bool): True if this is the root workflow
         yaml_stem (str): The name of the current subworkflow (stem of the yaml filepath)
         steps (List[Yaml]): The steps: tag of a CWL workflow
-        wic_steps (Yaml): The metadata assocated with the workflow steps
         outputs_workflow (WorkflowOutputs): Contains the contents of the out: tags for each step.
         vars_workflow_output_internal (InternalOutputs): Keeps track of output\n
         variables which are internal to the root workflow, but not necessarily to subworkflows.
@@ -174,10 +172,9 @@ def get_workflow_outputs(args: argparse.Namespace,
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             #print('out_name', out_name)
 
-        wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
         for out_key, out_dict in outputs_workflow[i].items():
-            if 'scatter' in wic_step_i:
-                out_dict['type'] = canonicalize_type(out_dict['type'])
+            out_dict['type'] = canonicalize_type(out_dict['type'])
+            if 'scatter' in steps[i][step_key]:
                 # Promote scattered output types to arrays
                 out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
 

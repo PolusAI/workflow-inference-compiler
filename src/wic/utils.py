@@ -261,6 +261,11 @@ def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Y
             raise Exception(f'Error! No steps for backend {stepid} in {yaml_path}!')
         steps = wic['backends'][stepid]['steps']
         yaml_tree_copy.update({'steps': steps})
+        # TODO: Use the entire back_tree? Useful for inputs:
+        #back_tree = wic['backends'][stepid]
+        #if 'wic' in back_tree:
+        #    del back_tree['wic']
+        #yaml_tree_copy.update(back_tree)
     elif 'steps' in yaml_tree_copy:
         pass # steps = yaml_tree_copy['steps']
     else:

@@ -49,6 +49,7 @@ inputs:
     - edam:format_3910 # Gromacs trajectory *.trr
     inputBinding:
       position: 4
+    default: system.trr
 
 outputs:
   output_trr_path:

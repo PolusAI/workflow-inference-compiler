@@ -36,6 +36,7 @@ inputs:
     - edam:format_1476 # pdb
     inputBinding:
       position: 3
+    default: system.pdb
 
 outputs:
   output_pdb_path:

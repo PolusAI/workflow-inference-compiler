@@ -25,6 +25,11 @@ inputs:
       position: 1
     default: /autodock_vina_filter.py # NOTE: Initial / required
 
+# NOTE: To make inference work, at least one of the following two log inputs needs to be non-optional.
+# However, since there is no way in CWL (I think) to make inputs mutually exclusive, we would need to
+# supply fake default values in the form of anonymous Files and then perform a check in the script.
+# However, there is (at least one) bug in cwltool related to anonymous files (files that start with _:...) + Docker, etc.
+
   input_log_path:
     label: Path to the log file
     doc: |-
@@ -39,6 +44,7 @@ inputs:
     inputBinding:
       position: 2
       prefix: --input_log_path
+    #default: {class: File, basename: nonexistent_logfile.log, contents: "", format: edam:format_2330}
 
   input_log_paths:
     label: Path to the log files
@@ -54,6 +60,7 @@ inputs:
     inputBinding:
       position: 2
       prefix: --input_log_paths
+    #default: [{class: File, basename: nonexistent_logfile.log, contents: "", format: edam:format_2330}]
 
   docking_score_cutoff:
     label: Cutoff threshold for filtering docking scores
@@ -125,7 +132,7 @@ inputs:
 #    inputBinding:
 #      position: 7
 #      prefix: --output_batch_pdbqt_path
-#    default: .
+    default: .
 
 outputs:
 # NOTE: If docking_score_cutoff is too negative and filters out all of the files,

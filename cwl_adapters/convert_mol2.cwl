@@ -9,19 +9,41 @@ doc: |-
   Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
 
 baseCommand: obabel
+#Usage: 
+#obabel[-i<input-type>] <infilename> [-o<output-type>] -O<outfilename> [Options]
+#...
+#Options, other than -i -o -O -m, must come after the input files.
+arguments: [$(inputs.input_path), "-o", "mol2", "-O", $(inputs.output_mol2_path), "-xu"]
+# NOTE: These arguments must be given individually; they cannot be concatenated together.
+# (e.g. -xrhn) Otherwise, all but the first argument will be silently ignored!
 
-# NOTE: The version of openbabel in this container is old; This may or may not cause problems.
-# See https://github.com/openbabel/openbabel/issues/2435
+#mol2  Sybyl Mol2 format
+#Read Options e.g. -ac
+#  c               Read UCSF Dock scores saved in comments preceding molecules
+
+#Write Options e.g. -xl
+#  l               Output ignores residue information (only ligands)
+#  c               Write UCSF Dock scores saved in comments preceding molecules
+#  u               Do not write formal charge information in UNITY records
+
+# NOTE: -xu is required because the antechamber mol2 parser is broken.
+# See https://github.com/alanwilter/acpype/issues/25
+# NOTE: This issue may also be related
+# https://github.com/openbabel/openbabel/issues/2435
+
 hints:
   DockerRequirement:
     dockerPull: quay.io/biocontainers/biobb_chemistry:3.7.0--pyhdfd78af_0
+
+requirements:
+  InlineJavascriptRequirement: {}
 
 inputs:
   first_molecule:
     label: Index of the first molecule (1-based)
     doc: |-
       Input Index of the first molecule (1-based)
-      Type: string
+      Type: string?
     type: string?
     format:
     - edam:format_2330 # 'Textual format'
@@ -32,7 +54,7 @@ inputs:
     label: Index of the last molecule (1-based)
     doc: |-
       Input Index of the last molecule (1-based)
-      Type: string
+      Type: string?
     type: string?
     format:
     - edam:format_2330 # 'Textual format'
@@ -70,93 +92,39 @@ inputs:
     - edam:format_2033
     - edam:format_2332
     - edam:format_3875
-    inputBinding:
-      position: 1
 
-  output_sdf_path:
+  output_mol2_path:
     label: Path to the output file
     doc: |-
       Path to the output file
       Type: string
       File type: output
-      Accepted formats: sdf
+      Accepted formats: mol2
     type: string
     format:
-    - edam:format_3814 # sdf
-    inputBinding:
-      position: 2
-      prefix: -O
-    default: system.sdf
+    - edam:format_3816 # mol2
+    default: system.mol2
 
   arg1:
     label: Additional arguments
     doc: |-
       Additional arguments
-      Type: string
+      Type: string?
     type: string?
     format:
     - edam:format_2330 # 'Textual format'
     inputBinding:
-      position: 3
-    default: ""
-
-  arg2:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 4
-    default: ""
-
-  arg3:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 5
-    default: ""
-
-  arg4:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 6
-    default: ""
-
-  arg5:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 7
-    default: ""
+      position: 1
 
 outputs:
-  output_sdf_path:
+  output_mol2_path:
     label: Path to the output file
     doc: |-
       Path to the output file
     type: File
     outputBinding:
-      glob: $(inputs.output_sdf_path)
-    format: edam:format_3814 # sdf
+      glob: $(inputs.output_mol2_path)
+    format: edam:format_3816 # mol2
 
 $namespaces:
   edam: https://edamontology.org/

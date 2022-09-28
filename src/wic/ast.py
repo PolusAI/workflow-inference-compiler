@@ -90,10 +90,10 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
             y_t = YamlTree(StepId(step_key, plugin_ns), sub_yaml_tree_raw)
             (step_id_, sub_yml_tree) = read_ast_from_disk(y_t, yml_paths, tools, validator)
 
-            # inline sub_yml_tree; Since we are using a top-level wic: key,
-            # there shouldn't be any key collisions, but we should check.
             step_i_dict = {} if steps[i][step_key] is None else steps[i][step_key]
-            steps[i][step_key] = {**sub_yml_tree, **step_i_dict}
+            # Do not merge these two dicts; use subtree and parentargs so we can
+            # apply subtree before compilation and parentargs after compilation.
+            steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': step_i_dict}
 
     return YamlTree(step_id, yaml_tree)
 
@@ -145,13 +145,13 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
         # Recursively merge subworkflows, to implement parameter passing.
         if step_key in subkeys:
             # Extract the sub yaml file that we pre-loaded from disk.
-            sub_yml_tree_initial = steps[i][step_key]
+            sub_yml_tree_initial = steps[i][step_key]['subtree']
             sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
 
             y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree_initial)
             (step_key_, sub_yml_tree) = merge_yml_trees(y_t, sub_wic, tools)
             # Now mutably overwrite the self args with the merged args
-            steps[i][step_key] = sub_yml_tree
+            steps[i][step_key]['subtree'] = sub_yml_tree
 
         # Extract provided CWL args, if any, and (recursively) merge them with
         # provided CWL args passed in from the parent, if any.
@@ -212,7 +212,7 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
             wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
             plugin_ns_i = wic_step_i.get('wic', {}).get('namespace', 'global')
 
-            sub_yaml_tree = steps[i][step_key]
+            sub_yaml_tree = steps[i][step_key]['subtree']
             sub_yml_forest = tree_to_forest(YamlTree(StepId(step_key, plugin_ns_i), sub_yaml_tree), tools)
             (sub_yml_tree_step_id, sub_yml_tree_) = sub_yml_forest.yaml_tree
             yaml_forest_list.append((sub_yml_tree_step_id, sub_yml_forest))
@@ -262,7 +262,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
         yaml_stem = Path(yaml_name).stem
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         if step_key in subkeys:
-            sub_yml_tree = steps[i][step_key]
+            sub_yml_tree = steps[i][step_key]['subtree']
 
             y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
             sub_namespaces = get_inlineable_subworkflows(y_t, tools, False, namespaces_init + [step_name_i])
@@ -315,7 +315,8 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
         yaml_stem = Path(yaml_name).stem
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         if step_key in subkeys:
-            sub_yml_tree = steps[i][step_key]
+            sub_yml_tree = steps[i][step_key]['subtree']
+            sub_parentargs = steps[i][step_key]['parentargs']
 
             if namespaces[0] == step_name_i:
                 if len(namespaces) == 1:
@@ -334,7 +335,10 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
                     # inlineing after merging should not affect CWL args.
                     # Re-indexing could be tricky w.r.t. overloading.
                     # TODO: maintain inference boundaries (once feature is added)
-                    steps[i][step_key] = sub_yml_tree
+                    # NOTE: Since parentargs are applied after compiling a subworkflow,
+                    # and since inlineing removes the subworkflow, parentargs does not
+                    # appear to be inlineing invariant! However, using ~ syntax helps.
+                    steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': sub_parentargs}
 
     return YamlTree(step_id, yaml_tree)
 

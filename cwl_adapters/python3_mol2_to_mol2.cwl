@@ -33,9 +33,10 @@ inputs:
       Path to the output file
     type: string
     format:
-    - edam:format_3816 # mol3
+    - edam:format_3816 # mol2
     inputBinding:
       position: 3
+    default: system.mol2
 
 outputs:
   output_mol2_path:
