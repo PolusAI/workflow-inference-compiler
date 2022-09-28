@@ -1,12 +1,6 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["jupyter_packaging~=0.7.9", "setuptools>=42", "wheel", "versioneer-518"]
+# NOTE: The above list mostly comes from https://github.com/nglviewer/nglview/pull/969/files
 
-# build-backend = "setuptools.build_meta"
-# NOTE: The above is commented out for now due to the following related issues:
-# https://github.com/python-versioneer/python-versioneer/issues/192
-# https://github.com/python-versioneer/python-versioneer/issues/193
-# https://github.com/python-versioneer/python-versioneer/issues/249
-# https://github.com/python-versioneer/python-versioneer/pull/294
-# The date on that last PR is two days ago (as of the date of this commit)
-# so hopefully it will be resolved soon.
+build-backend = "setuptools.build_meta"

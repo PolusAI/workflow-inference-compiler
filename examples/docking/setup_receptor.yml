@@ -1,5 +1,13 @@
+inputs:
+  pdb_id:
+    type: string
+    format:
+    - edam:format_1476
+
 steps:
   - download_pdb.yml:
+      in:
+         pdb_id: ~pdb_id
   - pdb4amber_run: # NOTE: See comments below w.r.t. pdb2gmx
       in:
         input_pdb_path: '*protein.pdb'
@@ -19,22 +27,15 @@ steps:
         input_structure_path: '*receptor_pdb4amber.pdb'
         config: '{"charges": "True", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
         output_structure_path: '&receptor_hydrogens.pdbqt'
-  - obabel_convert_pdb:
+  - convert_pdbqt:
       in:
         input_path: '*receptor_pdb4amber.pdb'
         output_pdb_path: '&receptor_rigid.pdbqt'
         # NOTE: Use the following pdbqt format-specific write options (see `obabel -Hpdbqt`):
         # r  Output as a rigid molecule (i.e. no branches or torsion tree)
-        # h  Preserve hydrogens
-        # n  Preserve atom names
-        # Otherwise, we will get the grompp atom name warning (see below).
-        # NOTE: These arguments must be given individually; they cannot be concatenated together.
-        # (e.g. -xrhn) Otherwise, all but the first argument will be silently ignored!
         # Receptors *can* be flexible in autodock, but it is more complicated
         # than for ligands, so for now make receptors rigid.
         arg1: -xr
-        arg2: -xh
-        arg3: -xn
 
 # Docking setup
   - box:
@@ -90,7 +91,7 @@ wic:
        wic:
          graphviz:
            label: Add Hydrogen Atoms\nReceptor (w/ charges)
-     (5, obabel_convert_pdb):
+     (5, convert_pdbqt):
        wic:
          graphviz:
            label: Convert Receptor\npdb to pdbqt

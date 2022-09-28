@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from pyexpat import model
+
 import subprocess as sub
 import sys
 from typing import Any, Dict
@@ -132,7 +132,7 @@ def make_experiment_tag(system_name: str = 'system_name') -> Dict[str, Any]:
     }
         # Cannot use restraints on 32 bit systems :(
         #restraint:
-        #  type: FlatBottom
+        #  #type: FlatBottom
         #  restrained_ligand_atoms: (resname MOL) and (mass > 1.5)
         #  restrained_receptor_atoms: f'({residue_indices_str}) and (mass > 1.5)'
     return exp

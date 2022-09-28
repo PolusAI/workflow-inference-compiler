@@ -1,9 +1,17 @@
+inputs:
+  sdf_path:
+    type: File
+    format:
+    - edam:format_3814
+
 steps:
 # Ligand
 # NOTE: Searching for conformers tends to cause the ligand to curl up into a ball.
 # Although this lowers its energy in isolation, the decreased surface area tends
 # to weaken the binding free energy! (as reported by autodock vina)
   - flc.yml:
+      in:
+        sdf_path: ~sdf_path
 #  - minimize_ligand_only.yml:
 
 # NOTE: We converted to mol2 format above because it allows explicit charges.
@@ -30,13 +38,13 @@ steps:
     # we have the choice of using charges from the mol2 file.
       in:
         input_path: '*conformer.mol2' # Do NOT use '*decoy_ligand.pdb'
-        output_path_itp: '&ligand_GMX.itp'
+        output_itp_path: '&ligand_GMX.itp'
         # NOTE: Although we don't need the *.itp topology file yet, we
         # need to use these coordinates with autodock because they are
         # sorted to agree with the *.itp topology include file.
         # Otherwise, we will get the grompp atom name warning (see below).
-        output_path_gro: '&ligand_GMX.gro'
-        output_path_top: '&ligand_GMX.top'
+        output_gro_path: '&ligand_GMX.gro'
+        output_top_path: '&ligand_GMX.top'
         #charge_method: user # take charges from mol2 file
 # NOTE: acpype doesn't add forcefield or water topology #include lines.
   - bash_top:

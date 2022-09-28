@@ -39,7 +39,6 @@ inputs:
     - edam:format_3883
     inputBinding:
       position: 2
-    default: posre.itp
 
   output_top_zip_path:
     label: Output zip file

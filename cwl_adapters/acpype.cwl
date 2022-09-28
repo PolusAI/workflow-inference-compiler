@@ -32,7 +32,7 @@ inputs:
       position: 1
       prefix: --input
 
-  output_path_gro:
+  output_gro_path:
     label: Path to the GRO output file
     doc: |-
       Path to the GRO output file
@@ -45,10 +45,10 @@ inputs:
     - edam:format_2033
     #inputBinding:
     #  position: 2
-    #  prefix: --output_path_gro
+    #  prefix: --output_gro_path
     default: system.gro
 
-  output_path_itp:
+  output_itp_path:
     label: Path to the ITP output file
     doc: |-
       Path to the ITP output file
@@ -61,10 +61,10 @@ inputs:
     - edam:format_3883
     #inputBinding:
     #  position: 3
-    #  prefix: --output_path_itp
+    #  prefix: --output_itp_path
     default: system.itp
 
-  output_path_top:
+  output_top_path:
     label: Path to the TOP output file
     doc: |-
       Path to the TOP output file
@@ -77,7 +77,7 @@ inputs:
     - edam:format_3880
     #inputBinding:
     #  position: 4
-    #  prefix: --output_path_top
+    #  prefix: --output_top_path
     default: system.top
 
   base_name:
@@ -107,7 +107,7 @@ inputs:
     default: bcc # gas, bcc (default), user (user's charges in mol2 file)
 
 outputs:
-  output_path_gro:
+  output_gro_path:
     label: Path to the GRO output file
     doc: |-
       Path to the GRO output file
@@ -116,7 +116,7 @@ outputs:
       glob: "*/$(inputs.base_name)_GMX.gro"
     format: edam:format_2033
 
-  output_path_itp:
+  output_itp_path:
     label: Path to the ITP output file
     doc: |-
       Path to the ITP output file
@@ -125,7 +125,7 @@ outputs:
       glob: "*/$(inputs.base_name)_GMX.itp"
     format: edam:format_3883
 
-  output_path_top:
+  output_top_path:
     label: Path to the TOP output file
     doc: |-
       Path to the TOP output file

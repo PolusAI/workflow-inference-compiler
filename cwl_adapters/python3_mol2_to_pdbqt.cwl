@@ -24,7 +24,7 @@ inputs:
     type: File
     format:
     #- edam:format_2330 # 'Textual format'
-    - edam:format_3816
+    - edam:format_3816 # mol2
     inputBinding:
       position: 2
 
@@ -34,9 +34,10 @@ inputs:
       Path to the output file
     type: string
     format:
-    - edam:format_1476
+    - edam:format_1476 # pdb
     inputBinding:
       position: 3
+    default: system.pdb
 
 outputs:
   output_pdb_path:
@@ -44,7 +45,7 @@ outputs:
     doc: |-
       Path to the output file
     type: File
-    format: edam:format_1476
+    format: edam:format_1476 # pdb
     outputBinding:
       glob: $(inputs.output_pdb_path)
 

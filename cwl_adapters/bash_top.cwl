@@ -33,6 +33,7 @@ inputs:
     - edam:format_2330 # 'Textual format'
 #    inputBinding:
 #      position: 3
+    default: system.top
 
 outputs:
   output_top_path:

@@ -9,6 +9,31 @@ doc: |-
   Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
 
 baseCommand: obabel
+#Usage: 
+#obabel[-i<input-type>] <infilename> [-o<output-type>] -O<outfilename> [Options]
+#...
+#Options, other than -i -o -O -m, must come after the input files.
+arguments: [$(inputs.input_path), "-o", "pdbqt", "-O", $(inputs.output_pdb_path), "-xh", "-xn"]
+# NOTE: These arguments must be given individually; they cannot be concatenated together.
+# (e.g. -xrhn) Otherwise, all but the first argument will be silently ignored!
+
+# pdbqt  AutoDock PDBQT format
+# Reads and writes AutoDock PDBQT (Protein Data Bank, Partial Charge (Q), & Atom Type (T)) format
+# Note that the torsion tree is by default. Use the ``r`` write option
+# to prevent this.
+
+#Read Options, e.g. -ab
+#  b  Disable automatic bonding
+#  d  Input file is in dlg (AutoDock docking log) format
+
+#Write Options, e.g. -xr
+#  b  Enable automatic bonding
+#  r  Output as a rigid molecule (i.e. no branches or torsion tree)
+#  c  Combine separate molecular pieces of input into a single rigid molecule (requires "r" option or will have no effect)
+#  s  Output as a flexible residue
+#  p  Preserve atom indices from input file (default is to renumber atoms sequentially)
+#  h  Preserve hydrogens
+#  n  Preserve atom names
 
 # NOTE: The version of openbabel in this container is old; This may or may not cause problems.
 # See https://github.com/openbabel/openbabel/issues/2435
@@ -16,12 +41,15 @@ hints:
   DockerRequirement:
     dockerPull: quay.io/biocontainers/biobb_chemistry:3.7.0--pyhdfd78af_0
 
+requirements:
+  InlineJavascriptRequirement: {}
+
 inputs:
   first_molecule:
     label: Index of the first molecule (1-based)
     doc: |-
       Input Index of the first molecule (1-based)
-      Type: string
+      Type: string?
     type: string?
     format:
     - edam:format_2330 # 'Textual format'
@@ -32,7 +60,7 @@ inputs:
     label: Index of the last molecule (1-based)
     doc: |-
       Input Index of the last molecule (1-based)
-      Type: string
+      Type: string?
     type: string?
     format:
     - edam:format_2330 # 'Textual format'
@@ -70,93 +98,39 @@ inputs:
     - edam:format_2033
     - edam:format_2332
     - edam:format_3875
-    inputBinding:
-      position: 1
 
-  output_mol2_path:
+  output_pdb_path:
     label: Path to the output file
     doc: |-
       Path to the output file
       Type: string
       File type: output
-      Accepted formats: mol2
+      Accepted formats: pdb
     type: string
     format:
-    - edam:format_3816 # mol2
-    inputBinding:
-      position: 2
-      prefix: -O
-    default: system.mol2
+    - edam:format_1476 # pdb
+    default: system.pdbqt
 
   arg1:
     label: Additional arguments
     doc: |-
       Additional arguments
-      Type: string
+      Type: string?
     type: string?
     format:
     - edam:format_2330 # 'Textual format'
     inputBinding:
-      position: 3
-    default: ""
-
-  arg2:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 4
-    default: ""
-
-  arg3:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 5
-    default: ""
-
-  arg4:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 6
-    default: ""
-
-  arg5:
-    label: Additional arguments
-    doc: |-
-      Additional arguments
-      Type: string
-    type: string?
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 7
-    default: ""
+      position: 1
 
 outputs:
-  output_mol2_path:
+  output_pdb_path:
     label: Path to the output file
     doc: |-
       Path to the output file
     type: File
     outputBinding:
-      glob: $(inputs.output_mol2_path)
-    format: edam:format_3816 # mol2
+      glob: $(inputs.output_pdb_path)
+    format: edam:format_1476 # pdb
 
 $namespaces:
   edam: https://edamontology.org/

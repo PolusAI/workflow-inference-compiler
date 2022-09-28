@@ -11,7 +11,11 @@ conda install -c conda-forge -c schrodinger pymol-bundle
 #conda install -c conda-forge -c michellab biosimspace
 # At runtime, CWL uses the Docker image jakefennick/biosimspace
 
-conda install -c conda-forge cwltool graphviz openbabel mdanalysis
+conda install -c conda-forge cwltool cwl-utils graphviz openbabel mdanalysis
+
+conda install -c conda-forge mdtraj # Needs binary build dependencies, specifically cython
+
+conda install -c conda-forge jupyter_packaging # Build dependency of nglview
 
 conda install -c conda-forge pytest pytest-cov pytest-parallel mypy pylint types-requests types-PyYAML types-setuptools
 # NOTE: https://github.com/wearepal/data-science-types has been archived and is

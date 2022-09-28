@@ -1,8 +1,21 @@
+inputs:
+  sdf_path:
+    type: File
+    format:
+    - edam:format_3814
+
 steps:
 - docking.yml:
+    in:
+      sdf_path: ~sdf_path
 - stability.yml:
-- stability.yml:
+#- stability.yml: # Temporarily comment out due to demo trickery, specifically analysis_final.yml
 #- yank.yml:
+
+# Fatal error:
+# Index[3214] 3215 is larger than the number of atoms in the
+# trajectory file (3214). There is a mismatch in the contents
+# of your -f, -s and/or -n files.
 
 wic:
   graphviz:
@@ -47,14 +60,8 @@ wic:
     (3, stability.yml):
       # TODO: Figure out how to make these inlineing-invariant
       in:
-        stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path:
-        #stability__step__1__editconf___input_crd_path:
-          source: '*ligand_GMX.gro'
-          valueFrom: $(self)
-        stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path:
-        #stability__step__2__solvate___input_top_zip_path:
-          source: '*ligand_GMX.zip'
-          valueFrom: $(self)
+        crd_path: '*ligand_GMX.gro'
+        top_zip_path: '*ligand_GMX.zip'
       wic:
         inlineable: False
         environment:

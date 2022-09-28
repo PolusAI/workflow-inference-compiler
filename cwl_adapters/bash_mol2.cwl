@@ -33,6 +33,7 @@ inputs:
     - edam:format_3816
 #    inputBinding:
 #      position: 3
+    default: system.mol2
 
 outputs:
   output_mol2_path:

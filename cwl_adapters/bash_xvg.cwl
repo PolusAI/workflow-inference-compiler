@@ -40,6 +40,7 @@ inputs:
     - edam:format_2030
 #    inputBinding:
 #      position: 3
+    default: system.xvg
 
 outputs:
   output_xvg_path:

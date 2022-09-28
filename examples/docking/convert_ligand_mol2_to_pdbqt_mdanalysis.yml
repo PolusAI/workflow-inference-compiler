@@ -3,13 +3,13 @@ steps:
       in:
         script: /mol2_to_pdbqt.py # NOTE: Initial / required
         input_mol2_path: '*conformer.mol2'
-        output_pdb_path: '&ligand_periods.pdbqt'
+#        output_pdb_path: '&ligand_periods.pdbqt'
   - bash_pdb:
       in:
         # MDAnalysis adds a . to the final atomtype column, which causes autodock to crash.
         script: /pdbqt_remove_trailing_period.sh # NOTE: Initial / required
-        input_pdb_path: '*ligand_periods.pdbqt'
-        output_pdb_path: '&ligand_keywords.pdbqt'
+#        input_pdb_path: '*ligand_periods.pdbqt'
+#        output_pdb_path: '&ligand_keywords.pdbqt'
   - bash_pdb:
       in:
       # Remove the MODEL and ENDMDL keywords.
@@ -17,13 +17,13 @@ steps:
       # Unfortunately, all of the errors crash with the same cryptic message:
       # Parse error on line ... in file ".../ligand.pdbqt": Unknown or inappropriate tag
         script: /pdbqt_remove_keywords.sh # NOTE: Initial / required
-        input_pdb_path: '*ligand_keywords.pdbqt'
-        output_pdb_path: '&ligand_temp.pdbqt'
+#        input_pdb_path: '*ligand_keywords.pdbqt'
+#        output_pdb_path: '&ligand_temp.pdbqt'
   - bash_pdb:
       in:
       # Add ROOT, ENDROOT, TORSDOF keywords (if necessary).
       # Unfortunately, all of the errors crash with the same cryptic message:
       # Parse error on line ... in file ".../ligand.pdbqt": Unknown or inappropriate tag
         script: /pdbqt_remove_flex.sh # NOTE: Initial / required
-        input_pdb_path: '*ligand_temp.pdbqt'
+#        input_pdb_path: '*ligand_temp.pdbqt'
         output_pdb_path: '&ligand_rigid.pdbqt'
