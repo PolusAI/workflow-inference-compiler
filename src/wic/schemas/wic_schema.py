@@ -202,13 +202,18 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str]) -> Json:
     inputs['type'] = 'object'
     inputs['additionalProperties'] = True
 
+    # TODO: Use the real CWL outputs schema
+    outputs: Dict[Any, Any] = {}
+    outputs['type'] = 'object'
+    outputs['additionalProperties'] = True
+
     schema = default_schema(url=True)
     schema['$id'] = 'wic_main'
     schema['title'] = 'Validating against the Workflow Interence Compiler schema'
     #schema['description'] = ''
     #schema['required'] = ['steps']
     schema['properties'] = {'wic': wic_tag_schema(), 'steps': steps,
-                            'inputs': inputs} # 'required': ['steps']
+                            'inputs': inputs, 'outputs': outputs} # 'required': ['steps']
 
     return schema
 

@@ -78,8 +78,8 @@ inputs:
     label: Index of the first molecule (1-based)
     doc: |-
       Input Index of the first molecule (1-based)
-      Type: string
-    type: string?
+      Type: int
+    type: int?
     format:
     - edam:format_2330 # 'Textual format'
     inputBinding:
@@ -90,8 +90,8 @@ inputs:
     label: Index of the last molecule (1-based)
     doc: |-
       Input Index of the last molecule (1-based)
-      Type: string
-    type: string?
+      Type: int
+    type: int?
     format:
     - edam:format_2330 # 'Textual format'
     inputBinding:

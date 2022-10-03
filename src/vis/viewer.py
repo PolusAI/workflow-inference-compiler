@@ -1,5 +1,6 @@
 from pathlib import Path
 import time
+import threading
 from typing import Dict, List
 
 from IPython.display import display
@@ -9,13 +10,29 @@ import nglview as nv
 from . import filewatcher
 
 
-def main(num_iterations: int, cachedir_path: str = 'cachedir', file_patterns: List[str] = ['*.trr', '*.pdb']) -> None:
+def main(num_iterations: int, cachedir_path: str = '../../cachedir', file_patterns: List[str] = ['*.trr', '*.pdb']) -> None:
     """This function watches cachedir_path for file_patterns and updates an NGLWidget, upto num_iterations times.
 
     Args:
         num_iterations (int): The number of iterations, to guarantee termination.
         cachedir_path (str, optional): The cwltool --cachedir directory. Defaults to 'cachedir'.
         file_patterns (List[str], optional): The coordinate and topology file patterns. Defaults to ['*.trr', '*.pdb'].
+    """
+    # Just like matplotlib, you can't run a calculation in the GUI event loop thread
+    # or else the GUI will not redraw. However, once the main() thread finishes
+    # there is no easy way to interrupt another thread (i.e. no Ctrl-C), so simply
+    # use a fixed number of iterations.
+    thread = threading.Thread(target=main_body, args=(num_iterations, cachedir_path, file_patterns))
+    thread.start()
+
+
+def main_body(num_iterations: int, cachedir_path: str, file_patterns: List[str]) -> None:
+    """This function watches cachedir_path for file_patterns and updates an NGLWidget, upto num_iterations times.
+
+    Args:
+        num_iterations (int): The number of iterations, to guarantee termination.
+        cachedir_path (str, optional): The cwltool --cachedir directory.
+        file_patterns (List[str], optional): The coordinate and topology file patterns.
     """
 
     prev_files: Dict[str, float] = {}

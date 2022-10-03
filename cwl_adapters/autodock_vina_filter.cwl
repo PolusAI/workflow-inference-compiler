@@ -74,30 +74,30 @@ inputs:
       position: 3
       prefix: --docking_score_cutoff
 
-  max_num_decoys_per_ligand:
-    label: Maximum number of decoys per initial ligand
+  max_num_poses_per_ligand:
+    label: Maximum number of poses per initial ligand
     doc: |-
-      Maximum number of decoys per initial ligand
+      Maximum number of poses per initial ligand
       Type: int
     type: int
     format:
     - edam:format_2330
     inputBinding:
       position: 4
-      prefix: --max_num_decoys_per_ligand
+      prefix: --max_num_poses_per_ligand
     default: -1
 
-  max_num_decoys_total:
-    label: Maximum number of decoys total
+  max_num_poses_total:
+    label: Maximum number of poses total
     doc: |-
-      Maximum number of decoys total
+      Maximum number of poses total
       Type: int
     type: int
     format:
     - edam:format_2330
     inputBinding:
       position: 5
-      prefix: --max_num_decoys_total
+      prefix: --max_num_poses_total
     default: -1
 
   input_batch_pdbqt_path:

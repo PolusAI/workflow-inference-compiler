@@ -8,7 +8,7 @@ steps:
         # branch of the torsion tree to be listed sequentially in the pdbqt file.
         # This loses topological information, in particular bond order.
         # TODO: After docking, we need to extract the coordinates (only) from
-        # the decoys and combine them with the original topology information.
+        # the poses and combine them with the original topology information.
         # The alternative is to 'just' use openbabel, but that uses heuristics
         # to guess the bond orders, which are far from perfect. We need the correct
         # bond order information when generating the MD parameters with e.g. acpype.

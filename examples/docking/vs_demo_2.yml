@@ -1,49 +1,35 @@
 steps:
-- setup_receptor.yml:
+- setup_pdb.yml:
     in:
       pdb_id: 1ntp
+      pdb_path: '&pdb.pdbqt'
+      box_path: '&box.pdb'
+      water_type: spce
+      force_field: amber99sb-ildn
+- download_ligand_database:
+    in:
+      database: /NCIOpen.sdf
 - extract_molecules_sdf:
     in:
-      input_path: ../data/NCIOpen.sdf
-#      output_sdf_path: '&ligands.sdf'
-      first_molecule: "1"
-      last_molecule: "1"
+      first_molecule: 1
+      last_molecule: 1
 - generate_conformers_sdf:
-#    in:
-#      input_path:
-#        source: '*ligands.sdf'
-      # Adds hydrogens, minimizes, searches for the lowest energy conformer,
-      # then minimizes again.
-#      output_sdf_path: '&ligand_min.sdf'
 - assign_partial_charges.yml:
-# NOTE: split_pdbqt coincidentally also removes keywords.
 - split_pdbqt:
-#    in:
-#      input_path: '*ligand_keywords.pdbqt'
-#      output_pdb_path: '&ligand_split.pdbqt' # Array type
 - autodock_vina_batch:
     in:
-#      input_batch_pdbqt_path: '*ligand_split.pdbqt' # Array type
-      input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+      input_receptor_pdbqt_path: '*pdb.pdbqt'
       input_box_path: '*box.pdb'
-#      output_batch_pdbqt_path: '&decoys_ligand.pdbqt' # Array type
       output_log_path: '&vina.log'
 - split_pdbqt:
     scatter: [input_path]
-#    in:
-#      input_path: '*decoys_ligand.pdbqt' # Scalar type
-#      output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
-    #out:
-    #  output_pdb_path: # 2D Array type due to scattering
 - autodock_vina_filter:
     in:
       input_log_path: '*vina.log'
       docking_score_cutoff: -4.0
-      max_num_decoys_per_ligand: 1
-      max_num_decoys_total: 1
-#      input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
-#      output_batch_pdbqt_path: '&ligand.pdbqt'
-- ligand_topol_params.yml:
+      max_num_poses_per_ligand: 1
+      max_num_poses_total: 1
+- gen_topol_params.yml:
     scatter: [pdbqt_path]
 - stability.yml:
     scatter: [crd_path, top_zip_path]
@@ -51,19 +37,19 @@ steps:
 
 wic:
   steps:
-    (1, setup_receptor.yml):
+    (1, setup_pdb.yml):
       wic:
         inlineable: False
-    (2, extract_molecules_sdf):
+    (3, extract_molecules_sdf):
       wic:
         graphviz:
           label: Choose Ligands from\nCheminformatics Database
-    (4, assign_partial_charges.yml):
+    (5, assign_partial_charges.yml):
       wic:
         inlineable: False
-    (9, ligand_topol_params.yml):
+    (10, gen_topol_params.yml):
       wic:
         inlineable: False
-    (10, stability.yml):
+    (11, stability.yml):
       wic:
         inlineable: False
