@@ -13,6 +13,7 @@ steps:
             nsteps: 1000
             emstep: 0.0001
             emtol: 100
+            nstxout: 100
             nstenergy: 1
   - mdrun:
   - gmx_energy:

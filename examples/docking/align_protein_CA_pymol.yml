@@ -2,7 +2,7 @@ steps:
   - pymol_align_protein_CA:
       in:
         input_1_path: '*receptor_gro.pdb'
-        input_2_path: '*decoy_ligand_1.pdb'
+        input_2_path: '*pose_ligand_1.pdb'
         input_3_path: '*npt.gro' # Do NOT use prod.gro!
         # It is only written after the final timestep and thus cannot possibly be used for realtime analysis!
         input_4_path: '*prod.trr'

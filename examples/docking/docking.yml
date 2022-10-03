@@ -37,7 +37,7 @@ steps:
     # NOTE: We are using our own acpypye CWL adapter (NOT the biobb version) so
     # we have the choice of using charges from the mol2 file.
       in:
-        input_path: '*conformer.mol2' # Do NOT use '*decoy_ligand.pdb'
+        input_path: '*conformer.mol2' # Do NOT use '*pose_ligand.pdb'
         output_itp_path: '&ligand_GMX.itp'
         # NOTE: Although we don't need the *.itp topology file yet, we
         # need to use these coordinates with autodock because they are
@@ -66,20 +66,20 @@ steps:
       in:
         input_ligand_pdbqt_path: '*ligand_flex.pdbqt'
         #input_ligand_pdbqt_path: '*ligand_rigid.pdbqt'
-        input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+        input_receptor_pdbqt_path: '*pdb.pdbqt'
         input_box_path: '*box.pdb'
-        output_pdbqt_path: '&decoys_ligand.pdbqt'
+        output_pdbqt_path: '&poses_ligand.pdbqt'
         output_log_path: '&vina.log'
   - extract_model_pdbqt:
       in:
-        input_pdbqt_path: '*decoys_ligand.pdbqt'
-        output_pdbqt_path: '&decoy_ligand.pdbqt'
+        input_pdbqt_path: '*poses_ligand.pdbqt'
+        output_pdbqt_path: '&pose_ligand.pdbqt'
         config:
           model: 1 # NOTE: score, rmsd l.b., rmsd u.b. stored in REMARK lines
   - babel_convert:
       in:
-        input_path: '*decoy_ligand.pdbqt'
-        output_path: '&decoy_ligand.pdb'
+        input_path: '*pose_ligand.pdbqt'
+        output_path: '&pose_ligand.pdb'
 
 # Molecular Dynamics combine receptor & ligand
   - append_ligand:
@@ -90,7 +90,7 @@ steps:
   - cat_pdb:
       in:
         input_structure1: '*receptor_gro.pdb' # '*receptor_hydrogens.pdb'
-        input_structure2: '*decoy_ligand.pdb'
+        input_structure2: '*pose_ligand.pdb'
         output_structure_path: '&complex_vac.pdb'
 
 wic:

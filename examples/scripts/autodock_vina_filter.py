@@ -3,24 +3,24 @@ import json
 import sys
 from typing import List, Tuple, Dict, Any
 
-parser = argparse.ArgumentParser(prog='main', description='Parse one or more autodock_vina log files and filter the decoys by docking score.')
+parser = argparse.ArgumentParser(prog='main', description='Parse one or more autodock_vina log files and filter the poses by docking score.')
 parser.add_argument('--input_log_path')
 parser.add_argument('--input_log_paths', nargs='+', default=[])
 parser.add_argument('--docking_score_cutoff', type=float)
-parser.add_argument('--max_num_decoys_per_ligand', type=int)
-parser.add_argument('--max_num_decoys_total', type=int)
+parser.add_argument('--max_num_poses_per_ligand', type=int)
+parser.add_argument('--max_num_poses_total', type=int)
 args = parser.parse_args()
 
 input_log_path = args.input_log_path
 input_log_paths = args.input_log_paths
 docking_score_cutoff = args.docking_score_cutoff
-max_num_decoys_per_ligand = args.max_num_decoys_per_ligand
-max_num_decoys_total = args.max_num_decoys_total
+max_num_poses_per_ligand = args.max_num_poses_per_ligand
+max_num_poses_total = args.max_num_poses_total
 
-if max_num_decoys_per_ligand == -1:
-    max_num_decoys_per_ligand = sys.maxsize
-if max_num_decoys_total == -1:
-    max_num_decoys_total = sys.maxsize
+if max_num_poses_per_ligand == -1:
+    max_num_poses_per_ligand = sys.maxsize
+if max_num_poses_total == -1:
+    max_num_poses_total = sys.maxsize
 
 if input_log_path:
     with open(input_log_path, mode='r', encoding='utf-8') as f:
@@ -74,7 +74,7 @@ for line in lines:
             mode_idx = int(strs[0])
             floats = [float(x) for x in strs[1:]]
             score = floats[0]
-            if score < docking_score_cutoff and len(scores) < max_num_decoys_per_ligand:
+            if score < docking_score_cutoff and len(scores) < max_num_poses_per_ligand:
                 scores.append(score)
         except Exception as e:
             scores_all.append(scores)
@@ -90,7 +90,7 @@ for mol_idx, scores in enumerate(scores_all):
         indexed_scores.append((score, (mol_idx, mode_idx)))
 
 indexed_scores.sort(key=lambda x: x[0]) # Sort by the docking scores
-indexed_scores = indexed_scores[:max_num_decoys_total] # Truncate upto max total
+indexed_scores = indexed_scores[:max_num_poses_total] # Truncate upto max total
 #indexed_scores.sort(key=lambda x: x[1]) # Sort by the index tuple, which uses dictionary order.
 
 indices_all: List[str] = []

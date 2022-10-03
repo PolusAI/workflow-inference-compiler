@@ -477,6 +477,13 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             if 'format' in in_tool[arg_key]:
                 in_format = in_tool[arg_key]['format']
                 in_dict['format'] = in_format
+            # if demo...
+            #print('step_key', step_key)
+            #print('arg_key', arg_key)
+            #print('arg_val', arg_val)
+            if 'setup_pdb.yml' == step_key and arg_key in ['pdb_path', 'box_path']:
+                arg_val['source'] = arg_val['source'][1:] # Remove &
+
             if isinstance(arg_val, Dict) and arg_val['source'][0] == '~':
                 # NOTE: This is somewhat of a hack; it is useful for when
                 # inference fails and when you cannot make an explicit edge.
@@ -633,6 +640,13 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     graphdata.edges.append((input_node_name, step_node_name, {}))
 
         for arg_key in args_required:
+            # if demo...
+            if 'gen_topol_params.yml' == step_key and 'pdbqt_path' in steps[i][step_key].get('scatter', []):
+                steps[i][step_key]['scatter'] = ['gen_topol_params__step__1__convert_mol2___input_path']
+            if 'stability.yml' == step_key and ['crd_path', 'top_zip_path'] == steps[i][step_key].get('scatter', []):
+                steps[i][step_key]['scatter'] = ['stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path',
+                                                 'stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path']
+
             #print('arg_key', arg_key)
             in_name = f'{step_name_i}___{arg_key}'
             if arg_key in args_provided:
@@ -780,7 +794,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     utils.add_subgraphs(args, graph, sibling_subgraphs, namespaces, step_1_names, steps_ranksame)
     step_name_1 = utils.get_step_name_1(step_1_names, yaml_stem, namespaces, steps_keys, subkeys)
 
-    # Add the provided inputs of each step to the workflow inputs
+    # Add the provided workflow inputs to the workflow inputs from each step
     inputs_combined = {**yaml_tree.get('inputs', {}), **inputs_workflow}
     yaml_tree.update({'inputs': inputs_combined})
 
@@ -788,7 +802,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     # (Why are we getting uniques?)
     workflow_outputs = utils_cwl.get_workflow_outputs(args, namespaces, is_root, yaml_stem,
         steps, outputs_workflow, vars_workflow_output_internal, graph, tools_lst, step_node_name)
-    yaml_tree.update({'outputs': workflow_outputs})
+    # Add the provided workflow outputs to the workflow outputs from each step
+    outputs_combined = {**yaml_tree.get('outputs', {}), **workflow_outputs}
+    yaml_tree.update({'outputs': outputs_combined})
 
     # NOTE: currently mutates yaml_tree (maybe)
     utils_cwl.maybe_add_requirements(yaml_tree, tools, steps_keys, wic_steps, subkeys)

@@ -1,13 +1,19 @@
 steps:
-  - setup_receptor.yml:
+  - setup_pdb.yml:
       in:
         pdb_id: 1ntp
+        pdb_path: '&pdb.pdbqt'
+        box_path: '&box.pdb'
+        water_type: spce
+        force_field: amber99sb-ildn
+  - download_ligand_database:
+      in:
+        database: /NCIOpen.sdf
   - extract_molecules_sdf:
       in:
-        input_path: ../data/NCIOpen.sdf
 #        output_sdf_path: '&ligands.sdf'
-        first_molecule: "1"
-        last_molecule: "1"
+        first_molecule: 1
+        last_molecule: 1
   - split_sdf:
 #      in:
 #        input_path: '*ligands.sdf'
@@ -18,11 +24,11 @@ steps:
       in:
         input_log_paths: '*vina.log' # NOTE: plural
         docking_score_cutoff: -4.0
-        max_num_decoys_per_ligand: 1
-        max_num_decoys_total: 1
+        max_num_poses_per_ligand: 1
+        max_num_poses_total: 1
         input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
         output_batch_pdbqt_path: '&ligand.pdbqt'
-  - ligand_topol_params.yml: # scatter
+  - gen_topol_params.yml: # scatter
       scatter: [pdbqt_path]
   - stability.yml: # scatter
       scatter: [crd_path, top_zip_path]
@@ -32,15 +38,15 @@ wic:
   graphviz:
     label: Cheminformatics + Docking + Initial Topology Setup
   steps:
-    (1, setup_receptor.yml):
+    (1, setup_pdb.yml):
       wic:
         inlineable: False
-    (4, ligand_modeling_docking.yml):
+    (5, ligand_modeling_docking.yml):
       wic:
         inlineable: False
-    (6, ligand_topol_params.yml):
+    (7, gen_topol_params.yml):
       wic:
         inlineable: False
-    (7, stability.yml):
+    (8, stability.yml):
       wic:
         inlineable: False

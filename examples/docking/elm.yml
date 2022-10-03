@@ -1,13 +1,17 @@
 steps:
-- setup_receptor.yml:
+- setup_pdb.yml:
     in:
       pdb_id: 1uao #1ntp
+      pdb_path: '&pdb.pdbqt'
+      box_path: '&box.pdb'
+- download_ligand_database:
+    in:
+      database: /NCIOpen.sdf
 - extract_molecules_sdf:
     in:
-      input_path: ../data/NCIOpen.sdf
 #      output_sdf_path: '&ligands.sdf'
-      first_molecule: "1"
-      last_molecule: "1"
+      first_molecule: 1
+      last_molecule: 1
 # NOTE: We need to extract the models first, before splitting them into separate files.
 # If we try to do both simultaneously, obabel ignores -f and -l and outputs ALL models.
 - split_sdf:
@@ -23,18 +27,18 @@ steps:
 
 wic:
   steps:
-    (1, setup_receptor.yml):
+    (1, setup_pdb.yml):
       wic:
         inlineable: False # Due to yml wic tag inlineing issue
-    (2, extract_molecules_sdf):
+    (3, extract_molecules_sdf):
       wic:
         graphviz:
           label: Choose Ligands from\nCheminformatics Database
-    (3, split_sdf):
+    (4, split_sdf):
       wic:
         graphviz:
           label: Split Ligands into\nSeparate Files
-    (4, dsb.yml):
+    (5, dsb.yml):
       wic:
         # Scattering changes the input/output types and thus creates a barrier to inlineing.
         inlineable: False

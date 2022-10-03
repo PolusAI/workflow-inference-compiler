@@ -1,13 +1,19 @@
 steps:
-- setup_receptor.yml:
+- setup_pdb.yml:
     in:
       pdb_id: 1ntp
+      pdb_path: '&pdb.pdbqt'
+      box_path: '&box.pdb'
+      water_type: spce
+      force_field: amber99sb-ildn
+- download_ligand_database:
+    in:
+      database: /NCIOpen.sdf
 - extract_molecules_sdf:
     in:
-      input_path: ../data/NCIOpen.sdf
 #      output_sdf_path: '&ligands.sdf'
-      first_molecule: "1"
-      last_molecule: "1"
+      first_molecule: 1
+      last_molecule: 1
 - generate_conformers_sdf:
 #    in:
 #      input_path:
@@ -24,14 +30,14 @@ steps:
 - autodock_vina_batch:
     in:
 #      input_batch_pdbqt_path: '*ligand_split.pdbqt' # Array type
-      input_receptor_pdbqt_path: '*receptor_hydrogens.pdbqt'
+      input_receptor_pdbqt_path: '*pdb.pdbqt'
       input_box_path: '*box.pdb'
-#      output_batch_pdbqt_path: '&decoys_ligand.pdbqt' # Array type
+#      output_batch_pdbqt_path: '&poses_ligand.pdbqt' # Array type
       output_log_path: '&vina.log'
 - split_pdbqt:
     scatter: [input_path]
 #    in:
-#      input_path: '*decoys_ligand.pdbqt' # Scalar type
+#      input_path: '*poses_ligand.pdbqt' # Scalar type
 #      output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
     #out:
     #  output_pdb_path: # 2D Array type due to scattering
@@ -39,27 +45,27 @@ steps:
     in:
       input_log_path: '*vina.log'
       docking_score_cutoff: -4.0
-      max_num_decoys_per_ligand: 1
-      max_num_decoys_total: 1
+      max_num_poses_per_ligand: 1
+      max_num_poses_total: 1
 #      input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
 #      output_batch_pdbqt_path: '&ligand.pdbqt'
 - convert_mol2:
     scatter: [input_path]
 #    in:
 #      input_path: '*ligand.pdbqt'
-#      output_mol2_path: '&decoy.mol2'
+#      output_mol2_path: '&pose.mol2'
 - python3_mol2_to_mol2:
     scatter: [input_mol2_path]
     in:
       script: /rename_residues_MOL.py # NOTE: Initial / required
-#      input_mol2_path: '*decoy.mol2'
-#      output_mol2_path: '&decoy_MOL.mol2'
+#      input_mol2_path: '*pose.mol2'
+#      output_mol2_path: '&pose_MOL.mol2'
 - acpype:
     scatter: [input_path]
   # NOTE: We are using our own acpypye CWL adapter (NOT the biobb version) so
   # we have the choice of using charges from the mol2 file.
 #    in:
-#      input_path: '*decoy_MOL.mol2' # Do NOT use '*decoy_ligand.pdb'
+#      input_path: '*pose_MOL.mol2' # Do NOT use '*pose_ligand.pdb'
 #      output_itp_path: '&ligand_GMX.itp'
       # NOTE: Although we don't need the *.itp topology file yet, we
       # need to use these coordinates with autodock because they are
@@ -85,8 +91,8 @@ steps:
 - babel_convert:
     scatter: [input_path]
     in:
-#      input_path: '*ligand_GMX.gro' #'*decoy_ligand.pdbqt'
-      output_path: '&decoy_ligand.pdb'
+#      input_path: '*ligand_GMX.gro' #'*pose_ligand.pdbqt'
+      output_path: '&pose_ligand.pdb'
 
 # Molecular Dynamics combine receptor & ligand
 - append_ligand:
@@ -99,7 +105,7 @@ steps:
     scatter: [input_structure2]
     in:
       input_structure1: '*receptor_gro.pdb' # '*receptor_hydrogens.pdb'
-      input_structure2: '*decoy_ligand.pdb'
+      input_structure2: '*pose_ligand.pdb'
       output_structure_path: '&complex_vac.pdb'
 - stability.yml:
     scatter: [crd_path, top_zip_path]
@@ -109,18 +115,18 @@ steps:
 
 wic:
   steps:
-    (1, setup_receptor.yml):
+    (1, setup_pdb.yml):
       wic:
         inlineable: False
-    (2, extract_molecules_sdf):
+    (3, extract_molecules_sdf):
       wic:
         graphviz:
           label: Choose Ligands from\nCheminformatics Database
-    (4, assign_partial_charges.yml):
+    (5, assign_partial_charges.yml):
       wic:
         inlineable: False
 
-    (17, stability.yml):
+    (18, stability.yml):
       wic:
         inlineable: False
 

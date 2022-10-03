@@ -1,10 +1,14 @@
 steps:
-- setup_receptor.yml:
+- setup_pdb.yml:
     in:
       pdb_id: 1uao #1ntp
+      pdb_path: '&pdb.pdbqt'
+      box_path: '&box.pdb'
+- download_ligand_database:
+    in:
+      database: /NCIOpen.sdf
 - extract_molecules_sdf:
     in:
-      input_path: ../data/NCIOpen.sdf
-      first_molecule: "1"
-      last_molecule: "1"
+      first_molecule: 1
+      last_molecule: 1
 - dsb.yml:

@@ -13,7 +13,7 @@ steps:
             ref-t: 298
             tau-t: 2
             constraints: h-bonds
-            nstxout: 1000
+            nstxout: 100
             nstenergy: 10
             pcoupl: Berendsen
             tau-p: 1

@@ -19,6 +19,8 @@ parser.add_argument('--parallel', type=bool, required=False, default=False,
                     help='''When running locally, execute independent steps in parallel.
                     \nThis is required for real-time analysis, but it may cause issues with
                     \nhanging (particularly when scattering). See user guide for details.''')
+parser.add_argument('--quiet', type=bool, required=False, default=False,
+                    help='''Disable verbose output. This will not print out the commands used for each step.''')
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--cwl_run_local', type=bool, required=False, default=False,
