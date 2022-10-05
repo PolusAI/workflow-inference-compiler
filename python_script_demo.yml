@@ -1,0 +1,9 @@
+steps:
+- download_pdb.yml:
+    in:
+      pdb_id: 1BTY
+- python_script:
+    in:
+      script: atomselect_demo.py
+      selection_string: backbone and name CA
+      #input_pdb_file inferred!
