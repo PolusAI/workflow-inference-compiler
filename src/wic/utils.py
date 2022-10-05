@@ -225,6 +225,21 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
     return steps_keys
 
 
+def get_subkeys(steps_keys: List[str], tools_stems: List[str]) -> List[str]:
+    """This function determines which step keys are associated with subworkflows.\n
+    This is critical for the control flow in many areas of the compiler.
+
+    Args:
+        steps_keys (List[str]): All of the step keys for the current workflow.
+        tools_stems (List[str]): All of the step keys associated with CommandLineTools.
+
+    Returns:
+        List[str]: The list of step keys associated with subworkflows of the current workflow.
+    """
+    exceptions = ['python_script'] # special case
+    return [key for key in steps_keys if (key not in tools_stems) and (key not in exceptions)]
+
+
 def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
     """Chooses a specific backend for a given CWL workflow step.
 

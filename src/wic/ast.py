@@ -52,7 +52,7 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
     wic_steps = wic['wic'].get('steps', {})
     steps_keys = utils.get_steps_keys(steps)
     tools_stems = [stepid.stem for stepid in tools]
-    subkeys = [key for key in steps_keys if key not in tools_stems]
+    subkeys = utils.get_subkeys(steps_keys, tools_stems)
 
     for i, step_key in enumerate(steps_keys):
         stem = Path(step_key).stem
@@ -139,7 +139,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
     tools_stems = [stepid.stem for stepid in tools]
-    subkeys = [key for key in steps_keys if key not in tools_stems]
+    subkeys = utils.get_subkeys(steps_keys, tools_stems)
 
     for i, step_key in enumerate(steps_keys):
         # Recursively merge subworkflows, to implement parameter passing.
@@ -202,7 +202,7 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
     wic_steps = wic['wic'].get('steps', {})
     steps_keys = utils.get_steps_keys(steps)
     tools_stems = [stepid.stem for stepid in tools]
-    subkeys = [key for key in steps_keys if key not in tools_stems]
+    subkeys = utils.get_subkeys(steps_keys, tools_stems)
 
     yaml_forest_list = []
 
@@ -252,7 +252,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
     tools_stems = [stepid.stem for stepid in tools]
-    subkeys = [key for key in steps_keys if key not in tools_stems]
+    subkeys = utils.get_subkeys(steps_keys, tools_stems)
 
     # All subworkflows are inlineable, except scattered subworkflows.
     inlineable = wic['wic'].get('inlineable', True)
@@ -306,7 +306,7 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
     tools_stems = [stepid.stem for stepid in tools]
-    subkeys = [key for key in steps_keys if key not in tools_stems]
+    subkeys = utils.get_subkeys(steps_keys, tools_stems)
 
     # TODO: We really need to inline the wic tags as well. This may be complicated
     # because due to overloading we may need to modify parent wic tags.

@@ -32,6 +32,9 @@ RUN conda install -c conda-forge wget libarchive
 RUN conda install -c conda-forge openbabel
 # RUN conda install -c conda-forge mdanalysis
 
+# Solely for atomselect_demo
+RUN conda install -c conda-forge mdtraj
+
 # NOTE: Due to a trivial bug in MDAnalysis, running a MDAnalysis script within Docker currently requires my fork.
 # See https://github.com/MDAnalysis/mdanalysis/pull/3832
 RUN apt-get install -y git g++

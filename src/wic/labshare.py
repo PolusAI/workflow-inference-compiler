@@ -161,7 +161,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
     #print(steps_keys)
 
     #tools_stems = [stepid.stem for stepid in tools]
-    #subkeys = [key for key in steps_keys if key not in tools_stems]
+    #subkeys = utils.get_subkeys(steps_keys, tools_stems)
 
     cwl_tree_no_dd = remove_dot_dollar(cwl_tree)
     yaml_inputs_no_dd = remove_dot_dollar(yaml_inputs)
