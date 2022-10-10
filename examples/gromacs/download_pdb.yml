@@ -38,7 +38,13 @@ steps:
     in:
       config:
         models: [1]
-      output_structure_path: '&protein.pdb'
+      #output_structure_path: '&protein.pdb'
+- python_script:
+    in:
+      script: ../../atomselect_demo.py
+      # Remove any unknown residues that weren't already 'cleaned' in the `pdb` step above.
+      selection_string: not resname UNK
+      output_pdb_path: '&protein.pdb'
 
 wic:
   graphviz:

@@ -9,7 +9,15 @@ driver_script =  '/python_cwl_driver.py'
 types_script = '/workflow_types.py'
 
 types_script_rel = 'examples/scripts/workflow_types.py'
-types_script_rel = str(Path(__file__).parent) + '/../../examples/scripts/workflow_types.py'
+
+# NOTE: VERY IMPORTANT: Since we have to programmaticaly import the python file in the compiler,
+# and since the act of importing it executes the entire file (i.e. including import statements),
+
+# USERS SHOULD NOT USE TOP-LEVEL IMPORT STATEMENTS!
+
+# See the following links for a more detailed explanation
+# https://stackoverflow.com/questions/2724260/why-does-pythons-import-require-fromlist
+# https://stackoverflow.com/questions/8790003/dynamically-import-a-method-in-a-file-from-a-string
 
 
 def import_python_file(python_module_name: str, python_file_path: Path) -> ModuleType:
@@ -68,11 +76,11 @@ def get_main_args(module_: ModuleType) -> Dict[str, Any]:
     ret = {'return': anns.get('return')} # Separate out the return type
     if 'return' in anns:
         del anns['return']
-    print(anns)
-    print(ret)
+    #print(anns)
+    #print(ret)
 
-    print(inspect.signature(module_.main).parameters)
-    print(inspect.signature(module_.main).return_annotation)
+    #print(inspect.signature(module_.main).parameters)
+    #print(inspect.signature(module_.main).return_annotation)
     return anns
 
 

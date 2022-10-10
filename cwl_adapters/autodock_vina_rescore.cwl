@@ -2,6 +2,10 @@
 #!/usr/bin/env cwl-runner
 cwlVersion: v1.1
 
+# NOTE: This file is nearly identical to autodock_vina_batch with the primary difference that
+# --input_batch_pdbqt_path is replaced with --input_ligand_pdbqt_path.
+# (For no obvious reason, --score_only only works with --ligand, not --batch)
+
 class: CommandLineTool
 
 label: Wrapper of the AutoDock Vina software.
@@ -11,44 +15,10 @@ doc: |-
 
 baseCommand: vina # NOTE: Only version >=1.2 supports --batch!
 arguments:
-# Need to parse box.pdb and pass in each number separately.
-# REMARK BOX CENTER:     0.102     0.019    -0.004 SIZE:    30.195    31.940    27.005
-- "--dir" # Need to explicitly pass --dir . in --batch mode
-- "."
-- "--center_x"
-- $(inputs.input_box_path.contents.split("\n")[0].split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[0])
-- "--center_y"
-- $(inputs.input_box_path.contents.split("\n")[0].split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[1])
-- "--center_z"
-- $(inputs.input_box_path.contents.split("\n")[0].split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[2])
-- "--size_x"
-- $(inputs.input_box_path.contents.split("\n")[0].split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[3])
-- "--size_y"
-- $(inputs.input_box_path.contents.split("\n")[0].split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[4])
-- "--size_z"
-- $(inputs.input_box_path.contents.split("\n")[0].split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[5])
-# NOTE: Cannot use a single javascript expression to create the entire arguments list because CWL treats it as a string:
-# "the `arguments` field is not valid because value is a str"
-#  ${
-#    var words = inputs.input_box_path.contents.split("\n")[0].split(" ");
-#    var nums = words.filter(function(s) {return !isNaN(parseFloat(s))});
-#    var args = {};
-#    args.push("--dir"); // Need to explicitly pass --dir . in --batch mode
-#    args.push(".");
-#    args.push("--center_x");
-#    args.push(nums[0]);
-#    args.push("--center_y");
-#    args.push(nums[1]);
-#    args.push("--center_z");
-#    args.push(nums[2]);
-#    args.push("--size_x");
-#    args.push(nums[3]);
-#    args.push("--size_y");
-#    args.push(nums[4]);
-#    args.push("--size_z");
-#    args.push(nums[5]);
-#    return args;
-#  }
+- "--autobox"
+# NOTE: The documentation for --score_only claims "search space can be omitted" which is not quite correct;
+# if you omit --center_* and --size_* you get "ERROR: Grid box dimensions must be greater than 0 Angstrom."
+# However, adding --autobox works.
 
 # Temporarily comment out (in favor of `conda install vina`) due to issues with some AWS EC2 instances.
 #hints:
@@ -59,20 +29,20 @@ requirements:
   InlineJavascriptRequirement: {}
 
 inputs:
-  input_batch_pdbqt_path:
-    label: Path to the input PDBQT ligands
+  input_ligand_pdbqt_path:
+    label: Path to the input PDBQT ligand
     doc: |-
-      Path to the input PDBQT ligands
+      Path to the input PDBQT ligand
       Type: string
       File type: input
       Accepted formats: pdbqt
       Example file: https://github.com/bioexcel/biobb_vs/raw/master/biobb_vs/test/data/vina/vina_ligand.pdbqt
-    type: File[]
+    type: File
     format:
     - edam:format_1476
     inputBinding:
       position: 1
-      prefix: --batch
+      prefix: --ligand
 
   input_receptor_pdbqt_path:
     label: Path to the input PDBQT receptor
@@ -89,22 +59,23 @@ inputs:
       position: 2
       prefix: --receptor
 
-  input_box_path:
-    label: Path to the PDB containing the residues belonging to the binding site
-    doc: |-
-      Path to the PDB containing the residues belonging to the binding site
-      Type: string
-      File type: input
-      Accepted formats: pdb
-      Example file: https://github.com/bioexcel/biobb_vs/raw/master/biobb_vs/test/data/vina/vina_box.pdb
-    type: File
-    format:
-    - edam:format_1476
-#    inputBinding:
-#      position: 3
-#      prefix: --input_box_path
-    loadContents: true
+  local_only:
+    label: Do local search only
+    doc: Do local search only
+    type: boolean?
+    #format:
+    #- edam_format_2330 # textual format
+    inputBinding:
+      prefix: --local_only
 
+  score_only:
+    label: Do not do any conformational search; simply rescore.
+    doc: Do not do any conformational search; simply rescore.
+    type: boolean?
+    #format:
+    #- edam_format_2330 # textual format
+    inputBinding:
+      prefix: --score_only
 
 # NOTE: This is only used so we can create explicit edges.
 # The scatter-related inference bugs are now sorted out, so this can probably be removed.
@@ -138,6 +109,14 @@ inputs:
     - edam:format_2330
     default: system.log
 
+  docking_score:
+    label: Estimated Free Energy of Binding
+    doc: |-
+      Estimated Free Energy of Binding
+    type: string
+    format:
+    - edam:format_2330
+
 outputs:
   output_batch_pdbqt_path:
     label: Path to the output PDBQT files
@@ -160,6 +139,25 @@ outputs:
     outputBinding:
       glob: $(inputs.output_log_path)
     format: edam:format_2330
+
+  docking_score:
+    label: Estimated Free Energy of Binding
+    doc: |-
+      Estimated Free Energy of Binding
+    type: float
+    outputBinding:
+      glob: $(inputs.output_log_path)
+      loadContents: true
+      outputEval: |
+        ${
+          var lines = self[0].contents.split("\n");
+          // The correct line should be of the form
+          // Estimated Free Energy of Binding   : -6.053 (kcal/mol) [=(1)+(2)+(3)+(4)]
+          var bfe_line = lines.filter(function(s) {return s.split(" ")[0] == "Estimated"})[0];
+          var docking_score_string = bfe_line.split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[0];
+          var docking_score = parseFloat(docking_score_string);
+          return docking_score
+        }
 
 stdout: $(inputs.output_log_path)
 

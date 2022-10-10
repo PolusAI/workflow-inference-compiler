@@ -6,4 +6,4 @@ steps:
     in:
       script: atomselect_demo.py
       selection_string: backbone and name CA
-      #input_pdb_file inferred!
+      #input_pdb_path inferred!

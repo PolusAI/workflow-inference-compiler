@@ -25,7 +25,7 @@ steps:
 - acpype:
   # NOTE: We are using our own acpypye CWL adapter (NOT the biobb version) so
   # we have the choice of using charges from the mol2 file.
-#    in:
+    in:
 #      input_path: '*pose_MOL.mol2' # Do NOT use '*pose_ligand.pdb'
 #      output_itp_path: '&ligand_GMX.itp'
       # NOTE: Although we don't need the *.itp topology file yet, we
@@ -34,7 +34,7 @@ steps:
       # Otherwise, we will get the grompp atom name warning (see below).
 #      output_gro_path: '&ligand_GMX.gro'
 #      output_top_path: '&ligand_GMX.top'
-      #charge_method: user # take charges from mol2 file
+      charge_method: user # take charges from mol2 file
 # NOTE: acpype doesn't add forcefield or water topology #include lines.
 - bash_top:
     in:

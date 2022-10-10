@@ -1,0 +1,17 @@
+FROM ubuntu:22.04
+
+# Install miniconda
+RUN apt-get update && apt-get install -y wget
+RUN MINICONDA="Miniconda3-latest-Linux-x86_64.sh" && \
+    wget --quiet https://repo.continuum.io/miniconda/$MINICONDA && \
+    bash $MINICONDA -b -p /miniconda && \
+    rm -f $MINICONDA
+ENV PATH /miniconda/bin:$PATH
+
+RUN conda install -c conda-forge wget libarchive
+# bsdtar is installed with libarchive; see download_data.sh
+
+ADD Dockerfile_data .
+ADD download_data.sh .
+
+RUN ./download_data.sh

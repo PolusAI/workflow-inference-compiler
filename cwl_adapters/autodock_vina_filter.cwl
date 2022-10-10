@@ -100,6 +100,17 @@ inputs:
       prefix: --max_num_poses_total
     default: -1
 
+  input_txt_path:
+    label: Experimental binding free energy data file (if any)
+    doc: |-
+      Experimental binding free energy data file (if any)
+    type: File?
+    format:
+    - edam:format_2330
+    inputBinding:
+      position: 6
+      prefix: --input_txt_path
+
   input_batch_pdbqt_path:
     label: Path to the input PDBQT ligands
     doc: |-
@@ -113,7 +124,7 @@ inputs:
     format:
     - edam:format_1476
 #    inputBinding:
-#      position: 6 # Since the type is File[], this means starting at this position.
+#      position: 7 # Since the type is File[], this means starting at this position.
 #      prefix: --input_batch_pdbqt_path
 
 # NOTE: This is only used so we can create explicit edges.
@@ -133,6 +144,30 @@ inputs:
 #      position: 7
 #      prefix: --output_batch_pdbqt_path
     default: .
+
+  docking_scores:
+    label: Estimated Free Energies of Binding
+    doc: |-
+      Estimated Free Energies of Binding
+    type: string
+    format:
+    - edam:format_2330
+
+  experimental_binding_data:
+    label: Experimental binding data (if any)
+    doc: |-
+      Experimental binding data (if any)
+    type: string?
+    format:
+    - edam:format_2330
+
+  experimental_dGs:
+    label: Experimental binding free energy dG values (if any)
+    doc: |-
+      Experimental binding free energy dG values (if any)
+    type: string?
+    format:
+    - edam:format_2330
 
 outputs:
 # NOTE: If docking_score_cutoff is too negative and filters out all of the files,
@@ -167,7 +202,7 @@ outputs:
           var files = []; // In this case, flatten the 2D nested array into a 1D array
           for (var i = 0; i < lines.length; i++) {
             var indices = lines[i].split(" ");
-            //var docking_score = parseFloat(indices[0]);
+            //var docking_score = parseFloat(indices[0]); // See below
             var mol_idx = parseInt(indices[1]);
             var mode_idx = parseInt(indices[2]);
             var file = inputs.input_batch_pdbqt_path[mol_idx][mode_idx];
@@ -176,6 +211,80 @@ outputs:
           return files;
         }
     format: edam:format_1476
+
+  docking_scores:
+    label: Estimated Free Energies of Binding
+    doc: |-
+      Estimated Free Energies of Binding
+    type:
+      type: array
+      items: float
+    outputBinding:
+      glob: indices.txt
+      loadContents: true
+      outputEval: |
+        ${
+          var lines = self[0].contents.split("\n");
+          var docking_scores = [];
+          for (var i = 0; i < lines.length; i++) {
+            var indices = lines[i].split(" ");
+            var docking_score = parseFloat(indices[0]);
+            docking_scores.push(docking_score);
+          }
+          return docking_scores;
+        }
+
+  experimental_binding_data:
+    label: Experimental binding data (if any)
+    doc: |-
+      Experimental binding data (if any)
+    type: ["null", {"type": "array", "items": "float"}]
+    outputBinding:
+      glob: indices.txt
+      loadContents: true
+      outputEval: |
+        ${
+          var lines = self[0].contents.split("\n");
+          var data = [];
+          for (var i = 0; i < lines.length; i++) {
+            var indices = lines[i].split(" ");
+            if (indices.length > 3) {
+              var datum = parseFloat(indices[3]);
+              data.push(datum);
+            }
+          }
+          if (data.length == 0) {
+            return null;
+          } else {
+            return data;
+          }
+        }
+
+  experimental_dGs:
+    label: Experimental binding free energy dG values (if any)
+    doc: |-
+      Experimental binding free energy dG values (if any)
+    type: ["null", {"type": "array", "items": "float"}]
+    outputBinding:
+      glob: indices.txt
+      loadContents: true
+      outputEval: |
+        ${
+          var lines = self[0].contents.split("\n");
+          var dGs = [];
+          for (var i = 0; i < lines.length; i++) {
+            var indices = lines[i].split(" ");
+            if (indices.length > 4) {
+              var dG = parseFloat(indices[4]);
+              dGs.push(dG);
+            }
+          }
+          if (dGs.length == 0) {
+            return null;
+          } else {
+            return dGs;
+          }
+        }
 
 stdout: stdout
 

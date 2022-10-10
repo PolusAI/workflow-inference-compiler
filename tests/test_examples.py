@@ -20,13 +20,13 @@ from wic.schemas import wic_schema
 from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree
 
 
-def get_args() -> argparse.Namespace:
+def get_args(yml_path: str = '') -> argparse.Namespace:
     """This is used to get mock command line arguments.
 
     Returns:
         argparse.Namespace: The mocked command line arguments
     """
-    testargs = ['wic', '--yaml', '', '--cwl_output_intermediate_files', 'True']  # ignore --yaml
+    testargs = ['wic', '--yaml', yml_path, '--cwl_output_intermediate_files', 'True']  # ignore --yaml
     # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
     with patch.object(sys, 'argv', testargs):
         args: argparse.Namespace = wic.cli.parser.parse_args()
@@ -79,7 +79,7 @@ def test_examples(yml_path_str: str, yml_path: Path) -> None:
     graph_nx = nx.DiGraph()
     graphdata = GraphData(str(yml_path))
     graph = GraphReps(graph_gv, graph_nx, graphdata)
-    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(), [], [graph], {}, {},
+    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {},
                                                     tools_cwl, True, relative_run_path=True, testing=True)
     rose_tree = compiler_info.rose
     sub_node_data: NodeData = rose_tree.data
@@ -148,7 +148,7 @@ def test_cwl_embedding_independence(yml_path_str: str, yml_path: Path) -> None:
     graphdata = GraphData(str(yml_path))
     graph = GraphReps(graph_gv, graph_nx, graphdata)
     is_root = True
-    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(), [], [graph], {}, {},
+    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {},
                                                     tools_cwl, is_root, relative_run_path=False, testing=True)
     rose_tree = compiler_info.rose
     node_data_lst: List[NodeData] = wic.utils.flatten_rose_tree(rose_tree)
@@ -176,8 +176,8 @@ def test_cwl_embedding_independence(yml_path_str: str, yml_path: Path) -> None:
         graphdata_fakeroot = GraphData(str(sub_name))
         graph_fakeroot = GraphReps(graph_fakeroot_gv, graph_fakeroot_nx, graphdata_fakeroot)
         fake_root = True
-        compiler_info_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest.yaml_tree,
-            get_args(), [], [graph_fakeroot], {}, {}, tools_cwl, fake_root, relative_run_path=False, testing=True)
+        compiler_info_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest.yaml_tree, get_args(str(yml_path)),
+            [], [graph_fakeroot], {}, {}, tools_cwl, fake_root, relative_run_path=False, testing=True)
         sub_node_data_fakeroot: NodeData = compiler_info_fakeroot.rose.data
         sub_cwl_fakeroot = sub_node_data_fakeroot.compiled_cwl
 
@@ -249,7 +249,7 @@ def test_inline_subworkflows(yml_path_str: str, yml_path: Path) -> None:
     graph_nx = nx.DiGraph()
     graphdata = GraphData(str(yml_path))
     graph = GraphReps(graph_gv, graph_nx, graphdata)
-    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(), [], [graph], {}, {},
+    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {},
                                                     tools_cwl, True, relative_run_path=True, testing=True)
     rose_tree = compiler_info.rose
     sub_node_data: NodeData = rose_tree.data
@@ -265,8 +265,8 @@ def test_inline_subworkflows(yml_path_str: str, yml_path: Path) -> None:
         inline_graph_nx = nx.DiGraph()
         inline_graphdata = GraphData(str(yml_path))
         inline_graph = GraphReps(inline_graph_gv, inline_graph_nx, inline_graphdata)
-        inline_compiler_info = wic.compiler.compile_workflow(inline_yaml_tree,
-            get_args(), [], [inline_graph], {}, {}, tools_cwl, True, relative_run_path=True, testing=True)
+        inline_compiler_info = wic.compiler.compile_workflow(inline_yaml_tree, get_args(str(yml_path)),
+            [], [inline_graph], {}, {}, tools_cwl, True, relative_run_path=True, testing=True)
         inline_rose_tree = inline_compiler_info.rose
         inline_sub_node_data: NodeData = inline_rose_tree.data
 
