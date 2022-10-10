@@ -1,38 +1,90 @@
 steps:
-  - setup_pdb.yml:
-      in:
-        pdb_id: 1ntp
-        pdb_path: '&pdb.pdbqt'
-        box_path: '&box.pdb'
-        water_type: spce
-        force_field: amber99sb-ildn
-  - download_ligand_database:
-      in:
-        database: /NCIOpen.sdf
-  - extract_molecules_sdf:
-      in:
-#        output_sdf_path: '&ligands.sdf'
-        first_molecule: 1
-        last_molecule: 1
-  - split_sdf:
-#      in:
-#        input_path: '*ligands.sdf'
-#        output_sdf_path: '&ligand.sdf' # Array type
-  - ligand_modeling_docking.yml: # scatter
-      scatter: [sdf_path]
-  - autodock_vina_filter:
-      in:
-        input_log_paths: '*vina.log' # NOTE: plural
-        docking_score_cutoff: -4.0
-        max_num_poses_per_ligand: 1
-        max_num_poses_total: 1
-        input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
-        output_batch_pdbqt_path: '&ligand.pdbqt'
-  - gen_topol_params.yml: # scatter
-      scatter: [pdbqt_path]
-  - stability.yml: # scatter
-      scatter: [crd_path, top_zip_path]
-      scatterMethod: dotproduct
+- setup_pdb.yml:
+    in:
+      pdb_id: 1r4l # ACE2
+      #pdb_id: 1ntp # trypsin
+      #pdb_id: 1uao # chignolin (for speed)
+      pdb_path: '&pdb.pdbqt'
+      box_path: '&box.pdb'
+      water_type: spce
+      force_field: amber99sb-ildn
+# For some reason, this step is not cached by --cachedir, but use it for the CI.
+- download_ligand_database_xlsx:
+    in:
+      database: /ncats_target_based_curated.xlsx # SMACC ligand database
+- python_script:
+    in:
+      script: ../scripts/generate_conformers.py
+      #input_excel_path: ../../ncats_target_based_curated.xlsx
+      # query syntax: `column name` 'column value'
+      query: "`Standard Type` == 'Kd' and `duplicate-type-classifier` == 'unique'"
+      max_row: 1 #25 # Use 1 for CI
+      smiles_column: SMILES
+      binding_data_column: Standard Value
+      convert_Kd_dG: 'True'
+      output_txt_path: '&binding_data.txt'
+- ligand_modeling_docking.yml:
+    scatter: [sdf_path]
+- autodock_vina_filter:
+    in:
+      input_log_paths: '*vina.log' # NOTE: plural
+      input_txt_path: '*binding_data.txt'
+      docking_score_cutoff: -4.0
+      max_num_poses_per_ligand: 1
+      max_num_poses_total: 1 #25 # Use 1 for CI
+      input_batch_pdbqt_path: '*ligand_nested_split.pdbqt' # 2D Array type
+      output_batch_pdbqt_path: '&ligand.pdbqt'
+      docking_scores: '&docking_scores' # NOTE: Not a filename, just an explicit edge
+      experimental_dGs: '&dGs' # NOTE: Not a filename, just an explicit edge
+- gen_topol_params.yml:
+    scatter: [pdbqt_path]
+- stability.yml:
+    scatter: [crd_path, top_zip_path]
+    scatterMethod: dotproduct
+- python_script:
+    scatter: [input_pdb_path]
+    in:
+      script: ../../atomselect_demo.py
+      selection_string: protein # Extract the protein from the last timestep
+      input_pdb_path: '*prod.pdb'
+# Assign partial charges (protein)
+# NOTE: Although we only start off with one protein, the final coordinates
+# after doing MD with different ligands will be different; hence scatter
+- convert_mol2:
+    scatter: [input_path]
+- convert_pdbqt:
+    scatter: [input_path]
+    in:
+      output_pdb_path: '&protein_prod.pdbqt'
+      arg1: -xr # Receptor needs to be rigid
+- python_script:
+    scatter: [input_pdb_path]
+    in:
+      script: ../../atomselect_demo.py
+      selection_string: resname MOL # Extract the ligand from the last timestep
+      input_pdb_path: '*prod.pdb'
+# Assign partial charges (ligand)
+- convert_mol2:
+    scatter: [input_path]
+- convert_pdbqt:
+    scatter: [input_path]
+    in:
+      output_pdb_path: '&ligand_prod.pdbqt'
+- autodock_vina_rescore:
+    scatter: [input_ligand_pdbqt_path, input_receptor_pdbqt_path]
+    scatterMethod: dotproduct
+    in:
+      input_ligand_pdbqt_path: '*ligand_prod.pdbqt'
+      input_receptor_pdbqt_path: '*protein_prod.pdbqt'
+      score_only: True
+      #local_only: True
+      output_log_path: '&vina_rescore.log'
+      docking_score: '&docking_score' # NOTE: Not a filename, just an explicit edge
+- scatter_plot:
+    in:
+      xs: '*dGs'
+      ys: '*docking_scores'
+      ys2: '*docking_score'
 
 wic:
   graphviz:
@@ -41,12 +93,12 @@ wic:
     (1, setup_pdb.yml):
       wic:
         inlineable: False
-    (5, ligand_modeling_docking.yml):
+    (4, ligand_modeling_docking.yml):
       wic:
         inlineable: False
-    (7, gen_topol_params.yml):
+    (6, gen_topol_params.yml):
       wic:
         inlineable: False
-    (8, stability.yml):
+    (7, stability.yml):
       wic:
         inlineable: False

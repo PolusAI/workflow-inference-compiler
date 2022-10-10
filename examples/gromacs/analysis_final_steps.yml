@@ -21,7 +21,7 @@ steps:
         #  selection: System
         input_top_path: '*prod.tpr'
         input_crd_path: '*prod.gro'
-        output_str_path: 'prod.pdb'
+        output_str_path: '&prod.pdb'
 
 wic:
   graphviz:

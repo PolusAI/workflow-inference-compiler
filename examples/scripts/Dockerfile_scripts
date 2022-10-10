@@ -35,6 +35,12 @@ RUN conda install -c conda-forge openbabel
 # Solely for atomselect_demo
 RUN conda install -c conda-forge mdtraj
 
+# Solely to generate conformers from SMACC database
+RUN conda install -c conda-forge pandas rdkit openpyxl
+
+# Solely to generate scatter plots
+RUN conda install -c conda-forge matplotlib
+
 # NOTE: Due to a trivial bug in MDAnalysis, running a MDAnalysis script within Docker currently requires my fork.
 # See https://github.com/MDAnalysis/mdanalysis/pull/3832
 RUN apt-get install -y git g++
@@ -47,5 +53,3 @@ RUN git clone https://github.com/jfennick/mdanalysis.git && cd mdanalysis/packag
 ADD *.sh .
 ADD *.py .
 ADD Dockerfile_scripts .
-
-RUN ./download_data.sh

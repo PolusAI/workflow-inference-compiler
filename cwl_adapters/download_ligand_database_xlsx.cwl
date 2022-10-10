@@ -3,10 +3,10 @@ cwlVersion: v1.0
 
 class: CommandLineTool
 
-label: Downloads the NCI lgand database(s)
+label: Downloads the SMACC ligand database(s) https://smacc.mml.unc.edu
 
 doc: |-
-  Downloads the NCI lgand database(s)
+  Downloads the SMACC ligand database(s) https://smacc.mml.unc.edu
 
 baseCommand: cp
 arguments: [$(inputs.database), $(runtime.outdir)]
@@ -19,16 +19,16 @@ requirements:
 inputs:
   database:
     type: string
-    default: /NCIOpen.sdf # NOTE: Initial / required
-    # /NCIOpen.sdf is mounted inside the docker image, . is outside of the image.
+    default: /ncats_target_based_curated.xlsx # NOTE: Initial / required
+    # /ncats_target_based_curated.xlsx is mounted inside the docker image, . is outside of the image.
 
 outputs:
-  output_sdf_path:
-    label: Path to the output sdf file
+  output_excel_path:
+    label: Path to the output xlsx file
     doc: |-
-      Path to the output sdf file
+      Path to the output xlsx file
     type: File
-    format: edam:format_3814 # sdf
+    format: edam:format_3620
     outputBinding:
       glob: $(inputs.database.slice(1)) # Remove initial /
 
