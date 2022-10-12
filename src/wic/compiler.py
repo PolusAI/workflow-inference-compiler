@@ -639,8 +639,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
                 if isinstance(arg_val, str):
                     arg_val_str = arg_val
-                if isinstance(arg_val, Dict):
+                elif isinstance(arg_val, Dict):
                     arg_val_str = arg_val['source']
+                else:
+                    # TODO: This is simply to prevent uninitialized access below.
+                    # Figure out a better solution.
+                    arg_val_str = ''
 
                 if arg_val_str in steps[i][step_key].get('scatter', []):
                     # Promote scattered input types to arrays

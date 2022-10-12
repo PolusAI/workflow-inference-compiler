@@ -8,6 +8,7 @@ steps:
 - config_tag_pdb:
     in:
       pdb_id: ~pdb_id
+      #filter: "False" # False = do not 'clean' the pdb file.
       output_config_string: '&pdb_id_str'
 - pdb:
     in:

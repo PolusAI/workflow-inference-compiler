@@ -11,6 +11,8 @@ inputs:
     type: string
     format:
     - edam:format_1476
+  box_buffer:
+    type: float
   water_type:
     type: string
   force_field:
@@ -30,7 +32,7 @@ outputs:
   box_path:
     type: File
     format: edam:format_1476
-    outputSource: setup_pdb__step__7__box/output_pdb_path
+    outputSource: setup_pdb__step__8__box/output_pdb_path
 
 steps:
   - download_pdb.yml:
@@ -68,13 +70,18 @@ steps:
         arg1: -xr
 
 # Docking setup
+  - config_tag_box:
+      in:
+        offset: ~box_buffer
+        output_config_string: '&config_tag_box'
   - box:
       in:
         input_pdb_path: '*receptor_pdb4amber.pdb' # pdb, not pdbqt
         # if demo...
         output_pdb_path: '&box.pdb'
         #output_pdb_path: ~box_path
-        config: '{"offset": "20"}' # Default of 2 Angstroms can cause autodock to not find any solutions.
+        config: '*config_tag_box'
+        #config: '{"offset": "20"}' # Default of 2 Angstroms can cause autodock to not find any solutions.
 
 # Molecular Dynamics setup
 #  - leap_gen_top:

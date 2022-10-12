@@ -13,6 +13,8 @@ steps:
       in:
         sdf_path: ~sdf_path
 #  - minimize_ligand_only.yml:
+#      in:
+#        sdf_path: ~sdf_path
 
 # NOTE: We converted to mol2 format above because it allows explicit charges.
 # Thus, if we only infer charges once and then preserve them, we don't have to

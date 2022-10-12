@@ -149,7 +149,7 @@ inputs:
     label: Estimated Free Energies of Binding
     doc: |-
       Estimated Free Energies of Binding
-    type: string
+    type: string?
     format:
     - edam:format_2330
 

@@ -1,3 +1,13 @@
+inputs:
+  nsteps:
+    type: int
+  dt:
+    type: float
+  ref-t:
+    type: float
+  ref-p:
+    type: float
+
 steps:
 # Since setup_vac_min.yml also calls min.yml, if we directly pass &min.tpr to grompp in
 # steep.yml, then there will be a copy of &min.tpr at each call site.
@@ -8,6 +18,11 @@ steps:
   - min.yml:
   - equil.yml:
   - prod.yml:
+      in:
+        nsteps: ~nsteps
+        dt: ~dt
+        ref-t: ~ref-t
+        ref-p: ~ref-p
 
 # Pass the CWL `in` tag as a parameter through BOTH of the yml DSL tags cg.yml and grompp.
 # Use (1-based) indexing to uniquely reference (step_number, step_name).

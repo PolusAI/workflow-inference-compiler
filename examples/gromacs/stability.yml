@@ -1,3 +1,12 @@
+inputs:
+  nsteps:
+    type: int
+  dt:
+    type: float
+  temperature:
+    type: float
+  pressure:
+    type: float
 # if demo...
 #inputs:
 #  crd_path:
@@ -17,6 +26,11 @@ steps:
 #        crd_path: ~crd_path
 #        top_zip_path: ~top_zip_path
   - basic.yml:
+      in:
+        nsteps: ~nsteps
+        dt: ~dt
+        ref-t: ~temperature
+        ref-p: ~pressure
   - analysis.yml:
 
 wic:
