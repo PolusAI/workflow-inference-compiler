@@ -104,6 +104,12 @@ def test_examples(yml_path_str: str, yml_path: Path) -> None:
         # (i.e. will not have all inputs), we need to check for
         # "Missing required input parameter" and only fail the
         # workflows which should have succeeded.
+        # TODO: Consider adding an explicit whitelist of workflows which should
+        # compile and run successfully. The issue with relying on missing_input
+        # only is that if a workflow previously compiled and executed, and then
+        # either the compiler changed or someone modifies the workflow such that
+        # there is now a missing input, that should be an error. Since we do not
+        # have access to previous CI results, then we should have a whitelist.
         missing_input = "Missing required input parameter"
         output = proc.stdout.decode("utf-8")
         if not missing_input in output:

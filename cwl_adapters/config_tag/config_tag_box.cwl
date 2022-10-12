@@ -12,10 +12,15 @@ requirements:
   InlineJavascriptRequirement: {}
 
 inputs:
-  pdb_id:
-    type: string
+  offset:
+    label: Extra distance (Angstroms) between the last residue atom and the box boundary.
+    doc: |-
+      Extra distance (Angstroms) between the last residue atom and the box boundary.
+    type: float
     format:
     - edam:format_2330
+
+# TODO: box_coordinates
 
   output_config_string:
     label: A dictionary of the given arguments as a JSON-encoded string.
@@ -36,7 +41,7 @@ outputs:
       outputEval: |
         ${
           var config = {};
-          config["pdb_code"] = inputs.pdb_id;
+          config["offset"] = inputs.offset;
           return JSON.stringify(config);
         }
 

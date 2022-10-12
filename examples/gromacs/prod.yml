@@ -1,28 +1,42 @@
 # Use &filename to create a reference to an output. Inputs in later steps can
 # use *filename to dereference the filename and create an explicit edge.
+inputs:
+  nsteps:
+    type: int
+  dt:
+    type: float
+  ref-t:
+    type: float
+  ref-p:
+    type: float
+
 steps:
-  - grompp:
+  - config_tag_mdp:
       in:
+        nsteps: ~nsteps #10000
+        dt: ~dt #0.002
+        ref-t: ~ref-t #298.0
+        ref-p: ~ref-p #1.0
         config:
           mdp:
             integrator: sd
             rvdw: 1.0
             rcoulomb: 1.0
             coulombtype: pme
-            nsteps: 10000
-            dt: 0.002
             tc-grps: system
-            ref-t: 298
             tau-t: 2
             constraints: h-bonds
             nstxout: 100
             nstenergy: 100
             pcoupl: parrinello-rahman
             tau-p: 1
-            ref-p: 1
             compressibility: 4.5e-5
             comm-mode: linear
             comm-grps: system
+        output_config_string: '&config_tag_mdp_prod'
+  - grompp:
+      in:
+        config: '*config_tag_mdp_prod'
         output_tpr_path: '&prod.tpr'
         input_top_zip_path: '*genion.zip'  # Use the original topology file so
 # we don't have to question whether the topology gets messed up after file format conversions.
