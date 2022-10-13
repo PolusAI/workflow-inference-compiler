@@ -39,7 +39,7 @@ steps:
       output_top_zip_path: '&complex_vac.zip'
       config:
         water_type: spce
-        force_field: amber99sb-ildn
+        forcefield: amber99sb-ildn
         ignh: True
         merge: False
 

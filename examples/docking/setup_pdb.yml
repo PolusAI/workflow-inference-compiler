@@ -15,7 +15,7 @@ inputs:
     type: float
   water_type:
     type: string
-  force_field:
+  forcefield:
     type: string
 
 outputs:
@@ -88,7 +88,7 @@ steps:
   - config_tag_pdb2gmx:
       in:
         water_type: ~water_type #spce
-        force_field: ~force_field #amber99sb-ildn
+        forcefield: ~forcefield #amber99sb-ildn
         ignh: True
 # NOTE: Setting ignh to True removes all existing hydrogens, and adds new
 # hydrogens based on residue templates. This can cause problems for titratable

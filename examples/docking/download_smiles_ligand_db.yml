@@ -1,0 +1,32 @@
+# if demo...
+inputs:
+  path:
+    type: string
+  query:
+    type: string
+  max_row:
+    type: int
+  smiles_column:
+    type: string
+  binding_data_column:
+    type: string
+  convert_Kd_dG:
+    type: string
+  output_txt_path:
+    type: string
+
+steps:
+- wget_xlsx:
+    in:
+      url: ~path
+- python_script:
+    in:
+      script: ../scripts/generate_conformers.py
+      #input_excel_path: # inferred
+      # query syntax: `column name` 'column value'
+      query: ~query #"`Standard Type` == 'Kd' and `duplicate-type-classifier` == 'unique'"
+      max_row: ~max_row #1 #25 # Use 1 for CI
+      smiles_column: ~smiles_column #SMILES
+      binding_data_column: ~binding_data_column #Standard Value
+      convert_Kd_dG: ~convert_Kd_dG #'True'
+      output_txt_path: '&binding_data.txt'

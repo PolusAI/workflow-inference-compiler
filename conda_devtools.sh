@@ -18,6 +18,8 @@ conda install -y -c conda-forge pytest pytest-cov pytest-parallel mypy pylint ty
 # are some functions which are missing stubs.
 conda install -y -c conda-forge data-science-types
 
+conda install -y -c conda-forge wget
+
 # Temporarily use conda (instead of the Docker image jakefennick/autodock_vina)
 # due to issues with some AWS EC2 instances.
 conda install -y -c conda-forge vina

@@ -17,7 +17,7 @@ inputs:
     format:
     - edam:format_2330
 
-  force_field:
+  forcefield:
     type: string
     format:
     - edam:format_2330
@@ -54,7 +54,7 @@ outputs:
         ${
           var config = {};
           config["water_type"] = inputs.water_type;
-          config["force_field"] = inputs.force_field;
+          config["force_field"] = inputs.forcefield; // Note underscore
           config["ignh"] = inputs.ignh;
           config["merge"] = inputs.merge;
           return JSON.stringify(config);

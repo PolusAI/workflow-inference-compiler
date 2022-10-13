@@ -8,15 +8,14 @@ steps:
       box_path: '&box.pdb'
       box_buffer: 20 # Angstroms
       water_type: spce
-      force_field: amber99sb-ildn
+      forcefield: amber99sb-ildn
 # For some reason, this step is not cached by --cachedir, but use it for the CI.
 #- download_ligand_database_xlsx:
 #    in:
 #      database: /ncats_target_based_curated.xlsx # SMACC ligand database
-- python_script:
+- download_smiles_ligand_db.yml:
     in:
-      script: ../scripts/generate_conformers.py
-      input_excel_path: ../../ncats_target_based_curated.xlsx
+      path: https://smacc.mml.unc.edu/ncats_target_based_curated.xlsx
       # query syntax: `column name` 'column value'
       query: "`Standard Type` == 'Kd' and `duplicate-type-classifier` == 'unique'"
       max_row: 1 #25 # Use 1 for CI
@@ -24,7 +23,6 @@ steps:
       binding_data_column: Standard Value
       convert_Kd_dG: 'True'
       output_txt_path: '&binding_data.txt'
-- cat_sdf:
 #- download_ligand_database:
 #    in:
 #      database: /NCIOpen.sdf
@@ -34,7 +32,7 @@ steps:
 #      last_molecule: 1
 #- generate_conformers_sdf:
 - assign_partial_charges.yml:
-- split_pdbqt:
+    scatter: [input_path]
 # NOTE: cwltool uses the CLI args to determine cacheing. In batch mode, the
 # ligands are passed (as CLI args) to vina all at once. Thus, if you want to
 # incrementally increase the number of ligands, the previous results will NOT be cached!
@@ -66,50 +64,13 @@ steps:
       dt: 0.002
       temperature: 298.0
       pressure: 1.0
-- python_script:
+- autodock_vina_rescore.yml:
     scatter: [input_pdb_path]
-    in:
-      script: ../../atomselect_demo.py
-      selection_string: protein # Extract the protein from the last timestep
-      input_pdb_path: '*prod.pdb'
-# Assign partial charges (protein)
-# NOTE: Although we only start off with one protein, the final coordinates
-# after doing MD with different ligands will be different; hence scatter
-- convert_mol2:
-    scatter: [input_path]
-- convert_pdbqt:
-    scatter: [input_path]
-    in:
-      output_pdb_path: '&protein_prod.pdbqt'
-      arg1: -xr # Receptor needs to be rigid
-- python_script:
-    scatter: [input_pdb_path]
-    in:
-      script: ../../atomselect_demo.py
-      selection_string: resname MOL # Extract the ligand from the last timestep
-      input_pdb_path: '*prod.pdb'
-# Assign partial charges (ligand)
-- convert_mol2:
-    scatter: [input_path]
-- convert_pdbqt:
-    scatter: [input_path]
-    in:
-      output_pdb_path: '&ligand_prod.pdbqt'
-- autodock_vina_rescore:
-    scatter: [input_ligand_pdbqt_path, input_receptor_pdbqt_path]
-    scatterMethod: dotproduct
-    in:
-      input_ligand_pdbqt_path: '*ligand_prod.pdbqt'
-      input_receptor_pdbqt_path: '*protein_prod.pdbqt'
-      score_only: True
-      #local_only: True
-      output_log_path: '&vina_rescore.log'
-      docking_score: '&docking_score' # NOTE: Not a filename, just an explicit edge
 - scatter_plot:
     in:
       xs: '*dGs'
       ys: '*docking_scores'
-      ys2: '*docking_score'
+      ys2: '*docking_rescores'
 
 wic:
   steps:

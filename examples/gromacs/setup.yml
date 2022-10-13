@@ -11,14 +11,22 @@
 #    - edam:format_3987
 
 steps:
-- editconf:
+# - editconf:
+#     in:
+#       # if demo...
+#       #input_crd_path: ~crd_path
+#       input_crd_path: '*complex_vac.pdb'
+#       config:
+#         box_type: cubic
+#         distance_to_molecule: 1.2
+- gmx_editconf:
     in:
       # if demo...
       #input_crd_path: ~crd_path
       input_crd_path: '*complex_vac.pdb'
-      config:
-        box_type: cubic
-        distance_to_molecule: 1.2
+      align_principal_axes: 0
+      box_type: cubic
+      distance_to_molecule: 1.2
 - solvate:
     in:
       # if demo...
