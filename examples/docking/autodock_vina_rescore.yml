@@ -1,0 +1,38 @@
+# if demo...
+#inputs:
+#  input_pdb_path:
+#    type: File
+#    format: edam:format_1476
+
+steps:
+- python_script:
+    in:
+      script: ../../atomselect_demo.py
+      selection_string: protein # Extract the protein from the last timestep
+      input_pdb_path: '*prod.pdb' #~input_pdb_path
+# Assign partial charges (protein)
+# NOTE: Although we only start off with one protein, the final coordinates
+# after doing MD with different ligands will be different; hence scatter
+- convert_mol2:
+- convert_pdbqt:
+    in:
+      output_pdb_path: '&protein_prod.pdbqt'
+      arg1: -xr # Receptor needs to be rigid
+- python_script:
+    in:
+      script: ../../atomselect_demo.py
+      selection_string: resname MOL # Extract the ligand from the last timestep
+      input_pdb_path: '*prod.pdb' #~input_pdb_path
+# Assign partial charges (ligand)
+- convert_mol2:
+- convert_pdbqt:
+    in:
+      output_pdb_path: '&ligand_prod.pdbqt'
+- autodock_vina_rescore:
+    in:
+      input_ligand_pdbqt_path: '*ligand_prod.pdbqt'
+      input_receptor_pdbqt_path: '*protein_prod.pdbqt'
+      score_only: True
+      #local_only: True
+      output_log_path: '&vina_rescore.log'
+      docking_score: '&docking_rescores' # NOTE: Not a filename, just an explicit edge

@@ -1,11 +1,3 @@
-# if demo...
-#inputs:
-#  input_path:
-#    type: File
-#    format:
-#    - edam:format_1476
-#    - edam:format_3814
-
 steps:
 - convert_mol2:
 #    in:

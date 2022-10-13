@@ -8,7 +8,7 @@ steps:
       box_path: '&box.pdb'
       box_buffer: 20 # Angstroms
       water_type: spce
-      force_field: amber99sb-ildn
+      forcefield: amber99sb-ildn
 - download_ligand_database:
     in:
       database: /NCIOpen.sdf
@@ -24,7 +24,7 @@ steps:
       # Adds hydrogens, minimizes, searches for the lowest energy conformer,
       # then minimizes again.
 #      output_sdf_path: '&ligand_min.sdf'
-- assign_partial_charges.yml:
+- assign_partial_charges_batch.yml:
 # NOTE: split_pdbqt coincidentally also removes keywords.
 - split_pdbqt:
 #    in:

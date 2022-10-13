@@ -214,13 +214,13 @@ def biobb_pdb2gmx_schema() -> Json:
               'amber99sb', 'amber03', 'amber99sb-ildn', 'oplsaa', 'amber94',
               'amber99sb-star-ildn-mut']
     desc = '(“amber99sb-ildn”) Force field to be used during the conversion.'
-    force_field = {'type': 'string', 'enum': ffvals, 'description': desc}
+    forcefield = {'type': 'string', 'enum': ffvals, 'description': desc}
     ignh = {'type': 'boolean', 'description': '(False) Should pdb2gmx ignore the hydrogens in the original structure.'}
     his = {'type': 'string', 'description': '(None) Histidine protonation array.'}
     merge = {'type': 'boolean', 'description': '(False) Merge all chains into a single molecule.'}
 
     schema = default_schema()
-    schema['properties'] = {'water_type': water_type, 'force_field': force_field,
+    schema['properties'] = {'water_type': water_type, 'forcefield': forcefield,
         'ignh': ignh, 'his': his, 'merge': merge,
         **biobb_container_schema()}
     return schema

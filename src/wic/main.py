@@ -1,9 +1,10 @@
 import glob
+import json
 import subprocess as sub
 import sys
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict, List
 
 import graphviz
 import networkx as nx
@@ -217,7 +218,39 @@ def main() -> None:
         # TODO: Consider using the undocumented flag --fast-parser for known-good workflows,
         # which was recently added in the 3.1.20220913185150 release of cwltool.
         print('Running ' + ' '.join(cmd))
-        sub.run(cmd, check=False)
+        proc = sub.run(cmd, check=False)
+        # Finally, since there is an output file copying bug in cwltool,
+        # we need to copy the output files manually. See comment above.
+        #if proc.returncode == 0:
+        output_json_file = 'provenance/workflow/primary-output.json'
+        with open(output_json_file, mode='r', encoding='utf-8') as f:
+            output_dict = json.loads(f.read())
+        for step_name, obj in output_dict.items():
+            parentdirs = 'outdir/' + '/'.join(step_name.split('___')[:-1])
+            Path(parentdirs).mkdir(parents=True, exist_ok=True)
+            copy_provenance_files_to_outdir(obj, parentdirs)
+
+
+def copy_provenance_files_to_outdir(obj: Any, parentdirs: str) -> None:
+    """Parses the primary workflow provenance JSON object and copies the files to outdir.
+
+    Args:
+        obj (Any): Th provenance object or one of its recursive sub-objects.
+        parentdirs (str): The directory associated with obj.
+    """
+    if isinstance(obj, Dict):
+        if obj.get('class', '') == 'File':
+            source = 'provenance/workflow/' + obj['location']
+            dest = parentdirs +  '/' + obj['basename']
+            cmd = ['cp', source, dest]
+            sub.run(cmd, check=True)
+        if obj.get('class', '') == 'Directory':
+            subdir = parentdirs + '/' + obj['basename']
+            Path(subdir).mkdir(parents=True, exist_ok=True)
+            copy_provenance_files_to_outdir(obj['listing'], subdir)
+    if isinstance(obj, List):
+        for o in obj:
+            copy_provenance_files_to_outdir(o, parentdirs)
 
 
 def stage_input_files(yml_inputs: Yaml, root_yml_dir_abs: Path,

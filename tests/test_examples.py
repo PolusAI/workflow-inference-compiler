@@ -110,6 +110,10 @@ def test_examples(yml_path_str: str, yml_path: Path) -> None:
         # either the compiler changed or someone modifies the workflow such that
         # there is now a missing input, that should be an error. Since we do not
         # have access to previous CI results, then we should have a whitelist.
+        # More importantly, if we have a whitelist, we can get rid of the
+        # "No definition found" error near line 560 of compiler.py
+        # Otherwise, the error message will get buried in the subsequent stdout
+        # and users will not notice it.
         missing_input = "Missing required input parameter"
         output = proc.stdout.decode("utf-8")
         if not missing_input in output:
