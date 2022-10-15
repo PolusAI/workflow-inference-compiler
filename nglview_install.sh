@@ -15,3 +15,5 @@ pip install nglview jupyterlab ipywidgets==7.7.1
 # See https://github.com/nglviewer/nglview/issues/1032
 
 jupyter-nbextension enable nglview --py --sys-prefix
+
+pip install ipytree ipywidgets

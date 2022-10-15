@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import time
 import threading
@@ -7,10 +8,116 @@ from IPython.display import display
 import mdtraj
 import nglview as nv
 
+from ipytree import Tree, Node
+from ipywidgets import HBox
+
+from wic import utils
 from . import filewatcher
 
 
-def main(num_iterations: int, cachedir_path: str = '../../cachedir', file_patterns: List[str] = ['*.trr', '*.pdb']) -> None:
+def make_ipytree_nodes(prov_tree: Dict) -> List[Node]:
+    """Recursively applies the ipytree Node constructor to each element of the provenance output files tree.
+
+    Args:
+        prov_tree (Dict): This should be the output of utils.provenance_list_to_tree(files)
+
+    Returns:
+        List[Node]: A list of Nodes (where each Node contains children Nodes, etc)
+    """
+    nodes = []
+    for key, val in prov_tree.items():
+        if isinstance(val, Dict):
+            children = make_ipytree_nodes(val)
+        if isinstance(val, List):
+            children = []
+            for (location, parentargs, basename) in val:
+                child = Node(basename)
+                # NOTE: We need to store a unique id in each node so we can
+                # take the appropriate action when the user clicks. Storing
+                # the id in the name attribute would make the UI look terrible.
+                # However, this is python, so we can just pretend an id
+                # attribute exists and use it anyway. Is this unsafe? Probably!
+                child.id = parentargs
+                children.append(child)
+        node = Node(key, children)
+        node.id = '' # See above comment.
+        node.opened = False
+        nodes.append(node)
+    return nodes
+
+
+def tree_viewer(rootdir: str = '../../') -> HBox:
+    """Creates a file browser that will display molecular files.
+
+    Args:
+        rootdir (str, optional): The directory in which to search for\n
+        provenance/workflow/primary-output.json'. Defaults to '../../'.
+
+    Returns:
+        HBox: An ipywidget which contains ipytree on the left and nglview on the right.
+    """
+    nglwidget = nv.NGLWidget()
+    nglwidget._set_size('100%', '800px') # pylint: disable=protected-access
+
+    output_json_file = Path(rootdir + 'provenance/workflow/primary-output.json')
+    if not output_json_file.exists():
+        print(f'Error! {output_json_file.absolute()} does not exist!')
+        print('Did your workflow finish executing?')
+        return HBox()
+
+    files = utils.parse_provenance_output_files(output_json_file)
+    with open(output_json_file, mode='r', encoding='utf-8') as f:
+        output_dict = json.loads(f.read())
+    prov_tree = utils.provenance_list_to_tree(files)
+    #import yaml
+    #print(yaml.dump(prov_tree))
+    children = make_ipytree_nodes(prov_tree)
+
+    rootnode = Node("Workflow", children)
+    tree  = Tree(nodes=[rootnode], multiple_selection=False)
+    components: List = []
+
+    def clear_components() -> None:
+        for component in components:
+            nglwidget.remove_component(component)
+        components.clear()
+
+    def on_selected_change(change: Dict) -> None:
+        #print('change[new]', change['new'])
+        id_ = str(change['new'][0].id)
+        #print('id:', id_)
+        if id_ != '':
+            step_name = id_.replace('/', '___')
+            val = output_dict.get(step_name)
+            #print('val:', val)
+            # TODO: Check for other instances of val
+            if isinstance(val, List) and len(val) == 1:
+                val = val[0]
+            if isinstance(val, Dict) and val.get('class') == 'File':
+                outdir = rootdir + 'outdir'
+                basename = str(val['basename'])
+                filepath = outdir + '/' + id_ + '/' + basename
+                #print(filepath)
+                mdtraj_exts = [".pdb", ".pdb.gz", ".h5", ".lh5", ".prmtop", ".parm7", ".prm7",
+                               ".psf", ".mol2", ".hoomdxml", ".gro", ".arc", ".hdf5", ".gsd"]
+                # NOTE: mdtraj does not support .sdf and .pdbqt
+                ngl_exts = [".mmcif", ".cif", ".mcif", ".pdb", ".pdbqt", ".ent",
+                            ".pqr", ".gro", ".sdf", ".sd", ".mol2", ".mmtf"]
+                if Path(filepath).suffix in mdtraj_exts:
+                    clear_components()
+                    traj = mdtraj.load(filepath)
+                    component = nglwidget.add_trajectory(traj)
+                    components.append(component)
+                elif Path(filepath).suffix in ngl_exts:
+                    clear_components()
+                    component = nglwidget.add_component(filepath)
+                    components.append(component)
+
+    tree.observe(on_selected_change, names='selected_nodes')
+    return HBox([tree, nglwidget])
+
+
+def realtime_viewer(num_iterations: int, cachedir_path: str = '../../cachedir', file_patterns: List[str] = ['*.trr', '*.pdb']) -> None:
     """This function watches cachedir_path for file_patterns and updates an NGLWidget, upto num_iterations times.
 
     Args:
@@ -19,14 +126,14 @@ def main(num_iterations: int, cachedir_path: str = '../../cachedir', file_patter
         file_patterns (List[str], optional): The coordinate and topology file patterns. Defaults to ['*.trr', '*.pdb'].
     """
     # Just like matplotlib, you can't run a calculation in the GUI event loop thread
-    # or else the GUI will not redraw. However, once the main() thread finishes
+    # or else the GUI will not redraw. However, once the realtime_viewer() thread finishes
     # there is no easy way to interrupt another thread (i.e. no Ctrl-C), so simply
     # use a fixed number of iterations.
-    thread = threading.Thread(target=main_body, args=(num_iterations, cachedir_path, file_patterns))
+    thread = threading.Thread(target=realtime_viewer_body, args=(num_iterations, cachedir_path, file_patterns))
     thread.start()
 
 
-def main_body(num_iterations: int, cachedir_path: str, file_patterns: List[str]) -> None:
+def realtime_viewer_body(num_iterations: int, cachedir_path: str, file_patterns: List[str]) -> None:
     """This function watches cachedir_path for file_patterns and updates an NGLWidget, upto num_iterations times.
 
     Args:
