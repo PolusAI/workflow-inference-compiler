@@ -20,10 +20,9 @@ arguments:
 # if you omit --center_* and --size_* you get "ERROR: Grid box dimensions must be greater than 0 Angstrom."
 # However, adding --autobox works.
 
-# Temporarily comment out (in favor of `conda install vina`) due to issues with some AWS EC2 instances.
-#hints:
-#  DockerRequirement:
-#    dockerPull: jakefennick/autodock_vina
+hints:
+  DockerRequirement:
+    dockerPull: jakefennick/autodock_vina
 
 requirements:
   InlineJavascriptRequirement: {}
