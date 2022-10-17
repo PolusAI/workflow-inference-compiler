@@ -50,10 +50,9 @@ arguments:
 #    return args;
 #  }
 
-# Temporarily comment out (in favor of `conda install vina`) due to issues with some AWS EC2 instances.
-#hints:
-#  DockerRequirement:
-#    dockerPull: jakefennick/autodock_vina
+hints:
+  DockerRequirement:
+    dockerPull: jakefennick/autodock_vina
 
 requirements:
   InlineJavascriptRequirement: {}

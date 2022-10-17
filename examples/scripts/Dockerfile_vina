@@ -8,6 +8,23 @@ RUN MINICONDA="Miniconda3-latest-Linux-x86_64.sh" && \
     rm -f $MINICONDA
 ENV PATH /miniconda/bin:$PATH
 
-RUN conda install -c conda-forge vina
+# The latest release version 1.2.3 has several known bugs.
+# See https://github.com/ccsb-scripps/AutoDock-Vina/pull/81
+# and https://github.com/ccsb-scripps/AutoDock-Vina/pull/138
+# RUN conda install -c conda-forge vina
+
+RUN apt-get install -y git
+RUN git clone https://github.com/jfennick/AutoDock-Vina.git
+RUN cd AutoDock-Vina && git switch batch_overwrite
+
+# Build vina binary
+RUN apt-get install -y build-essential libboost-all-dev swig
+RUN cd AutoDock-Vina/build/linux/release && make
+# Since there is no make install, manually copy vina
+RUN cp AutoDock-Vina/build/linux/release/vina /usr/bin/
+
+# Build and install python bindings
+RUN conda install -c conda-forge numpy boost-cpp swig
+RUN cd AutoDock-Vina/build/python && python setup.py build install
 
 ADD Dockerfile_vina .
