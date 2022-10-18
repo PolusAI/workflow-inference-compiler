@@ -51,11 +51,19 @@ wic:
   graphviz:
     label: Molecular\nModeling
   steps:
-    (1, pdb):
+    (1, config_tag_pdb):
       wic:
         graphviz:
-          label: 'Download\nPDB Code'
-    (2, extract_model):
+          label: 'Specify PDB Code'
+    (2, pdb):
       wic:
         graphviz:
-          label: 'Extract Model'
+          label: 'Download and Clean\nPDB File'
+    (3, extract_model):
+      wic:
+        graphviz:
+          label: 'Extract First Model'
+    (4, python_script):
+      wic:
+        graphviz:
+          label: 'Remove Unknown Residues'

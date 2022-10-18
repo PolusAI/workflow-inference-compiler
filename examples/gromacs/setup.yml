@@ -65,10 +65,10 @@ wic:
   graphviz:
     label: System Setup
     ranksame:
-    - (1, editconf)
+    - (1, gmx_editconf)
     - (4, genion)
   steps:
-    (1, editconf):
+    (1, gmx_editconf):
       wic:
         graphviz:
           label: 'Initialize\nPeriodic Box'
@@ -84,3 +84,7 @@ wic:
       wic:
         graphviz:
           label: 'Neutralize &\nAdd Ions'
+    (5, gmx_trjconv_str):
+      wic:
+        graphviz:
+          label: 'Save as PDB File'

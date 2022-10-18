@@ -11,7 +11,7 @@ conda create --name wic
 conda activate wic
 ./conda_devtools.sh
 pip install .
-wic --yaml examples/gromacs/tutorial.yml --cwl_dir . --cwl_run_local True
+wic --yaml examples/gromacs/tutorial.yml --run_local True --quiet True
 ```
 That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the workflow, and run it locally.
 
@@ -19,10 +19,15 @@ That last command will infer edges, compile the yml to CWL, generate a GraphViz 
 
 Then, in another terminal, use the following command to view the plots in real-time.
 ```
-python RealtimePlots.py
+conda activate wic
+timeseries_plots
 ```
 
 ![Plots](examples/gromacs/plots.png)
+
+You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipynb`.
+
+![Plots](docs/tree_viewer.png)
 
 The Workflow Inference Compiler is a [Domain Specific Language](https://en.wikipedia.org/wiki/Domain-specific_language) (DSL) based on the [Common Workflow Language](https://www.commonwl.org). CWL is fantastic, but explicitly constructing the Directed Acyclic Graph (DAG) associated with a non-trivial workflow is not so simple. For example, the workflow shown above is based on the following [gromacs tutorial](https://mmb.irbbarcelona.org/biobb/availability/tutorials/cwl). Instead of writing raw CWL, you can write your workflows in a much simpler yml DSL. For technical reasons edge inference is far from unique, so ***`users should always check that edge inference actually produces the intended DAG`***.
 

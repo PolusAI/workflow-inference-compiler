@@ -129,23 +129,35 @@ wic:
        wic:
          graphviz:
            label: Add Hydrogen Atoms\nReceptor (no charges)
-     (4, str_check_add_hydrogens):
+     (4, python3_pdb_to_pdb):
+       wic:
+         graphviz:
+           label: Fix Terminal\nResidue Names
+     (5, str_check_add_hydrogens):
        wic:
          graphviz:
            label: Add Hydrogen Atoms\nReceptor (w/ charges)
-     (5, convert_pdbqt):
+     (6, convert_pdbqt):
        wic:
          graphviz:
            label: Convert Receptor\npdb to pdbqt
-     (6, box):
+     (7, config_tag_box):
+       wic:
+         graphviz:
+           label: Specify Bounding\nBox Buffer
+     (8, box):
        wic:
          graphviz:
            label: Get Receptor\nBounding Box
-     (7, pdb2gmx):
+     (9, config_tag_pdb2gmx):
+       wic:
+         graphviz:
+           label: Configure Forcefield\nOptions
+     (10, pdb2gmx):
        wic:
          graphviz:
            label: Generate Initial\nReceptor Topology
-     (8, babel_convert):
+     (11, babel_convert):
        wic:
          graphviz:
            label: Convert Receptor\ngro to pdb

@@ -199,7 +199,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         compute_workflow = {
             "name": yaml_stem,
             #"version": __version__, # no version for workflows
-            "driver": "slurm",
+            "driver": args.compute_driver,
             "cwlJobInputs": yaml_inputs_no_dd,
             **cwl_tree_run
         }

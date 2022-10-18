@@ -152,7 +152,7 @@ def perform_edge_inference(args: argparse.Namespace,
             # By default, simply choose the first (i.e. most-recent) matching format
             out_key = format_matches[0][0]
 
-            if args.cwl_inference_use_naming_conventions: # default False
+            if args.inference_use_naming_conventions: # default False
                 if len(format_matches) == 1:
                     # Great! We found a unique format match.
                     out_key = format_matches[0][0]

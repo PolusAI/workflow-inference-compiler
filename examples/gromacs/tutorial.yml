@@ -12,3 +12,22 @@ steps:
 wic:
   graphviz:
     label: Molecular Dynamics Stability Analysis
+  steps:
+    (2, stability.yml):
+      wic:
+        steps:
+          (2, basic.yml):
+            wic:
+              steps:
+                (3, prod.yml):
+                  wic:
+                    steps:
+                      (4, cwl_watcher_analysis.yml):
+                        wic:
+                          backend: protein
+          (3, analysis.yml):
+            wic:
+              steps:
+                (1, analysis_realtime.yml):
+                  wic:
+                    backend:  protein

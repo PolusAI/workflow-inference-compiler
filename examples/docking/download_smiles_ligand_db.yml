@@ -30,3 +30,16 @@ steps:
       binding_data_column: ~binding_data_column #Standard Value
       convert_Kd_dG: ~convert_Kd_dG #'True'
       output_txt_path: '&binding_data.txt'
+
+wic:
+  graphviz:
+    label: Download Smiles\nLigand Database
+  steps:
+    (1, wget_xlsx):
+      wic:
+        graphviz:
+          label: Download Excel File
+    (2, python_script):
+      wic:
+        graphviz:
+          label: Query Spreadsheet\nGenerate Conformers

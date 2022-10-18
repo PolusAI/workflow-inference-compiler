@@ -49,13 +49,13 @@ wic:
                 (3, prod.yml):
                   wic:
                     steps:
-                      (1, grompp):
+                      (2, grompp):
                         in:
                           input_top_zip_path: '*genion_complex.zip'
-                      (2, mdrun):
+                      (3, mdrun):
                         in:
                           output_crd_path: '&prod_complex.gro'
-                      (3, cwl_watcher_analysis.yml):
+                      (4, cwl_watcher_analysis.yml):
                         wic:
                           backend: complex
           (3, analysis.yml):
@@ -90,13 +90,13 @@ wic:
                 (3, prod.yml):
                   wic:
                     steps:
-                      (1, grompp):
+                      (2, grompp):
                         in:
                           input_top_zip_path: '*genion_ligand.zip'
-                      (2, mdrun):
+                      (3, mdrun):
                         in:
                           output_crd_path: '&prod_ligand.gro'
-                      (3, cwl_watcher_analysis.yml):
+                      (4, cwl_watcher_analysis.yml):
                         wic:
                           backend: ligand
           (3, analysis.yml):
