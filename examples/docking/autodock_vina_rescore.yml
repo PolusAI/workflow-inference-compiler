@@ -36,3 +36,36 @@ steps:
       #local_only: True
       output_log_path: '&vina_rescore.log'
       docking_score: '&docking_rescores' # NOTE: Not a filename, just an explicit edge
+
+wic:
+  graphviz:
+    label: Re-score Refined\nDocking Poses
+  steps:
+    (1, python_script):
+      wic:
+        graphviz:
+          label: Select Protein\nfrom last timestep
+    (2, convert_mol2):
+      wic:
+        graphviz:
+          label: Assign Partial\nCharges
+    (3, convert_pdbqt):
+      wic:
+        graphviz:
+          label: Convert to\npdbqt format
+    (4, python_script):
+      wic:
+        graphviz:
+          label: Select Ligand\nfrom last timestep
+    (5, convert_mol2):
+      wic:
+        graphviz:
+          label: Assign Partial\nCharges
+    (6, convert_pdbqt):
+      wic:
+        graphviz:
+          label: Convert to\npdbqt format
+    (7, autodock_vina_rescore):
+      wic:
+        graphviz:
+          label: Re-score Refined\nDocking Poses

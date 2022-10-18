@@ -23,18 +23,20 @@ parser.add_argument('--quiet', type=bool, required=False, default=False,
                     help='''Disable verbose output. This will not print out the commands used for each step.''')
 
 group_run = parser.add_mutually_exclusive_group()
-group_run.add_argument('--cwl_run_local', type=bool, required=False, default=False,
-                    help='After generating the cwl file(s), run it on localhost.')
-group_run.add_argument('--cwl_run_slurm', type=bool, required=False, default=False,
-                    help='After generating the cwl file, run it on labshare using the slurm driver.')
-# Use required=('--cwl_run_slurm' in sys.argv) make other args conditionally required.
+group_run.add_argument('--run_local', type=bool, required=False, default=False,
+                    help='After generating the cwl file(s), run it on your local machine.')
+group_run.add_argument('--run_compute', type=bool, required=False, default=False,
+                    help='After generating the cwl file(s), run it on the remote labshare Compute platform.')
+parser.add_argument('--compute_driver', type=str, required=False, default='slurm', choices=['slurm', 'argo'],
+                    help='The driver to use for running workflows on labshare Compute.')
+# Use required=('--run_compute' in sys.argv) make other args conditionally required.
 # See https://stackoverflow.com/questions/19414060/argparse-required-argument-y-if-x-is-present
-# For example, if cwl_run_slurm is enabled, you MUST enable cwl_inline_subworkflows!
+# For example, if run_compute is enabled, you MUST enable cwl_inline_subworkflows!
 # Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
 
-parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, default=('--cwl_run_slurm' in sys.argv),
-                    help='Before generating the cwl file, inline all subworkflows. Required for --cwl_run_slurm')
-parser.add_argument('--cwl_inference_use_naming_conventions', type=bool, required=False, default=False,
+parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, default=('--run_compute' in sys.argv),
+                    help='Before generating the cwl file, inline all subworkflows. Required for --run_compute')
+parser.add_argument('--inference_use_naming_conventions', type=bool, required=False, default=False,
                     help='Enables the use of naming conventions in the inference algorithm')
 parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
                     help='After generating the cwl file, validate it.')
@@ -45,9 +47,9 @@ aws_url = 'http://compute.ci.aws.labshare.org'
 ncats_url = 'https://compute.scb-ncats.io/'
 
 parser.add_argument('--compute_url', type=str, default=ncats_url,
-                    help='The URL associated with the labshare slurm driver. Required for --cwl_run_slurm')
-parser.add_argument('--compute_access_token', type=str, required=('--cwl_run_slurm' in sys.argv),
-                    help="""The access_token used for authentication. Required for --cwl_run_slurm
+                    help='The URL associated with the labshare Compute API. Required for --run_compute')
+parser.add_argument('--compute_access_token', type=str, required=('--run_compute' in sys.argv),
+                    help="""The access_token used for authentication. Required for --run_compute
                     For now, get this manually from https://a-qa.labshare.org/""")
 
 parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,

@@ -18,3 +18,16 @@ steps:
 #    in:
 #      input_path: '*ligand_min.mol2' #'*conformer.mol2'
 #      output_pdb_path: '&ligand_keywords.pdbqt'
+
+wic:
+  graphviz:
+    label: Assign Partial\nCharges
+  steps:
+    (1, convert_mol2):
+      wic:
+        graphviz:
+          label: Assign Partial Charges
+    (2, convert_pdbqt):
+      wic:
+        graphviz:
+          label: Convert to\npdbqt format

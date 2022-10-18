@@ -1,8 +1,12 @@
+# NOTE: We're not using the results of the structure_check steps,
+# and they're cluttering up the DAG, so comment out for now.
 steps:
 - download_pdb.yml:
-- structure_check:
     in:
-      output_summary_path: structure_check_protein.json
+      pdb_id: 1aki
+#- structure_check:
+#    in:
+#      output_summary_path: structure_check_protein.json
 # Requires modeller license
 #- fix_backbone:
 #    in:
@@ -13,15 +17,15 @@ steps:
 - fix_amides:
     in:
       output_pdb_path: protein_fix_amides.pdb
-- structure_check:
-    in:
-      output_summary_path: structure_check_protein_fix_amides.json
+#- structure_check:
+#    in:
+#      output_summary_path: structure_check_protein_fix_amides.json
 - fix_side_chain:
     in:
       output_pdb_path: protein_fix_side_chain.pdb
-- structure_check:
-    in:
-      output_summary_path: structure_check_protein_fix_side_chain.json
+#- structure_check:
+#    in:
+#      output_summary_path: structure_check_protein_fix_side_chain.json
 - str_check_add_hydrogens:
     in:
       config:
@@ -30,9 +34,9 @@ steps:
         ph: 7.4
         keep_canonical_resnames: False
       output_structure_path: protein_hydrogens.pdb
-- structure_check:
-    in:
-      output_summary_path: structure_check_protein_hydrogens.json
+#- structure_check:
+#    in:
+#      output_summary_path: structure_check_protein_hydrogens.json
 - pdb2gmx:
     in:
       output_crd_path: '&complex_vac.pdb'
@@ -54,35 +58,35 @@ wic:
       wic:
         graphviz:
           label: 'Download\nProtein Model'
-    (2, structure_check):
-      wic:
-        graphviz:
-          label: 'Structure\nCheck'
-    (3, fix_amides):
+#    (2, structure_check):
+#      wic:
+#        graphviz:
+#          label: 'Structure\nCheck'
+    (2, fix_amides):
       wic:
         graphviz:
           label: 'Fix Amides'
-    (4, structure_check):
-      wic:
-        graphviz:
-          label: 'Structure\nCheck'
-    (5, fix_side_chain):
+#    (4, structure_check):
+#      wic:
+#        graphviz:
+#          label: 'Structure\nCheck'
+    (3, fix_side_chain):
       wic:
         graphviz:
           label: 'Fix Side Chains'
-    (6, structure_check):
-      wic:
-        graphviz:
-          label: 'Structure\nCheck'
-    (7, str_check_add_hydrogens):
+#    (6, structure_check):
+#      wic:
+#        graphviz:
+#          label: 'Structure\nCheck'
+    (4, str_check_add_hydrogens):
       wic:
         graphviz:
           label: 'Add Hydrogens'
-    (8, structure_check):
-      wic:
-        graphviz:
-          label: 'Structure\nCheck'
-    (9, pdb2gmx):
+#    (8, structure_check):
+#      wic:
+#        graphviz:
+#          label: 'Structure\nCheck'
+    (5, pdb2gmx):
       wic:
         graphviz:
           label: 'Generate\nInitial\nTopology'

@@ -62,3 +62,40 @@ steps:
       input_structure1: '*receptor_gro.pdb' # '*receptor_hydrogens.pdb'
       input_structure2: '*pose_ligand.pdb'
       output_structure_path: '&complex_vac.pdb'
+
+wic:
+  graphviz:
+    label: Generate Ligand\nTopology & Parameters
+  steps:
+    (1, convert_mol2):
+      wic:
+        graphviz:
+          label: Convert to\nmol2 format
+    (2, python3_mol2_to_mol2):
+      wic:
+        graphviz:
+          label: Rename Residues\nto MOL
+    (3, acpype):
+      wic:
+        graphviz:
+          label: Generate Ligand\nTopology & Parameters
+    (4, bash_top):
+      wic:
+        graphviz:
+          label: Fix Ligand\nTopology Files
+    (5, zip_top):
+      wic:
+        graphviz:
+          label: Create Topology\nZip File
+    (6, babel_convert):
+      wic:
+        graphviz:
+          label: Convert to\nPDB format
+    (7, append_ligand):
+      wic:
+        graphviz:
+          label: Combine Receptor\nLigand Topologies
+    (8, cat_pdb):
+      wic:
+        graphviz:
+          label: Combine Receptor\nLigand Coordinates

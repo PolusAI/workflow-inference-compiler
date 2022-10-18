@@ -47,3 +47,20 @@ steps:
         output_pdb_path: '&ligand_nested_split.pdbqt' # 1D Array type, but
       #out:
       #  output_pdb_path: # 2D Array type due to scattering
+
+wic:
+  graphviz:
+    label: Perform Ligand\nModeling & Docking
+  steps:
+    (2, python3_mol2_to_mol2):
+      wic:
+        graphviz:
+          label: Rename Residues\nto MOL
+    (4, autodock_vina_run):
+      wic:
+        graphviz:
+          label: Docking
+    (5, split_pdbqt):
+      wic:
+        graphviz:
+          label: Extract Docking\nPoses

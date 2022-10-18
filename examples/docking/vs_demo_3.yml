@@ -56,17 +56,33 @@ steps:
 
 wic:
   graphviz:
-    label: Cheminformatics + Docking + Initial Topology Setup
+    label: Virtual Screening Demo
   steps:
     (1, setup_pdb.yml):
       wic:
         inlineable: False
-    (4, ligand_modeling_docking.yml):
+        graphviz:
+          label: Setup PDB
+    (2, download_smiles_ligand_db.yml):
       wic:
         inlineable: False
-    (6, gen_topol_params.yml):
+    (3, ligand_modeling_docking.yml):
       wic:
         inlineable: False
-    (7, stability.yml):
+    (4, autodock_vina_filter):
+      wic:
+        graphviz:
+          label: Apply Docking\nScore Cutoff
+    (5, gen_topol_params.yml):
       wic:
         inlineable: False
+    (6, stability.yml):
+      wic:
+        inlineable: False
+    (7, autodock_vina_rescore.yml):
+      wic:
+        inlineable: False
+    (8, scatter_plot):
+      wic:
+        graphviz:
+          label: Plot Experimental\nvs Predicted Binding

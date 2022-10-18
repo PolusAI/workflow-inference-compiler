@@ -53,15 +53,19 @@ wic:
   graphviz:
     label: Production
   steps:
-    (1, grompp):
+    (1, config_tag_mdp):
+      wic:
+        graphviz:
+          label: 'Configure Default\nGromacs Options'
+    (2, grompp):
       wic:
         graphviz:
           label: 'Update\nTopology'
-    (2, mdrun):
+    (3, mdrun):
       wic:
         graphviz:
           label: 'Molecular\nDynamics'
-    (3, cwl_watcher_analysis.yml):
+    (4, cwl_watcher_analysis.yml):
       wic:
         backend: protein
         graphviz:

@@ -25,7 +25,7 @@ To avoid having to deal with relative file paths in YAML files, all plugin names
 The edge inference algorithm is actually rather simple: For each input in the current step of a workflow, it checks for compatible outputs in the previous steps. Since most operations presumably desire the most recent compatible output, by default the steps are checked in reverse order and the outputs of each step are also checked in reverse order. For each output, it first checks for matching types and formats. If there is a unique match, then great! If there are multiple matches, it tentatively chooses the first (i.e. most recent) match. For technical reasons edge inference is far from unique, so ***`users should always check that edge inference actually produces the intended DAG`***.
 
 ### Naming Conventions
-If `--cwl_inference_use_naming_conventions` is enabled, matches can be refined based on the naming conventions of the inputs and outputs in the CWL CommandLineTools. Specifically, first `input_` is removed from the input name and `output_` is removed from all output names. Then, the default renamings contained in `renaming_conventions.txt` (shown below) are iteratively applied to the input name (only), and then the modified input name and all of the output names are checked for equality.
+If `--inference_use_naming_conventions` is enabled, matches can be refined based on the naming conventions of the inputs and outputs in the CWL CommandLineTools. Specifically, first `input_` is removed from the input name and `output_` is removed from all output names. Then, the default renamings contained in `renaming_conventions.txt` (shown below) are iteratively applied to the input name (only), and then the modified input name and all of the output names are checked for equality.
 
 ```
 # The biobb CWL files do not always use consistent naming
@@ -156,16 +156,16 @@ The runtime system intentionally hides the working sub-directories of each step.
 It is assumed that the real-time analysis takes care of the complex log file parsing, etc and produces simple tabular data files (i.e. csv files separated by whitespace instead of a comma). We need to use the same file watching / polling trick as above to locate these tabular data files. The first argument to the following command is the directory in which to look for the files. (By default it is `cachedir` because that is the default value of the  `--cachedir` wic command line argument.) You can also optionally supply the file patterns, which by default are `*.xvg` and `*.dat`.
 
 ```
-python RealtimePlots.py cachedir
+timeseries_plots cachedir
 ```
 
 ## Labshare Compute
 
-As previously mentioned, one of the beautiful things about the declarative approach to workflows is that we can execute workflows on massive machines just as easily as executing workflows on a local laptop. Concretely, merely changing `--cwl_run_local` to `--cwl_run_slurm`, we can execute the exact same workflow on the NCATS HPC cluster! That's it! Absolutely no modifications necessary!
+As previously mentioned, one of the beautiful things about the declarative approach to workflows is that we can execute workflows on massive machines just as easily as executing workflows on a local laptop. Concretely, merely changing `--run_local` to `--run_compute`, we can execute the exact same workflow on the NCATS HPC cluster! That's it! Absolutely no modifications necessary!
 
 ### Authentication Access Token
 
-When using `--cwl_run_slurm` you will also need to use `--compute_access_token $ACCESS_TOKEN`. Unfortunately, there is currently no programmatic way of obtaining the access token via an API. You will need to manually perform the following steps:
+When using `--run_compute` you will also need to use `--compute_access_token $ACCESS_TOKEN`. Unfortunately, there is currently no programmatic way of obtaining the access token via an API. You will need to manually perform the following steps:
 
 * Go to https://a-qa.labshare.org
 * Click Login and then Azure

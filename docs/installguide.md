@@ -73,7 +73,7 @@ You should now have the `wic` executable available in your terminal.
 To test your installation, you can run the example in README.md:
 
 ```
-wic --yaml examples/gromacs/tutorial.yml --cwl_dir . --cwl_run_local True
+wic --yaml examples/gromacs/tutorial.yml --run_local True --quiet True
 ```
 
 You can also run the automated test suite. This will run the full set of tests, which takes about 20-30 minutes on a laptop.
@@ -124,7 +124,7 @@ To enable this feature, simply install the YAML vscode extension (by Red Hat). T
 ```
 
 ```
-wic --generate_schemas_only True --cwl_dir . --yml_dir .
+wic --generate_schemas_only True
 ```
 
 After a ~10 second delay, vscode should display "Validating against the Workflow Interence Compiler schema" just above the first line in a \*.yml file.

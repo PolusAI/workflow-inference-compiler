@@ -73,20 +73,42 @@ steps:
       ys2: '*docking_rescores'
 
 wic:
+  graphviz:
+    label: Virtual Screening Demo
   steps:
     (1, setup_pdb.yml):
       wic:
         inlineable: False
-    (3, extract_molecules_sdf):
+        graphviz:
+          label: Setup PDB
+    (2, download_smiles_ligand_db.yml):
+      wic:
+        inlineable: False
+    (3, assign_partial_charges.yml):
+      wic:
+        inlineable: False
+    (4, autodock_vina_batch):
       wic:
         graphviz:
-          label: Choose Ligands from\nCheminformatics Database
-    (5, assign_partial_charges.yml):
+          label: Docking
+    (5, split_pdbqt):
+      wic:
+        graphviz:
+          label: Extract Docking\nPoses
+    (6, autodock_vina_filter):
+      wic:
+        graphviz:
+          label: Apply Docking\nScore Cutoff
+    (7, gen_topol_params.yml):
       wic:
         inlineable: False
-    (10, gen_topol_params.yml):
+    (8, stability.yml):
       wic:
         inlineable: False
-    (11, stability.yml):
+    (9, autodock_vina_rescore.yml):
       wic:
         inlineable: False
+    (10, scatter_plot):
+      wic:
+        graphviz:
+          label: Plot Experimental\nvs Predicted Binding

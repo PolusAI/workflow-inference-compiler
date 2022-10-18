@@ -19,7 +19,7 @@ wic:
                 (3, prod.yml):
                   wic:
                     steps:
-                      (3, cwl_watcher_analysis.yml):
+                      (4, cwl_watcher_analysis.yml):
                         wic:
                           backend: complex
           (3, analysis.yml):
