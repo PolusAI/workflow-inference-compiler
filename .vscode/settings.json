@@ -9,4 +9,5 @@
     "[yaml]": {
         "editor.suggest.showWords": false
     },
+    "notebook.output.textLineLimit": 100,
 }

@@ -30,14 +30,18 @@ def make_ipytree_nodes(prov_tree: Dict) -> List[Node]:
             children = make_ipytree_nodes(val)
         if isinstance(val, List):
             children = []
-            for (location, parentargs, basename) in val:
+            for idx, (location, parentargs, basename) in val:
+                if idx != 0:
+                    stem = Path(basename).stem
+                    suffix = Path(basename).suffix
+                    basename = stem + f'_{idx+1}' + suffix
                 child = Node(basename)
                 # NOTE: We need to store a unique id in each node so we can
                 # take the appropriate action when the user clicks. Storing
                 # the id in the name attribute would make the UI look terrible.
                 # However, this is python, so we can just pretend an id
                 # attribute exists and use it anyway. Is this unsafe? Probably!
-                child.id = parentargs
+                child.id = (idx, parentargs)
                 children.append(child)
         node = Node(key, children)
         node.id = '' # See above comment.
@@ -84,19 +88,23 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
 
     def on_selected_change(change: Dict) -> None:
         #print('change[new]', change['new'])
-        id_ = str(change['new'][0].id)
+        id_ = change['new'][0].id
         #print('id:', id_)
+        idx = 0
+        if isinstance(id_, tuple):
+            (idx, id_) = id_
         if id_ != '':
             step_name = id_.replace('/', '___')
             val = output_dict.get(step_name)
             #print('val:', val)
             # TODO: Check for other instances of val
-            if isinstance(val, List) and len(val) == 1:
-                val = val[0]
+            if isinstance(val, List):
+                val = val[idx]
             if isinstance(val, Dict) and val.get('class') == 'File':
                 outdir = rootdir + 'outdir'
                 basename = str(val['basename'])
-                filepath = outdir + '/' + id_ + '/' + basename
+                name = change['new'][0].name
+                filepath = outdir + '/' + id_ + '/' + name # basename
                 #print(filepath)
                 mdtraj_exts = [".pdb", ".pdb.gz", ".h5", ".lh5", ".prmtop", ".parm7", ".prm7",
                                ".psf", ".mol2", ".hoomdxml", ".gro", ".arc", ".hdf5", ".gsd"]

@@ -363,13 +363,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # If there isn't an exact match, remove input_* and output_* from the
         # current step and previous steps, respectively, and then check again.
         # If there still isn't an exact match, explicit renaming may be required.
+        if 'in' not in steps[i][step_key]:
+            steps[i][step_key]['in'] = {}
 
         # cachedir_path needs to be an absolute path, but for reproducibility
         # we don't want users' home directories in the yml files.
         if 'cwl_watcher' == step_key:
-            if 'in' not in steps[i][step_key]:
-                steps[i][step_key]['in'] = {}
-
             cachedir_path = Path(args.cachedir).absolute()
             #print('setting cachedir_path to', cachedir_path)
             steps[i][step_key]['in']['root_workflow_yml_path'] = str(Path(args.yaml).parent.absolute())

@@ -686,13 +686,14 @@ def recursively_insert_into_dict_tree(tree: Dict, keys: List[str], val: Any) -> 
     if len(keys) == 1:
         if isinstance(tree, Dict):
             if key in tree:
-                tree[key].append(val)
+                idx = len(tree[key])
+                tree[key].append((idx, val))
             else:
-                tree[key] = [val]
+                tree[key] = [(0, val)]
         if isinstance(tree, List):
             # TODO: Output Directories cause problems with uniqueness of names,
             # so for now we have to terminate the recursion.
-            tree.append(val)
+            tree.append((0, val))
         return tree
     subtree = tree.get(key, {})
     tree[key] = recursively_insert_into_dict_tree(subtree, keys[1:], val)
