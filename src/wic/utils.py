@@ -686,14 +686,13 @@ def recursively_insert_into_dict_tree(tree: Dict, keys: List[str], val: Any) -> 
     if len(keys) == 1:
         if isinstance(tree, Dict):
             if key in tree:
-                idx = len(tree[key])
-                tree[key].append((idx, val))
+                tree[key].append(val)
             else:
-                tree[key] = [(0, val)]
+                tree[key] = [val]
         if isinstance(tree, List):
             # TODO: Output Directories cause problems with uniqueness of names,
             # so for now we have to terminate the recursion.
-            tree.append((0, val))
+            tree.append(val)
         return tree
     subtree = tree.get(key, {})
     tree[key] = recursively_insert_into_dict_tree(subtree, keys[1:], val)
@@ -756,5 +755,6 @@ def parse_provenance_output_files_(obj: Any, parentdirs: str) -> List[Tuple[str,
         files = []
         for o in obj:
             files.append(parse_provenance_output_files_(o, parentdirs))
+        # Should we flatten?? This will lose the structure of 2D (and higher) array outputs.
         return [y for x in files for y in x]
     return []
