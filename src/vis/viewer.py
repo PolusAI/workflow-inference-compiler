@@ -15,11 +15,12 @@ from wic import utils
 from . import filewatcher
 
 
-def make_ipytree_nodes(prov_tree: Dict) -> List[Node]:
+def make_ipytree_nodes(prov_tree: Dict, rootdir: str) -> List[Node]:
     """Recursively applies the ipytree Node constructor to each element of the provenance output files tree.
 
     Args:
         prov_tree (Dict): This should be the output of utils.provenance_list_to_tree(files)
+        rootdir (str): The directory in which to search for outdir/
 
     Returns:
         List[Node]: A list of Nodes (where each Node contains children Nodes, etc)
@@ -27,21 +28,29 @@ def make_ipytree_nodes(prov_tree: Dict) -> List[Node]:
     nodes = []
     for key, val in prov_tree.items():
         if isinstance(val, Dict):
-            children = make_ipytree_nodes(val)
+            children = make_ipytree_nodes(val, rootdir)
         if isinstance(val, List):
             children = []
-            for idx, (location, parentargs, basename) in val:
-                if idx != 0:
+            dests = set()
+            for (location, parentdirs, basename) in val:
+                dest = rootdir + 'outdir/' + parentdirs +  '/' + basename
+                idx = 2
+                while dest in dests:
                     stem = Path(basename).stem
                     suffix = Path(basename).suffix
-                    basename = stem + f'_{idx+1}' + suffix
+                    basename_ = stem + f'_{idx}' + suffix
+                    dest = rootdir + 'outdir/' + parentdirs +  '/' + basename_
+                    idx += 1
+                if idx > 2: # If the while loop ran at least once
+                    basename = basename_
+                dests.add(dest)
                 child = Node(basename)
                 # NOTE: We need to store a unique id in each node so we can
                 # take the appropriate action when the user clicks. Storing
                 # the id in the name attribute would make the UI look terrible.
                 # However, this is python, so we can just pretend an id
                 # attribute exists and use it anyway. Is this unsafe? Probably!
-                child.id = (idx, parentargs)
+                child.id = parentdirs
                 children.append(child)
         node = Node(key, children)
         node.id = '' # See above comment.
@@ -75,7 +84,7 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
     prov_tree = utils.provenance_list_to_tree(files)
     #import yaml
     #print(yaml.dump(prov_tree))
-    children = make_ipytree_nodes(prov_tree)
+    children = make_ipytree_nodes(prov_tree, rootdir)
 
     rootnode = Node("Workflow", children)
     tree  = Tree(nodes=[rootnode], multiple_selection=False)
@@ -88,24 +97,13 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
 
     def on_selected_change(change: Dict) -> None:
         #print('change[new]', change['new'])
-        id_ = change['new'][0].id
-        #print('id:', id_)
-        idx = 0
-        if isinstance(id_, tuple):
-            (idx, id_) = id_
-        if id_ != '':
-            step_name = id_.replace('/', '___')
-            val = output_dict.get(step_name)
-            #print('val:', val)
-            # TODO: Check for other instances of val
-            if isinstance(val, List):
-                val = val[idx]
-            if isinstance(val, Dict) and val.get('class') == 'File':
-                outdir = rootdir + 'outdir'
-                basename = str(val['basename'])
-                name = change['new'][0].name
-                filepath = outdir + '/' + id_ + '/' + name # basename
-                #print(filepath)
+        parentdirs = change['new'][0].id
+        basename = change['new'][0].name
+        #print('parentdirs:', parentdirs)
+        if parentdirs != '':
+            filepath = rootdir + 'outdir/' + parentdirs + '/' + basename
+            #print(filepath)
+            if Path(filepath).exists():
                 mdtraj_exts = [".pdb", ".pdb.gz", ".h5", ".lh5", ".prmtop", ".parm7", ".prm7",
                                ".psf", ".mol2", ".hoomdxml", ".gro", ".arc", ".hdf5", ".gsd"]
                 # NOTE: mdtraj does not support .sdf and .pdbqt
