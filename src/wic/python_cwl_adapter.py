@@ -157,7 +157,8 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
                         'items': ['Directory', 'File']},
                 'outputBinding': {'glob': '.'},
                 'format': 'edam:format_2330'} # 'Textual format'
-    outputs['output_all'] = output_all
+    # This crashes toil-cwl-runner, but not cwltool.
+    #outputs['output_all'] = output_all
     yaml_tree['outputs'] = outputs
 
     yaml_tree['stdout'] = 'stdout'

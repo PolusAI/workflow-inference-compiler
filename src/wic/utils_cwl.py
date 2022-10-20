@@ -196,7 +196,8 @@ def get_workflow_outputs(args: argparse.Namespace,
                          'items': ['Directory', 'File']},
                      'outputBinding': {'glob': '\".\"'},
                      'format': 'edam:format_2330'}} # 'Textual format'
-    workflow_outputs.update(output_all) # type: ignore
+    # This crashes toil-cwl-runner, but not cwltool.
+    #workflow_outputs.update(output_all) # type: ignore
     return workflow_outputs
 
 

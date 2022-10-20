@@ -68,12 +68,23 @@ pip install .
 
 You should now have the `wic` executable available in your terminal.
 
+## Jupyter notebook visualization
+
+The visualization currently needs to be in its own conda environment.
+
+```
+conda create --name vis
+conda activate vis
+./nglview_install.sh
+pip install .
+```
+
 ## testing
 
 To test your installation, you can run the example in README.md:
 
 ```
-wic --yaml examples/gromacs/tutorial.yml --run_local True --quiet True
+wic --yaml examples/gromacs/tutorial.yml --run_local --quiet
 ```
 
 You can also run the automated test suite. This will run the full set of tests, which takes about 20-30 minutes on a laptop.
@@ -124,7 +135,7 @@ To enable this feature, simply install the YAML vscode extension (by Red Hat). T
 ```
 
 ```
-wic --generate_schemas_only True
+wic --generate_schemas_only
 ```
 
 After a ~10 second delay, vscode should display "Validating against the Workflow Interence Compiler schema" just above the first line in a \*.yml file.

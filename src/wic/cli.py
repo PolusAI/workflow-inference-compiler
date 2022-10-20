@@ -5,7 +5,7 @@ parser = argparse.ArgumentParser(prog='main', description='Convert a high-level 
 parser.add_argument('--yaml', type=str, required=('--generate_schemas_only' not in sys.argv),
                     help='Yaml workflow file')
 
-parser.add_argument('--generate_schemas_only', type=bool, required=False,
+parser.add_argument('--generate_schemas_only', default=False, action="store_true",
                     help='Generate schemas for the files in --cwl_dirs_file and --yml_dirs_file.')
 parser.add_argument('--cwl_dirs_file', type=str, required=False, default='cwl_dirs.txt',
                     help='Configuration file which lists the directories which contains the CWL CommandLineTools')
@@ -15,17 +15,19 @@ parser.add_argument('--yml_dirs_file', type=str, required=False, default='yml_di
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
 
-parser.add_argument('--parallel', type=bool, required=False, default=False,
+parser.add_argument('--parallel', default=False, action="store_true",
                     help='''When running locally, execute independent steps in parallel.
                     \nThis is required for real-time analysis, but it may cause issues with
                     \nhanging (particularly when scattering). See user guide for details.''')
-parser.add_argument('--quiet', type=bool, required=False, default=False,
+parser.add_argument('--quiet', default=False, action="store_true",
                     help='''Disable verbose output. This will not print out the commands used for each step.''')
+parser.add_argument('--cwl_runner', type=str, required=False, default='cwltool', choices=['cwltool', 'toil-cwl-runner'],
+                    help='The CWL runner to use for running workflows locally.')
 
 group_run = parser.add_mutually_exclusive_group()
-group_run.add_argument('--run_local', type=bool, required=False, default=False,
+group_run.add_argument('--run_local', default=False, action="store_true",
                     help='After generating the cwl file(s), run it on your local machine.')
-group_run.add_argument('--run_compute', type=bool, required=False, default=False,
+group_run.add_argument('--run_compute', default=False, action="store_true",
                     help='After generating the cwl file(s), run it on the remote labshare Compute platform.')
 parser.add_argument('--compute_driver', type=str, required=False, default='slurm', choices=['slurm', 'argo'],
                     help='The driver to use for running workflows on labshare Compute.')
@@ -34,11 +36,11 @@ parser.add_argument('--compute_driver', type=str, required=False, default='slurm
 # For example, if run_compute is enabled, you MUST enable cwl_inline_subworkflows!
 # Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
 
-parser.add_argument('--cwl_inline_subworkflows', type=bool, required=False, default=('--run_compute' in sys.argv),
+parser.add_argument('--cwl_inline_subworkflows', default=('--run_compute' in sys.argv), action="store_true",
                     help='Before generating the cwl file, inline all subworkflows. Required for --run_compute')
-parser.add_argument('--inference_use_naming_conventions', type=bool, required=False, default=False,
+parser.add_argument('--inference_use_naming_conventions', default=False, action="store_true",
                     help='Enables the use of naming conventions in the inference algorithm')
-parser.add_argument('--cwl_validate', type=bool, required=False, default=False,
+parser.add_argument('--cwl_validate', default=False, action="store_true",
                     help='After generating the cwl file, validate it.')
 parser.add_argument('--cachedir', type=str, required=False, default='cachedir',
                     help='The directory to save intermediate results; useful with RealtimePlots.py')
@@ -52,15 +54,15 @@ parser.add_argument('--compute_access_token', type=str, required=('--run_compute
                     help="""The access_token used for authentication. Required for --run_compute
                     For now, get this manually from https://a-qa.labshare.org/""")
 
-parser.add_argument('--graph_label_edges', type=bool, required=False, default=False,
+parser.add_argument('--graph_label_edges', default=False, action="store_true",
                     help='Label the graph edges with the name of the intermediate input/output.')
-parser.add_argument('--graph_label_stepname', type=bool, required=False, default=False,
+parser.add_argument('--graph_label_stepname', default=False, action="store_true",
                     help='Prepend the step name to each step node.')
-parser.add_argument('--graph_show_inputs', type=bool, required=False, default=False,
+parser.add_argument('--graph_show_inputs', default=False, action="store_true",
                     help='Add nodes to the graph representing the workflow inputs.')
-parser.add_argument('--graph_show_outputs', type=bool, required=False, default=False,
+parser.add_argument('--graph_show_outputs', default=False, action="store_true",
                     help='Add nodes to the graph representing the workflow outputs.')
 parser.add_argument('--graph_inline_depth', type=int, required=False, default=sys.maxsize,
                     help='Controls the depth of subgraphs which are displayed.')
-parser.add_argument('--graph_dark_theme', type=bool, default=False,
+parser.add_argument('--graph_dark_theme', default=False, action="store_true",
                     help='Changees the color of the fonts and edges from white to black.')
