@@ -2,6 +2,8 @@
 
 Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but users still need to explicitly specify how to connect the steps. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between steps, and it compiles to CWL for execution. The examples are chosen from classical molecular dynamics but like CWL, the software is general purpose and is not limited to any specific domain.
 
+## Documentation
+The documentation is available on [readthedocs](https://workflow-inference-compiler.readthedocs.io/en/latest/).
 ## Quick Start
 See the [installation guide](docs/installguide.md) for more details, but:
 ```
@@ -11,7 +13,7 @@ conda create --name wic
 conda activate wic
 ./conda_devtools.sh
 pip install .
-wic --yaml examples/gromacs/tutorial.yml --run_local True --quiet True
+wic --yaml examples/gromacs/tutorial.yml --run_local --quiet
 ```
 That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the workflow, and run it locally.
 
@@ -25,7 +27,14 @@ timeseries_plots
 
 ![Plots](examples/gromacs/plots.png)
 
-You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipynb`.
+You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipynb`. The visualization currently needs to be in its own conda environment.
+
+```
+conda create --name vis
+conda activate vis
+./nglview_install.sh
+pip install .
+```
 
 ![Plots](docs/tree_viewer.png)
 

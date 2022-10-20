@@ -1,4 +1,5 @@
-conda install -y -c conda-forge -c schrodinger pymol-bundle
+# Comment out pymol-bundle because it conflicts with `pip install toil[cwl]` below.
+#conda install -y -c conda-forge -c schrodinger pymol-bundle
 # If you want to use the GUI, also install
 # pip install PyQt5
 # At runtime, CWL uses the Docker image jakefennick/scripts
@@ -9,7 +10,7 @@ conda install -y -c conda-forge -c schrodinger pymol-bundle
 #conda install -y -c conda-forge -c michellab biosimspace
 # At runtime, CWL uses the Docker image jakefennick/biosimspace
 
-conda install -y -c conda-forge cwltool nodejs graphviz openbabel mdanalysis
+conda install -y -c conda-forge nodejs graphviz openbabel mdanalysis
 # NOTE: cwltool needs nodejs for InlineJavascriptRequirement
 
 conda install -y -c conda-forge pytest pytest-cov pytest-parallel mypy pylint types-requests types-PyYAML types-setuptools
@@ -19,3 +20,8 @@ conda install -y -c conda-forge pytest pytest-cov pytest-parallel mypy pylint ty
 conda install -y -c conda-forge data-science-types
 
 conda install -y -c conda-forge wget
+
+# NOTE: The [cwl] extra installs an embedded cwltool within toil-cwl-runner.
+# You can NOT `conda install cwltool` and then `pip install toil` !
+conda install -y -c conda-forge pip
+pip install 'toil[cwl]'

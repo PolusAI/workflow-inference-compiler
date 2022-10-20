@@ -1,8 +1,6 @@
 # nglview has a transitive dependency on mistune==2.0.4 which conflicts with
-# cwltool's transitive dependency of mistune==0.8.4.
-# Fortunately, due to the file watching strategy in src/vis/viewer.py does not
-# need to know the structure of the workflows, nglview and cwltool do not
-# need to be installed into the same conda environment.
+# cwltool's transitive dependency of mistune==0.8.4. Fortunately,
+# nglview and cwltool do not need to be installed into the same conda environment.
 
 conda install -y -c conda-forge nglview
 
