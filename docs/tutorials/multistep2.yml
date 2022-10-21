@@ -1,0 +1,12 @@
+steps:
+- pdb:
+    in:
+      config:
+        pdb_code: 1aki
+- fix_amides:
+- fix_side_chain:
+- extract_model:
+    in:
+      config:
+        models: [1]
+      output_structure_path: '&protein_model_1.pdb'

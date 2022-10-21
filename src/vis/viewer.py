@@ -33,7 +33,8 @@ def make_ipytree_nodes(prov_tree: Dict, rootdir: str) -> List[Node]:
             children = []
             dests = set()
             for (location, namespaced_output_name, basename) in val:
-                parentdirs = utils.shorten_namespaced_output_name(namespaced_output_name)[1].replace('___', '/')
+                yaml_stem_init, shortened = utils.shorten_namespaced_output_name(namespaced_output_name)
+                parentdirs = yaml_stem_init + '/' + shortened.replace('___', '/')
                 dest = rootdir + 'outdir/' + parentdirs +  '/' + basename
                 idx = 2
                 while dest in dests:

@@ -81,7 +81,7 @@ def parse_step_name_str(step_name: str) -> Tuple[str, int, str]:
     return (vals[0], i-1, vals[3])
 
 
-def shorten_namespaced_output_name(namespaced_output_name: str, sep: str = None) -> Tuple[str, str]:
+def shorten_namespaced_output_name(namespaced_output_name: str, sep: str = ' ') -> Tuple[str, str]:
     """Removes the intentionally redundant yaml_stem prefixes from the list of
     step_name_str's embedded in namespaced_output_name which allows each
     step_name_str to be context-free and unique. This is potentially dangerous,
@@ -90,7 +90,7 @@ def shorten_namespaced_output_name(namespaced_output_name: str, sep: str = None)
     Args:
         namespaced_output_name (str): A string of the form:
         '___'.join(namespaces + [step_name_i, out_key])
-        sep (str, optional): The separator used to construct the shortened step name strings.
+        sep (str): The separator used to construct the shortened step name strings.
 
     Returns:
         Tuple[str, str]: the first yaml_stem, so this function can be inverted,
@@ -102,7 +102,7 @@ def shorten_namespaced_output_name(namespaced_output_name: str, sep: str = None)
     output_name = split[-1]
     strs = []
     yaml_stem_init = ''
-    if len(namespaces) > 1:
+    if len(namespaces) > 0:
         yaml_stem_init = parse_step_name_str(namespaces[0])[0]
         for stepnamestr in namespaces:
             _, i, step_key = parse_step_name_str(stepnamestr)
