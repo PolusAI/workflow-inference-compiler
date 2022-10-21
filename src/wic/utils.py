@@ -81,6 +81,69 @@ def parse_step_name_str(step_name: str) -> Tuple[str, int, str]:
     return (vals[0], i-1, vals[3])
 
 
+def shorten_namespaced_output_name(namespaced_output_name: str, sep: str = None) -> Tuple[str, str]:
+    """Removes the intentionally redundant yaml_stem prefixes from the list of
+    step_name_str's embedded in namespaced_output_name which allows each
+    step_name_str to be context-free and unique. This is potentially dangerous,
+    and the only purpose is so we can slightly shorten the output filenames.
+
+    Args:
+        namespaced_output_name (str): A string of the form:
+        '___'.join(namespaces + [step_name_i, out_key])
+        sep (str, optional): The separator used to construct the shortened step name strings.
+
+    Returns:
+        Tuple[str, str]: the first yaml_stem, so this function can be inverted,
+        and namespaced_output_name, with the embedded yaml_stem prefixes
+        removed and double underscores replaced with a single space.
+    """
+    split = namespaced_output_name.split('___')
+    namespaces = split[:-1]
+    output_name = split[-1]
+    strs = []
+    yaml_stem_init = ''
+    if len(namespaces) > 1:
+        yaml_stem_init = parse_step_name_str(namespaces[0])[0]
+        for stepnamestr in namespaces:
+            _, i, step_key = parse_step_name_str(stepnamestr)
+            strs.append(f'step{sep}{i+1}{sep}{step_key}')
+    shortened = '___'.join(strs + [output_name])
+    return (yaml_stem_init, shortened)
+
+
+def restore_namespaced_output_name(yaml_stem_init: str, shortened_output_name: str, sep: str = None) -> str:
+    """The inverse function to shorten_namespaced_output_name()
+
+    Args:
+        yaml_stem_init (str): The initial yaml_stem prefix
+        shortened_output_name (str): The shortened namespaced_output_name
+        sep (str, optional): The separator used for shortening. Defaults to None.
+
+    Raises:
+        Exception: If the argument is not of the same form as returned by shorten_namespaced_output_name
+
+    Returns:
+        str: The original namespaced_output_name before shortening.
+    """
+    if yaml_stem_init == '':
+        return shortened_output_name
+    else:
+        split = shortened_output_name.split('___')
+        namespaces = split[:-1]
+        output_name = split[-1]
+        yaml_stem = yaml_stem_init
+        strs = []
+        for shortened_step_name_str in namespaces:
+            words = shortened_step_name_str.split(sep)
+            if len(words) != 3:
+                raise Exception(f'Error! {shortened_step_name_str} is not of the correct format!')
+            _, num, name_yml = words
+            strs.append(f'{yaml_stem}{sep}step{sep}{num}{sep}{name_yml}')
+            yaml_stem = Path(name_yml).stem
+        restored = '___'.join(strs + [output_name])
+        return restored
+
+
 def add_graph_edge(args: argparse.Namespace, graph: GraphReps,
                    nss1: Namespaces, nss2: Namespaces,
                    label: str, color: str = '') -> None:
@@ -709,11 +772,11 @@ def provenance_list_to_tree(files: List[Tuple[str, str, str]]) -> Dict:
         Dict: A nested tree of Dicts corresponding to subworkflows.
     """
     tree: Dict = {}
-    for location, parentdirs, basename in files:
-        parents = parentdirs.split('/')
+    for location, namespaced_output_name, basename in files:
+        namespaces = namespaced_output_name.split('___')
         #print(yaml.dump(tree))
-        #print((location, parentdirs, basename))
-        tree = recursively_insert_into_dict_tree(tree, parents, (location, parentdirs, basename))
+        #print((location, namespaced_output_name, basename))
+        tree = recursively_insert_into_dict_tree(tree, namespaces, (location, namespaced_output_name, basename))
     return tree
 
 
@@ -729,9 +792,8 @@ def parse_provenance_output_files(output_json_file: Path) -> List[Tuple[str, str
     with open(output_json_file, mode='r', encoding='utf-8') as f:
         output_dict = json.loads(f.read())
     files = []
-    for step_name, obj in output_dict.items():
-        parentdirs = '/'.join(step_name.split('___'))
-        files.append(parse_provenance_output_files_(obj, parentdirs))
+    for namespaced_output_name, obj in output_dict.items():
+        files.append(parse_provenance_output_files_(obj, namespaced_output_name))
     return [y for x in files for y in x]
 
 
