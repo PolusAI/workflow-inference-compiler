@@ -133,8 +133,8 @@ def get_workflow_outputs(args: argparse.Namespace,
                 vars_nss = [var.replace('/', '___') for var in vars_workflow_output_internal]
                 case1 = (tool_i['class'] == 'Workflow') and (not out_key in vars_nss)
                 # Avoid duplicating outputs from subgraphs in parent graphs.
-                output_node_name = '___'.join(namespaces + [step_name_i, out_key])
-                lengths_off_by_one = (len(step_node_name.split('___')) + 1 == len(output_node_name.split('___')))
+                namespaced_output_name = '___'.join(namespaces + [step_name_i, out_key])
+                lengths_off_by_one = (len(step_node_name.split('___')) + 1 == len(namespaced_output_name.split('___')))
                 # TODO: check is_root here
                 case1 = case1 and not is_root and lengths_off_by_one
                 case2 = (tool_i['class'] == 'CommandLineTool') and (not out_var in vars_workflow_output_internal)
@@ -144,17 +144,17 @@ def get_workflow_outputs(args: argparse.Namespace,
                     graphdata = graph.graphdata
                     attrs = {'label': out_key_no_namespace, 'shape': 'box',
                              'style': 'rounded, filled', 'fillcolor': 'lightyellow'}
-                    graph_gv.node(output_node_name, **attrs)
+                    graph_gv.node(namespaced_output_name, **attrs)
                     font_edge_color = 'black' if args.graph_dark_theme else 'white'
                     if args.graph_label_edges:
-                        graph_gv.edge(step_node_name, output_node_name, color=font_edge_color,
+                        graph_gv.edge(step_node_name, namespaced_output_name, color=font_edge_color,
                                       label=out_key_no_namespace)  # Is labeling necessary?
                     else:
-                        graph_gv.edge(step_node_name, output_node_name, color=font_edge_color)
-                    graph_nx.add_node(output_node_name)
-                    graph_nx.add_edge(step_node_name, output_node_name)
-                    graphdata.nodes.append((output_node_name, attrs))
-                    graphdata.edges.append((step_node_name, output_node_name, {}))
+                        graph_gv.edge(step_node_name, namespaced_output_name, color=font_edge_color)
+                    graph_nx.add_node(namespaced_output_name)
+                    graph_nx.add_edge(step_node_name, namespaced_output_name)
+                    graphdata.nodes.append((namespaced_output_name, attrs))
+                    graphdata.edges.append((step_node_name, namespaced_output_name, {}))
             # NOTE: Unless we are in the root workflow, we always need to
             # output everything. This is because while we are within a
             # subworkflow, we do not yet know if a subworkflow output will be used as
