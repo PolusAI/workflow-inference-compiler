@@ -1,0 +1,7 @@
+steps:
+  - tutorial.yml:
+  - python_script:
+      in:
+        script: ../scripts/nmr4md.py
+        input_tpr_path: '*prod.tpr'
+        input_trr_path: '*prod.trr'

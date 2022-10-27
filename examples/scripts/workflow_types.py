@@ -12,7 +12,9 @@ xlsxfile = {'type': 'File', 'format': 'edam:format_3620'}
 pdbfile = {'type': 'File', 'format': 'edam:format_1476'}
 mol2file = {'type': 'File', 'format': 'edam:format_3816'}
 sdffile = {'type': 'File', 'format': 'edam:format_3814'}
-
+trrfile = {'type': 'File', 'format': 'edam:format_3910'}
+tprfile = {'type': 'File', 'format': 'edam:format_2333'}
+pngfile = {'type': 'File', 'format': 'edam:format_3603'}
 
 pdbfiles = {'type': 'File[]', 'format': 'edam:format_1476'}
 mol2files = {'type': 'File[]', 'format': 'edam:format_3816'}
