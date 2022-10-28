@@ -1,0 +1,11 @@
+steps:
+- pdb:
+    in:
+      config:
+        pdb_code: 1aki
+- fix_protein.yml:
+- extract_model:
+    in:
+      config:
+        models: [1]
+      output_structure_path: '&protein_model_1.pdb'

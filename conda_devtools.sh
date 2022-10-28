@@ -13,7 +13,8 @@
 conda install -y -c conda-forge nodejs graphviz openbabel mdanalysis
 # NOTE: cwltool needs nodejs for InlineJavascriptRequirement
 
-conda install -y -c conda-forge pytest pytest-cov pytest-parallel mypy pylint types-requests types-PyYAML types-setuptools
+# See https://github.com/kevlened/pytest-parallel/pull/119
+conda install -y -c conda-forge "pytest==7.1.3" pytest-cov pytest-parallel mypy pylint types-requests types-PyYAML types-setuptools
 # NOTE: https://github.com/wearepal/data-science-types has been archived and is
 # no longer under active development. So most of the API is covered, but there
 # are some functions which are missing stubs.

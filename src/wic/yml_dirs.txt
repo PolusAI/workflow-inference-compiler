@@ -8,5 +8,6 @@
 
 # Namespace Directory
 global      examples/
+global      docs/tutorials/
 # foo       a/relative/path/
 # bar       /an/absolute/path/

@@ -7,9 +7,7 @@ Workflow Inference Compiler documentation
 
    overview.md
    installguide.md
-   tutorials/tutorials.md
-   tutorials/helloworld.md
-   tutorials/multistep.md
+   tutorials/tutorials.rst
    userguide.md
    dev/devguide.md
    dev/algorithms.md

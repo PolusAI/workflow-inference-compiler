@@ -36,7 +36,7 @@ RUN conda install -c conda-forge openbabel
 RUN conda install -c conda-forge mdtraj
 
 # Solely to generate conformers from SMACC database
-RUN conda install -c conda-forge pandas rdkit openpyxl
+RUN conda install -c conda-forge pandas rdkit openpyxl xorg-libxrender
 
 # Solely to generate scatter plots
 RUN conda install -c conda-forge matplotlib
