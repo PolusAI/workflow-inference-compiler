@@ -1,6 +1,18 @@
 Developer API
 ====================================
 
+vis.filewatcher
+------------------------------------
+.. automodule:: vis.filewatcher
+
+vis.timeseries
+------------------------------------
+.. automodule:: vis.timeseries
+
+vis.viewer
+------------------------------------
+.. automodule:: vis.viewer
+
 wic.ast
 ------------------------------------
 .. automodule:: wic.ast
@@ -28,6 +40,10 @@ wic.labshare
 wic.main
 ------------------------------------
 .. automodule:: wic.main
+
+wic.python_cwl_adapter
+------------------------------------
+.. automodule:: wic.python_cwl_adapter
 
 wic.schemas.biobb
 ------------------------------------

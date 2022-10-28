@@ -287,7 +287,8 @@ def stage_input_files(yml_inputs: Yaml, root_yml_dir_abs: Path,
             path = root_yml_dir_abs / Path(val['path'])
             if not path.exists() and throw:
                 #raise FileNotFoundError(f'Error! {path} does not exist!')
-                print(f'Error! {path} does not exist! (Did you forget to use an explicit edge?)')
+                print(f'Error! {path} does not exist!')
+                print('(Did you forget to use an explicit edge?)')
                 print('See https://workflow-inference-compiler.readthedocs.io/en/latest/userguide.html#explicit-edges')
                 sys.exit(1)
 

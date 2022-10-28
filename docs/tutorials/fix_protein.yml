@@ -1,0 +1,3 @@
+steps:
+- fix_amides:
+- fix_side_chain:
