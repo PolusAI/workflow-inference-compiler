@@ -106,6 +106,18 @@ inputs:
       prefix: --charge_method
     default: bcc # gas, bcc (default), user (user's charges in mol2 file)
 
+  net_charge:
+    label: net molecular charge (int), for gas default is 0
+    doc: |-
+      net molecular charge (int), for gas default is 0
+      Type: int
+    type: int?
+    format:
+    - edam:format_2330
+    inputBinding:
+      position: 4
+      prefix: --net_charge
+  
 outputs:
   output_gro_path:
     label: Path to the GRO output file
