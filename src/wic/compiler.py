@@ -137,7 +137,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     # we can return the modified AST to the call site and re-compile.
     (yaml_path_orig, yaml_tree_orig) = copy.deepcopy(yaml_tree_ast)
 
-    print(' starting', ('  ' * len(namespaces)) + yaml_path)
+    if not testing:
+        print(' starting', ('  ' * len(namespaces)) + yaml_path)
 
     # Check for top-level yml dsl args
     wic = {'wic': yaml_tree.get('wic', {})}
@@ -332,7 +333,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # Disable for testing because when testing in parallel, the *.gv Graphviz files
             # can be written/read to/from disk simultaneously, which results in
             # intermittent 'syntax errors'.
-            utils.make_tool_dag(stem, tool_i, args.graph_dark_theme)
+            pass
+            # Actually, this is a significant performance bottleneck and isn't really necessary.
+            #utils.make_tool_dag(stem, tool_i, args.graph_dark_theme)
 
         # Add run tag, using relative or flat-directory paths
         # NOTE: run: path issues were causing test_cwl_embedding_independence()
@@ -551,7 +554,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # we do not want to replace them with internal CWL dependencies!
                 arg_val['source'] = arg_val['source'][1:]  # Remove *
                 if not explicit_edge_defs_copy.get(arg_val['source']):
-                    if is_root:
+                    if is_root and not testing:
                         # TODO: Check this comment.
                         # Even if is_root, we don't want to raise an Exception
                         # here because in test_cwl_embedding_independence, we
@@ -757,7 +760,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 steps[i] = inference.perform_edge_inference(args, tools, tools_lst, steps_keys,
                     yaml_stem, i, steps, arg_key, graph, is_root, namespaces,
                     vars_workflow_output_internal, inputs_workflow,
-                    in_name_in_inputs_file_workflow, conversions, wic_steps)
+                    in_name_in_inputs_file_workflow, conversions, wic_steps, testing)
                 # NOTE: For now, perform_edge_inference mutably appends to
                 # inputs_workflow and vars_workflow_output_internal.
 
@@ -891,7 +894,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # The root workflow will be validated anyway.
         sub.run(cmd, check=False)
 
-    print('finishing', ('  ' * len(namespaces)) + yaml_path)
+    if not testing:
+        print('finishing', ('  ' * len(namespaces)) + yaml_path)
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
     node_data = NodeData(namespaces, yaml_stem, yaml_tree_orig, yaml_tree, yaml_inputs,

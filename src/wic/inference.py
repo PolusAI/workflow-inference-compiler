@@ -25,7 +25,8 @@ def perform_edge_inference(args: argparse.Namespace,
                            inputs_workflow: WorkflowInputs,
                            in_name_in_inputs_file_workflow: bool,
                            conversions: List[StepId],
-                           wic_steps: Yaml) -> Yaml:
+                           wic_steps: Yaml,
+                           testing: bool) -> Yaml:
     """This function implements the core edge inference feature.
     NOTE: steps[i], vars_workflow_output_internal, inputs_workflow are mutably updated.
 
@@ -50,6 +51,7 @@ def perform_edge_inference(args: argparse.Namespace,
         failure to find a match should be considered an error.
         conversions (List[StepId]): If exact inference fails, a list of possible file format conversions is stored here.
         wic_steps (Yaml): The metadata associated with the given workflow.
+        testing: Used to disable some optional features which are unnecessary for testing.
 
     Returns:
         Yaml: steps[i] with the input tag arg_key updated with an inferred input value.
@@ -281,7 +283,7 @@ def perform_edge_inference(args: argparse.Namespace,
         # This just means we need to defer to the parent workflow.
         # There will actually be an error only if no parent supplies an
         # input value and thus there is no entry in inputs_file_workflow.
-        if is_root and not in_name_in_inputs_file_workflow:
+        if is_root and not in_name_in_inputs_file_workflow and not testing:
             print('Error! No match found for input', i + 1, step_key, arg_key)
             # NOTE: The following print statement is a bit misleading because
             # we don't print out any attempted matches in the recursive case.
