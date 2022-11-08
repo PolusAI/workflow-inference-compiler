@@ -3,7 +3,7 @@ import copy
 import json
 from pathlib import Path
 import subprocess as sub
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import graphviz
 import yaml
@@ -111,13 +111,13 @@ def shorten_namespaced_output_name(namespaced_output_name: str, sep: str = ' ') 
     return (yaml_stem_init, shortened)
 
 
-def restore_namespaced_output_name(yaml_stem_init: str, shortened_output_name: str, sep: str = None) -> str:
+def restore_namespaced_output_name(yaml_stem_init: str, shortened_output_name: str, sep: Optional[str] = None) -> str:
     """The inverse function to shorten_namespaced_output_name()
 
     Args:
         yaml_stem_init (str): The initial yaml_stem prefix
         shortened_output_name (str): The shortened namespaced_output_name
-        sep (str, optional): The separator used for shortening. Defaults to None.
+        sep (Optional[str], optional): The separator used for shortening. Defaults to None.
 
     Raises:
         Exception: If the argument is not of the same form as returned by shorten_namespaced_output_name
@@ -575,6 +575,8 @@ def make_tool_dag(tool_stem: str, tool: Tool, graph_dark_theme: bool) -> None:
         output_no_initial_ns = output_cwl.replace(f'{output_initial_ns}__', '')
         graph.node(f'output_{output_cwl}', label=output_no_initial_ns, fillcolor='lightyellow', **attrs)
         graph.edge(tool_stem, f'output_{output_cwl}', color=font_edge_color)
+    # NOTE: Since there may be many inputs/outputs and thus edges in complex subworkflows,
+    # the layout algorithm for this this .render() call may be very slow! (10+ seconds)
     graph.render(format='png')
 
 
@@ -606,6 +608,8 @@ def make_plugins_dag(tools: Tools, graph_dark_theme: bool) -> None:
             (tool_path, tool_cwl) = tools[tool]
             attrs = {'shape':'box', 'style':'rounded, filled'}
             graph.node(Path(tool_path).stem, fillcolor='lightblue', fontsize="24", width='0.75', **attrs)
+        # NOTE: Since there are no edges in this DAG and thus no edge constraints,
+        # the layout algorithm for this .render() call is fast. (about 1 second)
         graph.render(format='png')
 
 
