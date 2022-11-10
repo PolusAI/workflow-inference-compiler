@@ -126,23 +126,25 @@ def main() -> None:
 
     # Generate schemas for validation and vscode IntelliSense code completion
     yaml_stems = utils.flatten([list(p) for p in yml_paths.values()])
-    validator = wic_schema.get_validator(tools_cwl, yaml_stems, use_yml_schema=False, write_to_disk=True)
+    schema_store: Dict[str, Json] = {}
+    validator = wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)
 
-    # This takes ~3 seconds, but guarantees the subworkflow schemas are always up to date.
+    # This takes ~20 seconds, but guarantees the subworkflow schemas are always up to date.
     # In the future, we may require the user to update the schemas manually or use a filewatcher.
     if True: #args.generate_schemas_only:
         yml_paths_tuples = [(yml_path_str, yml_path)
             for yml_namespace, yml_paths_dict in yml_paths.items()
             for yml_path_str, yml_path in yml_paths_dict.items()]
-        schema_store: Dict[str, Json] = {}
+
         for yml_path_str, yml_path in yml_paths_tuples:
-            # NOTE: For now, compile_workflow_generate_schema mutably appends to schema_store
-            wic_schema.compile_workflow_generate_schema(yml_path_str, yml_path,
-                                                        tools_cwl, yml_paths,
-                                                        schema_store, validator)
+            schema = wic_schema.compile_workflow_generate_schema(yml_path_str, yml_path,
+                                                                 tools_cwl, yml_paths, validator)
+            # overwrite placeholders in schema_store. See comment in get_validator()
+            schema_store[schema['$id']] = schema
+
         # Now that we compiled all of the subworkflows once with the permissive/weak schema,
         # compile the root yml workflow again with the restrictive/strict schema.
-        validator = wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, use_yml_schema=True, write_to_disk=False)
+        validator = wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=False)
 
     if args.generate_schemas_only:
         print('Finished generating schemas. Exiting.')

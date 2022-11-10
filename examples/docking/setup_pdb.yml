@@ -45,7 +45,7 @@ steps:
   - str_check_add_hydrogens:
       in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
         input_structure_path: '*receptor_pdb4amber.pdb'
-        config: '{"charges": "False", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
+        config: {"charges": "False", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}
         output_structure_path: '&receptor_hydrogens_terminal.pdb'
   - python3_pdb_to_pdb:
       in:
@@ -55,7 +55,7 @@ steps:
   - str_check_add_hydrogens:
       in: # charges = True outputs in pdbqt format; mode = auto, list, ph (must use ph mode to set ph!)
         input_structure_path: '*receptor_pdb4amber.pdb'
-        config: '{"charges": "True", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}'
+        config: {"charges": "True", "mode": "auto", "ph": "7.4", "list": "", "keep_canonical_resnames": "False"}
         # if demo...
         output_structure_path: '&pdb.pdbqt'
         #output_structure_path: ~pdb_path

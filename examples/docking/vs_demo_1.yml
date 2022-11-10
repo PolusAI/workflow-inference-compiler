@@ -111,7 +111,8 @@ steps:
       input_structure2: '*pose_ligand.pdb'
       output_structure_path: '&complex_vac.pdb'
 - stability.yml:
-    scatter: [crd_path, top_zip_path]
+    scatter: [stability__step__1__setup.yml___setup__step__1__gmx_editconf___input_crd_path,
+              stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path] #[crd_path, top_zip_path]
     scatterMethod: dotproduct
     in:
       nsteps: 10000

@@ -65,6 +65,7 @@ def biobb_selection_schema() -> Json:
     for group, desc in gromacs_selection_groups().items():
         g_s = {'type': 'string', 'const': group, 'description': desc}
         groups_schemas.append(g_s)
+    groups_schemas.append({'type': 'string', 'pattern': '^resname.*'}) # TODO: Check for other patterns
     # NOTE: Use oneOf instead of enum so we can add descriptions to each value
     desc = """(“System”) Group where the rms will be performed.
     If input_index_path provided, check the file for the accepted values."""
@@ -252,4 +253,5 @@ config_schemas = {
     'gmx_energy': biobb_gmx_energy_schema(),
     'gmx_rms': biobb_selection_schema(),
     'gms_rgyr': biobb_selection_schema(),
+    # TODO: Add box, str_check_add_hydrogens, ...
 }

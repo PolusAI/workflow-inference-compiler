@@ -37,9 +37,10 @@ steps:
       docking_scores: '&docking_scores' # NOTE: Not a filename, just an explicit edge
       experimental_dGs: '&dGs' # NOTE: Not a filename, just an explicit edge
 - gen_topol_params.yml:
-    scatter: [pdbqt_path]
+    scatter: [gen_topol_params__step__1__convert_mol2___input_path] #[pdbqt_path]
 - stability.yml:
-    scatter: [crd_path, top_zip_path]
+    scatter: [stability__step__1__setup.yml___setup__step__1__gmx_editconf___input_crd_path,
+              stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path] #[crd_path, top_zip_path]
     scatterMethod: dotproduct
     in:
       nsteps: 10000
@@ -47,7 +48,9 @@ steps:
       temperature: 298.0
       pressure: 1.0
 - autodock_vina_rescore.yml:
-    scatter: [input_pdb_path]
+    scatter: [autodock_vina_rescore__step__1__python_script___input_pdb_path,
+              autodock_vina_rescore__step__4__python_script___input_pdb_path] #[input_pdb_path]
+    scatterMethod: dotproduct
 - scatter_plot:
     in:
       xs: '*dGs'

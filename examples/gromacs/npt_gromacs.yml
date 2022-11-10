@@ -6,7 +6,7 @@ steps:
             integrator: sd
             rvdw: 1.0
             rcoulomb: 1.0
-            coulombtype: pme
+            coulombtype: PME
             nsteps: 10000
             dt: 0.002
             tc-grps: system
@@ -19,7 +19,7 @@ steps:
             tau-p: 1
             ref-p: 1
             compressibility: 4.5e-5
-            comm-mode: linear
+            comm-mode: Linear
             comm-grps: system
   - mdrun:
       in:
