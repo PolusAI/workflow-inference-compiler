@@ -85,7 +85,17 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
             with open(yaml_path, mode='r', encoding='utf-8') as y:
                 sub_yaml_tree_raw: Yaml = yaml.safe_load(y.read())
 
-            validator.validate(sub_yaml_tree_raw)
+            try:
+                validator.validate(sub_yaml_tree_raw)
+            except Exception as e:
+                print('Failed to validate', yaml_path)
+                print(f'See validation_{yaml_path.stem}.txt for detailed technical information.')
+                # Do not display a nasty stack trace to the user; hide it in a file.
+                with open(f'validation_{yaml_path.stem}.txt', mode='w', encoding='utf-8') as f:
+                    import traceback
+                    traceback.print_exception(e, file=f)
+                import sys
+                sys.exit(1)
 
             y_t = YamlTree(StepId(step_key, plugin_ns), sub_yaml_tree_raw)
             (step_id_, sub_yml_tree) = read_ast_from_disk(y_t, yml_paths, tools, validator)
