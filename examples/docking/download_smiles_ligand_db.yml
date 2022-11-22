@@ -1,4 +1,3 @@
-# if demo...
 inputs:
   path:
     type: string
@@ -15,6 +14,12 @@ inputs:
   output_txt_path:
     type: string
 
+outputs:
+  output_txt_path:
+    type: File
+    format: edam:format_2330
+    outputSource: download_smiles_ligand_db__step__2__python_script/output_txt_path
+
 steps:
 - wget_xlsx:
     in:
@@ -29,7 +34,7 @@ steps:
       smiles_column: ~smiles_column #SMILES
       binding_data_column: ~binding_data_column #Standard Value
       convert_Kd_dG: ~convert_Kd_dG #'True'
-      output_txt_path: '&binding_data.txt'
+      output_txt_path: ~output_txt_path # '&binding_data.txt'
 
 wic:
   graphviz:

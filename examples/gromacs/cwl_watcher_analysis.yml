@@ -1,5 +1,5 @@
 wic:
-  default_backend: complex # To simplify the demo
+  default_backend: protein
   backends:
     protein:
       steps:

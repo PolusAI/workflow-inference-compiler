@@ -14,18 +14,13 @@ steps:
       dt: 0.002
       temperature: 298.0
       pressure: 1.0
-#- stability.yml: # Temporarily comment out due to demo trickery, specifically analysis_final.yml
-#    in:
-#      nsteps: 10000
-#      dt: 0.002
-#      temperature: 298.0
-#      pressure: 1.0
+- stability.yml:
+    in:
+      nsteps: 10000
+      dt: 0.002
+      temperature: 298.0
+      pressure: 1.0
 #- yank.yml:
-
-# Fatal error:
-# Index[3214] 3215 is larger than the number of atoms in the
-# trajectory file (3214). There is a mismatch in the contents
-# of your -f, -s and/or -n files.
 
 wic:
   graphviz:
@@ -33,7 +28,7 @@ wic:
   steps:
     (2, stability.yml):
       wic:
-        inlineable: False
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
         environment:
           action: checkpoint
         steps:
@@ -73,7 +68,7 @@ wic:
         crd_path: '*ligand_GMX.gro'
         top_zip_path: '*ligand_GMX.zip'
       wic:
-        inlineable: False
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
         environment:
           action: restore
           save_defs: ['genion_complex.zip', 'prod_complex.gro']

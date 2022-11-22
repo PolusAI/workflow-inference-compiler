@@ -1,15 +1,14 @@
-# if demo...
-#inputs:
-#  input_pdb_path:
-#    type: File
-#    format: edam:format_1476
+inputs:
+  input_pdb_path:
+    type: File
+    format: edam:format_1476
 
 steps:
 - python_script:
     in:
       script: ../../atomselect_demo.py
       selection_string: protein # Extract the protein from the last timestep
-      input_pdb_path: '*prod.pdb' #~input_pdb_path
+      input_pdb_path: ~input_pdb_path # '*prod.pdb'
 # Assign partial charges (protein)
 # NOTE: Although we only start off with one protein, the final coordinates
 # after doing MD with different ligands will be different; hence scatter
@@ -22,7 +21,7 @@ steps:
     in:
       script: ../../atomselect_demo.py
       selection_string: resname MOL # Extract the ligand from the last timestep
-      input_pdb_path: '*prod.pdb' #~input_pdb_path
+      input_pdb_path: ~input_pdb_path # '*prod.pdb'
 # Assign partial charges (ligand)
 - convert_mol2:
 - convert_pdbqt:

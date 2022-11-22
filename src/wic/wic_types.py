@@ -100,6 +100,8 @@ class NodeData(NamedTuple):
     step_name_1: StepName1
 
 class EnvData(NamedTuple):
+    input_mapping: Dict[str, List[str]]
+    output_mapping: Dict[str, str]
     inputs_file_workflow: WorkflowInputsFile
     vars_workflow_output_internal: InternalOutputs
     explicit_edge_defs: ExplicitEdgeDefs

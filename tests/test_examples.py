@@ -43,7 +43,7 @@ yml_paths_tuples = [(yml_path_str, yml_path)
 # Due to the computational complexity of the graph isomorphism problem, we
 # need to manually exclude large workflows.
 # See https://en.wikipedia.org/wiki/Graph_isomorphism_problem
-large_workflows = ['dsb', 'dsb1', 'elm']
+large_workflows = ['dsb', 'dsb1', 'elm', 'vs_demo_2', 'vs_demo_3']
 yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in large_workflows]
 
 # Generate schemas for validation
@@ -79,7 +79,7 @@ def test_examples(yml_path_str: str, yml_path: Path) -> None:
     graph_nx = nx.DiGraph()
     graphdata = GraphData(str(yml_path))
     graph = GraphReps(graph_gv, graph_nx, graphdata)
-    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {},
+    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {}, {}, {},
                                                     tools_cwl, True, relative_run_path=True, testing=True)
     rose_tree = compiler_info.rose
     sub_node_data: NodeData = rose_tree.data
@@ -158,7 +158,7 @@ def test_cwl_embedding_independence(yml_path_str: str, yml_path: Path) -> None:
     graphdata = GraphData(str(yml_path))
     graph = GraphReps(graph_gv, graph_nx, graphdata)
     is_root = True
-    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {},
+    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {}, {}, {},
                                                     tools_cwl, is_root, relative_run_path=False, testing=True)
     rose_tree = compiler_info.rose
     node_data_lst: List[NodeData] = wic.utils.flatten_rose_tree(rose_tree)
@@ -187,7 +187,7 @@ def test_cwl_embedding_independence(yml_path_str: str, yml_path: Path) -> None:
         graph_fakeroot = GraphReps(graph_fakeroot_gv, graph_fakeroot_nx, graphdata_fakeroot)
         fake_root = True
         compiler_info_fakeroot = wic.compiler.compile_workflow(sub_yaml_forest.yaml_tree, get_args(str(yml_path)),
-            [], [graph_fakeroot], {}, {}, tools_cwl, fake_root, relative_run_path=False, testing=True)
+            [], [graph_fakeroot], {}, {}, {}, {}, tools_cwl, fake_root, relative_run_path=False, testing=True)
         sub_node_data_fakeroot: NodeData = compiler_info_fakeroot.rose.data
         sub_cwl_fakeroot = sub_node_data_fakeroot.compiled_cwl
 
@@ -226,6 +226,7 @@ def test_cwl_embedding_independence(yml_path_str: str, yml_path: Path) -> None:
         sub_graph_fakeroot_nx = sub_node_data_fakeroot.graph.networkx
         #assert isomorphism.faster_could_be_isomorphic(sub_graph_nx, sub_graph_fakeroot_nx)
         g_m = isomorphism.GraphMatcher(sub_graph_nx, sub_graph_fakeroot_nx)
+        print('is_isomorphic()?', yml_path_str, sub_name)
         assert g_m.is_isomorphic() # See top-level comment above!
 
 
@@ -259,7 +260,7 @@ def test_inline_subworkflows(yml_path_str: str, yml_path: Path) -> None:
     graph_nx = nx.DiGraph()
     graphdata = GraphData(str(yml_path))
     graph = GraphReps(graph_gv, graph_nx, graphdata)
-    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {},
+    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {}, {}, {},
                                                     tools_cwl, True, relative_run_path=True, testing=True)
     rose_tree = compiler_info.rose
     sub_node_data: NodeData = rose_tree.data
@@ -276,7 +277,7 @@ def test_inline_subworkflows(yml_path_str: str, yml_path: Path) -> None:
         inline_graphdata = GraphData(str(yml_path))
         inline_graph = GraphReps(inline_graph_gv, inline_graph_nx, inline_graphdata)
         inline_compiler_info = wic.compiler.compile_workflow(inline_yaml_tree, get_args(str(yml_path)),
-            [], [inline_graph], {}, {}, tools_cwl, True, relative_run_path=True, testing=True)
+            [], [inline_graph], {}, {}, {}, {}, tools_cwl, True, relative_run_path=True, testing=True)
         inline_rose_tree = inline_compiler_info.rose
         inline_sub_node_data: NodeData = inline_rose_tree.data
 
@@ -285,4 +286,5 @@ def test_inline_subworkflows(yml_path_str: str, yml_path: Path) -> None:
         sub_graph_fakeroot_nx = inline_sub_node_data.graph.networkx
         #assert isomorphism.faster_could_be_isomorphic(sub_graph_nx, sub_graph_fakeroot_nx)
         g_m = isomorphism.GraphMatcher(sub_graph_nx, sub_graph_fakeroot_nx)
+        print('is_isomorphic()?', yml_path_str, namespaces)
         assert g_m.is_isomorphic() # See top-level comment above!

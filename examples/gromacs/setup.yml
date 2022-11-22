@@ -1,37 +1,33 @@
-# if demo...
-#inputs:
-#  crd_path:
-#    type: File
-#    format:
-#    - edam:format_1476
-#    - edam:format_2033
-#  top_zip_path:
-#    type: File
-#    format:
-#    - edam:format_3987
+inputs:
+  crd_path:
+    type: File
+    format:
+    - edam:format_1476
+    - edam:format_2033
+  top_zip_path:
+    type: File
+    format:
+    - edam:format_3987
 
 steps:
 # - editconf:
 #     in:
-#       # if demo...
-#       #input_crd_path: ~crd_path
-#       input_crd_path: '*complex_vac.pdb'
+#       input_crd_path: ~crd_path
+#       #input_crd_path: '*complex_vac.pdb'
 #       config:
 #         box_type: cubic
 #         distance_to_molecule: 1.2
 - gmx_editconf:
     in:
-      # if demo...
-      #input_crd_path: ~crd_path
-      input_crd_path: '*complex_vac.pdb'
+      input_crd_path: ~crd_path
+      #input_crd_path: '*complex_vac.pdb'
       align_principal_axes: 0
       box_type: cubic
       distance_to_molecule: 1.2
 - solvate:
     in:
-      # if demo...
-      #input_top_zip_path: ~top_zip_path
-      input_top_zip_path: '*complex_vac.zip'
+      input_top_zip_path: ~top_zip_path
+      #input_top_zip_path: '*complex_vac.zip'
       output_crd_path: '&solvate.gro'
       output_top_zip_path: '&solvate.zip'
 - grompp:

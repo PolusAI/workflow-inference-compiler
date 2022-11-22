@@ -37,10 +37,9 @@ steps:
       docking_scores: '&docking_scores' # NOTE: Not a filename, just an explicit edge
       experimental_dGs: '&dGs' # NOTE: Not a filename, just an explicit edge
 - gen_topol_params.yml:
-    scatter: [gen_topol_params__step__1__convert_mol2___input_path] #[pdbqt_path]
+    scatter: [pdbqt_path]
 - stability.yml:
-    scatter: [stability__step__1__setup.yml___setup__step__1__gmx_editconf___input_crd_path,
-              stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path] #[crd_path, top_zip_path]
+    scatter: [crd_path, top_zip_path]
     scatterMethod: dotproduct
     in:
       nsteps: 10000
@@ -48,9 +47,7 @@ steps:
       temperature: 298.0
       pressure: 1.0
 - autodock_vina_rescore.yml:
-    scatter: [autodock_vina_rescore__step__1__python_script___input_pdb_path,
-              autodock_vina_rescore__step__4__python_script___input_pdb_path] #[input_pdb_path]
-    scatterMethod: dotproduct
+    scatter: [input_pdb_path]
 - scatter_plot:
     in:
       xs: '*dGs'
@@ -63,7 +60,7 @@ wic:
   steps:
     (1, setup_pdb.yml):
       wic:
-        inlineable: False
+        inlineable: False # Due to yml wic tag inlineing issue and ~pdb_id
         graphviz:
           label: Setup PDB
     (2, download_smiles_ligand_db.yml):
@@ -71,7 +68,7 @@ wic:
         inlineable: False
     (3, ligand_modeling_docking.yml):
       wic:
-        inlineable: False
+        inlineable: False # Due to yml wic tag inlineing issue and ~sdf_path
     (4, autodock_vina_filter):
       wic:
         graphviz:
@@ -81,7 +78,38 @@ wic:
         inlineable: False
     (6, stability.yml):
       wic:
-        inlineable: False
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
+        steps:
+          (1, setup.yml):
+            wic:
+              steps:
+                (4, genion):
+                  in:
+                    output_top_zip_path: '&genion_complex.zip'
+          (2, basic.yml):
+            wic:
+              steps:
+                (3, prod.yml):
+                  wic:
+                    steps:
+                      (2, grompp):
+                        in:
+                          input_top_zip_path: '*genion_complex.zip'
+                      (3, mdrun):
+                        in:
+                          output_crd_path: '&prod_complex.gro'
+                      (4, cwl_watcher_analysis.yml):
+                        wic:
+                          backend: complex
+          (3, analysis.yml):
+            wic:
+              steps:
+                (1, analysis_realtime.yml):
+                  wic:
+                    backend: complex
+                (2, analysis_final.yml):
+                  wic:
+                    backend: complex
     (7, autodock_vina_rescore.yml):
       wic:
         inlineable: False

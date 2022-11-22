@@ -72,7 +72,7 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
             if paths_ns_i == {}:
                 raise Exception(f'Error! namespace {plugin_ns} not found in yaml paths. Check yml_dirs.txt')
             if stem not in paths_ns_i:
-                msg = f'Error! {stem} not found in namespace {plugin_ns}.'
+                msg = f'Error! {stem} not found in namespace {plugin_ns} when attempting to read {step_id.stem}.yml'
                 if stem == 'in':
                     msg += f'\n(Check that you have properly indented the `in` tag in {step_id.stem})'
                 raise Exception(msg)
