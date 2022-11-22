@@ -1,5 +1,5 @@
 wic:
-  default_backend: complex # To simplify the demo
+  default_backend: protein
   backends:
     protein:
       steps:
@@ -52,14 +52,14 @@ wic:
                     config: '{"selection": "(group Protein) or (resname MOL)"}'
                 (2, gmx_image):
                   in:
-                    #input_crd_path: '*prod_complex.gro'
+                    input_crd_path: '*prod_complex.gro'
                     config:
                       fit_selection: (group_Protein)_or_(resname_MOL)
                       center_selection: (group_Protein)_or_(resname_MOL)
                       output_selection: (group_Protein)_or_(resname_MOL)
-                #(3, gmx_trjconv_str):
-                #  in:
-                #    input_crd_path: '*prod_complex.gro'
+                (3, gmx_trjconv_str):
+                  in:
+                    input_crd_path: '*prod_complex.gro'
   graphviz:
     label: Real-time Analysis
     #style: invis # Do NOT make this graph invisible, because 

@@ -7,6 +7,8 @@ steps:
       pdb_path: '&pdb.pdbqt'
       box_path: '&box.pdb'
       box_buffer: 20 # Angstroms
+      water_type: spce
+      forcefield: amber99sb-ildn
 - download_ligand_database:
     in:
       database: /NCIOpen.sdf
@@ -32,7 +34,7 @@ wic:
   steps:
     (1, setup_pdb.yml):
       wic:
-        inlineable: False # Due to yml wic tag inlineing issue
+        inlineable: False # Due to yml wic tag inlineing issue and ~pdb_id
     (3, extract_molecules_sdf):
       wic:
         graphviz:

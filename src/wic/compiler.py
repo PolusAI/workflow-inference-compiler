@@ -26,6 +26,8 @@ def compile_workflow(yaml_tree_ast: YamlTree,
                      subgraphs_: List[GraphReps],
                      explicit_edge_defs: ExplicitEdgeDefs,
                      explicit_edge_calls: ExplicitEdgeCalls,
+                     input_mapping: Dict[str, List[str]],
+                     output_mapping: Dict[str, str],
                      tools: Tools,
                      is_root: bool,
                      relative_run_path: bool,
@@ -55,6 +57,7 @@ def compile_workflow(yaml_tree_ast: YamlTree,
         subgraphs = copy.deepcopy(subgraphs_) # See comment below!
         compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs,
                                               explicit_edge_defs, explicit_edge_calls,
+                                              input_mapping, output_mapping,
                                               tools, is_root, relative_run_path, testing)
         node_data: NodeData = compiler_info.rose.data
         ast_modified = not yaml_tree.yml == node_data.yml
@@ -101,6 +104,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                      subgraphs: List[GraphReps],
                      explicit_edge_defs: ExplicitEdgeDefs,
                      explicit_edge_calls: ExplicitEdgeCalls,
+                     input_mapping: Dict[str, List[str]],
+                     output_mapping: Dict[str, str],
                      tools: Tools,
                      is_root: bool,
                      relative_run_path: bool,
@@ -168,6 +173,10 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     # Collect workflow input parameters
     inputs_workflow = {}
     inputs_file_workflow = {}
+
+    # Collect workflow input/output to workflow step input/output mappings
+    input_mapping_copy = copy.deepcopy(input_mapping)
+    output_mapping_copy = copy.deepcopy(output_mapping)
 
     # Collect the internal workflow output variables
     outputs_workflow = []
@@ -248,7 +257,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
             sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i],
                                                  subgraphs + [subgraph], explicit_edge_defs_copy,
-                                                 explicit_edge_calls_copy, tools, False, relative_run_path, testing)
+                                                 explicit_edge_calls_copy,
+                                                 input_mapping_copy, output_mapping_copy,
+                                                 tools, False, relative_run_path, testing)
 
             sub_rose_tree = sub_compiler_info.rose
             rose_tree_list.append(sub_rose_tree)
@@ -294,8 +305,16 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 input_namespaced = (f'{step_name_i}___{k}', val) # _{step_key}_input___{k}
                 inputs_namespaced_list.append(input_namespaced)
             inputs_namespaced = dict(inputs_namespaced_list)
-
             inputs_file_workflow.update(inputs_namespaced)
+
+            input_mapping_copy_namespaced = dict([(f'{step_name_i}___{k}', val) for k, val in
+                                                  sub_env_data.input_mapping.items() if k not in input_mapping])
+            input_mapping_copy.update(input_mapping_copy_namespaced)
+
+            output_mapping_copy_namespaced = dict([(f'{step_name_i}___{k}', val) for k, val in
+                                                   sub_env_data.output_mapping.items() if k not in output_mapping])
+            output_mapping_copy.update(output_mapping_copy_namespaced)
+
             vars_workflow_output_internal += sub_env_data.vars_workflow_output_internal
             explicit_edge_defs_copy.update(sub_env_data.explicit_edge_defs)
             explicit_edge_calls_copy.update(sub_env_data.explicit_edge_calls)
@@ -505,19 +524,28 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             if 'format' in in_tool[arg_key]:
                 in_format = in_tool[arg_key]['format']
                 in_dict['format'] = in_format
-            # if demo...
-            #print('step_key', step_key)
-            #print('arg_key', arg_key)
-            #print('arg_val', arg_val)
-            if 'setup_pdb.yml' == step_key and arg_key in ['pdb_path', 'box_path']:
-                arg_val['source'] = arg_val['source'][1:] # Remove &
-            if 'download_smiles_ligand_db.yml' == step_key and arg_key in ['output_txt_path']:
-                arg_val['source'] = arg_val['source'][1:] # Remove &
 
             if isinstance(arg_val, Dict) and arg_val['source'][0] == '~':
                 # NOTE: This is somewhat of a hack; it is useful for when
                 # inference fails and when you cannot make an explicit edge.
                 arg_val['source'] = arg_val['source'][1:]  # Remove ~
+
+                # Subworkflows which use workflow inputs: variables ~var cannot
+                # (yet) be inlined. Somehow, if they are not marked with
+                # inlineable: False, test_inline_subworkflows can still pass.
+                # This assertion will (correctly) cause such inlineing tests to fail.
+                if arg_val['source'] not in yaml_tree.get('inputs', {}):
+                    print("arg_val['source']", arg_val['source'])
+                    print("yaml_tree.get('inputs')", yaml_tree.get('inputs', {}))
+                assert arg_val['source'] in yaml_tree.get('inputs', {})
+
+                if arg_val['source'] in input_mapping_copy:
+                    input_mapping_copy[arg_val['source']].append(in_name)
+                else:
+                    input_mapping_copy[arg_val['source']] = [in_name]
+                # TODO: We have ~ syntax for input mapping; no notation for output mapping!
+                # For now, use nasty hack below.
+
                 steps[i][step_key]['in'][arg_key] = arg_val # Leave un-evaluated? or
                 """# Prepend the autogenerated step name
                 (step_name, out_name) = arg_val['source'].split('/')
@@ -620,6 +648,19 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                         raise Exception("Error! len(nss_call_tails) == 0! Please file a bug report!\n" +
                                         f'nss_def {nss_def}\n nss_call {nss_call}')
 
+                    arg_keys = [in_name] if in_name in input_mapping_copy else [arg_key]
+                    arg_keys = utils.get_input_mappings(input_mapping_copy, arg_keys,
+                                                        (arg_key in yaml_tree.get('inputs', {})))
+
+                    out_key_init = '___'.join(nss_def_init + [var])
+                    out_key = utils.get_output_mapping(output_mapping_copy, out_key_init)
+
+                    nss_def_embedded = out_key.split('___')[:-1]
+
+                    # NOTE: This if statement is unmotivated and probably masking some other bug, but it works.
+                    if out_key.startswith('___'.join(nss_def_init)):
+                        nss_def = nss_def_embedded
+
                     # Add an edge, but in a carefully chosen subgraph.
                     # If you add an edge whose head/tail is outside of the subgraph,
                     # graphviz may segfault! Moreover, even if graphviz doesn't
@@ -633,7 +674,21 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     graph_init = subgraphs[len(nss_def_inits)]
                     # Let's use regular blue for explicit edges.
                     # Use constraint=false ?
-                    utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
+                    for arg_key_ in arg_keys:
+                        # TODO: Double check that we can use the same graph_init for all edges.
+                        # Since input_mapping_copy really just factors edges through a single workflow input,
+                        # this should hopefully be correct.
+
+                        # NOTE: This if statement is unmotivated and probably masking some other bug, but it works.
+                        nss_call_embedded = arg_key_.split('___')[:-1]
+                        if arg_key_.startswith('___'.join(namespaces + [step_name_i])):
+                            nss_call = nss_call_embedded
+                        elif arg_key_.startswith(step_name_i):
+                            nss_call = namespaces + nss_call_embedded
+                        else:
+                            nss_call = namespaces + [step_name_i] + nss_call_embedded
+
+                        utils.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
             else:
                 # NOTE: See comment above about excluding cwl_watcher from
                 # explicit edge dereferences.
@@ -674,22 +729,6 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     graphdata.edges.append((input_node_name, step_node_name, {}))
 
         for arg_key in args_required:
-            # if demo...
-            if 'gen_topol_params.yml' == step_key and 'pdbqt_path' in steps[i][step_key].get('scatter', []):
-                steps[i][step_key]['scatter'] = ['gen_topol_params__step__1__convert_mol2___input_path']
-            # if 'stability.yml' == step_key and ['crd_path', 'top_zip_path'] == steps[i][step_key].get('scatter', []):
-            #     steps[i][step_key]['scatter'] = ['stability__step__1__setup.yml___setup__step__1__editconf___input_crd_path',
-            #                                      'stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path']
-            if 'stability.yml' == step_key and ['crd_path', 'top_zip_path'] == steps[i][step_key].get('scatter', []):
-                steps[i][step_key]['scatter'] = ['stability__step__1__setup.yml___setup__step__1__gmx_editconf___input_crd_path',
-                                                 'stability__step__1__setup.yml___setup__step__2__solvate___input_top_zip_path']
-            if 'assign_partial_charges.yml' == step_key and 'input_path' in steps[i][step_key].get('scatter', []):
-                steps[i][step_key]['scatter'] = ['assign_partial_charges__step__1__convert_mol2___input_path']
-            if 'autodock_vina_rescore.yml' == step_key and 'input_pdb_path' in steps[i][step_key].get('scatter', []):
-                steps[i][step_key]['scatter'] = ['autodock_vina_rescore__step__1__python_script___input_pdb_path',
-                                                 'autodock_vina_rescore__step__4__python_script___input_pdb_path']
-                steps[i][step_key]['scatterMethod'] = 'dotproduct'
-
             #print('arg_key', arg_key)
             in_name = f'{step_name_i}___{arg_key}'
             if arg_key in args_provided:
@@ -757,10 +796,11 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             else:
                 conversions: List[StepId] = []
                 in_name_in_inputs_file_workflow: bool = (in_name in inputs_file_workflow)
+                arg_key_in_yaml_tree_inputs: bool = (arg_key in yaml_tree.get('inputs', {}))
                 steps[i] = inference.perform_edge_inference(args, tools, tools_lst, steps_keys,
                     yaml_stem, i, steps, arg_key, graph, is_root, namespaces,
-                    vars_workflow_output_internal, inputs_workflow,
-                    in_name_in_inputs_file_workflow, conversions, wic_steps, testing)
+                    vars_workflow_output_internal, input_mapping_copy, output_mapping_copy, inputs_workflow, in_name,
+                    in_name_in_inputs_file_workflow, arg_key_in_yaml_tree_inputs, conversions, wic_steps, testing)
                 # NOTE: For now, perform_edge_inference mutably appends to
                 # inputs_workflow and vars_workflow_output_internal.
 
@@ -800,7 +840,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                                          explicit_edge_defs_copy2, explicit_edge_calls_copy2,
                                          graph, inputs_workflow, '')
                     rose_tree = RoseTree(node_data, rose_tree_list)
-                    env_data = EnvData(inputs_file_workflow, vars_workflow_output_internal,
+                    env_data = EnvData(input_mapping_copy, output_mapping_copy, inputs_file_workflow, vars_workflow_output_internal,
                                        explicit_edge_defs_copy, explicit_edge_calls_copy)
                     compiler_info = CompilerInfo(rose_tree, env_data)
                     #node_data_dummy = NodeData(None, None, yaml_tree_mod, None, None, None, None, None, None, None)
@@ -840,6 +880,11 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     # Add the provided workflow inputs to the workflow inputs from each step
     inputs_combined = {**yaml_tree.get('inputs', {}), **inputs_workflow}
     yaml_tree.update({'inputs': inputs_combined})
+
+    # NOTE: This is a nasty hack because we don't have any syntax for mapping workflow outputs.
+    for k, v in yaml_tree.get('outputs', {}).items():
+        # Assume the user has manually added the correct namespaced CWL dependency.
+        output_mapping_copy[k] = v['outputSource'].replace('/', '___')
 
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
@@ -902,7 +947,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                          explicit_edge_defs_copy2, explicit_edge_calls_copy2,
                          graph, inputs_workflow, step_name_1)
     rose_tree = RoseTree(node_data, rose_tree_list)
-    env_data = EnvData(inputs_file_workflow, vars_workflow_output_internal,
+    env_data = EnvData(input_mapping_copy, output_mapping_copy, inputs_file_workflow, vars_workflow_output_internal,
                        explicit_edge_defs_copy, explicit_edge_calls_copy)
     compiler_info = CompilerInfo(rose_tree, env_data)
     return compiler_info

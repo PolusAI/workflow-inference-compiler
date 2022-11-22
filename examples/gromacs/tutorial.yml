@@ -15,6 +15,7 @@ wic:
   steps:
     (2, stability.yml):
       wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
         steps:
           (2, basic.yml):
             wic:

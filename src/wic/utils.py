@@ -824,3 +824,71 @@ def parse_provenance_output_files_(obj: Any, parentdirs: str) -> List[Tuple[str,
         # Should we flatten?? This will lose the structure of 2D (and higher) array outputs.
         return [y for x in files for y in x]
     return []
+
+
+def get_input_mappings(input_mapping: Dict[str, List[str]], arg_keys: List[str],
+                       arg_key_in_yaml_tree_inputs: bool) -> List[str]:
+    """Gets all of the workflow step inputs / call sites that are mapped from the given workflow inputs.
+
+    Args:
+        input_mapping (Dict[str, List[str]]): Maps workflow inputs to workflow step inputs, recursively namespaced.
+        arg_keys (List[str]): A (singleton) list of root workflow inputs.
+        arg_key_in_yaml_tree_inputs (bool): Determines whether at least one level of recursion has been performed.
+
+    Returns:
+        List[str]: A list of the workflow step inputs / call sites, recursively namespaced.
+    """
+    #print('arg_keys', arg_keys)
+    # Since each workflow input can be used in many workflow steps, we
+    # need to (recursively) find all of the leaves of the mapping tree
+    # corresponding to the root arg_key/in_name. Since we already added all
+    # sub-input_mapping's (with namespacing) after each recursive call,
+    # this flattens the recursion into iteration here. The only trick is
+    # that we also need to remove the intermediate variables associated
+    # with subworkflow boundaries.
+    if not arg_key_in_yaml_tree_inputs:
+        done = False
+        while not done:
+            done = True
+            arg_keys_accum = []
+            for arg_key_ in arg_keys:
+                if arg_key_ in input_mapping:
+                    # Remove the intermediate variables associated with subworkflow boundaries.
+                    arg_key_init_namespaces = arg_key_.split('___')[:-1]
+                    temp = ['___'.join(arg_key_init_namespaces + [s]) for s in input_mapping[arg_key_]]
+                    arg_keys_accum.append(temp)
+                    done = False
+                else:
+                    arg_keys_accum.append([arg_key_])
+            arg_keys = [y for x in arg_keys_accum for y in x]
+            #print('arg_keys', arg_keys)
+
+    return arg_keys
+
+
+def get_output_mapping(output_mapping: Dict[str, str], out_key: str) -> str:
+    """Gets the workflow step output / return location that is mapped to the given workflow output.
+
+    Args:
+        output_mapping (Dict[str, str]): Maps workflow outputs to workflow step outputs, recursively namespaced.
+        out_key (str): The root workflow output.
+
+    Returns:
+        str: The workflow step output / return location, recursively namespaced.
+    """
+    #print('out_key', out_key)
+    # Similarly, we need to find the fixed-point of output_mapping.
+    # This is simpler since a workflow output can only come from one workflow step.
+    #if not out_key_in_yaml_tree_outputs:
+    done = False
+    while not done:
+        done = True
+        #out_key = f'{step_name_j}___{out_key}' # TODO: Check this
+        if out_key in output_mapping:
+            # Remove the intermediate variables associated with subworkflow boundaries.
+            out_key_init_namespaces = out_key.split('___')[:-1]
+            out_key = '___'.join(out_key_init_namespaces + [output_mapping[out_key]])
+            done = False
+        #print('out_key', out_key)
+
+    return out_key

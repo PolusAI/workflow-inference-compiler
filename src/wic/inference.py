@@ -22,8 +22,12 @@ def perform_edge_inference(args: argparse.Namespace,
                            is_root: bool,
                            namespaces: Namespaces,
                            vars_workflow_output_internal: InternalOutputs,
+                           input_mapping: Dict[str, List[str]],
+                           output_mapping: Dict[str, str],
                            inputs_workflow: WorkflowInputs,
+                           in_name: str,
                            in_name_in_inputs_file_workflow: bool,
+                           arg_key_in_yaml_tree_inputs: bool,
                            conversions: List[StepId],
                            wic_steps: Yaml,
                            testing: bool) -> Yaml:
@@ -46,9 +50,13 @@ def perform_edge_inference(args: argparse.Namespace,
         namespaces (Namespaces): Specifies the path in the AST of the current subworkflow
         vars_workflow_output_internal (InternalOutputs): Keeps track of output\n
         variables which are internal to the root workflow, but not necessarily to subworkflows.
+        input_mapping (Dict[str, List[str]]): Maps workflow inputs to workflow step inputs, recursively namespaced.
+        output_mapping (Dict[str, str]): Maps workflow outputs to workflow step outputs, recursively namespaced.
         inputs_workflow (WorkflowInputs): Keeps track of CWL inputs: variables for the current workflow.
+        in_name (str): The input name
         in_name_in_inputs_file_workflow (bool): Used to determine whether\n
         failure to find a match should be considered an error.
+        arg_key_in_yaml_tree_inputs (bool): Determines whether at least one level of recursion has been performed.
         conversions (List[StepId]): If exact inference fails, a list of possible file format conversions is stored here.
         wic_steps (Yaml): The metadata associated with the given workflow.
         testing: Used to disable some optional features which are unnecessary for testing.
@@ -211,22 +219,45 @@ def perform_edge_inference(args: argparse.Namespace,
             else:
                 vars_workflow_output_internal.append(f'{step_name_j}/{out_key}')
 
-            # Determine which head and tail node to use for the new edge
-            # First we need to extract the embedded namespaces
-            nss_embedded1 = out_key.split('___')[:-1]
-            nss_embedded2 = arg_key.split('___')[:-1]
-            nss1 = namespaces + [step_name_j] + nss_embedded1
-            nss2 = namespaces + [step_name_i] + nss_embedded2
-            # TODO: check this
-            out_key_no_namespace = out_key.split('___')[-1]
-            label = out_key_no_namespace if tool_j.cwl['class'] == 'Workflow' else out_key
-            utils.add_graph_edge(args, graph, nss1, nss2, label)
-
             #arg_val = {'source': f'{step_name_j}/{out_key}'}
             arg_val = f'{step_name_j}/{out_key}'
             arg_keyval = {arg_key: arg_val}
             steps_i = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
             #print(f'inference i {i} y arg_key {arg_key}')
+
+            arg_keys = [in_name] if in_name in input_mapping else [arg_key]
+            arg_keys = utils.get_input_mappings(input_mapping, arg_keys, arg_key_in_yaml_tree_inputs)
+
+            out_key = utils.get_output_mapping(output_mapping, out_key)
+
+            nss_embedded1 = out_key.split('___')[:-1]
+
+            # NOTE: This if statement is unmotivated and probably masking some other bug, but it works.
+            if out_key.startswith('___'.join(namespaces + [step_name_j])):
+                nss1 = nss_embedded1
+            elif out_key.startswith(step_name_j):
+                nss1 = namespaces + nss_embedded1
+            else:
+                nss1 = namespaces + [step_name_j] + nss_embedded1
+
+            for arg_key_ in arg_keys:
+                # Determine which head and tail node to use for the new edge
+                # First we need to extract the embedded namespaces
+                nss_embedded2 = arg_key_.split('___')[:-1]
+
+                # NOTE: This if statement is unmotivated and probably masking some other bug, but it works.
+                if arg_key_.startswith('___'.join(namespaces + [step_name_i])):
+                    nss2 = nss_embedded2
+                elif arg_key_.startswith(step_name_i):
+                    nss2 = namespaces + nss_embedded2
+                else:
+                    nss2 = namespaces + [step_name_i] + nss_embedded2
+
+                # TODO: check this
+                out_key_no_namespace = out_key.split('___')[-1]
+                label = out_key_no_namespace if tool_j.cwl['class'] == 'Workflow' else out_key
+                utils.add_graph_edge(args, graph, nss1, nss2, label)
+
             return steps_i  # Short circuit
 
         # Stop performing inference if the inference rule is 'break'

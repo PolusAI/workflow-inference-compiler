@@ -1,15 +1,14 @@
-# if demo...
-#inputs:
-#  input_path:
-#    type: File
-#    format:
-#    - edam:format_1476
-#    - edam:format_3814
+inputs:
+  input_path:
+    type: File
+    format:
+    - edam:format_1476
+    - edam:format_3814
 
 steps:
 - convert_mol2:
-#    in:
-#      input_path: '*ligand_min.sdf'
+    in:
+      input_path: ~input_path #'*ligand_min.sdf'
 #      output_mol2_path: '&ligand_min.mol2'
 # NOTE: If we directly convert from sdf to pdbqt, openbabel will NOT add
 # partial charges! We have to factor through mol2 format to trigger the

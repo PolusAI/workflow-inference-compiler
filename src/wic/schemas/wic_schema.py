@@ -318,7 +318,7 @@ def compile_workflow_generate_schema(yml_path_str: str, yml_path: Path,
     graph_nx = nx.DiGraph()
     graphdata = GraphData(str(yml_path))
     graph = GraphReps(graph_gv, graph_nx, graphdata)
-    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {},
+    compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {}, {}, {},
                                                     tools_cwl, True, relative_run_path=True, testing=True)
     rose_tree = compiler_info.rose
     sub_node_data: NodeData = rose_tree.data

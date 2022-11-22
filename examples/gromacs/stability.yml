@@ -7,24 +7,21 @@ inputs:
     type: float
   pressure:
     type: float
-# if demo...
-#inputs:
-#  crd_path:
-#    type: File
-#    format:
-#    - edam:format_1476
-#    - edam:format_2033
-#  top_zip_path:
-#    type: File
-#    format:
-#    - edam:format_3987
+  crd_path:
+    type: File
+    format:
+    - edam:format_1476
+    - edam:format_2033
+  top_zip_path:
+    type: File
+    format:
+    - edam:format_3987
 
 steps:
   - setup.yml:
-  # if demo...
-#      in:
-#        crd_path: ~crd_path
-#        top_zip_path: ~top_zip_path
+      in:
+        crd_path: ~crd_path
+        top_zip_path: ~top_zip_path
   - basic.yml:
       in:
         nsteps: ~nsteps

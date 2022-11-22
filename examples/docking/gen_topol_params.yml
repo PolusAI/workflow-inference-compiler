@@ -1,15 +1,13 @@
-# if demo...
-#inputs:
-#  pdbqt_path:
-#    type: File
-#    format:
-#    - edam:format_1476
+inputs:
+  pdbqt_path:
+    type: File
+    format:
+    - edam:format_1476
 
 steps:
 - convert_mol2:
-# if demo...
-    #in:
-    #  input_path: ~pdbqt_path
+    in:
+      input_path: ~pdbqt_path
 #      input_path: '*ligand.pdbqt'
 #      output_mol2_path: '&pose.mol2'
 - python3_mol2_to_mol2:

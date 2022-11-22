@@ -10,8 +10,12 @@ wic:
   graphviz:
     label: Docking + MD Stability Analysis
   steps:
+    (1, docking.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~sdf_path
     (2, stability.yml):
       wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
         steps:
           (2, basic.yml):
             wic:
