@@ -9,6 +9,7 @@ parser.add_argument('--input_txt_path', required=False) # Experimental data
 parser.add_argument('--docking_score_cutoff', type=float)
 parser.add_argument('--max_num_poses_per_ligand', type=int)
 parser.add_argument('--max_num_poses_total', type=int)
+parser.add_argument('--rescore', type=bool)
 args = parser.parse_args()
 
 input_log_path = args.input_log_path
@@ -58,29 +59,36 @@ mode |   affinity | dist from best mode
    8       -5.403      3.209      6.271
    9       -5.392      2.556      4.714
 """
+# If rescoring, the relevant line from each log file is of the form:
+"""Estimated Free Energy of Binding   : -8.659 (kcal/mol) [=(1)+(2)+(3)-(4)]"""
 
 scores: List[float] = []
 scores_all: List[List[float]] = []
-parsing = False
-for line in lines:
-    if line.startswith('-----+------------+----------+----------'):
-        scores = []
-        parsing = True
-        continue
+if args.rescore:
+    for line in lines:
+        if line.startswith('Estimated Free Energy of Binding'):
+            scores_all.append([float(line.split()[6])])
+else:
+    parsing = False
+    for line in lines:
+        if line.startswith('-----+------------+----------+----------'):
+            scores = []
+            parsing = True
+            continue
 
-    if parsing:
-        try:
-            strs = line.split()
-            mode_idx = int(strs[0])
-            floats = [float(x) for x in strs[1:]]
-            score = floats[0]
-            scores.append(score)
-        except Exception as e:
-            scores_all.append(scores)
-            parsing = False
+        if parsing:
+            try:
+                strs = line.split()
+                mode_idx = int(strs[0])
+                floats = [float(x) for x in strs[1:]]
+                score = floats[0]
+                scores.append(score)
+            except Exception as e:
+                scores_all.append(scores)
+                parsing = False
 
-if parsing: # When we reach end of file, we need to append one last time.
-    scores_all.append(scores)
+    if parsing: # When we reach end of file, we need to append one last time.
+        scores_all.append(scores)
 
 if args.input_txt_path: # If we have experimental data
     with open(args.input_txt_path, mode='r', encoding='utf-8') as f:

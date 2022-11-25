@@ -111,6 +111,17 @@ inputs:
       position: 6
       prefix: --input_txt_path
 
+  rescore:
+    label: Use True if autodock vina was run with --rescore
+    doc: |-
+      Use True if autodock vina was run with --rescore
+    type: string?
+    format:
+    - edam:format_2330
+    inputBinding:
+      position: 7
+      prefix: --rescore
+
   input_batch_pdbqt_path:
     label: Path to the input PDBQT ligands
     doc: |-
