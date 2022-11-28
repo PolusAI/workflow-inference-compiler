@@ -26,6 +26,12 @@ hints:
 
 requirements:
   InlineJavascriptRequirement: {}
+# InitialWorkDirRequirement is needed for --local_only, because vina writes out
+# the optimized geometry in the same directory as input_ligand_pdbqt_path,
+# which needs to be writeable.
+  InitialWorkDirRequirement:
+    listing:
+    - $(inputs.input_ligand_pdbqt_path)
 
 inputs:
   input_ligand_pdbqt_path:
@@ -76,13 +82,10 @@ inputs:
     inputBinding:
       prefix: --score_only
 
-# NOTE: This is only used so we can create explicit edges.
-# The scatter-related inference bugs are now sorted out, so this can probably be removed.
-  #output_batch_dir_path:
-  output_batch_pdbqt_path:
-    label: Path to the output PDBQT batch directory
+  output_ligand_pdbqt_path:
+    label: Path to the output PDBQT ligand
     doc: |-
-      Path to the output PDBQT batch directory
+      Path to the output PDBQT ligand
       Type: string
       File type: output
       Accepted formats: pdbqt
@@ -90,10 +93,6 @@ inputs:
     type: string?
     format:
     - edam:format_1476
-#    inputBinding:
-#      position: 4
-#      prefix: --dir
-#    default: .
 
   output_log_path:
     label: Path to the log file
@@ -117,7 +116,7 @@ inputs:
     - edam:format_2330
 
 outputs:
-  output_batch_pdbqt_path:
+  output_ligand_pdbqt_path:
     label: Path to the output PDBQT files
     doc: |-
       Path to the output PDBQT files
@@ -126,8 +125,15 @@ outputs:
       type: array
       items: File
     outputBinding:
-      #glob: $(inputs.output_batch_dir_path)/*.pdbqt
-      glob: ./*.pdbqt # Use ./* because leading *'s are reserved syntax for Yaml aliases.
+      glob: ./*_out.pdbqt # Use ./* because leading *'s are reserved syntax for Yaml aliases.
+      outputEval: |
+        ${
+          if (self.length > 0) { // if --local_only
+            return self;
+          } else { // if --score_only
+            return [inputs.input_ligand_pdbqt_path]
+          }
+        }
     format: edam:format_1476
 
   output_log_path:
