@@ -9,7 +9,7 @@ import graphviz
 import networkx as nx
 import yaml
 
-from . import ast, cli, compiler, inference, labshare, utils
+from . import ast, cli, compiler, inference, labshare, utils, utils_graphs
 from .schemas import wic_schema
 from .wic_types import Cwl, GraphData, GraphReps, Json, StepId, Tool, Tools, Yaml, YamlTree
 
@@ -64,7 +64,7 @@ def get_tools_cwl(cwl_dirs_file: Path) -> Tools:
             step_id = StepId(stem, plugin_ns)
             tools_cwl[step_id] = Tool(cwl_path_str, tool)
             #print(tool)
-            #utils.make_tool_dag(stem, (cwl_path_str, tool))
+            #utils_graphs.make_tool_dag(stem, (cwl_path_str, tool))
     return tools_cwl
 
 
@@ -116,7 +116,7 @@ def main() -> None:
 
     tools_cwl = get_tools_cwl(args.cwl_dirs_file)
     # This takes ~1 second but it is not really necessary.
-    #utils.make_plugins_dag(tools_cwl, args.graph_dark_theme)
+    #utils_graphs.make_plugins_dag(tools_cwl, args.graph_dark_theme)
     yml_paths = get_yml_paths(args.yml_dirs_file)
 
     # Perform initialization via mutating global variables (This is not ideal)

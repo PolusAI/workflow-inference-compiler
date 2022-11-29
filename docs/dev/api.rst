@@ -65,6 +65,10 @@ wic.utils_cwl
 ------------------------------------
 .. automodule:: wic.utils_cwl
 
+wic.utils_graphs
+------------------------------------
+.. automodule:: wic.utils_graphs
+
 wic.wic_types
 ------------------------------------
 .. automodule:: wic.wic_types

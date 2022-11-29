@@ -52,7 +52,7 @@ class GraphData():
                  edges: List[Tuple[str, str, Dict]] = [],
                  subgraphs: List[Any] = [],
                  ranksame: List[str] = []) -> None:
-        # NOTE: See comments in utils.flatten_graphdata() !!!
+        # NOTE: See comments in utils_graphs.flatten_graphdata() !!!
         self.name = name
         self.nodes = nodes
         self.edges = edges

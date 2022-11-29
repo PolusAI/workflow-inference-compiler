@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from . import utils, utils_cwl
+from . import utils, utils_cwl, utils_graphs
 from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
                         WorkflowInputs, Yaml)
 
@@ -250,7 +250,7 @@ def perform_edge_inference(args: argparse.Namespace,
                 # TODO: check this
                 out_key_no_namespace = out_key.split('___')[-1]
                 label = out_key_no_namespace if tool_j.cwl['class'] == 'Workflow' else out_key
-                utils.add_graph_edge(args, graph, nss1, nss2, label)
+                utils_graphs.add_graph_edge(args, graph, nss1, nss2, label)
 
             return steps_i  # Short circuit
 
