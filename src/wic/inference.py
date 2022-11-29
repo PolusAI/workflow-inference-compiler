@@ -74,11 +74,7 @@ def perform_edge_inference(args: argparse.Namespace,
     step_name_i = utils.step_name_str(yaml_stem, i, step_key)
 
     in_tool = tool_i.cwl['inputs']
-    in_type = in_tool[arg_key]['type']
-    if isinstance(in_type, str):
-        in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
-    in_type = utils_cwl.canonicalize_type(in_type)
-    in_dict = {'type': in_type}
+    in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key], True)
 
     if arg_key in steps[i][step_key].get('scatter', []):
         # Promote scattered input types to arrays
@@ -118,9 +114,7 @@ def perform_edge_inference(args: argparse.Namespace,
             #if inference_rule == 'continue':
             #    continue
 
-            out_type = out_tool[out_key]['type']
-            out_type = utils_cwl.canonicalize_type(out_type)
-            out_dict = {'type': out_type}
+            out_dict = utils_cwl.copy_cwl_IO_dict(out_tool[out_key])
 
             if 'scatter' in steps[j][steps_keys[j]]:
                 # Promote scattered output types to arrays

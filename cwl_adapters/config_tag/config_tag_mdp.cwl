@@ -41,9 +41,9 @@ inputs:
     type: float
 
   ref-p:
-    label: The nominal temperature
+    label: The nominal pressure
     doc: |-
-      The nominal temperature
+      The nominal pressure
     type: float
 
   output_config_string:

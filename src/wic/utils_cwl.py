@@ -221,4 +221,23 @@ def canonicalize_type(type_obj: Any) -> Any:
         if type_obj.get('type') == 'array':
             return {**type_obj, 'items': canonicalize_type(type_obj['items'])}
     return type_obj
-            
+
+
+def copy_cwl_IO_dict(io_dict: Dict, removeQ: bool = False) -> Dict:
+    """Copies the type, format, label, and doc entries. Does NOT copy inputBinding and outputBinding.
+
+    Args:
+        io_dict (Dict): A dictionary
+        removeQ (bool): Determines whether to remove question marks and thus make optional types required
+
+    Returns:
+        Dict: A copy of the dictionary.
+    """
+    io_type = io_dict['type']
+    if isinstance(io_type, str) and removeQ:
+        io_type = io_type.replace('?', '')  # Providing optional arguments makes them required
+    new_dict = {'type': canonicalize_type(io_type)}
+    for key in ['format', 'label', 'doc']:
+        if key in io_dict:
+            new_dict[key] = io_dict[key] # copy.deepcopy() ?
+    return new_dict

@@ -376,15 +376,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         else:
             steps[i] = {step_key: {'run': run_path}}
 
-        # TODO: Add label and doc tags
-
         # Generate intermediate file names between steps.
-        # The inputs for a given step need to come from either
-        # 1. the input.yaml file for the overall workflow (extract into separate yml file) or
-        # 2. the outputs from the previous steps (most recent first).
-        # If there isn't an exact match, remove input_* and output_* from the
-        # current step and previous steps, respectively, and then check again.
-        # If there still isn't an exact match, explicit renaming may be required.
         if 'in' not in steps[i][step_key]:
             steps[i][step_key]['in'] = {}
 
@@ -516,14 +508,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 steps[i][step_key]['in'][arg_key] = {'source': in_name}
                 continue
 
-            in_type = in_tool[arg_key]['type']
-            if isinstance(in_type, str):
-                in_type = in_type.replace('?', '')  # Providing optional arguments makes them required
-            in_type = utils_cwl.canonicalize_type(in_type)
-            in_dict = {'type': in_type}
-            if 'format' in in_tool[arg_key]:
-                in_format = in_tool[arg_key]['format']
-                in_dict['format'] = in_format
+            in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key], True)
 
             if isinstance(arg_val, Dict) and arg_val['source'][0] == '~':
                 # NOTE: This is somewhat of a hack; it is useful for when
@@ -538,6 +523,16 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     print("arg_val['source']", arg_val['source'])
                     print("yaml_tree.get('inputs')", yaml_tree.get('inputs', {}))
                 assert arg_val['source'] in yaml_tree.get('inputs', {})
+
+                inputs_key_dict = yaml_tree['inputs'][arg_val['source']]
+                if 'doc' in inputs_key_dict:
+                    inputs_key_dict['doc'] += '\\n' + in_dict.get('doc', '')
+                else:
+                    inputs_key_dict['doc'] = in_dict.get('doc', '')
+                if 'label' in inputs_key_dict:
+                    inputs_key_dict['label'] += '\\n' + in_dict.get('label', '')
+                else:
+                    inputs_key_dict['label'] = in_dict.get('label', '')
 
                 if arg_val['source'] in input_mapping_copy:
                     input_mapping_copy[arg_val['source']].append(in_name)
@@ -737,11 +732,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # We provided an explicit argument (but not an edge) in a subworkflow,
                 # and now we just need to pass it up to the root workflow.
                 #print('passing', in_name)
-                in_type = in_tool[arg_key]['type']
-                in_dict = {'type': in_type}
-                if 'format' in in_tool[arg_key]:
-                    in_format = in_tool[arg_key]['format']
-                    in_dict['format'] = in_format
+                in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key])
                 inputs_workflow.update({in_name: in_dict})
                 arg_keyval = {arg_key: in_name}
                 steps[i] = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
@@ -772,11 +763,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 more_recursion = yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0
                 if (nss_call_tails_stems == []) or more_recursion:
                     # i.e. (if 'dummy' value) or (if it is possible to do more recursion)
-                    in_type = in_tool[arg_key]['type']
-                    in_dict = {'type': in_type}
-                    if 'format' in in_tool[arg_key]:
-                        in_format = in_tool[arg_key]['format']
-                        in_dict['format'] = in_format
+                    in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key])
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = {'source': in_name}
                     # Store explicit edge call site info up through the recursion.
@@ -847,15 +834,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     #compiler_info_dummy = CompilerInfo(RoseTree(node_data_dummy, None), None)
                     return compiler_info
 
-        # Add CommandLineTool outputs tags to workflow out tags.
+        # Add CommandLineTool/Subworkflow outputs tags to workflow out tags.
         # Note: Add all output tags for now, but depending on config options,
         # not all output files will be generated. This may cause an error.
         out_keyvals = {}
         for out_key, out_dict in tool_i.cwl['outputs'].items():
-            if 'format' in out_dict:
-                out_keyvals[out_key] = {'type': out_dict['type'], 'format': out_dict['format']}
-            else:
-                out_keyvals[out_key] = {'type': out_dict['type']}
+            out_keyvals[out_key] = utils_cwl.copy_cwl_IO_dict(out_dict)
             #print(out_key, out_keyvals[out_key])
         if not out_keyvals: # FYI out_keyvals should never be {}
             print(f'Error! no outputs for step {step_key}')
