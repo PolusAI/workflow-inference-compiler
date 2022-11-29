@@ -106,7 +106,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     inputs = default_schema()
     inputs['properties'] = inputs_props
 
-    scatter_props = {'type': 'array', 'items': {'oneOf': [{'type': 'string', 'const': key} for key in inputs_props]}}
+    scatter_props = {'type': 'array', 'items': {'oneOf': [{**val, 'const': key} for key, val in inputs_props.items()]}}
     scatterMethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
 
     outputs_props: Json = {}
@@ -126,6 +126,8 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     outputs['properties'] = outputs_props
 
     step_props = default_schema()
+    step_props['title'] = cwl.get('label', '')
+    step_props['description'] = cwl.get('doc', '')
     step_props['properties'] = {'in': inputs,
                                 'out': outputs,
                                 'scatter': scatter_props,
@@ -137,8 +139,6 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     # (correctly) treats f'tools/{name}.json' as as uninterpreted string,
     # so instead of using name let's just use fake relative paths in ids.
     schema['$id'] = f'{id_prefix}/{name}.json'
-    schema['title'] = cwl.get('label', '')
-    schema['description'] = cwl.get('doc', '')
     step_name = name + '.yml' if id_prefix == 'workflows' else name
     schema['properties'] = {step_name: step_props}
     return schema
@@ -263,6 +263,7 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str]) -> Json:
     #schema['description'] = ''
     #schema['required'] = ['steps']
     schema['properties'] = {'wic': wic_tag_schema(), 'steps': steps,
+                            'label': {'type': 'string'}, 'doc': {'type': 'string'},
                             'inputs': inputs, 'outputs': outputs} # 'required': ['steps']
 
     return schema
