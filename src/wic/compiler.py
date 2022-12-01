@@ -660,16 +660,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     'cwl_watcher' in step_key and 'file_pattern' not in arg_key):
                     arg_val['source'] = arg_val['source'][1:] # Remove *, except for file_pattern
 
-                if isinstance(arg_val, str):
-                    arg_val_str = arg_val
-                elif isinstance(arg_val, Dict):
-                    arg_val_str = arg_val['source']
-                else:
-                    # TODO: This is simply to prevent uninitialized access below.
-                    # Figure out a better solution.
-                    arg_val_str = ''
 
-                if arg_val_str in steps[i][step_key].get('scatter', []):
+                if arg_key in steps[i][step_key].get('scatter', []) or (isinstance(arg_val, Dict) and 'valueFrom' in arg_val):
                     # Promote scattered input types to arrays
                     in_dict['type'] = {'type': 'array', 'items': in_dict['type']}
 
@@ -677,7 +669,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 in_dict = {**in_dict, 'value': arg_val}
                 inputs_file_workflow.update({in_name: in_dict})
                 new_val = {'source': in_name}
-                if arg_val_str in steps[i][step_key].get('scatter', []):
+                if isinstance(arg_val, Dict):
                     new_val = {**arg_val, **new_val}
                 steps[i][step_key]['in'][arg_key] = new_val
 

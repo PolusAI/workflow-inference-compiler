@@ -40,7 +40,11 @@ outputs:
         ${
           var config = {};
           config["pdb_code"] = inputs.pdb_id;
-          if (inputs.filter) {
+          if (inputs.filter == "False") {
+            config["filter"] = false;
+          } else if (inputs.filter == "None") {
+            config["filter"] = null;
+          } else if (inputs.filter) {
             config["filter"] = inputs.filter;
           }
           return JSON.stringify(config);
