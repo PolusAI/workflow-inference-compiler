@@ -122,7 +122,7 @@ inputs:
       position: 7
       prefix: --rescore
 
-  input_batch_pdbqt_path:
+  input_ligand_pdbqt_path:
     label: Path to the input PDBQT ligands
     doc: |-
       Path to the input PDBQT ligands
@@ -136,14 +136,14 @@ inputs:
     - edam:format_1476
 #    inputBinding:
 #      position: 7 # Since the type is File[], this means starting at this position.
-#      prefix: --input_batch_pdbqt_path
+#      prefix: --input_ligand_pdbqt_path
 
 # NOTE: This is only used so we can create explicit edges.
 # The scatter-related inference bugs are now sorted out, so this can probably be removed.
-  output_batch_pdbqt_path:
-    label: Path to the output PDBQT batch files
+  output_ligand_pdbqt_path:
+    label: Path to the output PDBQT ligand files
     doc: |-
-      Path to the output PDBQT batch files
+      Path to the output PDBQT ligand files
       Type: string
       File type: output
       Accepted formats: pdbqt
@@ -153,7 +153,33 @@ inputs:
     - edam:format_1476
 #    inputBinding:
 #      position: 7
-#      prefix: --output_batch_pdbqt_path
+#      prefix: --output_ligand_pdbqt_path
+    default: .
+
+  input_receptor_pdbqt_path:
+    label: Path to the input PDBQT receptors
+    doc: |-
+      Path to the input PDBQT receptors
+      Type: string
+      File type: input
+      Accepted formats: pdbqt
+      Example file: https://github.com/bioexcel/biobb_vs/raw/master/biobb_vs/test/data/vina/vina_ligand.pdbqt
+    type: {"type": "array", "items": {"type": "array", "items": "File"}}
+    #type: File[][] # Invalid syntax; [] syntactic sugar only works for 1D arrays.
+    format:
+    - edam:format_1476
+
+  output_receptor_pdbqt_path:
+    label: Path to the output PDBQT receptor files
+    doc: |-
+      Path to the output PDBQT receptor files
+      Type: string
+      File type: output
+      Accepted formats: pdbqt
+      Example file: https://github.com/bioexcel/biobb_vs/raw/master/biobb_vs/test/reference/vina/ref_output_vina.pdbqt
+    type: string
+    format:
+    - edam:format_1476
     default: .
 
   docking_scores:
@@ -183,16 +209,16 @@ inputs:
 outputs:
 # NOTE: If docking_score_cutoff is too negative and filters out all of the files,
 # you will get the following runtime error message:
-# ("Error collecting output for parameter 'output_batch_pdbqt_path': cwl_adapters/autodock_vina_filter.cwl:73:3: 'NoneType' object does not support item assignment", {})
-  output_batch_pdbqt_path:
+# ("Error collecting output for parameter 'output_ligand_pdbqt_path': cwl_adapters/autodock_vina_filter.cwl:73:3: 'NoneType' object does not support item assignment", {})
+  output_ligand_pdbqt_path:
     label: Path to the output PDBQT file
     doc: |-
       Path to the output PDBQT file
 # While 2D array inputs seem to be working, all of my attempts to output a 2D array using
 # outputEval have failed due to generating a stack trace in the cwltool python process:
-# ("Error collecting output for parameter 'output_batch_pdbqt_path': cwl_adapters/autodock_vina_filter.cwl:134:3: list indices must be integers or slices, not str", {})
-# I have even tried outputEval: $([[]]) and outputEval: $(inputs.output_batch_pdbqt_path)
-# Note that outputEval: $([]) and outputEval: $(inputs.output_batch_pdbqt_path[0]) with type: File[] works.
+# ("Error collecting output for parameter 'output_ligand_pdbqt_path': cwl_adapters/autodock_vina_filter.cwl:134:3: list indices must be integers or slices, not str", {})
+# I have even tried outputEval: $([[]]) and outputEval: $(inputs.output_ligand_pdbqt_path)
+# Note that outputEval: $([]) and outputEval: $(inputs.output_ligand_pdbqt_path[0]) with type: File[] works.
     #type: {"type": "array", "items": {"type": "array", "items": "File"}}
     #type: File[][] # See above
     type: File[]
@@ -216,7 +242,31 @@ outputs:
             //var docking_score = parseFloat(indices[0]); // See below
             var mol_idx = parseInt(indices[1]);
             var mode_idx = parseInt(indices[2]);
-            var file = inputs.input_batch_pdbqt_path[mol_idx][mode_idx];
+            var file = inputs.input_ligand_pdbqt_path[mol_idx][mode_idx];
+            files.push(file);
+          }
+          return files;
+        }
+    format: edam:format_1476
+
+  output_receptor_pdbqt_path:
+    label: Path to the output PDBQT file
+    doc: |-
+      Path to the output PDBQT file
+    type: File[]
+    outputBinding:
+      glob: indices.txt # This determines what binds to self[0]
+      loadContents: true # If true, this additionally binds self[0].contents
+      outputEval: |
+        ${
+          var lines = self[0].contents.split("\n");
+          var files = []; // In this case, flatten the 2D nested array into a 1D array
+          for (var i = 0; i < lines.length; i++) {
+            var indices = lines[i].split(" ");
+            //var docking_score = parseFloat(indices[0]); // See below
+            var mol_idx = parseInt(indices[1]);
+            var mode_idx = parseInt(indices[2]);
+            var file = inputs.input_receptor_pdbqt_path[mol_idx][mode_idx];
             files.push(file);
           }
           return files;

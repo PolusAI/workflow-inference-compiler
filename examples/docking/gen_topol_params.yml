@@ -1,13 +1,20 @@
 inputs:
-  pdbqt_path:
+  input_ligand_pdbqt_path:
     type: File
     format:
     - edam:format_1476
-
+  input_receptor_pdb_path:
+    type: File
+    format:
+    - edam:format_1476
+  input_top_zip_path:
+    type: File
+    format:
+    - edam:format_3987
 steps:
 - convert_mol2:
     in:
-      input_path: ~pdbqt_path
+      input_path: ~input_ligand_pdbqt_path
 #      input_path: '*ligand.pdbqt'
 #      output_mol2_path: '&pose.mol2'
 - python3_mol2_to_mol2:
@@ -53,11 +60,11 @@ steps:
 - append_ligand:
     in:
 #      input_itp_path: '*ligand_GMX.itp'
-      input_top_zip_path: '*receptor.zip'
+      input_top_zip_path: ~input_top_zip_path #'*receptor.zip'
       output_top_zip_path: '&complex_vac.zip'
 - cat_pdb:
     in:
-      input_structure1: '*receptor_gro.pdb' # '*receptor_hydrogens.pdb'
+      input_structure1: ~input_receptor_pdb_path # '*receptor_hydrogens.pdb'
       input_structure2: '*pose_ligand.pdb'
       output_structure_path: '&complex_vac.pdb'
 

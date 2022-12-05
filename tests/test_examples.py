@@ -43,7 +43,7 @@ yml_paths_tuples = [(yml_path_str, yml_path)
 # Due to the computational complexity of the graph isomorphism problem, we
 # need to manually exclude large workflows.
 # See https://en.wikipedia.org/wiki/Graph_isomorphism_problem
-large_workflows = ['dsb', 'dsb1', 'elm', 'vs_demo_2', 'vs_demo_3']
+large_workflows = ['dsb', 'dsb1', 'elm', 'vs_demo_2', 'vs_demo_3', 'vs_demo_4']
 yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in large_workflows]
 
 # Generate schemas for validation
