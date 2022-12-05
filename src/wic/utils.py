@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from . import auto_gen_header
-from .wic_types import (ExplicitEdgeCalls, Namespaces, NodeData, RoseTree, StepId, Yaml, YamlForest, YamlTree)
+from .wic_types import (ExplicitEdgeCalls, Namespaces, NodeData, RoseTree, StepId, Json, Yaml, YamlForest, YamlTree)
 
 
 def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
@@ -563,19 +563,17 @@ def provenance_list_to_tree(files: List[Tuple[str, str, str]]) -> Dict:
     return tree
 
 
-def parse_provenance_output_files(output_json_file: Path) -> List[Tuple[str, str, str]]:
+def parse_provenance_output_files(output_json: Json) -> List[Tuple[str, str, str]]:
     """Parses the primary workflow provenance JSON object.
 
     Args:
-        output_json_file (Path): The path to the provenance JSON object file.
+        output_json (Json): The JSON results object, containing the metadata for all output files.
 
     Returns:
         List[Tuple[str, str, str]]: A List of (location, parentdirs, basename) for each output file.
     """
-    with open(output_json_file, mode='r', encoding='utf-8') as f:
-        output_dict = json.loads(f.read())
     files = []
-    for namespaced_output_name, obj in output_dict.items():
+    for namespaced_output_name, obj in output_json.items():
         files.append(parse_provenance_output_files_(obj, namespaced_output_name))
     return [y for x in files for y in x]
 

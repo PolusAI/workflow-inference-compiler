@@ -41,7 +41,7 @@ We are using the pytest-cov code coverage plugin to make sure our tests are exer
 
 ## CI/CD
 
-Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `mypy src/ tests/`, `pylint src/ tests/`, and `pytest --cov`. Before pushing, please run `pytest --cov -m 'not slow'` or preferably the full `pytest --cov`.
+Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `mypy --no-incremental src/ tests/`, `pylint src/ tests/`, and `pytest --cov --workers 4`. Before pushing, please run `pytest --cov --workers 4 -m 'not slow'` or preferably the full `pytest --cov --workers 4`.
 
 ## Linting
 

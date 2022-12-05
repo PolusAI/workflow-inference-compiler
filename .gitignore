@@ -16,4 +16,5 @@ docs/_build/
 *_absolute.txt
 gromacs_mdp.html
 NCI*
+error_*.txt
 validation_*.txt

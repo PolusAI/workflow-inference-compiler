@@ -84,9 +84,10 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
         print('Did your workflow finish executing?')
         return HBox()
 
-    files = utils.parse_provenance_output_files(output_json_file)
     with open(output_json_file, mode='r', encoding='utf-8') as f:
-        output_dict = json.loads(f.read())
+        output_json = json.loads(f.read())
+
+    files = utils.parse_provenance_output_files(output_json)
     prov_tree = utils.provenance_list_to_tree(files)
     #import yaml
     #print(yaml.dump(prov_tree))
