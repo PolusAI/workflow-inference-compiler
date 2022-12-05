@@ -1,0 +1,60 @@
+inputs:
+  input_pdb_path:
+    type: File
+    format:
+    - edam:format_1476
+  input_sdf_path:
+    type: File
+    format:
+    - edam:format_3814
+
+steps:
+- convert_mol2:
+    in:
+      input_path: ~input_sdf_path
+
+- convert_pdbqt:
+    in:
+      output_pdb_path: '&mol_prod.pdbqt'
+
+# remove waters, then assigns partial charges to the protein
+- pdb4amber_run:
+    in:
+      input_pdb_path: ~input_pdb_path
+      output_pdb_path: '&pdbbind_pdb4amber.pdb'
+      config:
+        remove_waters: True
+        remove_hydrogen: True
+
+- convert_mol2:
+    in:
+      input_path: '*pdbbind_pdb4amber.pdb'
+
+- convert_pdbqt:
+    in:
+      output_pdb_path: '&receptor_prod.pdbqt'
+      arg1: -xr # Receptor needs to be rigid
+wic:
+  graphviz:
+    label: Assign Partial\nCharges
+  steps:
+    (1, convert_mol2):
+      wic:
+        graphviz:
+          label: Assign Partial Charges
+    (2, convert_pdbqt):
+      wic:
+        graphviz:
+          label: Convert to\npdbqt format
+    (3, pdb4amber_run):
+      wic:
+        graphviz:
+          label: Fix Residue Names\n(pdb4amber)
+    (4, convert_mol2):
+      wic:
+        graphviz:
+          label: Assign Partial Charges
+    (5, convert_pdbqt):
+      wic:
+        graphviz:
+          label: Convert to\npdbqt format

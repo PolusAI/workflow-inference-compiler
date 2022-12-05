@@ -1,9 +1,12 @@
 steps:
-- setup_pdb.yml:
+- download_pdb.yml:
     in:
       #pdb_id: 1r4l # ACE2
       #pdb_id: 1ntp # trypsin
       pdb_id: 1uao # chignolin (for speed)
+- setup_pdb.yml:
+    in:
+      input_pdb_path: '*protein.pdb'
       pdb_path: '&pdb.pdbqt'
       box_path: '&box.pdb'
       box_buffer: 20 # Angstroms

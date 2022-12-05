@@ -3,7 +3,6 @@ inputs:
     type: File
     format:
     - edam:format_3814
-
 steps:
 - docking.yml:
     in:
