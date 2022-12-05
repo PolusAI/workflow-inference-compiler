@@ -65,7 +65,10 @@ jobs:
       working-directory: ${{github.workspace}}
       # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
       # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
-      run: mypy src/ tests/
+      # NOTE: We need to use --no-incremental because there is a bug in mypy.
+      # This bug most often occurs when using ruamel library.
+      # See https://github.com/python/mypy/issues/12664
+      run: mypy --no-incremental src/ tests/
 
     - name: Run PyLint
       working-directory: ${{github.workspace}}
