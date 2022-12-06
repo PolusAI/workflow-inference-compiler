@@ -59,7 +59,7 @@ def biobb_selection_schema() -> Json:
     """
     # See https://biobb-analysis.readthedocs.io/en/latest/gromacs.html#module-gromacs.gmx_rms
     # See https://biobb-analysis.readthedocs.io/en/latest/gromacs.html#module-gromacs.gmx_rgyr
-    xvg = {'type': 'str', 'enum': ['xmgrace', 'xmgr', 'none'], 'description': '(“none”) XVG plot formatting.'}
+    xvg = {'type': 'string', 'enum': ['xmgrace', 'xmgr', 'none'], 'description': '(“none”) XVG plot formatting.'}
 
     groups_schemas = []
     for group, desc in gromacs_selection_groups().items():
@@ -91,7 +91,7 @@ def biobb_gmx_energy_schema() -> Json:
         Json: A schema for gromacs gmx_energy options.
     """
     # See https://biobb-analysis.readthedocs.io/en/latest/gromacs.html#module-gromacs.gmx_energy
-    xvg = {'type': 'str', 'enum': ['xmgrace', 'xmgr', 'none'], 'description': '(“none”) XVG plot formatting.'}
+    xvg = {'type': 'string', 'enum': ['xmgrace', 'xmgr', 'none'], 'description': '(“none”) XVG plot formatting.'}
     # TODO: Check this list; the documentation appears to have typos...
     terms_list = ['Angle', 'Proper-Dih.', 'Improper-Dih.', 'LJ-14', 'Coulomb-14',
         'LJ-(SR)', 'Coulomb-(SR)', 'Coul.-recip.', 'Position-Rest.', 'Potential',
@@ -102,8 +102,8 @@ def biobb_gmx_energy_schema() -> Json:
         'Pres-YZ', 'Pres-ZX', 'Pres-ZY', 'Pres-ZZ', 'Surf*SurfTen', 'Box-Vel-XX',
         'Box-Vel-YY', 'Box-Vel-ZZ', 'Mu-X', 'Mu-Y', 'Mu-Z', 'T-Protein',
         'T-non-Protein', 'Lamb-Protein', 'Lamb-non-Protein']
-    terms_schemas = [{'type': 'string', 'const': t} for t in terms_list]
-    terms = {'type': 'array', 'items': {'oneOf': terms_schemas}, 'description': '([“Potential”]) Energy terms.'}
+    terms_schema = {'type': 'string', 'enum': terms_list}
+    terms = {'type': 'array', 'items': terms_schema, 'description': '([“Potential”]) Energy terms.'}
 
     schema = default_schema()
     schema['properties'] = {'xvg': xvg, 'terms': terms,
@@ -118,7 +118,7 @@ def biobb_genion_schema() -> Json:
         Json: A schema for gromacs genion options.
     """
     # See https://biobb-md.readthedocs.io/en/latest/gromacs.html#module-gromacs.genion
-    replaced_group = {'type': 'str', 'description': '(“SOL”) Group of molecules that will be replaced by the solvent.'}
+    replaced_group = {'type': 'string', 'description': '(“SOL”) Group of molecules that will be replaced by the solvent.'}
     neutral = {'type': 'boolean', 'description': '(False) Neutralize the charge of the system.'}
     concentration = {'type': 'number', 'description': '(0.05) [0~10|0.01] Concentration of the ions in (mol/liter).'}
     seed = {'type': 'number', 'description': '(1993) Seed for random number generator.'}
@@ -162,7 +162,7 @@ def biobb_editconf_schema() -> Json:
     dodecahedron (rhombic dodecahedron),
     octahedron (truncated octahedron)."""
     box_type = {'type': 'string', 'enum': box_vals, 'description': desc}
-    center_molecule = {'type': 'bolean', 'description': '(True) Center molecule in the box.'}
+    center_molecule = {'type': 'boolean', 'description': '(True) Center molecule in the box.'}
 
     schema = default_schema()
     schema['properties'] = {'distance_to_molecule': distance_to_molecule,

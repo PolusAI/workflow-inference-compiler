@@ -161,7 +161,7 @@ def main() -> None:
 
         # Now that we compiled all of the subworkflows once with the permissive/weak schema,
         # compile the root yml workflow again with the restrictive/strict schema.
-        validator = wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=False)
+        validator = wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)
 
     if args.generate_schemas_only:
         print('Finished generating schemas. Exiting.')
