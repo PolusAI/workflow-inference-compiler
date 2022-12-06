@@ -11,7 +11,7 @@ from jsonschema import RefResolver, Draft202012Validator
 import yaml
 
 import wic
-from wic import ast, cli, compiler
+from wic import ast, cli, compiler, utils_cwl
 from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree
 from ..wic_types import Json, Tools
 from .biobb import config_schemas
@@ -63,6 +63,88 @@ def named_null_schema(name: str) -> Json:
     return schema
 
 
+def cwl_type_to_jsonschema_type_schema(type_obj: Json) -> Json:
+    """Converts a canonicalized CWL type into the equivalent jsonschema type schema, if possible.
+
+    Args:
+        type_obj (Json): A canonical CWL type object
+
+    Returns:
+        Json: A JSON type schema corresponding to type_obj if valid else None
+    """
+    jsontype = cwl_type_to_jsonschema_type(type_obj)
+    if jsontype is not None:
+        if isinstance(jsontype, str) or isinstance(jsontype, List):
+            return {'type': jsontype}
+    return jsontype
+
+
+def cwl_type_to_jsonschema_type(type_obj: Json) -> Json:
+    """Converts a canonicalized CWL type into the equivalent jsonschema type schema, if possible.
+
+    Args:
+        type_obj (Json): A canonical CWL type object
+
+    Returns:
+        Json: A JSON type schema corresponding to type_obj if valid else None
+    """
+    if isinstance(type_obj, str):
+        # Obviously ignore empty types
+        if type_obj == '':
+            return None
+        # The 'null' type is valid; it does not indicate an error.
+        if type_obj == 'null':
+            return 'null'
+        # There are only two numeric types in json
+        if type_obj == 'int' or type_obj == 'long':
+            return 'integer'
+        if type_obj == 'float' or type_obj == 'double':
+            return 'number'
+        # Rename common abbreviations
+        if type_obj == 'bool':
+            return 'boolean'
+        if type_obj == 'str':
+            return 'string'
+        # CWL suports an Any type; map this to the empty wildcard {} schema
+        if type_obj == 'Any':
+            return {}
+        # json does not have any File or Directory types
+        if type_obj == 'File':
+            return None
+        if type_obj == 'Directory':
+            return None
+        if type_obj == 'WritableFile':
+            return None
+        if type_obj == 'WritableDirectory':
+            return None
+
+    if isinstance(type_obj, Dict):
+        if type_obj.get('type') == 'array' and 'items' in type_obj:
+            items = cwl_type_to_jsonschema_type(type_obj['items'])
+            if items is None:
+                return None # Propagate any type failures
+            if isinstance(type_obj['items'], str):
+                # Wrap primitive strings in {'type': ...}
+                return {**type_obj, 'items': {'type': items}}
+            return {**type_obj, 'items': items}
+        # TODO: Other cases?
+
+    if isinstance(type_obj, List):
+        items = [cwl_type_to_jsonschema_type(item) for item in type_obj]
+        if any([item is None for item in items]):
+            return None # Propagate any type failures
+        # See https://cswr.github.io/JsonSchema/spec/multiple_types/
+        # In a list, if some of the types are themselves arrays or objects,
+        # we need to replace them with "array" and "object". This loses
+        # information, but that's the specification, so...
+        items = ['array' if isinstance(item, Dict) and item.get('type', '') == 'array' else item for item in items]
+        items = ['object' if isinstance(item, Dict) and item.get('type', '') == 'object' else item for item in items]
+        return items
+
+    # TODO: Support CWL records
+    return type_obj
+
+
 def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     """Generates a schema (including documentation) based on the inputs of a CWL CommandLineTool or Workflow.
 
@@ -77,26 +159,25 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     inputs_props: Json = {}
     #required = []
     for key, val in cwl['inputs'].items():
-        inputs_props[key] = {}
-        # Initialize special cases
-        if key == 'config':
-            config_schema = config_schemas.get(name, {'type': 'object'}) # See comment at the bottom of biobb.py
-            inputs_props[key] = {'oneOf': [{'type': 'string'}, config_schema]}
+        metadata = {'title': val.get('label', ''), 'description': val.get('doc', '')}
 
-        inputs_props[key]['title'] = val.get('label', '')
-        inputs_props[key]['description'] = val.get('doc', '')
-
-        valtype = val.get('type', '')
         # Determine required keys
-        #if key == 'config' or not ('?' in valtype or 'default' in val):
+        #if key == 'config' or not ('?' in cwltype or 'default' in val):
         #    required.append(key)
 
+        # Handle special cases
+        if key == 'config' and name in config_schemas:
+            inputs_props[key] = {'oneOf': [{'type': 'string', **metadata},
+                                           {**config_schemas[name], **metadata}]}
+            continue
+
         # Add type information, with exceptions
-        if isinstance(valtype, str):
-            valtype = valtype.replace('?', '')
-        if (not (valtype in ['', 'File']) and # Json does not have a File type
-            not (key == 'config') and name in config_schemas):  # Exclude config schemas
-            inputs_props[key]['type'] = valtype
+        cwltype = utils_cwl.canonicalize_type(val.get('type', ''))
+        jsontype = cwl_type_to_jsonschema_type_schema(cwltype)
+        if jsontype:
+            inputs_props[key] = {'oneOf': [{'type': 'string', **metadata}, {**jsontype, **metadata}]}
+        else:
+            inputs_props[key] = {'type': 'string', **metadata}
 
     # Do not mark properties which are required for CWL as required for yml,
     # because the whole point of inference is that we shouldn't have to!
@@ -111,16 +192,15 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
 
     outputs_props: Json = {}
     for key, val in cwl['outputs'].items():
-        outputs_props[key] = {}
-        outputs_props[key]['title'] = val.get('label', '')
-        outputs_props[key]['description'] = val.get('doc', '')
+        metadata = {'title': val.get('label', ''), 'description': val.get('doc', '')}
 
-        valtype = val.get('type', '')
         # Add type information, with exceptions
-        #if isinstance(valtype, str):
-        #    valtype = valtype.replace('?', '')
-        if not (valtype in ['', 'File']): # Json does not have a File type
-            outputs_props[key]['type'] = valtype
+        cwltype = utils_cwl.canonicalize_type(val.get('type', ''))
+        jsontype = cwl_type_to_jsonschema_type_schema(cwltype)
+        if jsontype:
+            outputs_props[key] = {'oneOf': [{'type': 'string', **metadata}, {**jsontype, **metadata}]}
+        else:
+            outputs_props[key] = {'type': 'string', **metadata}
 
     outputs = default_schema()
     outputs['properties'] = outputs_props
@@ -219,18 +299,27 @@ def wic_tag_schema() -> Json:
     return schema
 
 
-def wic_main_schema(tools_cwl: Tools, yml_stems: List[str]) -> Json:
+def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[str, Json]) -> Json:
     """The main schema which is used to validate yml files.
 
     Args:
         tools_cwl (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         yml_stems (List[str]): The names of the yml workflow definitions found using get_yml_paths()
+        schema_store (Dict[str, Json]): A global mapping between ids and schemas
 
     Returns:
         Json: The main schema which is used to validate yml files.
     """
-    tools_schemas: List[Json] = [{'oneOf': [{'$ref': f'tools/{step_id.stem}.json'},
-                                            named_null_schema(step_id.stem)]} for step_id in tools_cwl]
+    # NOTE: As mentioned below, using $ref's with external schema files
+    # (coincidentally?) works with the VSCode YAML extension, and for the
+    # jsonschema library we can supply an explicit schemastore. The API of the
+    # hypothesis-jsonschema library, however, only takes a schema. So we either
+    # need to bundle the external file contents into wic.json (using $def's),
+    # or (since there is only one call site per file) simply inline the contents.
+    tools_schemas: List[Json] = [{'oneOf': [schema_store.get(f'tools/{step_id.stem}.json', {'$ref': f'tools/{step_id.stem}.json'}),
+                                            named_null_schema(step_id.stem)]} for step_id in tools_cwl if not step_id.stem == 'python_script']
+#    tools_schemas: List[Json] = [{'oneOf': [{'$ref': f'tools/{step_id.stem}.json'},
+#                                            named_null_schema(step_id.stem)]} for step_id in tools_cwl]
     # NOTE: See comment in get_validator(). Nonetheless, the vscode YAML extension
     # appears to be resolving ids w.r.t. relative local paths. jsonschema
     # (correctly) treats f'tools/{name}.json' as an uninterpreted string,
@@ -238,8 +327,10 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str]) -> Json:
 
     # NOTE: We could/should re-validate after every AST modification. This will
     # require substantial code changes, so let's not worry about it for now.
-    yml_schemas: List[Json] = [{'oneOf': [{'$ref': f'workflows/{yml_stem}.json'},
+    yml_schemas: List[Json] = [{'oneOf': [schema_store.get(f'workflows/{yml_stem}.json', {'$ref': f'workflows/{yml_stem}.json'}),
                                           named_null_schema(f'{yml_stem}.yml')]} for yml_stem in yml_stems]
+#    yml_schemas: List[Json] = [{'oneOf': [{'$ref': f'workflows/{yml_stem}.json'},
+#                                          named_null_schema(f'{yml_stem}.yml')]} for yml_stem in yml_stems]
 
     steps: Json = {}
     steps['type'] = 'array'
@@ -265,6 +356,12 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str]) -> Json:
     schema['properties'] = {'wic': wic_tag_schema(), 'steps': steps,
                             'label': {'type': 'string'}, 'doc': {'type': 'string'},
                             'inputs': inputs, 'outputs': outputs} # 'required': ['steps']
+
+    # https://json-schema.org/understanding-json-schema/structuring.html#bundling
+    #import copy
+    #schema['$defs'] = copy.deepcopy(schema_store)
+    # Without deepcopy, "ValueError: Circular reference detected"
+    # "f.write(json.dumps(schema, indent=2))"
 
     return schema
 
@@ -327,8 +424,8 @@ def compile_workflow_generate_schema(yml_path_str: str, yml_path: Path,
     #wic.utils.write_to_disk(rose_tree, Path('autogenerated/'), relative_run_path=True)
     schema = cwl_schema(step_id.stem, sub_node_data.compiled_cwl, 'workflows')
 
-    with open(f'autogenerated/schemas/workflows/{step_id.stem}.json', mode='w', encoding='utf-8') as f:
-        f.write(json.dumps(schema, indent=2))
+    #with open(f'autogenerated/schemas/workflows/{step_id.stem}.json', mode='w', encoding='utf-8') as f:
+    #    f.write(json.dumps(schema, indent=2))
 
     return schema
 
@@ -349,17 +446,17 @@ def get_validator(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[str
     for step_id, tool in tools_cwl.items():
         schema_tool = cwl_schema(step_id.stem, tool.cwl, 'tools')
         schema_store[schema_tool['$id']] = schema_tool
-        if write_to_disk:
-            with open(f'autogenerated/schemas/tools/{step_id.stem}.json', mode='w', encoding='utf-8') as f:
-                f.write(json.dumps(schema_tool, indent=2))
+        #if write_to_disk:
+        #    with open(f'autogenerated/schemas/tools/{step_id.stem}.json', mode='w', encoding='utf-8') as f:
+        #        f.write(json.dumps(schema_tool, indent=2))
 
     # Add temporary placeholders to the schema_store so we don't get
     # "jsonschema.exceptions.RefResolutionError: unknown url type: 'workflows/*.json'"
     for yml_stem in yml_stems:
-        if yml_stem not in schema_store:
+        if f'workflows/{yml_stem}.json' not in schema_store:
             schema_store[f'workflows/{yml_stem}.json'] = {}
 
-    schema = wic_main_schema(tools_cwl, yml_stems)
+    schema = wic_main_schema(tools_cwl, yml_stems, schema_store)
     schema_store[schema['$id']] = schema
     schema_store['wic_tag'] = wic_tag_schema()
     if write_to_disk:
@@ -376,6 +473,10 @@ def get_validator(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[str
     messages and fail in less obvious or consistent ways.'
     """
     # i.e. This should match 'https://json-schema.org/draft/2020-12/schema'
+    # NOTE: If you get nasty errors while developing the schema such as:
+    # "jsonschema.exceptions.SchemaError: ... is not valid under any of the given schemas"
+    # try temporarily commmenting this line out to generate the schema anyway.
+    # Then, in any yml file, the very first line should show a "schema stack trace"
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, resolver=resolver)
     return validator
