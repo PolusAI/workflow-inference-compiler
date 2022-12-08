@@ -125,8 +125,8 @@ def gromacs_mdp_schema() -> Json:
         # NOTE: This may be related to the following issue:
         # https://github.com/redhat-developer/vscode-yaml/issues/381
         if len(values_schemas) > 0:
-            # NOTE: Use oneOf instead of enum so we can add descriptions to each value
-            mdp[name] = {'oneOf': values_schemas, 'description': f'"{desc}"'}
+            # NOTE: Use anyOf instead of enum so we can add descriptions to each value
+            mdp[name] = {'anyOf': values_schemas, 'description': f'"{desc}"'}
             #mdp[name] = {'type': 'string', 'enum': [s['const'] for s in values_schemas]}
 
         # Overwrite some cases that are handled incorrectly above
