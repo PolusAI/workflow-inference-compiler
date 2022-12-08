@@ -3,6 +3,7 @@
 from collections import defaultdict
 import distutils.util
 import math
+from typing import List
 import os.path as osp
 import re
 import subprocess
@@ -120,30 +121,38 @@ def load_data(index_file_name: str, base_dir: str, query:str, output_txt_path:st
         df = df[(int(min_row) - 1):int(max_row)]
 
     # Calculate dG
+    df = df[['PDB_code', 'value', 'Kd_Ki']]
+    binding_data: List[str] = []
     convert_Kd_dG = distutils.util.strtobool(convert_Kd_dG)
-    binding_data = df[['PDB_code', 'value', 'Kd_Ki']]
-    if convert_Kd_dG:
-        microMolar = 0.000001  # uM
-        dG_data = [calculate_dG(value * microMolar) for value in binding_data['value']]
-        binding_data.insert(2, 'dG', dG_data)
+    microMolar = 0.000001 # uM
+    for _, row in enumerate(df.values):
+
+        (pdbcode, binding_datum, kd_ki) = row
+        binding_datum = binding_datum * microMolar
+
+        if convert_Kd_dG:
+            dG = calculate_dG(binding_datum)
+            binding_data.append(f'{pdbcode} {binding_datum} {dG} {kd_ki}')
+        else:
+            binding_data.append(f'{pdbcode} {binding_datum} {kd_ki}')
 
     with open(output_txt_path, mode='w', encoding='utf-8') as f:
-        dfAsString = binding_data.to_string(header=False, index=False)
-        f.write(dfAsString)
+        f.write('\n'.join(binding_data))
 
 
     # copy pdb and sdf files
-    for _, row in binding_data.iterrows():
+    for _, row in df.iterrows():
+        pdbcode = row['PDB_code']
         source_pdb_path = osp.join(base_dir,
-                                   row['PDB_code'],
-                                   f'{row["PDB_code"]}_protein.pdb')
-        dist_pdb_path = f'{row["PDB_code"]}_protein.pdb'
+                                   pdbcode,
+                                   f'{pdbcode}_protein.pdb')
+        dist_pdb_path = f'{pdbcode}_protein.pdb'
         subprocess.run(["cp", f"{source_pdb_path}", f"{dist_pdb_path}"])
         source_sdf_path = osp.join(base_dir,
-                                    row['PDB_code'],
-                                   f'{row["PDB_code"]}_ligand.sdf')
+                                    pdbcode,
+                                   f'{pdbcode}_ligand.sdf')
 
-        dist_sdf_path = f'{row["PDB_code"]}_ligand.sdf'
+        dist_sdf_path = f'{pdbcode}_ligand.sdf'
         subprocess.run(["cp", f"{source_sdf_path}", f"{dist_sdf_path}"])
 
 def main() -> None:

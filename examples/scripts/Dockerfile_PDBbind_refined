@@ -11,5 +11,5 @@ ENV PATH /miniconda/bin:$PATH
 RUN conda install -c conda-forge pandas
 
 ADD Dockerfile_PDBbind_refined .
-ADD generate_pdbbind_complex.py .
 ADD PDBbind_v2020_refined.tar.gz .
+ADD generate_pdbbind_complex.py .
