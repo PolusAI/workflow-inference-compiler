@@ -63,7 +63,10 @@ def get_tools_cwl(cwl_dirs_file: Path) -> Tools:
             print('This almost certainly means you are not in the correct directory.')
         # These two cwl files throw a yaml.scanner.ScannerError, but they are both legacy, so ignore.
         exceptions = ['biobb/biobb_adapters/cwl/biobb_md/gromacs_extra/ndx2resttop.cwl',
-                      'biobb/biobb_adapters/cwl/biobb_md/gromacs/genrestr.cwl']
+                      'biobb/biobb_adapters/cwl/biobb_md/gromacs/genrestr.cwl',
+                      # No outputs (messes up the schema). Use pdb4amber_run
+                      'biobb/biobb_adapters/cwl/biobb_amber/pdb4amber/pdb4amber.cwl',
+                      'biobb/biobb_adapters/cwl/biobb_amber/pdb4amber.cwl']
         for cwl_path_str in cwl_paths_sorted:
             if any(e in cwl_path_str for e in exceptions):
                 continue

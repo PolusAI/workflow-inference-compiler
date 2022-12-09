@@ -66,10 +66,10 @@ def biobb_selection_schema() -> Json:
         g_s = {'type': 'string', 'const': group, 'description': desc}
         groups_schemas.append(g_s)
     groups_schemas.append({'type': 'string', 'pattern': '^resname.*'}) # TODO: Check for other patterns
-    # NOTE: Use oneOf instead of enum so we can add descriptions to each value
+    # NOTE: Use anyOf instead of enum so we can add descriptions to each value
     desc = """(“System”) Group where the rms will be performed.
     If input_index_path provided, check the file for the accepted values."""
-    groups = {'oneOf': groups_schemas, 'description': desc}
+    groups = {'anyOf': groups_schemas, 'description': desc}
     #groups = {'type': 'string', 'enum': [s['const'] for s in groups_schemas]}
     # NOTE: This schema appears to trigger some kind of a bug in the vscode YAML
     # extension. Specifically, IntelliSense code completion will not work when
