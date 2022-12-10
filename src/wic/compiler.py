@@ -477,7 +477,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 steps[i][step_key]['in'][arg_key] = {'source': in_name}
                 continue
 
-            in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key], True)
+            in_dict = utils_cwl.copy_cwl_input_output_dict(in_tool[arg_key], True)
 
             if isinstance(arg_val, Dict) and arg_val['source'][0] == '~':
                 # NOTE: This is somewhat of a hack; it is useful for when
@@ -661,7 +661,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     arg_val['source'] = arg_val['source'][1:] # Remove *, except for file_pattern
 
 
-                if arg_key in steps[i][step_key].get('scatter', []) or (isinstance(arg_val, Dict) and 'valueFrom' in arg_val):
+                if (arg_key in steps[i][step_key].get('scatter', []) or
+                    (isinstance(arg_val, Dict) and 'valueFrom' in arg_val)):
                     # Promote scattered input types to arrays
                     in_dict['type'] = {'type': 'array', 'items': in_dict['type']}
 
@@ -693,7 +694,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # We provided an explicit argument (but not an edge) in a subworkflow,
                 # and now we just need to pass it up to the root workflow.
                 #print('passing', in_name)
-                in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key])
+                in_dict = utils_cwl.copy_cwl_input_output_dict(in_tool[arg_key])
                 inputs_workflow.update({in_name: in_dict})
                 arg_keyval = {arg_key: in_name}
                 steps[i] = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
@@ -724,7 +725,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 more_recursion = yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0
                 if (nss_call_tails_stems == []) or more_recursion:
                     # i.e. (if 'dummy' value) or (if it is possible to do more recursion)
-                    in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key])
+                    in_dict = utils_cwl.copy_cwl_input_output_dict(in_tool[arg_key])
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = {'source': in_name}
                     # Store explicit edge call site info up through the recursion.
@@ -766,7 +767,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                                          explicit_edge_defs_copy2, explicit_edge_calls_copy2,
                                          graph, inputs_workflow, '')
                     rose_tree = RoseTree(node_data, rose_tree_list)
-                    env_data = EnvData(input_mapping_copy, output_mapping_copy, inputs_file_workflow, vars_workflow_output_internal,
+                    env_data = EnvData(input_mapping_copy, output_mapping_copy,
+                                       inputs_file_workflow, vars_workflow_output_internal,
                                        explicit_edge_defs_copy, explicit_edge_calls_copy)
                     compiler_info = CompilerInfo(rose_tree, env_data)
                     #node_data_dummy = NodeData(None, None, yaml_tree_mod, None, None, None, None, None, None, None)
@@ -778,7 +780,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # not all output files will be generated. This may cause an error.
         out_keyvals = {}
         for out_key, out_dict in tool_i.cwl['outputs'].items():
-            out_keyvals[out_key] = utils_cwl.copy_cwl_IO_dict(out_dict)
+            out_keyvals[out_key] = utils_cwl.copy_cwl_input_output_dict(out_dict)
             #print(out_key, out_keyvals[out_key])
         if not out_keyvals: # FYI out_keyvals should never be {}
             print(f'Error! no outputs for step {step_key}')

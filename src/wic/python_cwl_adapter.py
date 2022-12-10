@@ -139,9 +139,11 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
 
     inputs: Dict[str, Any]  = {}
     #driver_script_file = {'class': 'File', 'path': driver_script}
-    inputs['driver_script'] = {'type': 'string', 'format': 'edam:format_2330', **input_binding(1), 'default': driver_script} # driver_script_file
+    inputs['driver_script'] = {'type': 'string', 'format': 'edam:format_2330',
+                               **input_binding(1), 'default': driver_script} # driver_script_file
     #workflow_types_file = {'class': 'File', 'path': types_script}
-    inputs['workflow_types'] = {'type': 'string', 'format': 'edam:format_2330', **input_binding(2), 'default': types_script} # workflow_types_file
+    inputs['workflow_types'] = {'type': 'string', 'format': 'edam:format_2330',
+                                **input_binding(2), 'default': types_script} # workflow_types_file
     inputs['script'] = {'type': 'File', 'format': 'edam:format_2330', **input_binding(3)}
     for i, (arg_key, arg_val) in enumerate(module_inputs.items()):
         inputs[arg_key] = {**arg_val, **input_binding(i+4, arg_key)}
@@ -190,7 +192,8 @@ def get_module(python_script_mod: str, python_script_path: Path, yml_args: Dict[
     return module_
 
 
-def get_inputs_workflow(module_inputs: Dict[str, Any], python_script_path: str, yml_args: Dict[str, Any]) -> Dict[str, Any]:
+def get_inputs_workflow(module_inputs: Dict[str, Any], python_script_path: str,
+                        yml_args: Dict[str, Any]) -> Dict[str, Any]:
     """This generates the contents of the inputs file associated with generate_CWL_CommandLineTool\n
     Note that this is already taken care of in the compiler, but this function\n
     is useful for standalone purposes. (Alternatively, just make a single-step workflow.)
