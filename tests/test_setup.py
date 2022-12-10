@@ -74,9 +74,14 @@ def wic_yaml_filter_backends_or_steps(yml: Yaml) -> bool:
 time_initial = time.time()
 
 wic_schema = wic.schemas.wic_schema.wic_main_schema(tools_cwl, yaml_stems, schema_store, hypothesis=True)
-# NOTE: The CLI version of mypy and the VSCode version of mypy disagree on the
-# following line. The "type: ignore" comment is NOT unused.
-wic_strategy = hj.from_schema(wic_schema).filter(wic_yaml_filter_blank_steps).filter(wic_yaml_filter_backends_or_steps) # type: ignore
+# NOTE: The CLI version of mypy (0.991) and the VSCode version of mypy
+# disagree on the following line. According to CLI mypy:
+# "Argument 1 to "filter" of "SearchStrategy" has incompatible type"
+# If you add a "type: ignore" comment CLI mypy passes, but then VSCode mypy says:
+# "Unused "type: ignore" comment"
+# Apparently github CI mypy (curiously, also 0.991) agrees with VSCode mypy, so
+# do not add a "type: ignore" comment!
+wic_strategy = hj.from_schema(wic_schema).filter(wic_yaml_filter_blank_steps).filter(wic_yaml_filter_backends_or_steps)
 
 time_final = time.time()
 print(f'from_schema time: {round(time_final - time_initial, 4)} seconds')
