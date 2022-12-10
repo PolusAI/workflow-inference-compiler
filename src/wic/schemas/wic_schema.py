@@ -75,7 +75,7 @@ def cwl_type_to_jsonschema_type_schema(type_obj: Json) -> Json:
     """
     jsontype = cwl_type_to_jsonschema_type(type_obj)
     if jsontype is not None:
-        if isinstance(jsontype, str) or isinstance(jsontype, List):
+        if isinstance(jsontype, (List, str)):
             return {'type': jsontype}
     return jsontype
 
@@ -204,7 +204,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     inputs['properties'] = inputs_props
 
     scatter_props = {'type': 'array', 'items': {'anyOf': [{**val, 'const': key} for key, val in inputs_props.items()]}}
-    scatterMethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
+    scattermethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
 
     outputs_props: Json = {}
     for key, val in cwl['outputs'].items():
@@ -232,7 +232,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     step_props['properties'] = {'in': inputs,
                                 'out': out, # NOT outputs! See comment above!
                                 'scatter': scatter_props,
-                                'scatterMethod': scatterMethod_props}
+                                'scatterMethod': scattermethod_props} # NOTE: capital M
 
     schema = default_schema(url=True)
     # NOTE: See comment in get_validator(). Nonetheless, the vscode YAML extension
@@ -269,17 +269,17 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     graphviz_props['ranksame'] = {'type': 'array'}
     graphviz_props['ranksame']['items'] = {'type': 'string', 'pattern': pat_int_str}
 
-    graphviz = default_schema()
-    graphviz['properties'] = graphviz_props
+    graphviz_schema = default_schema()
+    graphviz_schema['properties'] = graphviz_props
 
     # Call recursive reference
     recursive_ref = {'$dynamicRef': '#wic'}
     in_props: Json = {} # TODO: Add yml specific properties
 
     scatter_props: Json = {} # TODO: Add yml specific properties
-    scatterMethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
+    scattermethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
 
-    choices_props = {'wic': recursive_ref, 'scatterMethod': scatterMethod_props}
+    choices_props = {'wic': recursive_ref, 'scatterMethod': scattermethod_props} # NOTE: capital M
     if not hypothesis:
         # Empty wildcard {} schemas can cause problems with hypothesis.
         choices_props['in'] = in_props
@@ -328,7 +328,7 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     schema['title'] = 'Metadata annotations'
     schema['description'] = 'Use steps: to recursively overload / pass parameters.\nUse graphviz: to modify the DAGs.'
 
-    schema_props = {'graphviz': graphviz, 'steps': steps, 'backend': backend,
+    schema_props = {'graphviz': graphviz_schema, 'steps': steps, 'backend': backend,
                     'default_backend': default_backend,
                     'namespace': namespace, 'inlineable': inlineable, 'environment': environment}
     if not hypothesis:
@@ -356,8 +356,10 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     # hypothesis-jsonschema library, however, only takes a schema. So we either
     # need to bundle the external file contents into wic.json (using $def's),
     # or (since there is only one call site per file) simply inline the contents.
-    tools_schemas: List[Json] = [{'anyOf': [schema_store.get(f'tools/{step_id.stem}.json', {'$ref': f'tools/{step_id.stem}.json'}),
-                                            named_null_schema(step_id.stem)]} for step_id in tools_cwl if not step_id.stem == 'python_script']
+    tools_schemas: List[Json] = [{'anyOf': [schema_store.get(f'tools/{step_id.stem}.json',
+                                                             {'$ref': f'tools/{step_id.stem}.json'}),
+                                            named_null_schema(step_id.stem)]}
+                                 for step_id in tools_cwl if not step_id.stem == 'python_script']
 #    tools_schemas: List[Json] = [{'anyOf': [{'$ref': f'tools/{step_id.stem}.json'},
 #                                            named_null_schema(step_id.stem)]} for step_id in tools_cwl]
     # NOTE: See comment in get_validator(). Nonetheless, the vscode YAML extension
@@ -367,7 +369,8 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
 
     # NOTE: We could/should re-validate after every AST modification. This will
     # require substantial code changes, so let's not worry about it for now.
-    yml_schemas: List[Json] = [{'anyOf': [schema_store.get(f'workflows/{yml_stem}.json', {'$ref': f'workflows/{yml_stem}.json'}),
+    yml_schemas: List[Json] = [{'anyOf': [schema_store.get(f'workflows/{yml_stem}.json',
+                                                           {'$ref': f'workflows/{yml_stem}.json'}),
                                           named_null_schema(f'{yml_stem}.yml')]} for yml_stem in yml_stems]
 #    yml_schemas: List[Json] = [{'anyOf': [{'$ref': f'workflows/{yml_stem}.json'},
 #                                          named_null_schema(f'{yml_stem}.yml')]} for yml_stem in yml_stems]

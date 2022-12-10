@@ -48,8 +48,8 @@ class TestFuzzyCompile(unittest.TestCase):
         graphdata = GraphData(str(yml_path))
         graph = GraphReps(graph_gv, graph_nx, graphdata)
         try:
-            compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {}, {}, {},
-                                                        tools_cwl, True, relative_run_path=True, testing=True)
+            compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {}, {},
+                                                          {}, tools_cwl, True, relative_run_path=True, testing=True)
         except Exception as e:
             multi_def_str = 'Error! Multiple definitions of &'
             if multi_def_str in str(e):

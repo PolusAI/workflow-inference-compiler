@@ -57,7 +57,7 @@ def gromacs_mdp_schema() -> Json:
             html_content = f.read()
     else:
         mdp_url = 'https://manual.gromacs.org/documentation/current/user-guide/mdp-options.html'
-        response = requests.get(mdp_url)
+        response = requests.get(mdp_url, timeout=60) # seconds
         html_content = response.text # cache this locally
         with open(gromacs_mdp_html_file, mode='w', encoding='utf-8') as f:
             f.write(html_content)

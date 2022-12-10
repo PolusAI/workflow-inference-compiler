@@ -5,14 +5,16 @@ import subprocess as sub
 import sys
 import os
 from pathlib import Path
+import signal
+import traceback
 from typing import Dict
 
-import cwltool
+import cwltool.main
 import graphviz
 import networkx as nx
 import yaml
 
-from . import ast, cli, compiler, inference, labshare, utils, utils_graphs
+from . import ast, cli, compiler, inference, labshare, utils #, utils_graphs
 from .schemas import wic_schema
 from .wic_types import Cwl, GraphData, GraphReps, Json, StepId, Tool, Tools, Yaml, YamlTree
 
@@ -270,19 +272,17 @@ def main() -> None:
 
             print('running cwltool via python API')
             try:
-                import cwltool.main
                 # NOTE: cwltool.main.run (currently) calls sys.exit().
                 # Until https://github.com/common-workflow-language/cwltool/pull/1772
                 # is released, we need to copy & paste the body below.
                 # cwltool.main.run(cmd[1:])
 
-                import signal
                 cwltool.main.windows_check()
-                signal.signal(signal.SIGTERM, cwltool.main._signal_handler)
+                signal.signal(signal.SIGTERM, cwltool.main._signal_handler) # pylint: disable=protected-access
                 try:
                     cwltool.main.main(cmd[1:])
                 finally:
-                    cwltool.main._terminate_processes()
+                    cwltool.main._terminate_processes() # pylint: disable=protected-access
 
                 # This also works, but doesn't easily allow using --leave-outputs, --provenence, --cachedir
                 # import cwltool.factory
@@ -298,7 +298,6 @@ def main() -> None:
                 print(f'See error_{yaml_stem}.txt for detailed technical information.')
                 # Do not display a nasty stack trace to the user; hide it in a file.
                 with open(f'error_{yaml_stem}.txt', mode='w', encoding='utf-8') as f:
-                    import traceback
                     traceback.print_exception(e, file=f)
 
         if args.cwl_runner == 'toil-cwl-runner':

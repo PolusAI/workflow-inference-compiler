@@ -9,6 +9,8 @@ import yaml
 from . import __version__, utils
 from .wic_types import KV, Cwl, NodeData, RoseTree, StepId, Tools
 
+timeout = 60 # seconds
+
 
 def delete_previously_uploaded(args: argparse.Namespace, plugins_or_pipelines: str, name: str) -> None:
     """Delete plugins/pipelines previously uploaded to labshare.
@@ -20,7 +22,7 @@ def delete_previously_uploaded(args: argparse.Namespace, plugins_or_pipelines: s
     access_token = args.compute_access_token
 
     response = requests.delete(args.compute_url + f'/compute/{plugins_or_pipelines}/' + name + ':' + __version__,
-                                headers = {'Authorization': f'Bearer {access_token}'})
+                                headers = {'Authorization': f'Bearer {access_token}'}, timeout=timeout)
     print('delete', response.json())
     # TODO: Check response for success
 
@@ -90,7 +92,7 @@ def upload_plugin(compute_url: str, access_token: str, tool: Cwl, name: str) -> 
     # Use http POST request to upload a primitive CommandLineTool / define a plugin and get its id hash.
     response = requests.post(compute_url + '/compute/plugins',
                              headers = {'Authorization': f'Bearer {access_token}'},
-                             json = compute_plugin)
+                             json = compute_plugin, timeout=timeout)
     r_json = response.json()
 
     # {'error': {'statusCode': 422, 'name': 'UnprocessableEntityError',
@@ -117,7 +119,7 @@ def print_plugins(compute_url: str) -> None:
     Args:
         compute_url (str): The url to the Compute API
     """
-    r = requests.get(compute_url + '/compute/plugins/')
+    r = requests.get(compute_url + '/compute/plugins/', timeout=timeout)
     for j in r.json():
         print(f"id {j.get('id')} class {j.get('class')} name {j.get('name')}")
         #print(j)
@@ -206,7 +208,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         # Use http POST request to upload a complete Workflow (w/ inputs) and get its id hash.
         response = requests.post(args.compute_url + '/compute/workflows',
                                  headers = {'Authorization': f'Bearer {access_token}'},
-                                 json = compute_workflow)
+                                 json = compute_workflow, timeout=timeout)
         r_json = response.json()
         print('post response')
         j = r_json
@@ -237,7 +239,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         # Use http POST request to upload a subworkflow / "pipeline" (no inputs) and get its id hash.
         response = requests.post(args.compute_url + '/compute/pipelines',
                                  headers = {'Authorization': f'Bearer {access_token}'},
-                                 json = compute_pipeline)
+                                 json = compute_pipeline, timeout=timeout)
         r_json = response.json()
 
         # {'error': {'statusCode': 422, 'name': 'UnprocessableEntityError',
