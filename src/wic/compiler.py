@@ -784,7 +784,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             print(f'Error! no outputs for step {step_key}')
         outputs_workflow.append(out_keyvals)
 
-        steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs']))
+        steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs'].keys()))
 
         #print()
 
@@ -902,7 +902,7 @@ def insert_step_into_workflow(yaml_tree_orig: Yaml, stepid: StepId, tools: Tools
         if 'format' in out_val:
             inference_rules_dict[out_key] = inference_rules.get(out_val['format'], 'default')
     inf_dict = {'wic': {'inference': inference_rules_dict}}
-    keystr = f'({i+1}, {stepid})' # The yml file uses 1-based indexing
+    keystr = f'({i+1}, {stepid.stem})' # The yml file uses 1-based indexing
 
     if 'wic' in yaml_tree_mod:
         if 'steps' in yaml_tree_mod['wic']:
