@@ -66,7 +66,10 @@ def get_tools_cwl(cwl_dirs_file: Path) -> Tools:
                       'biobb/biobb_adapters/cwl/biobb_md/gromacs/genrestr.cwl',
                       # No outputs (messes up the schema). Use pdb4amber_run
                       'biobb/biobb_adapters/cwl/biobb_amber/pdb4amber/pdb4amber.cwl',
-                      'biobb/biobb_adapters/cwl/biobb_amber/pdb4amber.cwl']
+                      'biobb/biobb_adapters/cwl/biobb_amber/pdb4amber.cwl',
+                      # Empty dockerPull: '' Use autodock_vina_run
+                      'biobb/biobb_adapters/cwl/biobb_vs/vina/autodock_vina.cwl',
+                      'biobb/biobb_adapters/cwl/biobb_vs/autodock_vina.cwl']
         for cwl_path_str in cwl_paths_sorted:
             if any(e in cwl_path_str for e in exceptions):
                 continue

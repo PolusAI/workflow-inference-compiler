@@ -22,16 +22,16 @@ steps:
             integrator: sd
             rvdw: 1.0
             rcoulomb: 1.0
-            coulombtype: pme
+            coulombtype: PME
             tc-grps: system
             tau-t: 2
             constraints: h-bonds
             nstxout: 100
             nstenergy: 100
-            pcoupl: parrinello-rahman
+            pcoupl: Parrinello-Rahman
             tau-p: 1
             compressibility: 4.5e-5
-            comm-mode: linear
+            comm-mode: Linear
             comm-grps: system
         output_config_string: '&config_tag_mdp_prod'
   - grompp:
