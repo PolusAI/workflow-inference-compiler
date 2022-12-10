@@ -1,6 +1,8 @@
 import copy
 from pathlib import Path
 import re
+import sys
+import traceback
 from typing import Dict, List
 
 from mergedeep import merge, Strategy
@@ -92,9 +94,7 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
                 print(f'See validation_{yaml_path.stem}.txt for detailed technical information.')
                 # Do not display a nasty stack trace to the user; hide it in a file.
                 with open(f'validation_{yaml_path.stem}.txt', mode='w', encoding='utf-8') as f:
-                    import traceback
                     traceback.print_exception(e, file=f)
-                import sys
                 sys.exit(1)
 
             y_t = YamlTree(StepId(step_key, plugin_ns), sub_yaml_tree_raw)
@@ -304,14 +304,14 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
             (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, wic['wic'], Path(''))
             yaml_tree = {'steps': yaml_tree['steps']} # Remove wic tag
             return YamlTree(step_id, yaml_tree) # TODO: check step_id
-        else:
-            # Pass namespaces through unmodified
-            backends_trees = []
-            for stepid, back in wic['wic']['backends'].items():
-                backend_tree = inline_subworkflow(YamlTree(stepid, back), tools, namespaces)
-                backends_trees.append(backend_tree)
-            yaml_tree['wic']['backends'] = dict(backends_trees)
-            return YamlTree(step_id, yaml_tree)
+
+        # Pass namespaces through unmodified
+        backends_trees = []
+        for stepid, back in wic['wic']['backends'].items():
+            backend_tree = inline_subworkflow(YamlTree(stepid, back), tools, namespaces)
+            backends_trees.append(backend_tree)
+        yaml_tree['wic']['backends'] = dict(backends_trees)
+        return YamlTree(step_id, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
@@ -368,8 +368,8 @@ def move_slash_last(source_new: str) -> str:
         source_split = source_new.split('___')
         source_new = '___'.join(source_split[:-1]) + '/' + source_split[-1]
         return source_new
-    else:
-        return source_new
+
+    return source_new
 
 
 def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
@@ -397,7 +397,8 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
     steps = cwl_tree['steps']
     steps_keys = list(steps.keys())
     # NOTE: Only use the last namespace since we are recursively inlineing.
-    subkeysdict = {t.data.namespaces[-1]:copy.deepcopy(t.data.compiled_cwl) for t in sub_trees} # NOT rose_tree.sub_trees
+    subkeysdict = {t.data.namespaces[-1]:copy.deepcopy(t.data.compiled_cwl)
+                   for t in sub_trees} # NOT rose_tree.sub_trees
     #print('subkeys', list(subkeysdict.keys()))
     #print('steps_keys', steps_keys)
     steps_new = {}

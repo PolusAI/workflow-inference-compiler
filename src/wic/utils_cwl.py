@@ -238,18 +238,18 @@ def canonicalize_type(type_obj: Any) -> Any:
     return type_obj
 
 
-def copy_cwl_IO_dict(io_dict: Dict, removeQ: bool = False) -> Dict:
+def copy_cwl_input_output_dict(io_dict: Dict, remove_qmark: bool = False) -> Dict:
     """Copies the type, format, label, and doc entries. Does NOT copy inputBinding and outputBinding.
 
     Args:
         io_dict (Dict): A dictionary
-        removeQ (bool): Determines whether to remove question marks and thus make optional types required
+        remove_qmark (bool): Determines whether to remove question marks and thus make optional types required
 
     Returns:
         Dict: A copy of the dictionary.
     """
     io_type = io_dict['type']
-    if isinstance(io_type, str) and removeQ:
+    if isinstance(io_type, str) and remove_qmark:
         io_type = io_type.replace('?', '')  # Providing optional arguments makes them required
     new_dict = {'type': canonicalize_type(io_type)}
     for key in ['format', 'label', 'doc']:
