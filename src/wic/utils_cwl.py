@@ -56,13 +56,12 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
             yaml_tree['requirements'] = reqsdict
 
 
-def add_yamldict_keyval(steps_i: Yaml, step_key: str, in_out: str, keyval: Yaml) -> Yaml:
+def add_yamldict_keyval_in(steps_i: Yaml, step_key: str, keyval: Yaml) -> Yaml:
     """Convenience function used to (mutably) merge two Yaml dicts.
 
     Args:
         steps_i (Yaml): A partially-completed Yaml dict representing a step in a CWL workflow
         step_key (str): The name of the step in a CWL workflow
-        in_out (str): Either the string 'in' or the string 'out'
         keyval (Yaml): A Yaml dict with additional details to be merged into the first Yaml dict
 
     Returns:
@@ -70,24 +69,40 @@ def add_yamldict_keyval(steps_i: Yaml, step_key: str, in_out: str, keyval: Yaml)
     """
     # TODO: Check whether we can just use deepmerge.merge()
     if steps_i[step_key]:
-        if in_out in steps_i[step_key]:
-            new_keys = dict(list(steps_i[step_key][in_out].items()) + list(keyval.items()))
-            new_keyvals = dict([(k, v) if k != in_out else (k, new_keys) for k, v in steps_i[step_key].items()])
+        if 'in' in steps_i[step_key]:
+            new_keys = dict(list(steps_i[step_key]['in'].items()) + list(keyval.items()))
+            new_keyvals = dict([(k, v) if k != 'in' else (k, new_keys) for k, v in steps_i[step_key].items()])
         else:
             new_keys = keyval
-            new_keyvals = dict(list(steps_i[step_key].items()) + [(in_out, new_keys)])
+            new_keyvals = dict(list(steps_i[step_key].items()) + [('in', new_keys)])
         steps_i[step_key].update(new_keyvals)
     else:
-        steps_i = {step_key: {in_out: keyval}}
+        steps_i = {step_key: {'in': keyval}}
     return steps_i
 
-def add_yamldict_keyval_in(steps_i: Yaml, step_key: str, keyval: Yaml) -> Yaml:
-    """add_yamldict_keyval partially applied with in_out='in' """
-    return add_yamldict_keyval(steps_i, step_key, 'in', keyval)
 
-def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, keyval: List[str]) -> Yaml:
-    """add_yamldict_keyval partially applied with in_out='out' """
-    return add_yamldict_keyval(steps_i, step_key, 'out', keyval) # type: ignore
+def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, strs: List[str]) -> Yaml:
+    """Convenience function used to (mutably) merge two Yaml dicts.
+
+    Args:
+        steps_i (Yaml): A partially-completed Yaml dict representing a step in a CWL workflow
+        step_key (str): The name of the step in a CWL workflow
+        keyval (Yaml): A Yaml dict with additional details to be merged into the first Yaml dict
+
+    Returns:
+        Yaml: The first Yaml dict with the second Yaml dict merged into it.
+    """
+    # TODO: Check whether we can just use deepmerge.merge()
+    if steps_i[step_key]:
+        if 'out' in steps_i[step_key]:
+            new_strs = steps_i[step_key]['out'] + strs
+            new_keyvals = dict([(k, v) if k != 'out' else (k, new_strs) for k, v in steps_i[step_key].items()])
+        else:
+            new_keyvals = dict(list(steps_i[step_key].items()) + [('out', strs)])
+        steps_i[step_key].update(new_keyvals)
+    else:
+        steps_i = {step_key: {'out': strs}}
+    return steps_i
 
 
 def get_workflow_outputs(args: argparse.Namespace,

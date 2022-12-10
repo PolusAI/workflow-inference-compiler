@@ -24,7 +24,7 @@ steps:
       output_pdb_path: '&pdbbind_pdb4amber.pdb'
       config:
         remove_waters: True
-        remove_hydrogen: True
+        remove_hydrogens: True
 
 - convert_mol2:
     in:
