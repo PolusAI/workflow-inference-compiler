@@ -74,7 +74,9 @@ def wic_yaml_filter_backends_or_steps(yml: Yaml) -> bool:
 time_initial = time.time()
 
 wic_schema = wic.schemas.wic_schema.wic_main_schema(tools_cwl, yaml_stems, schema_store, hypothesis=True)
-wic_strategy = hj.from_schema(wic_schema).filter(wic_yaml_filter_blank_steps).filter(wic_yaml_filter_backends_or_steps)
+# NOTE: The CLI version of mypy and the VSCode version of mypy disagree on the
+# following line. The "type: ignore" comment is NOT unused.
+wic_strategy = hj.from_schema(wic_schema).filter(wic_yaml_filter_blank_steps).filter(wic_yaml_filter_backends_or_steps) # type: ignore
 
 time_final = time.time()
 print(f'from_schema time: {round(time_final - time_initial, 4)} seconds')
