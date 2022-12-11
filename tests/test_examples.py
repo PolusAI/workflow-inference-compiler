@@ -32,7 +32,7 @@ def test_run_examples(yml_path_str: str, yml_path: Path) -> None:
     the yml files lack inputs and cannot be run independently, and are excluded.
     """
     if yml_path_str == 'vs_demo_4':
-        assert True # Temporarily skip due to Docker hub issue
+        return None # Skip so we don't accidentally DOS pdbbind.org.cn
 
     # First compile the workflow.
     # Load the high-level yaml workflow file.
