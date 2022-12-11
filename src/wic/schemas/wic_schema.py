@@ -191,6 +191,8 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
         if jsontype:
             if jsontype == {'type': 'string'}:
                 jsontype = str_nonempty
+            if isinstance(jsontype['type'], List) and 'string' in jsontype['type']:
+                jsontype['type'].remove('string')
             inputs_props[key] = {'anyOf': [str_nonempty, {**jsontype, **metadata}]}
         else:
             inputs_props[key] = str_nonempty
