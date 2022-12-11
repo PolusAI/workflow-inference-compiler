@@ -755,7 +755,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
                 # Automatically insert file format conversion
                 conversions = list(set(conversions)) # Remove duplicates
-                if len(conversions) != 0:
+                if len(conversions) != 0 and args.insert_steps_automatically:
                     conversion = conversions[0]
                     print('Automaticaly inserting file format conversion', conversion, i)
                     if len(conversions) != 1:
