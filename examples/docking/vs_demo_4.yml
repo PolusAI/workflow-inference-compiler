@@ -9,7 +9,7 @@ steps:
 
 - extract_pdbbind_refined:
     in:
-      query: '(Kd_Ki == "Kd") & (value < 1)'
+      query: '(Kd_Ki == "Kd") & (value < 0.000002)'
       max_row: 1 #25 # Use 1 for CI
       convert_Kd_dG: 'True'
       output_txt_path: '&binding_data.txt'
