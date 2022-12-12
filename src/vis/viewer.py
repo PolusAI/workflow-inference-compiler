@@ -130,7 +130,8 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
     return HBox([tree, nglwidget])
 
 
-def realtime_viewer(num_iterations: int, cachedir_path: str = '../../cachedir', file_patterns: List[str] = ['*.trr', '*.pdb']) -> None:
+def realtime_viewer(num_iterations: int, cachedir_path: str = '../../cachedir',
+                    file_patterns: List[str] = ['*.trr', '*.pdb']) -> None:
     """This function watches cachedir_path for file_patterns and updates an NGLWidget, upto num_iterations times.
 
     Args:

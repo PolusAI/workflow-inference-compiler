@@ -1,8 +1,5 @@
-import argparse
 import subprocess as sub
-import sys
 from pathlib import Path
-from unittest.mock import patch
 from typing import List
 
 import graphviz
@@ -16,29 +13,10 @@ import wic.compiler
 import wic.main
 import wic.utils
 from wic import auto_gen_header
-from wic.schemas import wic_schema
 from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree
 
+from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tuples
 
-def get_args(yml_path: str = '') -> argparse.Namespace:
-    """This is used to get mock command line arguments.
-
-    Returns:
-        argparse.Namespace: The mocked command line arguments
-    """
-    testargs = ['wic', '--yaml', yml_path, '--cwl_output_intermediate_files', 'True']  # ignore --yaml
-    # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
-    with patch.object(sys, 'argv', testargs):
-        args: argparse.Namespace = wic.cli.parser.parse_args()
-    return args
-
-
-tools_cwl = wic.main.get_tools_cwl(get_args().cwl_dirs_file)
-yml_paths = wic.main.get_yml_paths(get_args().yml_dirs_file)
-
-yml_paths_tuples = [(yml_path_str, yml_path)
-            for yml_namespace, yml_paths_dict in yml_paths.items()
-            for yml_path_str, yml_path in yml_paths_dict.items()]
 
 # Due to the computational complexity of the graph isomorphism problem, we
 # need to manually exclude large workflows.
@@ -46,17 +24,16 @@ yml_paths_tuples = [(yml_path_str, yml_path)
 large_workflows = ['dsb', 'dsb1', 'elm', 'vs_demo_2', 'vs_demo_3', 'vs_demo_4']
 yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in large_workflows]
 
-# Generate schemas for validation
-yaml_stems = [s for s, p in yml_paths_tuples]
-validator = wic_schema.get_validator(tools_cwl, yaml_stems)
-
 
 @pytest.mark.slow
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples)
-def test_examples(yml_path_str: str, yml_path: Path) -> None:
+def test_run_examples(yml_path_str: str, yml_path: Path) -> None:
     """Runs all of the examples in the examples/ directory. Note that some of
     the yml files lack inputs and cannot be run independently, and are excluded.
     """
+    if yml_path_str == 'vs_demo_4':
+        return None # Skip so we don't accidentally DOS pdbbind.org.cn
+
     # First compile the workflow.
     # Load the high-level yaml workflow file.
     with open(yml_path, mode='r', encoding='utf-8') as y:
