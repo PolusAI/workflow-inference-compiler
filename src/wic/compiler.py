@@ -324,10 +324,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # i.e. immediately before compilation of the python_script yml tag below.
                 yml_args = copy.deepcopy(steps[i][step_key]['in'])
                 python_script_path = yml_args.get('script', '')
-                if python_script_path == '':
-                    print('Error! Missing `script` tag in python_script')
-                    import sys
-                    sys.exit(1)
+                # NOTE: The existence of the script: tag should now be guaranteed in the schema
                 del yml_args['script']
                 root_yml_dir_abs = Path(args.yaml).parent.absolute()
                 python_script_path = root_yml_dir_abs / Path(python_script_path)
@@ -477,7 +474,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 steps[i][step_key]['in'][arg_key] = {'source': in_name}
                 continue
 
-            in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key], True)
+            in_dict = utils_cwl.copy_cwl_input_output_dict(in_tool[arg_key], True)
 
             if isinstance(arg_val, Dict) and arg_val['source'][0] == '~':
                 # NOTE: This is somewhat of a hack; it is useful for when
@@ -487,11 +484,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # Subworkflows which use workflow inputs: variables ~var cannot
                 # (yet) be inlined. Somehow, if they are not marked with
                 # inlineable: False, test_inline_subworkflows can still pass.
-                # This assertion will (correctly) cause such inlineing tests to fail.
+                # This Exception will (correctly) cause such inlineing tests to fail.
                 if arg_val['source'] not in yaml_tree.get('inputs', {}):
-                    print("arg_val['source']", arg_val['source'])
-                    print("yaml_tree.get('inputs')", yaml_tree.get('inputs', {}))
-                assert arg_val['source'] in yaml_tree.get('inputs', {})
+                    inputs = yaml_tree.get('inputs', {})
+                    unbound_lit_var = 'Error! Unbound literal variable ~'
+                    if inputs == {}:
+                        raise Exception(f"{unbound_lit_var}{arg_val['source']} not in inputs: tag in {yaml_stem}.yml")
+                    inputs_dump = yaml.dump({'inputs': inputs})
+                    raise Exception(f"{unbound_lit_var}{arg_val['source']} not in\n{inputs_dump}\nin {yaml_stem}.yml")
 
                 inputs_key_dict = yaml_tree['inputs'][arg_val['source']]
                 if 'doc' in inputs_key_dict:
@@ -661,7 +661,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     arg_val['source'] = arg_val['source'][1:] # Remove *, except for file_pattern
 
 
-                if arg_key in steps[i][step_key].get('scatter', []) or (isinstance(arg_val, Dict) and 'valueFrom' in arg_val):
+                if (arg_key in steps[i][step_key].get('scatter', []) or
+                    (isinstance(arg_val, Dict) and 'valueFrom' in arg_val)):
                     # Promote scattered input types to arrays
                     in_dict['type'] = {'type': 'array', 'items': in_dict['type']}
 
@@ -693,7 +694,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # We provided an explicit argument (but not an edge) in a subworkflow,
                 # and now we just need to pass it up to the root workflow.
                 #print('passing', in_name)
-                in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key])
+                in_dict = utils_cwl.copy_cwl_input_output_dict(in_tool[arg_key])
                 inputs_workflow.update({in_name: in_dict})
                 arg_keyval = {arg_key: in_name}
                 steps[i] = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
@@ -724,7 +725,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 more_recursion = yaml_stem in nss_call_tails_stems and nss_call_tails_stems.index(yaml_stem) > 0
                 if (nss_call_tails_stems == []) or more_recursion:
                     # i.e. (if 'dummy' value) or (if it is possible to do more recursion)
-                    in_dict = utils_cwl.copy_cwl_IO_dict(in_tool[arg_key])
+                    in_dict = utils_cwl.copy_cwl_input_output_dict(in_tool[arg_key])
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = {'source': in_name}
                     # Store explicit edge call site info up through the recursion.
@@ -754,7 +755,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
                 # Automatically insert file format conversion
                 conversions = list(set(conversions)) # Remove duplicates
-                if len(conversions) != 0:
+                if len(conversions) != 0 and args.insert_steps_automatically:
                     conversion = conversions[0]
                     print('Automaticaly inserting file format conversion', conversion, i)
                     if len(conversions) != 1:
@@ -766,7 +767,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                                          explicit_edge_defs_copy2, explicit_edge_calls_copy2,
                                          graph, inputs_workflow, '')
                     rose_tree = RoseTree(node_data, rose_tree_list)
-                    env_data = EnvData(input_mapping_copy, output_mapping_copy, inputs_file_workflow, vars_workflow_output_internal,
+                    env_data = EnvData(input_mapping_copy, output_mapping_copy,
+                                       inputs_file_workflow, vars_workflow_output_internal,
                                        explicit_edge_defs_copy, explicit_edge_calls_copy)
                     compiler_info = CompilerInfo(rose_tree, env_data)
                     #node_data_dummy = NodeData(None, None, yaml_tree_mod, None, None, None, None, None, None, None)
@@ -778,13 +780,13 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # not all output files will be generated. This may cause an error.
         out_keyvals = {}
         for out_key, out_dict in tool_i.cwl['outputs'].items():
-            out_keyvals[out_key] = utils_cwl.copy_cwl_IO_dict(out_dict)
+            out_keyvals[out_key] = utils_cwl.copy_cwl_input_output_dict(out_dict)
             #print(out_key, out_keyvals[out_key])
         if not out_keyvals: # FYI out_keyvals should never be {}
             print(f'Error! no outputs for step {step_key}')
         outputs_workflow.append(out_keyvals)
 
-        steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs']))
+        steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs'].keys()))
 
         #print()
 
@@ -834,17 +836,19 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     for key, in_dict in inputs_file_workflow.items():
         new_keyval: WorkflowInputsFile = {}
         if 'File' == in_dict['type']:
-            in_format = in_dict['format']
-            if isinstance(in_format, List):
-                in_format = list(set(in_format)) # get uniques
-                if len(in_format) > 1:
-                    print(f'NOTE: More than one input file format for {key}')
-                    print(f'formats: {in_format}')
-                    print(f'Choosing {in_format[0]}')
-                in_format = in_format[0]
             # path = Path(in_dict['value']).name # NOTE: Use .name ?
-            new_keyval = {key: {'class': 'File', 'format': in_format,
-                                'path': in_dict['value']['source']}} # type: ignore
+            newval = {'class': 'File', 'path': in_dict['value']['source']} # type: ignore
+            if 'format' in in_dict:
+                in_format = in_dict['format']
+                if isinstance(in_format, List):
+                    in_format = list(set(in_format)) # get uniques
+                    if len(in_format) > 1:
+                        print(f'NOTE: More than one input file format for {key}')
+                        print(f'formats: {in_format}')
+                        print(f'Choosing {in_format[0]}')
+                    in_format = in_format[0]
+                newval['format'] = in_format
+            new_keyval = {key: newval}
         # TODO: Check for all valid types?
         else:
             # We cannot store string values as a dict, so use type: ignore
@@ -902,7 +906,7 @@ def insert_step_into_workflow(yaml_tree_orig: Yaml, stepid: StepId, tools: Tools
         if 'format' in out_val:
             inference_rules_dict[out_key] = inference_rules.get(out_val['format'], 'default')
     inf_dict = {'wic': {'inference': inference_rules_dict}}
-    keystr = f'({i+1}, {stepid})' # The yml file uses 1-based indexing
+    keystr = f'({i+1}, {stepid.stem})' # The yml file uses 1-based indexing
 
     if 'wic' in yaml_tree_mod:
         if 'steps' in yaml_tree_mod['wic']:

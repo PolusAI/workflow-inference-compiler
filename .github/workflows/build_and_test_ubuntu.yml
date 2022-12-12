@@ -59,7 +59,7 @@ jobs:
 
     - name: Install Workflow Inference Compiler
       working-directory: ${{github.workspace}}
-      run: python3 setup.py install
+      run: pip install .[test]
 
     - name: Run MyPy
       working-directory: ${{github.workspace}}
