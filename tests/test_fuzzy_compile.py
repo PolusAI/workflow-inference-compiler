@@ -26,7 +26,7 @@ class TestFuzzyCompile(unittest.TestCase):
     @settings(max_examples=100,
               suppress_health_check=[HealthCheck.too_slow,
                                      HealthCheck.filter_too_much],
-              deadline=timedelta(milliseconds=5000))
+              deadline=timedelta(milliseconds=10000))
     # TODO: Improve schema so we can remove the health checks
     def test_fuzzy_compile(self, yml: Yaml) -> None:
         """Tests that the compiler doesn't crash when given random allegedly valid input.\n
@@ -37,11 +37,21 @@ class TestFuzzyCompile(unittest.TestCase):
             yml (Yaml): Yaml input, randomly generated according to a random subset of wic_main_schema
         """
         plugin_ns = 'global'
+        yml_path = Path('random_stepid')
+        steps_keys = wic.utils.get_steps_keys(yml.get('steps', []))
+        tools_stems = [stepid.stem for stepid in tools_cwl]
+        subkeys = wic.utils.get_subkeys(steps_keys, tools_stems)
+        if subkeys:
+            # NOTE: Since all filepaths are currently relative w.r.t. --yaml,
+            # we need to supply a fake --yaml. Using [0] works because we are
+            # using k=1 in wic_main_schema.
+            yml_path_stem = Path(subkeys[0]).stem
+            yml_path = yml_paths[plugin_ns][yml_path_stem]
+
         y_t = YamlTree(StepId('random_stepid', plugin_ns), yml)
         yaml_tree_raw = wic.ast.read_ast_from_disk(y_t, yml_paths, tools_cwl, validator)
         yaml_tree = wic.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
 
-        yml_path = Path('random_stepid')
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
         graph_gv.attr(newrank='True')
         graph_nx = nx.DiGraph()
@@ -52,7 +62,14 @@ class TestFuzzyCompile(unittest.TestCase):
                                                           {}, tools_cwl, True, relative_run_path=True, testing=True)
         except Exception as e:
             multi_def_str = 'Error! Multiple definitions of &'
-            if multi_def_str in str(e):
+            unbound_lit_var = 'Error! Unbound literal variable ~'
+            python_script = 'Error! Cannot load python_script'
+            # Certain constraints are conditionally dependent on values and are
+            # not easily encoded in the schema, so catch them here.
+            # Moreover, although we check for the existence of input files in
+            # stage_input_files, we cannot encode file existence in json schema
+            # to check the python_script script: tag before compile time.
+            if multi_def_str in str(e) or unbound_lit_var in str(e) or python_script in str(e):
                 pass
             else:
                 #import yaml

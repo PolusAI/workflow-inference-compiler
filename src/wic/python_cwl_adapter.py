@@ -50,12 +50,15 @@ def import_python_file(python_module_name: str, python_file_path: Path) -> Modul
     if spec:
         module_ = importlib.util.module_from_spec(spec)
         sys.modules[python_module_name] = module_
-        spec.loader.exec_module(module_) # type: ignore
+
+        try:
+            spec.loader.exec_module(module_) # type: ignore
+        except Exception as e:
+            raise Exception(f'Error! Cannot load python_script {python_file_path}') from e
         # Note that now (after calling exec_module) we can call import_module without error
         #module_ = importlib.import_module(python_module_name)
     else:
-        print(f'Error! Cannot load {spec}')
-        sys.exit(1)
+        raise Exception(f'Error! Cannot load python_script spec {spec} from file\n{python_file_path}')
     return module_
 
 
