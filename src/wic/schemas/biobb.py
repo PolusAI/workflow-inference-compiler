@@ -118,7 +118,8 @@ def biobb_genion_schema() -> Json:
         Json: A schema for gromacs genion options.
     """
     # See https://biobb-md.readthedocs.io/en/latest/gromacs.html#module-gromacs.genion
-    replaced_group = {'type': 'string', 'description': '(“SOL”) Group of molecules that will be replaced by the solvent.'}
+    replaced_group = {'type': 'string', 'description':
+        '(“SOL”) Group of molecules that will be replaced by the solvent.'}
     neutral = {'type': 'boolean', 'description': '(False) Neutralize the charge of the system.'}
     concentration = {'type': 'number', 'description': '(0.05) [0~10|0.01] Concentration of the ions in (mol/liter).'}
     seed = {'type': 'number', 'description': '(1993) Seed for random number generator.'}
@@ -243,6 +244,63 @@ def biobb_grompp_schema() -> Json:
     return schema
 
 
+def biobb_str_check_add_hydrogens_schema() -> Json:
+    """A schema for str_check_add_hydrogens options.
+
+    Returns:
+        Json: A schema for str_check_add_hydrogens options.
+    """
+    # See https://biobb-structure-utils.readthedocs.io/en/latest/utils.html#utils-str-check-add-hydrogens-module
+    charges = {'type': 'boolean', 'description':
+        '(False) Whether or not to add charges to the output file. If True the output is in PDBQT format.'}
+    mode = {'type': 'string', 'enum': ['auto', 'list', 'ph'], 'description': '(auto) Selection mode'}
+    p_h = {'type': 'number', 'minimum': 0, 'maximum': 14, 'description':
+        '(7.4) Add hydrogens appropriate for pH. Only in case mode ph selected.'}
+    lst = {'type': 'string', 'description':
+        'List of residues to modify separated by commas (i.e HISA234HID,HISB33HIE). Only in case mode list selected.'}
+    keep_canonical_resnames = {'type': 'boolean', 'description': '(False) Whether or not keep canonical residue names'}
+    binary_path = {'type': 'string', 'description': '(“check_structure”) path to the check_structure application'}
+    remove_tmp = {'type': 'boolean', 'description': '(True) Remove temporal files.'}
+    restart = {'type': 'boolean', 'description': '(False) Do not execute if output files exist.'}
+
+    schema = default_schema(url=True)
+    schema['properties'] = {'charges': charges, 'mode': mode, 'ph': p_h, 'list': lst,
+                            'keep_canonical_resnames': keep_canonical_resnames,
+                            'binary_path': binary_path, 'remove_tmp': remove_tmp, 'restart': restart}
+    return schema
+
+
+def biobb_pdb4amber_run_schema() -> Json:
+    """A schema for pdb4amber_run options.
+
+    Returns:
+        Json: A schema for pdb4amber_run options.
+    """
+    # See https://biobb-amber.readthedocs.io/en/latest/pdb4amber.html#module-pdb4amber.pdb4amber_run
+    remove_hydrogens = {'type': 'boolean', 'description':
+        '(False) Remove hydrogen atoms from the PDB file.'}
+    remove_waters = {'type': 'boolean', 'description':
+        '(False) Remove water molecules from the PDB file.'}
+    constant_ph = {'type': 'boolean', 'description':
+        '(False) Rename ionizable residues e.g. GLU,ASP,HIS for constant pH simulation.'}
+    binary_path = {'type': 'string', 'description': '(“pdb4amber”) Path to the pdb4amber executable binary.'}
+    remove_tmp = {'type': 'boolean', 'description': '(True) Remove temporal files.'}
+    restart = {'type': 'boolean', 'description': '(False) Do not execute if output files exist.'}
+
+    schema = default_schema(url=True)
+    schema['properties'] = {'remove_hydrogens': remove_hydrogens, 'remove_waters': remove_waters,
+                            'constant_pH': constant_ph, # NOTE: capital H
+                            'binary_path': binary_path, 'remove_tmp': remove_tmp, 'restart': restart}
+    return schema
+
+
+energy_terms_amber = ['VOLUME', 'TSOLVENT', 'TSOLUTE', 'TEMP', 'PRES',
+                      'ETOT', 'ESCF', 'EPTOT', 'EKTOT', 'EKCMT', 'DENSITY']
+term_amber = {'type': 'string', 'enum': energy_terms_amber}
+terms_amber = {'type': 'array', 'items': term_amber, 'description': '([“ETOT”]) Statistics descriptors.'}
+biobb_process_mdout_schema = {**default_schema(), 'properties': {'terms': terms_amber}}
+
+
 config_schemas = {
     'pdb2gmx': biobb_pdb2gmx_schema(),
     'editconf': biobb_editconf_schema(),
@@ -252,6 +310,11 @@ config_schemas = {
     'mdrun': biobb_mdrun_schema(),
     'gmx_energy': biobb_gmx_energy_schema(),
     'gmx_rms': biobb_selection_schema(),
-    'gms_rgyr': biobb_selection_schema(),
-    # TODO: Add box, str_check_add_hydrogens, ...
+    'gmx_rgyr': biobb_selection_schema(),
+    'extract_model': {**default_schema(),
+                      'properties': {'models': {'type': 'array', 'items': {'type': 'integer', 'minimum': 0}}}}, # 1?
+    'extract_model_pdbqt': {**default_schema(), 'properties': {'model': {'type': 'integer', 'minimum': 0}}}, # 1?
+    'str_check_add_hydrogens': biobb_str_check_add_hydrogens_schema(),
+    'pdb4amber_run': biobb_pdb4amber_run_schema(),
+    'process_mdout': biobb_process_mdout_schema,
 }

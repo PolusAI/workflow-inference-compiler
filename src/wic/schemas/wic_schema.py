@@ -29,7 +29,7 @@ def default_schema(url: bool = False) -> Json:
     """
     schema: Json = {}
     schema['type'] = 'object'
-    schema['additionalProperties'] = False
+    schema['additionalProperties'] = False #{'not': True, 'errorMessage': 'remove additional property ${0#}'}
     if url:
         schema['$schema'] = 'https://json-schema.org/draft/2020-12/schema'
     return schema
@@ -75,7 +75,7 @@ def cwl_type_to_jsonschema_type_schema(type_obj: Json) -> Json:
     """
     jsontype = cwl_type_to_jsonschema_type(type_obj)
     if jsontype is not None:
-        if isinstance(jsontype, str) or isinstance(jsontype, List):
+        if isinstance(jsontype, (List, str)):
             return {'type': jsontype}
     return jsontype
 
@@ -161,6 +161,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     #required = []
     for key, val in cwl['inputs'].items():
         metadata = {'title': val.get('label', ''), 'description': val.get('doc', '')}
+        str_nonempty = {'type': 'string', 'minLength': 1, **metadata}
 
         # Determine required keys
         #if key == 'config' or not ('?' in cwltype or 'default' in val):
@@ -168,17 +169,33 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
 
         # Handle special cases
         if key == 'config' and name in config_schemas:
-            inputs_props[key] = {'anyOf': [{'type': 'string', **metadata},
+            inputs_props[key] = {'anyOf': [str_nonempty,
                                            {**config_schemas[name], **metadata}]}
+            continue
+
+        if key == 'config' and name == 'cwl_watcher':
+            # This may cause problems with hypothesis, but since the
+            # cwl_watcher config tag takes an arbitrary Json-encoded string
+            # as input, we cannot restrict this particular sub-schema.
+            empty_schema: Dict = {}
+            inputs_props[key] = empty_schema
+            continue
+
+        if key == 'config' and name == 'config_tag_mdp':
+            inputs_props[key] = config_schemas['grompp']
             continue
 
         # Add type information, with exceptions
         cwltype = utils_cwl.canonicalize_type(val.get('type', ''))
         jsontype = cwl_type_to_jsonschema_type_schema(cwltype)
         if jsontype:
-            inputs_props[key] = {'anyOf': [{'type': 'string', **metadata}, {**jsontype, **metadata}]}
+            if jsontype == {'type': 'string'}:
+                jsontype = str_nonempty
+            if isinstance(jsontype['type'], List) and 'string' in jsontype['type']:
+                jsontype['type'].remove('string')
+            inputs_props[key] = {'anyOf': [str_nonempty, {**jsontype, **metadata}]}
         else:
-            inputs_props[key] = {'type': 'string', **metadata}
+            inputs_props[key] = str_nonempty
 
     # Do not mark properties which are required for CWL as required for yml,
     # because the whole point of inference is that we shouldn't have to!
@@ -189,7 +206,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     inputs['properties'] = inputs_props
 
     scatter_props = {'type': 'array', 'items': {'anyOf': [{**val, 'const': key} for key, val in inputs_props.items()]}}
-    scatterMethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
+    scattermethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
 
     outputs_props: Json = {}
     for key, val in cwl['outputs'].items():
@@ -199,20 +216,25 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
         cwltype = utils_cwl.canonicalize_type(val.get('type', ''))
         jsontype = cwl_type_to_jsonschema_type_schema(cwltype)
         if jsontype:
-            outputs_props[key] = {'anyOf': [{'type': 'string', **metadata}, {**jsontype, **metadata}]}
+            outputs_props[key] = {'anyOf': [str_nonempty, {**jsontype, **metadata}]}
         else:
-            outputs_props[key] = {'type': 'string', **metadata}
+            outputs_props[key] = str_nonempty
 
     outputs = default_schema()
     outputs['properties'] = outputs_props
+
+    # NOTE: This function generates schemas compatible with call sites in a
+    # workflow. Specifically, the types of `inputs:` and `in:` are the same (Json)
+    # but we want to use out, NOT outputs below, which has type List[str].
+    out = {'type': 'array', 'items': {'type': 'string', 'enum': list(cwl['outputs'].keys())}}
 
     step_props = default_schema()
     step_props['title'] = cwl.get('label', '')
     step_props['description'] = cwl.get('doc', '')
     step_props['properties'] = {'in': inputs,
-                                'out': outputs,
+                                'out': out, # NOT outputs! See comment above!
                                 'scatter': scatter_props,
-                                'scatterMethod': scatterMethod_props}
+                                'scatterMethod': scattermethod_props} # NOTE: capital M
 
     schema = default_schema(url=True)
     # NOTE: See comment in get_validator(). Nonetheless, the vscode YAML extension
@@ -238,23 +260,28 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     # See https://json-schema.org/draft/2020-12/json-schema-core.html#dynamic-ref
     # and https://stackoverflow.com/questions/69728686/explanation-of-dynamicref-dynamicanchor-in-json-schema-as-opposed-to-ref-and
 
-    graphviz_props: Json = {}
-    graphviz_props['label'] = {'type': 'string'}
-    graphviz_props['style'] = {'type': 'string'}
-    graphviz_props['ranksame'] = {'type': 'array'}
-    graphviz_props['ranksame']['items'] = {'type': 'string'}
+    # TODO: restrict the str to the enum of all valid step keys
+    pat_int_str = "\\([0-9]+, [A-Za-z0-9_\\.]+\\)"
 
-    graphviz = default_schema()
-    graphviz['properties'] = graphviz_props
+    graphviz_props: Json = {}
+    # Is it useful to have an empty label? Let's bar it for now.
+    graphviz_props['label'] = {'type': 'string', 'minLength': 1}
+    pat_gv_style = '((,\\s*)*(dashed|dotted|solid|invis|bold|tapered|filled|striped|wedged|diagonals|rounded))+'
+    graphviz_props['style'] = {'type': 'string', 'pattern': pat_gv_style}
+    graphviz_props['ranksame'] = {'type': 'array'}
+    graphviz_props['ranksame']['items'] = {'type': 'string', 'pattern': pat_int_str}
+
+    graphviz_schema = default_schema()
+    graphviz_schema['properties'] = graphviz_props
 
     # Call recursive reference
     recursive_ref = {'$dynamicRef': '#wic'}
     in_props: Json = {} # TODO: Add yml specific properties
 
     scatter_props: Json = {} # TODO: Add yml specific properties
-    scatterMethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
+    scattermethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
 
-    choices_props = {'wic': recursive_ref, 'scatterMethod': scatterMethod_props}
+    choices_props = {'wic': recursive_ref, 'scatterMethod': scattermethod_props} # NOTE: capital M
     if not hypothesis:
         # Empty wildcard {} schemas can cause problems with hypothesis.
         choices_props['in'] = in_props
@@ -270,7 +297,7 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     # yml file. We should probably do this anyway for the in: tag.
     steps = default_schema()
     # additionalProperties = False still works with patternProperties FYI
-    steps['patternProperties'] = {"\\([0-9]+, [A-Za-z0-9_\\.]+\\)": choices}
+    steps['patternProperties'] = {pat_int_str: choices}
 
     #backends = default_schema()
     backends: Dict[Any, Any] = {}
@@ -278,19 +305,20 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     backends['additionalProperties'] = True
     # TODO: Restrict the backend properties and make default_backend an enum
 
-    namespace: Dict[Any, Any] = {}
-    namespace['type'] = 'string'
+    str_nonempty = {'type': 'string', 'minLength': 1}
+
+    namespace: Dict[Any, Any] = str_nonempty
     # namespace['enum'] = ...
     # TODO: Restrict the namespace properties to only those in yml_paths.txt
 
-    backend = {'type': 'string'}
-    default_backend = {'type': 'string'}
+    backend = str_nonempty
+    default_backend = str_nonempty
     inlineable = {'type': 'boolean'}
 
     environment_props: Json = {}
-    environment_props['action'] = {'type': 'string'}
+    environment_props['action'] = {'type': 'string', 'enum': ['checkpoint', 'restore']}
     environment_props['save_defs'] = {'type': 'array'}
-    environment_props['save_defs']['items'] = {'type': 'string'}
+    environment_props['save_defs']['items'] = str_nonempty
 
     environment = default_schema()
     environment['properties'] = environment_props
@@ -302,7 +330,7 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     schema['title'] = 'Metadata annotations'
     schema['description'] = 'Use steps: to recursively overload / pass parameters.\nUse graphviz: to modify the DAGs.'
 
-    schema_props = {'graphviz': graphviz, 'steps': steps, 'backend': backend,
+    schema_props = {'graphviz': graphviz_schema, 'steps': steps, 'backend': backend,
                     'default_backend': default_backend,
                     'namespace': namespace, 'inlineable': inlineable, 'environment': environment}
     if not hypothesis:
@@ -330,8 +358,10 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     # hypothesis-jsonschema library, however, only takes a schema. So we either
     # need to bundle the external file contents into wic.json (using $def's),
     # or (since there is only one call site per file) simply inline the contents.
-    tools_schemas: List[Json] = [{'anyOf': [schema_store.get(f'tools/{step_id.stem}.json', {'$ref': f'tools/{step_id.stem}.json'}),
-                                            named_null_schema(step_id.stem)]} for step_id in tools_cwl if not step_id.stem == 'python_script']
+    tools_schemas: List[Json] = [{'anyOf': [schema_store.get(f'tools/{step_id.stem}.json',
+                                                             {'$ref': f'tools/{step_id.stem}.json'}),
+                                            named_null_schema(step_id.stem)]}
+                                 for step_id in tools_cwl if not step_id.stem == 'python_script']
 #    tools_schemas: List[Json] = [{'anyOf': [{'$ref': f'tools/{step_id.stem}.json'},
 #                                            named_null_schema(step_id.stem)]} for step_id in tools_cwl]
     # NOTE: See comment in get_validator(). Nonetheless, the vscode YAML extension
@@ -341,7 +371,8 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
 
     # NOTE: We could/should re-validate after every AST modification. This will
     # require substantial code changes, so let's not worry about it for now.
-    yml_schemas: List[Json] = [{'anyOf': [schema_store.get(f'workflows/{yml_stem}.json', {'$ref': f'workflows/{yml_stem}.json'}),
+    yml_schemas: List[Json] = [{'anyOf': [schema_store.get(f'workflows/{yml_stem}.json',
+                                                           {'$ref': f'workflows/{yml_stem}.json'}),
                                           named_null_schema(f'{yml_stem}.yml')]} for yml_stem in yml_stems]
 #    yml_schemas: List[Json] = [{'anyOf': [{'$ref': f'workflows/{yml_stem}.json'},
 #                                          named_null_schema(f'{yml_stem}.yml')]} for yml_stem in yml_stems]
@@ -355,16 +386,27 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
         # you call .example(), hypothesis will compile the schema and cache the
         # results. Subsequent .example() calls are nearly instantaneous.
         # The time increases fairly rapidly with k, i.e.
-        k = 3 # 1-5 minutes...
+        k = 1 # 1-5 minutes...
         # Choose a random subset so we're not testing the same files
         tools_schemas = random.choices(tools_schemas, k=k)
         yml_schemas = random.choices(yml_schemas, k=k)
 
     steps_schemas = tools_schemas + yml_schemas
+
+    str_nonempty = {'type': 'string', 'minLength': 1}
+
     if not hypothesis:
-        steps_schemas += [named_empty_schema('python_script')]
+        python_script_schema: Json = {}
+        python_script_schema['type'] = 'object'
+        python_script_schema['additionalProperties'] = True
+        python_script_schema['properties'] = {'script': str_nonempty}
+        steps_schemas += [python_script_schema]
 
     steps['items'] = {'anyOf': steps_schemas, 'minItems': 1, 'title': 'Valid workflow steps'}
+    if hypothesis:
+        # For performance reasons, limit the number of steps.
+        # This should (hopefully) avoid hypothesis.errors.DeadlineExceeded
+        steps['items']['maxItems'] = 5
 
     # TODO: Use the real CWL inputs schema
     inputs: Dict[Any, Any] = {}
@@ -381,14 +423,18 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     schema['title'] = 'Validating against the Workflow Interence Compiler schema'
     #schema['description'] = ''
     #schema['required'] = ['steps'] # steps are not required, e.g. npt.yml
-    schema_props = {'steps': steps, 'label': {'type': 'string'}, 'doc': {'type': 'string'}}
-    #schema_props['wic'] = wic_tag_schema() # NOTE: This technicaly 'works'
+
+    schema_props = {'steps': steps,
+                    'label': str_nonempty, 'doc': str_nonempty}
+    #schema_props['wic'] = wic_tag_schema(hypothesis) # NOTE: This technically 'works'
     # with hypothesis, but the wic_tag_schema still needs some work.
+
     if not hypothesis:
-        schema_props['wic'] = wic_tag_schema()
+        schema_props['wic'] = wic_tag_schema(hypothesis)
         # {'additionalProperties': True} can cause problems with hypothesis.
         schema_props['inputs'] = inputs
         schema_props['outputs'] = outputs
+
     schema['properties'] = schema_props
 
     # https://json-schema.org/understanding-json-schema/structuring.html#bundling
