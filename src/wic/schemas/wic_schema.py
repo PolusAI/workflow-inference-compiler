@@ -392,10 +392,21 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
         yml_schemas = random.choices(yml_schemas, k=k)
 
     steps_schemas = tools_schemas + yml_schemas
+
+    str_nonempty = {'type': 'string', 'minLength': 1}
+
     if not hypothesis:
-        steps_schemas += [named_empty_schema('python_script')]
+        python_script_schema: Json = {}
+        python_script_schema['type'] = 'object'
+        python_script_schema['additionalProperties'] = True
+        python_script_schema['properties'] = {'script': str_nonempty}
+        steps_schemas += [python_script_schema]
 
     steps['items'] = {'anyOf': steps_schemas, 'minItems': 1, 'title': 'Valid workflow steps'}
+    if hypothesis:
+        # For performance reasons, limit the number of steps.
+        # This should (hopefully) avoid hypothesis.errors.DeadlineExceeded
+        steps['items']['maxItems'] = 5
 
     # TODO: Use the real CWL inputs schema
     inputs: Dict[Any, Any] = {}
@@ -412,8 +423,6 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     schema['title'] = 'Validating against the Workflow Interence Compiler schema'
     #schema['description'] = ''
     #schema['required'] = ['steps'] # steps are not required, e.g. npt.yml
-
-    str_nonempty = {'type': 'string', 'minLength': 1}
 
     schema_props = {'steps': steps,
                     'label': str_nonempty, 'doc': str_nonempty}

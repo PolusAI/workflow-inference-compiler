@@ -324,10 +324,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # i.e. immediately before compilation of the python_script yml tag below.
                 yml_args = copy.deepcopy(steps[i][step_key]['in'])
                 python_script_path = yml_args.get('script', '')
-                if python_script_path == '':
-                    print('Error! Missing `script` tag in python_script')
-                    import sys
-                    sys.exit(1)
+                # NOTE: The existence of the script: tag should now be guaranteed in the schema
                 del yml_args['script']
                 root_yml_dir_abs = Path(args.yaml).parent.absolute()
                 python_script_path = root_yml_dir_abs / Path(python_script_path)
@@ -487,11 +484,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # Subworkflows which use workflow inputs: variables ~var cannot
                 # (yet) be inlined. Somehow, if they are not marked with
                 # inlineable: False, test_inline_subworkflows can still pass.
-                # This assertion will (correctly) cause such inlineing tests to fail.
+                # This Exception will (correctly) cause such inlineing tests to fail.
                 if arg_val['source'] not in yaml_tree.get('inputs', {}):
-                    print("arg_val['source']", arg_val['source'])
-                    print("yaml_tree.get('inputs')", yaml_tree.get('inputs', {}))
-                assert arg_val['source'] in yaml_tree.get('inputs', {})
+                    inputs = yaml_tree.get('inputs', {})
+                    unbound_lit_var = 'Error! Unbound literal variable ~'
+                    if inputs == {}:
+                        raise Exception(f"{unbound_lit_var}{arg_val['source']} not in inputs: tag in {yaml_stem}.yml")
+                    inputs_dump = yaml.dump({'inputs': inputs})
+                    raise Exception(f"{unbound_lit_var}{arg_val['source']} not in\n{inputs_dump}\nin {yaml_stem}.yml")
 
                 inputs_key_dict = yaml_tree['inputs'][arg_val['source']]
                 if 'doc' in inputs_key_dict:
@@ -836,17 +836,19 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     for key, in_dict in inputs_file_workflow.items():
         new_keyval: WorkflowInputsFile = {}
         if 'File' == in_dict['type']:
-            in_format = in_dict['format']
-            if isinstance(in_format, List):
-                in_format = list(set(in_format)) # get uniques
-                if len(in_format) > 1:
-                    print(f'NOTE: More than one input file format for {key}')
-                    print(f'formats: {in_format}')
-                    print(f'Choosing {in_format[0]}')
-                in_format = in_format[0]
             # path = Path(in_dict['value']).name # NOTE: Use .name ?
-            new_keyval = {key: {'class': 'File', 'format': in_format,
-                                'path': in_dict['value']['source']}} # type: ignore
+            newval = {'class': 'File', 'path': in_dict['value']['source']} # type: ignore
+            if 'format' in in_dict:
+                in_format = in_dict['format']
+                if isinstance(in_format, List):
+                    in_format = list(set(in_format)) # get uniques
+                    if len(in_format) > 1:
+                        print(f'NOTE: More than one input file format for {key}')
+                        print(f'formats: {in_format}')
+                        print(f'Choosing {in_format[0]}')
+                    in_format = in_format[0]
+                newval['format'] = in_format
+            new_keyval = {key: newval}
         # TODO: Check for all valid types?
         else:
             # We cannot store string values as a dict, so use type: ignore
