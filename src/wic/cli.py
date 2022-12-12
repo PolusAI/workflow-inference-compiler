@@ -14,6 +14,8 @@ parser.add_argument('--yml_dirs_file', type=str, required=False, default='yml_di
 # Change default to True for now. See comment in compiler.py
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
+parser.add_argument('--insert_steps_automatically', default=False, action="store_true",
+                    help='Attempt to fix inference failures by speculatively inserting workflow steps from a curated whitelist.')
 
 parser.add_argument('--parallel', default=False, action="store_true",
                     help='''When running locally, execute independent steps in parallel.
