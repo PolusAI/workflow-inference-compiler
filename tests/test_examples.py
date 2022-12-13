@@ -39,6 +39,8 @@ def is_isomorphic_with_timeout(gm: isomorphism.GraphMatcher, yml_path_str: str) 
         raise Exception(f'{line1}\n{line2}')
 
     # See https://docs.python.org/3/library/signal.html#examples
+    # NOTE: You CANNOT use `pytest --workers 4 ...` with this. Otherwise:
+    # "ValueError: signal only works in main thread of the main interpreter"
     signal.signal(signal.SIGALRM, handler)
 
     signal.alarm(10) # timeout after 10 seconds
@@ -120,6 +122,7 @@ def test_run_examples(yml_path_str: str, yml_path: Path) -> None:
 
 
 @pytest.mark.fast
+@pytest.mark.serial
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_large)
 def test_cwl_embedding_independence(yml_path_str: str, yml_path: Path) -> None:
     """Tests that compiling a subworkflow is independent of how it is embedded
@@ -227,6 +230,7 @@ def test_cwl_embedding_independence(yml_path_str: str, yml_path: Path) -> None:
         is_isomorphic_with_timeout(g_m, yml_path_str)
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_large)
 def test_inline_subworkflows(yml_path_str: str, yml_path: Path) -> None:
     """Tests that compiling a workflow is independent of how subworkflows are inlined.
