@@ -6,6 +6,7 @@ import sys
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import traceback
 from typing import Dict
@@ -366,6 +367,15 @@ def main() -> None:
             else:
                 print('Failure! Please scroll up and find the FIRST error message.')
                 print('(You may have to scroll up A LOT.)')
+
+        # Remove the annoying cachedir* directories that somehow aren't getting automatically deleted.
+        # NOTE: Do NOT allow args.cachedir_path to be absolute; otherwise
+        # if users pass in "/" this will delete their entire hard drive.
+        cachedir_path = str(args.cachedir)
+        if not Path(cachedir_path).is_absolute():
+            for d in glob.glob(cachedir_path + '*'):
+                if not d == cachedir_path:
+                    shutil.rmtree(d) # Be VERY careful when programmatically deleting directories!
 
         # Finally, since there is an output file copying bug in cwltool,
         # we need to copy the output files manually. See comment above.
