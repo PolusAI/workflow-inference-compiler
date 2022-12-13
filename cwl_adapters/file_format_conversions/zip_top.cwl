@@ -34,7 +34,7 @@ inputs:
       File type: input
       Accepted formats: top
       Example file: https://github.com/bioexcel/biobb_md/raw/master/biobb_md/test/data/gromacs/mdrun.top
-    type: File
+    type: File?
     format:
     - edam:format_3883
     inputBinding:
