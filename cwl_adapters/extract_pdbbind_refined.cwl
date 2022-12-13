@@ -12,7 +12,7 @@ baseCommand: python3
 
 hints:
   DockerRequirement:
-    dockerPull: ndonyapour/pdbbind_refined_v2020
+    dockerPull: pdbbind_refined_v2020
 
 requirements:
   InlineJavascriptRequirement: {}
@@ -135,6 +135,14 @@ inputs:
     doc: |-
       Experimental Free Energies of Binding
     type: string?
+    format:
+    - edam:format_2330
+
+  previous_stdout:
+    label: NOTE, This input is to enforce a fake / dummy dependency between steps. Do NOT explicitly supply a value here!
+    doc: |-
+      NOTE, This input is to enforce a fake / dummy dependency between steps. Do NOT explicitly supply a value here!
+    type: File
     format:
     - edam:format_2330
 
