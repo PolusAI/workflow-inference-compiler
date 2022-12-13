@@ -29,7 +29,8 @@ def default_schema(url: bool = False) -> Json:
     """
     schema: Json = {}
     schema['type'] = 'object'
-    schema['additionalProperties'] = False #{'not': True, 'errorMessage': 'remove additional property ${0#}'}
+    schema['additionalProperties'] = False
+    schema['errorMessage'] = 'Property is not allowed. IS YOUR INDENTATION CORRECT?'
     if url:
         schema['$schema'] = 'https://json-schema.org/draft/2020-12/schema'
     return schema
