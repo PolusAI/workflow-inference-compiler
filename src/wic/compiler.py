@@ -859,13 +859,6 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         #    raise Exception(f"Error! Unknown type: {in_dict['type']}")
         yaml_inputs.update(new_keyval)
 
-    if args.cwl_validate:
-        print(f'Validating {yaml_stem}.cwl ...')
-        cmd = ['cwltool', '--validate', f'{yaml_stem}.cwl']
-        # Do we want to check here and immediately fail?
-        # The root workflow will be validated anyway.
-        sub.run(cmd, check=False)
-
     if not testing:
         print('finishing', ('  ' * len(namespaces)) + yaml_path)
     # Note: We do not necessarily need to return inputs_workflow.
