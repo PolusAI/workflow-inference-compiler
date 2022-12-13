@@ -1,15 +1,15 @@
 FROM ubuntu:22.04
-
-# Install miniconda
 RUN apt-get update && apt-get install -y wget
+# Download the bdbbind dataset
+RUN wget --no-clobber http://www.pdbbind.org.cn/download/PDBbind_v2020_refined.tar.gz
+RUN tar -xvf PDBbind_v2020_refined.tar.gz
+# Install miniconda
 RUN MINICONDA="Miniconda3-latest-Linux-x86_64.sh" && \
     wget --quiet https://repo.continuum.io/miniconda/$MINICONDA && \
     bash $MINICONDA -b -p /miniconda && \
     rm -f $MINICONDA
 ENV PATH /miniconda/bin:$PATH
-
 RUN conda install -c conda-forge pandas
-
-ADD Dockerfile_PDBbind_refined .
 ADD generate_pdbbind_complex.py .
-ADD PDBbind_v2020_refined.tar.gz .
+ADD Dockerfile_PDBbind_refined .
+
