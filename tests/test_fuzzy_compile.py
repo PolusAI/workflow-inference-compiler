@@ -26,7 +26,7 @@ class TestFuzzyCompile(unittest.TestCase):
     @settings(max_examples=100,
               suppress_health_check=[HealthCheck.too_slow,
                                      HealthCheck.filter_too_much],
-              deadline=timedelta(milliseconds=10000))
+              deadline=timedelta(milliseconds=20000))
     # TODO: Improve schema so we can remove the health checks
     def test_fuzzy_compile(self, yml: Yaml) -> None:
         """Tests that the compiler doesn't crash when given random allegedly valid input.\n
