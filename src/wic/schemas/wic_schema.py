@@ -396,10 +396,17 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     str_nonempty = {'type': 'string', 'minLength': 1}
 
     if not hypothesis:
-        python_script_schema: Json = {}
-        python_script_schema['type'] = 'object'
-        python_script_schema['additionalProperties'] = True
-        python_script_schema['properties'] = {'script': str_nonempty}
+        script_schema: Json = {}
+        script_schema['type'] = 'object'
+        script_schema['additionalProperties'] = True
+        script_schema['properties'] = {'script': str_nonempty}
+
+        in_schema = default_schema()
+        in_schema['properties'] = {'in': script_schema}
+
+        python_script_schema = default_schema()
+        python_script_schema['properties'] = {'python_script': in_schema}
+
         steps_schemas += [python_script_schema]
 
     steps['items'] = {'anyOf': steps_schemas, 'minItems': 1, 'title': 'Valid workflow steps'}
