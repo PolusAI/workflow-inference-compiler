@@ -42,8 +42,12 @@ parser.add_argument('--cwl_inline_subworkflows', default=('--run_compute' in sys
                     help='Before generating the cwl file, inline all subworkflows. Required for --run_compute')
 parser.add_argument('--inference_use_naming_conventions', default=False, action="store_true",
                     help='Enables the use of naming conventions in the inference algorithm')
-parser.add_argument('--cwl_validate', default=False, action="store_true",
-                    help='After generating the cwl file, validate it.')
+parser.add_argument('--validate_plugins', default=False, action="store_true",
+                    help='Validate all CWL CommandLineTools')
+parser.add_argument('--no_skip_dollar_schemas', default=False, action="store_true",
+                    help='''Does not skip processing $schemas tags in CWL files for performance.
+                    Skipping significantly improves initial validation performance, but is not always desired.
+                    See https://github.com/common-workflow-language/cwltool/issues/623''')
 parser.add_argument('--cachedir', type=str, required=False, default='cachedir',
                     help='The directory to save intermediate results; useful with RealtimePlots.py')
 

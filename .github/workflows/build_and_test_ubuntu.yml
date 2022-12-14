@@ -2,7 +2,6 @@ name: Build And Run Test on Ubuntu
 
 on:
   push:
-    branches: [ master ]
   pull_request: 
   workflow_dispatch:
 
@@ -59,7 +58,7 @@ jobs:
 
     - name: Install Workflow Inference Compiler
       working-directory: ${{github.workspace}}
-      run: pip install .[test]
+      run: pip install ".[test]"
 
     - name: Run MyPy
       working-directory: ${{github.workspace}}
@@ -75,7 +74,10 @@ jobs:
       # NOTE: See fail-under threshold in .pylintrc
       run: pylint src/ tests/
 
-    - name: Run PyTest
+    - name: Run PyTest Serial Tests
       working-directory: ${{github.workspace}}
-      # NOTE: See fail_under threshold in .coveragerc
-      run: pytest --cov --workers 4
+      run: pytest --cov -m serial --cov-config=.coveragerc_serial
+
+    - name: Run PyTest Parallel Tests
+      working-directory: ${{github.workspace}}
+      run: pytest --cov -m "not serial" --workers 4 --cov-config=.coveragerc_parallel

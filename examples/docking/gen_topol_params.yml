@@ -32,7 +32,7 @@ steps:
   # we have the choice of using charges from the mol2 file.
     in:
 #      input_path: '*pose_MOL.mol2' # Do NOT use '*pose_ligand.pdb'
-#      output_itp_path: '&ligand_GMX.itp'
+      output_itp_path: '&ligand_GMX.itp'
       # NOTE: Although we don't need the *.itp topology file yet, we
       # need to use these coordinates with autodock because they are
       # sorted to agree with the *.itp topology include file.
@@ -47,9 +47,9 @@ steps:
 #      input_top_path: '*ligand_GMX.top'
 #      output_top_path: '&ligand_GMX_includes.top'
 - zip_top:
-#    in:
+    in:
 #      input_top_path: '*ligand_GMX_includes.top'
-#      input_itp_path: '*ligand_GMX.itp'
+      input_itp_path: '*ligand_GMX.itp'
 #      output_top_zip_path: '&ligand_GMX.zip'
 - babel_convert:
     in:
