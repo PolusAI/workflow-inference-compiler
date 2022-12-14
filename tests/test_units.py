@@ -729,9 +729,6 @@ class TestUnits(unittest.TestCase):
             results=utils.get_output_mapping(output_mapping,out_key)
             all_vals=list(output_mapping.values())
             assert results in all_vals
-            
-
-
 
 
     
