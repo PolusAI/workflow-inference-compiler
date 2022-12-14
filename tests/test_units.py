@@ -625,7 +625,7 @@ class TestUnits(unittest.TestCase):
     def test_reindex_wic_steps(self,wic_dict: Dict,step_tuple_list: List[Tuple[int,str]]) -> None: # a bit trivial, no alternative solution, replace with a weaker test?
         """Test reindex_wic_steps
 
-        Args:
+        Args:a
             wic_dict (Dict): Dictionary with wic_strategy
         """
         has_steps=check_if_steps_in_dict(wic_dict)
