@@ -1,22 +1,18 @@
-import unittest
-import pytest
-import sys
-import os
-import yaml
-import string
+import os # pylint: disable=too-many-lines
+from pathlib import Path
 import random
 import copy
-import argparse
-from unittest.mock import patch
-from string import ascii_letters, printable
-from typing import Dict,List,Any,Tuple, Generator, Union
+from string import printable
+from typing import Dict,List,Any,Tuple, Generator
 import datetime
-from pathlib import Path
+import unittest
+import pytest
+
+
 
 from hypothesis import given, settings,HealthCheck
-from hypothesis.strategies import text, integers, booleans, floats, dictionaries, recursive, lists, none
+from hypothesis.strategies import text, integers, booleans, floats, none
 import hypothesis.strategies as s
-from hypothesis_jsonschema import from_schema
 from hypothesis.strategies._internal.strategies import SearchStrategy
 
 
@@ -25,9 +21,76 @@ import wic.cli
 import wic.main
 import wic.schemas
 import wic.schemas.wic_schema
-import wic.utils as utils
-from wic.wic_types import (RoseTree, StepId, Yaml, YamlForest, YamlTree, Json)
+from wic import utils
+from wic.wic_types import (RoseTree, StepId, Yaml, YamlForest, YamlTree)
 from .test_setup import wic_strategy, get_args
+
+
+
+def remove_duplicate_nested_keys(flatten_dict: Dict,new_keys: List[Tuple[str,...]]) -> Dict:
+    """Helper function for test_recursively_delete_dict_key. Need to ensure duplicate unflattened keys dont exist
+    (only first N keys are same i.e. (K1,K2,..,KN,..KM) nd (K1,K2,...,KN)). This can happen when removing individual
+    keys from flattend keys.
+
+    Args:
+        flatten_dict (Dict): Flattened dictionary
+        new_keys (List[Tuple[str,...]]): List of modified flattened keys
+
+    Returns:
+        Dict: Modified flattened dictionary
+    """
+    dups_to_remove=[]
+    for key_list,val in flatten_dict.items(): # pylint: disable=too-many-nested-blocks
+        if key_list in new_keys:
+            for okey_list,thevalue in flatten_dict.items():
+                if okey_list!=key_list and len(key_list)<len(okey_list):
+                    is_dup=True
+                    for i,ovalue in enumerate(okey_list):
+                        if i<=len(key_list)-1:
+                            value=key_list[i]
+                            if value!=ovalue:
+                                is_dup=False
+                    if is_dup is True:
+                        if key_list not in dups_to_remove:
+                            dups_to_remove.append(key_list)
+
+    for key_list in dups_to_remove:
+        del flatten_dict[key_list]
+    return flatten_dict
+
+
+def replace_keys_flat_dict(fullkeylist: List[List[str]],key: str,flatten_dict: Dict)\
+     -> Tuple[Dict, List[Tuple[str,...]]]:
+    """Helper function for test_recursively_delete_dict_key. Need to remove flattened keys containing input key.
+
+    Args:
+        fullkeylist (List[List[str]]): List of all flattened keys from flattened dictionary
+        key (str): Key to be removed in flatten keys containing key
+        flatten_dict (Dict): Flattened dictionary
+
+    Returns:
+        Dict: Modified flattened dictionary
+        List[str]: List of new flattned keys added to flattened dictionary
+    """
+    keylists_to_delete=[]
+    for key_list in fullkeylist:
+        if key in key_list:
+            keylists_to_delete.append(key_list)
+
+    new_keys=[]
+    for key_list in keylists_to_delete:
+        del flatten_dict[key_list]
+        if len(key_list)>1 and key!=key_list[0]:
+            new_key_list=[]
+            for i in key_list:
+                if i!=key:
+                    new_key_list.append(i)
+                else:
+                    break
+
+            new_keys.append(tuple(new_key_list))
+            flatten_dict[tuple(new_key_list)]={}
+    return flatten_dict,new_keys
 
 
 def check_nested_dict_for_key(test_dict: Dict,key_item: str) -> bool:
@@ -41,7 +104,6 @@ def check_nested_dict_for_key(test_dict: Dict,key_item: str) -> bool:
     """
     cont=True
     dict_list=grab_nested_dicts(test_dict)
-    
     for key,value in test_dict.items():
         if key_item in key: # using this as delimiter for flattening dictionary
             cont=False
@@ -53,7 +115,8 @@ def check_nested_dict_for_key(test_dict: Dict,key_item: str) -> bool:
 
 
 def add_wic_steps(wic_dict: Dict,step_tuple_list: List[Tuple[int,str]]) -> Dict:
-    """Add steps into nested dictionary to simulate run time dictionary if wic_strategy doesnt have in generated dictionary
+    """Add steps into nested dictionary to simulate run time
+    dictionary if wic_strategy doesnt have in generated dictionary
         need this because we chose not to include the property wic in our schema
 
     Args:
@@ -93,7 +156,7 @@ def check_if_steps_in_dict(wic_dict: Dict) -> bool:
 
     return check
 
-def flatten_list(S: List) -> List:
+def flatten_list(test_list: List) -> List:
     """Flatten a nested list
 
     Args:
@@ -102,14 +165,14 @@ def flatten_list(S: List) -> List:
     Returns:
         List: Flattened list
     """
-    if S == []:
-        return S
-    if isinstance(S[0], list):
-        return flatten_list(S[0]) + flatten_list(S[1:])
-    return S[:1] + flatten_list(S[1:])
+    if test_list == []:
+        return test_list
+    if isinstance(test_list[0], list):
+        return flatten_list(test_list[0]) + flatten_list(test_list[1:])
+    return test_list[:1] + flatten_list(test_list[1:])
 
 def grab_nested_dicts(d : Dict) -> Generator:
-    
+
     """Recursively grab nested dicts from a dict
 
     Args:
@@ -120,7 +183,7 @@ def grab_nested_dicts(d : Dict) -> Generator:
     """
     for value in d.values():
         if isinstance(value, Dict):
-            yield(value)
+            yield value
             yield from grab_nested_dicts(value)
 
 
@@ -133,17 +196,17 @@ def unflatten_dict(test_dict: Dict) -> Dict:
     Returns:
         _type_: Unflattened dictionary
     """
-    resultDict : Dict = dict()
+    result_dict : Dict = {}
     for key, value in test_dict.items():
         parts = list(key)
-        d = resultDict
+        d = result_dict
         for part in parts[:-1]:
             if part not in d:
-                d[part] = dict()
+                d[part] = {}
             d = d[part]
         d[parts[-1]] = value
-        
-    return resultDict
+
+    return result_dict
 
 
 def flatten_nested_dict(d : Dict) -> Dict:
@@ -171,7 +234,8 @@ def convert_dict_keys(d : Dict) -> Dict:
     """Convert dict keys from string to tuples
 
     Args:
-        d (Dict): Used in conjunction with flatten_nested_dict, this converts keys that are stored as key1+_key2+_ .. into a tuple (key1,key2,..)
+        d (Dict): Used in conjunction with flatten_nested_dict,
+        this converts keys that are stored as key1+_key2+_ .. into a tuple (key1,key2,..)
 
     Returns:
         Dict: Modified dictionary
@@ -180,11 +244,11 @@ def convert_dict_keys(d : Dict) -> Dict:
     for key, value in d.items():
         if isinstance(key, str):
             key = tuple(key.split('_'))
-  
+
         new_dict[tuple(key)] = value
     return new_dict
-    
-    
+
+
 
 
 def add_backend_steps(wic_dict : Dict, backend : str, steps : int) -> Dict:
@@ -271,7 +335,7 @@ def recursive_forest_items(yaml_tree : YamlTree) -> Generator:
             tup=(stepid,forest)
             if testdict not in stored_dicts and len(testdict)!=0:
                 yield tup
-                stored_dicts.append(testdict) # dont want duplicates 
+                stored_dicts.append(testdict) # dont want duplicates
             yield from recursive_forest_items(yml_tree)
 
 def create_rose_tree_from_nested_dict(test_dict : Dict) ->RoseTree:
@@ -310,17 +374,15 @@ def create_yaml_forest(test_yaml_tree: YamlTree) -> YamlForest:
     """Create a YamlForest from a YamlTree
 
     Args:
-        test_yaml_tree (YamlTree): YamlTree (originally made from nested dictionary) that will be used to create YamlForest
+        test_yaml_tree (YamlTree): YamlTree (originally made from
+        nested dictionary) that will be used to create YamlForest
 
     Returns:
-        YamlForest: Generated from YamlTree 
+        YamlForest: Generated from YamlTree
     """
     subfors=list(recursive_forest_items(test_yaml_tree))
-    if len(subfors)!=0:
-        yaml_forest=YamlForest(yaml_tree=test_yaml_tree,sub_forests=[subfors]) 
-    else:
-        yaml_forest=YamlForest(yaml_tree=test_yaml_tree,sub_forests=[tuple([StepId('', ''),\
-            YamlForest(yaml_tree=create_yaml_tree({}),sub_forests=[])])])
+    yaml_forest=YamlForest(yaml_tree=test_yaml_tree,sub_forests=subfors)
+
     return yaml_forest
 
 
@@ -331,9 +393,10 @@ nested_lists: Any = s.recursive(s.lists(any_types,min_size=1),\
 filtered_text: SearchStrategy[str] = s.text(min_size=1).filter(lambda x: '_' not in x)
 recursive_fn: Any = lambda children: s.dictionaries(text(min_size=1),children,min_size=1)
 nested_dict: Any = s.recursive(s.dictionaries(filtered_text,any_types).filter(lambda x: len(x)!=0),recursive_fn )
-
+str_list = s.lists(s.text(min_size=2),min_size=1,max_size=100)
 class TestUnits(unittest.TestCase):
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     def test_read_lines_pairs(self)-> None: # generalize to making files on the fly
         """Test read_lines_pairs
         """
@@ -344,7 +407,8 @@ class TestUnits(unittest.TestCase):
         cwl_dirs_path=Path(os.path.join(wicsrcpath,'cwl_dirs.txt'))
         self.assertEqual([('global', 'biobb/'), ('global', 'cwl_adapters/')],utils.read_lines_pairs(cwl_dirs_path))
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @given(item1=filtered_text,item2=s.integers(min_value=0,max_value=10 ** 6),item3=filtered_text)
     def test_parse_step_name_str(self,item1 : str, item2 : int, item3 : str)-> None:
         """Test parse_step_name_str
@@ -357,7 +421,8 @@ class TestUnits(unittest.TestCase):
         output=utils.step_name_str(item1, item2 ,item3)
         self.assertEqual((item1, item2, item3),utils.parse_step_name_str(output))
 
-    @pytest.mark.fast 
+    @pytest.mark.slow
+    @pytest.mark.unit
     @given(item1=filtered_text,item2=filtered_text)
     def test_shorten_restore_namespaced_output_name(self,item1 : str,item2 : str)->None:
         """Test shorten_restore_namespaced_output_name
@@ -372,9 +437,11 @@ class TestUnits(unittest.TestCase):
         restored_name=utils.restore_namespaced_output_name(tup[0],tup[1],sep=thesep)
         self.assertEqual(restored_name,namespaced_output_name)
 
-    @pytest.mark.fast
-    @given(stringlist=s.lists(s.text(min_size=2),min_size=1,max_size=100),astringlist=s.lists(s.text(min_size=2),min_size=1,max_size=50))
-    def test_partition_by_lowest_common_ancestor(self,stringlist : List[str], astringlist : List[str])->None: 
+    @pytest.mark.slow
+    @pytest.mark.unit
+    @given(stringlist=s.lists(s.text(min_size=2),min_size=1,max_size=100),\
+        astringlist=s.lists(s.text(min_size=2),min_size=1,max_size=50))
+    def test_partition_by_lowest_common_ancestor(self,stringlist : List[str], astringlist : List[str])->None:
         """Test partition_by_lowest_common_ancestor
 
         Args:
@@ -386,38 +453,31 @@ class TestUnits(unittest.TestCase):
             templist=[item,None]
             citem : Any =random.choice(templist)
             if citem is not None:
-                testlist.insert(random.randrange(len(testlist)+1), citem) # randomly add different things to dupicate list
-                
- 
+                testlist.insert(random.randrange(len(testlist)+1), citem)
+
+
         results=utils.partition_by_lowest_common_ancestor(stringlist,testlist)
         found=False
         for i,test_string in enumerate(stringlist):
-            same=True
-            teststring=testlist[i]
             if i<=len(testlist)-1:
+                teststring=testlist[i]
                 if test_string!=teststring:
-                    same=False
-                if i==0 and same is False:
-                    expected_results : Tuple[List,List] =([],stringlist)
+                    lastsameindex=i-1
+                    expected_results=(stringlist[:lastsameindex+1],stringlist[lastsameindex+1:])
                     found=True
                     break
-                else:
-                    if same is False:
-                        lastsameindex=i-1
-                        expected_results=(stringlist[:lastsameindex+1],stringlist[lastsameindex+1:])
-                        found=True
-                        break
         if found is False:
             expected_results=(stringlist,[])
         self.assertEqual(expected_results,results)
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much,HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
-    )  
+    )
     @given(dict_list=s.lists(nested_dict,min_size=1,max_size=10))
-    def test_get_steps_keys(self,dict_list : List[Dict])->None: 
+    def test_get_steps_keys(self,dict_list : List[Dict])->None:
         """Test get_steps_keys
 
         Args:
@@ -428,44 +488,50 @@ class TestUnits(unittest.TestCase):
             firstkeylist.extend(list(unflattendict.keys()))
         self.assertEqual(firstkeylist,utils.get_steps_keys(dict_list))
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much,HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
-    )  
-    @given(yaml_tree_tuple=wic_strategy.map(create_yaml_tree),stringlist=s.lists(s.text(min_size=2),min_size=1,max_size=100),astringlist=s.lists(s.text(min_size=2),min_size=1,max_size=50))
+    )
+    @given(yaml_tree_tuple=\
+        wic_strategy.map(create_yaml_tree),stringlist=str_list,astringlist=str_list) # type: ignore [arg-type]
     def test_get_subkeys(self,yaml_tree_tuple : YamlTree,stringlist : List[str], astringlist : List[str])->None:
-           
-            """Test get_subkeys
 
-            Args:
-                yaml_tree_tuple (YamlTree): YamlTree generated from nested dictionary
-                stringlist (List[str]): List of random strings
-                astringlist (List[str]): List of random strings
-            """
-            args = get_args()
-            (step_id, yaml_tree) = yaml_tree_tuple
-            if check_if_steps_in_dict(yaml_tree) is True:
-                    steps: List[Yaml] = yaml_tree['steps']
-                    wic_steps = yaml_tree['wic'].get('steps', {})
-                    steps_keys = utils.get_steps_keys(steps)
-                    tools = wic.main.get_tools_cwl(args.cwl_dirs_file)
-                    tools_stems = [stepid.stem for stepid in tools]
-                    
-            else:
-                the_ls=randomly_add_contents_lists_to_list([stringlist,astringlist],0) # account for case where wic_strategy doesnt give correct data type
-                steps_keys,tools_stems=the_ls[:]
+        """Test get_subkeys
 
-                    
-            results=utils.get_subkeys(steps_keys,tools_stems)
-            expected_results=[i for i in steps_keys if i not in tools_stems]
-            self.assertEqual(expected_results,results)
+        Args:
+            yaml_tree_tuple (YamlTree): YamlTree generated from nested dictionary
+            stringlist (List[str]): List of random strings
+            astringlist (List[str]): List of random strings
+        """
+        args = get_args()
+        (step_id, yaml_tree) = yaml_tree_tuple
+        if check_if_steps_in_dict(yaml_tree) is True:
+            steps: List[Yaml] = yaml_tree['steps']
+            wic_steps = yaml_tree['wic'].get('steps', {})
+            steps_keys = utils.get_steps_keys(steps)
+            tools = wic.main.get_tools_cwl(args.cwl_dirs_file)
+            tools_stems = [stepid.stem for stepid in tools]
 
-    @pytest.mark.fast
+        else:
+            output=randomly_add_contents_lists_to_list([stringlist,astringlist],0)
+            steps_keys=output[0]
+            tools_stems=output[1]
+
+
+
+
+        results=utils.get_subkeys(steps_keys,tools_stems)
+        expected_results=[i for i in steps_keys if i not in tools_stems]
+        self.assertEqual(expected_results,results)
+
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much,HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
-    )  
+    )
     @given(
         yaml_tree=wic_strategy,
         wic_dict=wic_strategy,
@@ -473,7 +539,7 @@ class TestUnits(unittest.TestCase):
         backend=s.text(min_size=1),
         steps=s.integers(min_value=0)
     )
-    def test_extract_backend(self, yaml_tree : Dict, wic_dict : Dict, yaml_path : str ,backend : str,steps : int)->None:
+    def test_extract_backend(self, yaml_tree : Dict, wic_dict : Dict, yaml_path : str ,backend : str,steps : int)->None: # pylint: disable=too-many-arguments
         """Test extract_backend
 
         Args:
@@ -487,16 +553,17 @@ class TestUnits(unittest.TestCase):
         if 'backend' in wic_dict.keys():
             backend=wic_dict['backend']
         else:
-            wic_dict=add_backend_steps(wic_dict,backend,steps) # in case wic_strategy doesnt give correct data structure
+            wic_dict=add_backend_steps(wic_dict,backend,steps)
             yaml_tree_copy.update({'steps': steps})
         results=utils.extract_backend(yaml_tree,wic_dict,Path(yaml_path))
         self.assertEqual((backend,yaml_tree_copy),results)
-    
-    @pytest.mark.fast
+
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
-    )  
+    )
     @given(masterlist=nested_lists)
     def test_flatten(self, masterlist : List[List])->None:
         """Test flatten
@@ -504,11 +571,12 @@ class TestUnits(unittest.TestCase):
         Args:
             masterlist (List[List]): Nested lists of random data types
         """
-        if any(isinstance(el, list) for el in masterlist): # recursive funciton sometimes gives list with no nested lists
+        if any(isinstance(el, list) for el in masterlist):
             expected_output=[x for lst in masterlist for x in lst]
             self.assertEqual(expected_output,utils.flatten(masterlist))
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
@@ -524,12 +592,13 @@ class TestUnits(unittest.TestCase):
             data=rosetree.data
             flattened_dict=list(grab_nested_dicts(data))
             return [data]+flattened_dict
-            
+
         expected_results=flatten_rose_tree(rosetree)
         results=utils.flatten_rose_tree(rosetree)
         self.assertEqual(expected_results,results)
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
@@ -543,7 +612,7 @@ class TestUnits(unittest.TestCase):
         """
         if len(test_dict)!=0:
             cont=check_nested_dict_for_key(test_dict,'_')
-            flatten_dict=convert_dict_keys(flatten_nested_dict(test_dict)) # convert to format to call unflatten function later
+            flatten_dict=convert_dict_keys(flatten_nested_dict(test_dict))
             if cont is True:
                 fullkeylist=list(flatten_dict.keys())
                 if len(fullkeylist)>1:
@@ -557,72 +626,47 @@ class TestUnits(unittest.TestCase):
                     if len(flatten_keylist)!=0:
                         key=random.choice(flatten_keylist) # choose random key to delete
                         results = utils.recursively_delete_dict_key(key, test_dict)
-                        keylists_to_delete=[]
-                        for key_list in fullkeylist:
-                            if key in key_list:
-                                keylists_to_delete.append(key_list)
-                        
-                        new_keys=[]
-                        for key_list in keylists_to_delete:
-                            del flatten_dict[key_list] 
-                            if len(key_list)>1 and key!=key_list[0]:
-                                new_key_list=[]
-                                for i in key_list:
-                                    if i!=key:
-                                        new_key_list.append(i)
-                                    else:
-                                        break
-                                
-                                new_keys.append(tuple(new_key_list))
-                                flatten_dict[tuple(new_key_list)]={}
-                        dups_to_remove=[]
-                        for key_list in flatten_dict.keys():
-                            if key_list in new_keys:
-                                for okey_list in flatten_dict.keys():
-                                    if okey_list!=key_list and len(key_list)<len(okey_list):
-                                        is_dup=True
-                                        for i,ovalue in enumerate(okey_list):
-                                            if i<=len(key_list)-1:
-                                                value=key_list[i]
-                                                if value!=ovalue:
-                                                    is_dup=False
-                                        if is_dup is True:
-                                            if key_list not in dups_to_remove:
-                                                dups_to_remove.append(key_list)            
-                                
-                        for key_list in dups_to_remove:
-                            del flatten_dict[key_list] 
-                        
+                        flatten_dict,new_keys = replace_keys_flat_dict(fullkeylist,key,flatten_dict)
+                        flatten_dict = remove_duplicate_nested_keys(flatten_dict,new_keys)
                         expected_results=unflatten_dict(flatten_dict)
                         self.assertEqual(expected_results,results)
 
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
     )
     @given(test_dict = nested_dict)
-    def test_recursively_contains_dict_key(self,test_dict: Dict) -> None: # a bit trivial, flatten keys first
+    def test_recursively_contains_dict_key(self,test_dict: Dict) -> None:
+        """Test recursively_contains_dict_key
+
+        Args:
+            test_dict (Dict): Nested dictionary
+        """
         dict_list=grab_nested_dicts(test_dict)
         keylist=[list(i.keys()) for i in dict_list]
         keylist=list(flatten_list(keylist))
-        key=random.choice(keylist)
-        results=utils.recursively_contains_dict_key(key,test_dict)
-        self.assertEqual(True,results)
-        
+        if len(keylist)!=0:
+            key=str(random.choice(keylist))
+            results=utils.recursively_contains_dict_key(key,test_dict)
+            self.assertEqual(True,results)
 
-        
-    @pytest.mark.fast
+
+
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
     )
     @given(
         wic_dict=wic_strategy,
-        step_tuple_list=s.lists(s.tuples(s.integers(min_value=0),s.text(min_size=1).filter(lambda x: ',' not in x)),min_size=1,max_size=10),
+        step_tuple_list=s.lists(s.tuples(s.integers(min_value=0),\
+            s.text(min_size=1).filter(lambda x: ',' not in x)),min_size=1,max_size=10),
     )
-    def test_reindex_wic_steps(self,wic_dict: Dict,step_tuple_list: List[Tuple[int,str]]) -> None: # a bit trivial, no alternative solution, replace with a weaker test?
+    def test_reindex_wic_steps(self,wic_dict: Dict,step_tuple_list: List[Tuple[int,str]]) -> None:
         """Test reindex_wic_steps
 
         Args:a
@@ -638,15 +682,15 @@ class TestUnits(unittest.TestCase):
         results=utils.reindex_wic_steps(wic_steps,random_index)
         new_wic_steps={}
         for key,value in wic_steps.items():
-            tupkey=list(utils.parse_int_string_tuple(key))
-            index = tupkey[0]
-            newstr = f'({index+1}, {tupkey[1]})' if index >= random_index else key
+            index,the_string=utils.parse_int_string_tuple(key)
+            newstr = f'({index+1}, {the_string})' if index >= random_index else key
             new_wic_steps[newstr]=value
         expected_results=new_wic_steps
         self.assertEqual(expected_results,results)
 
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
@@ -660,31 +704,33 @@ class TestUnits(unittest.TestCase):
             key (str): Random string
             val (Any): Random type
         """
-        
+
         dict_list=list(grab_nested_dicts(test_dict))
         cont=check_nested_dict_for_key(test_dict,'_')
         if len(dict_list)>1 and cont is True:
             flatten_dict=convert_dict_keys(flatten_nested_dict(test_dict))
             fullkeylist=list(flatten_dict.keys())
             key_list=random.choice(fullkeylist)
-            if type(flatten_dict[key_list]) is dict:
+            if isinstance(flatten_dict[key_list],dict):
                 del flatten_dict[key_list]
                 key_list=list(key_list)
                 key_list.append(key)
                 results=utils.recursively_insert_into_dict_tree(test_dict,key_list,val)
                 key_list=tuple(key_list)
                 flatten_dict[key_list]=[val]
-            else: 
+            else:
                 results=test_dict
             expected_results=unflatten_dict(flatten_dict)
             self.assertEqual(expected_results,results)
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
     )
-    @given(input_mapping = s.dictionaries(text(min_size=1),s.lists(text(min_size=1),min_size=1),min_size=1).filter(lambda x: len(x)!=0))
+    @given(input_mapping = s.dictionaries(text(min_size=1),\
+        s.lists(text(min_size=1),min_size=1),min_size=1).filter(lambda x: len(x)!=0))
     def test_get_input_mappings(self,input_mapping: Dict[str,List[str]]) -> None:
         """Test get_input_mappings
 
@@ -729,21 +775,3 @@ class TestUnits(unittest.TestCase):
             results=utils.get_output_mapping(output_mapping,out_key)
             all_vals=list(output_mapping.values())
             assert results in all_vals
-
-
-    
-
-
-
-        
-        
-                    
-                    
-
-
-   
- 
-
-    
-
-

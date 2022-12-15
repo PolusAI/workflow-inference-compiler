@@ -81,3 +81,7 @@ jobs:
     - name: Run PyTest Parallel Tests
       working-directory: ${{github.workspace}}
       run: pytest --cov -m "not serial" --workers 4 --cov-config=.coveragerc_parallel
+
+    - name: Run PyTest Unit Tests
+      working-directory: ${{github.workspace}}
+      run: pytest --cov -m "unit" --workers 4

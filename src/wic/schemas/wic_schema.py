@@ -390,7 +390,7 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
         k = 1 # 1-5 minutes...
         # Choose a random subset so we're not testing the same files
         tools_schemas = random.choices(tools_schemas, k=k)
-        yml_schemas = random.choices(yml_schemas, k=k)
+        yml_schemas = []
 
     steps_schemas = tools_schemas + yml_schemas
 
