@@ -21,10 +21,26 @@ import wic.cli
 import wic.main
 import wic.schemas
 import wic.schemas.wic_schema
-from wic import utils
+from wic import utils, utils_cwl
 from wic.wic_types import (RoseTree, StepId, Yaml, YamlForest, YamlTree)
 from .test_setup import wic_strategy, get_args
 
+
+def check_if_duplicate_keys(first_dict: Dict[str,Any],second_dict: Dict[str,Any]) -> bool:
+    """Check for duplicate keys between two dictionaries
+
+    Args:
+        first_dict (Dict[str,Any]): Dictionary of keys
+        second_dict (Dict[str,Any]): Another dictionary of keys
+
+    Returns:
+        bool: If duplicate key found
+    """
+    has_dup=False
+    for key,value in first_dict.items():
+        if key in second_dict.keys():
+            has_dup=True
+    return has_dup
 
 
 def remove_duplicate_nested_keys(flatten_dict: Dict,new_keys: List[Tuple[str,...]]) -> Dict:
@@ -114,7 +130,8 @@ def check_nested_dict_for_key(test_dict: Dict,key_item: str) -> bool:
     return cont
 
 
-def add_wic_steps(wic_dict: Dict,step_tuple_list: List[Tuple[int,str]]) -> Dict:
+def add_wic_steps(wic_dict: Dict,step_tuple_list: List[Tuple[int,str]], \
+    in_steps_dict: Dict = {}, out_steps: List[str] = []) -> Dict:
     """Add steps into nested dictionary to simulate run time
     dictionary if wic_strategy doesnt have in generated dictionary
         need this because we chose not to include the property wic in our schema
@@ -130,13 +147,19 @@ def add_wic_steps(wic_dict: Dict,step_tuple_list: List[Tuple[int,str]]) -> Dict:
     inner_wic_dict=wic_dict['wic']
     if 'steps' not in inner_wic_dict.keys():
         inner_wic_dict['steps']={}
-    wic_steps = inner_wic_dict['steps']
-    if len(wic_steps.keys())==0:
+    the_wic_steps = inner_wic_dict['steps']
+    if len(the_wic_steps.keys())==0:
         for item in step_tuple_list:
-            wic_steps[str(item)] = ""
-    inner_wic_dict['steps']=wic_steps
+            if len(in_steps_dict)!=0:
+                the_wic_steps[str(item)]={}
+                the_wic_steps[str(item)]['in']=in_steps_dict
+            if len(out_steps)!=0:
+                the_wic_steps[str(item)]={}
+                the_wic_steps[str(item)]['out']=out_steps
+            elif len(in_steps_dict)==0 and len(out_steps)==0:
+                the_wic_steps[str(item)] = ""
+    inner_wic_dict['steps']=the_wic_steps
     wic_dict['wic']=inner_wic_dict
-
     return wic_dict
 
 
@@ -394,7 +417,10 @@ filtered_text: SearchStrategy[str] = s.text(min_size=1).filter(lambda x: '_' not
 recursive_fn: Any = lambda children: s.dictionaries(text(min_size=1),children,min_size=1)
 nested_dict: Any = s.recursive(s.dictionaries(filtered_text,any_types).filter(lambda x: len(x)!=0),recursive_fn )
 str_list = s.lists(s.text(min_size=2),min_size=1,max_size=100)
+wic_steps = s.lists(s.tuples(s.integers(min_value=0),\
+            s.text(min_size=1).filter(lambda x: ',' not in x)),min_size=1,max_size=10)
 class TestUnits(unittest.TestCase):
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_read_lines_pairs(self)-> None: # generalize to making files on the fly
@@ -509,7 +535,7 @@ class TestUnits(unittest.TestCase):
         (step_id, yaml_tree) = yaml_tree_tuple
         if check_if_steps_in_dict(yaml_tree) is True:
             steps: List[Yaml] = yaml_tree['steps']
-            wic_steps = yaml_tree['wic'].get('steps', {})
+            the_wic_steps = yaml_tree['wic'].get('steps', {})
             steps_keys = utils.get_steps_keys(steps)
             tools = wic.main.get_tools_cwl(args.cwl_dirs_file)
             tools_stems = [stepid.stem for stepid in tools]
@@ -663,8 +689,7 @@ class TestUnits(unittest.TestCase):
     )
     @given(
         wic_dict=wic_strategy,
-        step_tuple_list=s.lists(s.tuples(s.integers(min_value=0),\
-            s.text(min_size=1).filter(lambda x: ',' not in x)),min_size=1,max_size=10),
+        step_tuple_list=wic_steps,
     )
     def test_reindex_wic_steps(self,wic_dict: Dict,step_tuple_list: List[Tuple[int,str]]) -> None:
         """Test reindex_wic_steps
@@ -675,13 +700,13 @@ class TestUnits(unittest.TestCase):
         has_steps=check_if_steps_in_dict(wic_dict)
         if has_steps is False:
             wic_dict = add_wic_steps(wic_dict,step_tuple_list)
-        wic_steps = wic_dict['wic'].get('steps', {})
-        random_step=random.choice(list(wic_steps.keys()))
+        the_wic_steps = wic_dict['wic'].get('steps', {})
+        random_step=random.choice(list(the_wic_steps.keys()))
         random_step=utils.parse_int_string_tuple(random_step)
         random_index=random_step[0]
-        results=utils.reindex_wic_steps(wic_steps,random_index)
+        results=utils.reindex_wic_steps(the_wic_steps,random_index)
         new_wic_steps={}
-        for key,value in wic_steps.items():
+        for key,value in the_wic_steps.items():
             index,the_string=utils.parse_int_string_tuple(key)
             newstr = f'({index+1}, {the_string})' if index >= random_index else key
             new_wic_steps[newstr]=value
@@ -754,7 +779,8 @@ class TestUnits(unittest.TestCase):
 
 
 
-    @pytest.mark.fast
+    @pytest.mark.slow
+    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
     deadline=datetime.timedelta(milliseconds=1000),
@@ -775,3 +801,156 @@ class TestUnits(unittest.TestCase):
             results=utils.get_output_mapping(output_mapping,out_key)
             all_vals=list(output_mapping.values())
             assert results in all_vals
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    @settings(
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
+    deadline=datetime.timedelta(milliseconds=1000),
+    )
+    @given(wic_dict = wic_strategy, keyval=nested_dict, inkeyval=nested_dict,
+    step_tuple_list=wic_steps)
+    def test_add_yamldict_keyval_in(self,wic_dict: Dict, keyval: Dict, inkeyval: Dict, \
+        step_tuple_list: List[Tuple[int,str]]) -> None:
+        """Test add_yamldict_keyval_in
+
+        Args:
+            wic_dict (Dict): wic_strategy that has steps from work flow
+            keyval (Dict): Extra steps added into workflow
+            inkeyval (Dict): Steps added into workflow for inputs
+        """
+        k = random.randint(0, 1)
+        if k == 1:
+            in_steps=inkeyval
+        else:
+            in_steps={}
+
+        if check_if_duplicate_keys(in_steps,keyval) is False:
+            wic_dict = add_wic_steps(wic_dict,step_tuple_list,in_steps_dict=in_steps)
+            steps_i = wic_dict['wic'].get('steps', {})
+            key_list=list(steps_i.keys())
+            step_key=random.choice(key_list)
+            results=utils_cwl.add_yamldict_keyval_in(steps_i,step_key,keyval)
+            result_step_key=results[step_key]
+            result_step_key_in=result_step_key['in']
+            result_step_key_in_flat=flatten_nested_dict(result_step_key_in)
+            result_step_key_in_flat_values=list(result_step_key_in_flat.values())
+            keyval_flat=flatten_nested_dict(keyval)
+            keyval_flat_values=list(keyval_flat.values())
+            for value in keyval_flat_values:
+                assert value in result_step_key_in_flat_values
+            if k == 1:
+                inkeyval_flat=flatten_nested_dict(inkeyval)
+                inkeyval_flat_values=list(inkeyval_flat.values())
+                for value in inkeyval_flat_values:
+                    assert value in result_step_key_in_flat_values
+
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    @settings(
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
+    deadline=datetime.timedelta(milliseconds=1000),
+    )
+    @given(wic_dict = wic_strategy, keyval=s.lists(s.text(min_size=2)), outvals=s.lists(s.text(min_size=1)),
+    step_tuple_list=wic_steps)
+    def test_add_yamldict_keyval_out(self,wic_dict: Dict, keyval: List[str], outvals: List[str], \
+        step_tuple_list: List[Tuple[int,str]]) -> None:
+        """Test add_yamldict_keyval_out
+
+        Args:
+            wic_dict (Dict): wic_strategy that has steps from work flow
+            keyval (List[str]): Extra steps added into workflow for outputs
+            outvals (List[str]): Steps added into workflow for outputs
+        """
+        k = random.randint(0, 1)
+        if k == 1:
+            the_out_steps=outvals
+        else:
+            the_out_steps=[]
+
+        wic_dict = add_wic_steps(wic_dict,step_tuple_list,out_steps=the_out_steps)
+        steps_i = wic_dict['wic'].get('steps', {})
+        key_list=list(steps_i.keys())
+        step_key=random.choice(key_list)
+        results=utils_cwl.add_yamldict_keyval_out(steps_i,step_key,keyval)
+        result_step_key=results[step_key]
+        result_step_key_out=result_step_key['out']
+        for value in keyval:
+            assert value in result_step_key_out
+        if k == 1:
+            for value in the_out_steps:
+                assert value in result_step_key_out
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    @settings(
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
+    deadline=datetime.timedelta(milliseconds=1000),
+    )
+    @given(test_dict = nested_dict, test_string = s.text(min_size=1), items_dict= nested_dict)
+    def test_canonicalize_type(self,test_dict: Dict, test_string : str, items_dict: Dict) -> None:
+        """Test canonicalize_type
+
+        Args:
+            test_dict (Dict): Nested dictionary
+            test_string (str): Random string
+        """
+
+        test_dict.update({'type':'array'})
+        test_dict.update({'items':items_dict})
+        results=utils_cwl.canonicalize_type(test_dict)
+        flat_results_dict=flatten_nested_dict(results)
+        flat_test_dict=flatten_nested_dict(test_dict)
+        self.assertEqual(flat_results_dict,flat_test_dict)
+        test_list=['?','[]']
+        item=random.choice(test_list)
+        test_string+=item
+        results=utils_cwl.canonicalize_type(test_string)
+        if item=='?':
+            the_item=results[1]
+            assert the_item in test_string
+        elif item=='[]':
+            the_item=results['items']
+            assert the_item in test_string
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    @settings(
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
+    deadline=datetime.timedelta(milliseconds=1000),
+    )
+    @given(list_nested_dicts = s.lists(nested_dict,min_size=3,max_size=3))
+    def test_copy_cwl_input_output_dict(self,list_nested_dicts: List[Dict]) -> None:
+        """Test copy_cwl_input_output_dict
+
+        Args:
+            list_nested_dics (List[Dict]): List of nested dictionaries
+        """
+        keylist=['format', 'label', 'doc']
+        io_dict=dict(zip(keylist,list_nested_dicts))
+        io_dict.update({'type':{}})
+        results=utils_cwl.copy_cwl_input_output_dict(io_dict)
+        for key,value in io_dict.items():
+            if key in keylist:
+                self.assertEqual(value,results[key])
+
+    # @pytest.mark.slow
+    # @pytest.mark.unit
+    # @settings(
+    # suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much, HealthCheck.data_too_large],
+    # deadline=datetime.timedelta(milliseconds=1000),
+    # )
+    # @given(input_dict = s.dictionaries(s.text(min_size=1),any_types),\
+    # output_dict = s.dictionaries(s.text(min_size=1),any_types))
+    # def test_generate_CWL_CommandLineTool(self,input_dict: Dict[str,Any],output_dict: Dict[str,Any]) -> None:
+    #     """Test generate_CWL_CommandLineTool
+
+    #     Args:
+    #         input_dict (Dict[str,Any]): Random inputs for python cwl
+    #         output_dict (Dict[str,Any]): Random outputs for python cwl
+    #     """
+    #     results=python_cwl_adapter.generate_CWL_CommandLineTool(input_dict,output_dict)
+    #     print('input_dict',input_dict)
+    #     print('output_dict',output_dict)
+    #     print('results',results)

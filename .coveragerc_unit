@@ -1,7 +1,9 @@
 [report]
 # Increase this threshold as we increase coverage.
-fail_under = 40.00
+fail_under = 50.00
 
 [run]
 omit =
-   tests/test_units.py
+   atomselect_demo.py
+   examples/*
+   tests/*

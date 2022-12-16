@@ -1,3 +1,7 @@
 [report]
 # Increase this threshold as we increase coverage.
 fail_under = 50.00
+
+[run]
+omit =
+   tests/test_units.py

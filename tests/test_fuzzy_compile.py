@@ -22,6 +22,7 @@ from .test_setup import get_args, tools_cwl, yml_paths, validator, wic_strategy
 class TestFuzzyCompile(unittest.TestCase):
 
     @pytest.mark.slow
+    @pytest.mark.parallel
     @given(wic_strategy)
     @settings(max_examples=100,
               suppress_health_check=[HealthCheck.too_slow,

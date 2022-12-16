@@ -41,7 +41,9 @@ jobs:
         ./conda_devtools.sh
 
     - name: Install System Graphviz (NOT python3-graphviz)
-      run: sudo apt install graphviz
+      run: |
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -y update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -y install graphviz
 
     - name: Setup Python
       uses: actions/setup-python@v2
@@ -80,8 +82,9 @@ jobs:
 
     - name: Run PyTest Parallel Tests
       working-directory: ${{github.workspace}}
-      run: pytest --cov -m "not serial" --workers 4 --cov-config=.coveragerc_parallel
+      run: pytest --cov -m parallel --workers 4 --cov-config=.coveragerc_parallel
 
     - name: Run PyTest Unit Tests
       working-directory: ${{github.workspace}}
-      run: pytest --cov -m "unit" --workers 4
+      run: pytest --cov -m unit --workers 4 --cov-config=.coveragerc_unit
+
