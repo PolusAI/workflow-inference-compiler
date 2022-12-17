@@ -46,7 +46,8 @@ steps:
         output_crd_path: '&prod.gro'
         output_trr_path: '&prod.trr' # Explicitly specify for cwl_watcher
         output_edr_path: '&prod.edr'
-        #config: '{use_gpu: True}'
+        # nb_calculations_device: gpu  # To run MD on GPU
+        # pme_calculations_device: gpu
   - cwl_watcher_analysis.yml:
 
 wic:
@@ -63,6 +64,7 @@ wic:
           label: 'Update\nTopology'
     (3, mdrun):
       wic:
+        #namespace: gpu  # To run MD on GPU
         graphviz:
           label: 'Molecular\nDynamics'
     (4, cwl_watcher_analysis.yml):
