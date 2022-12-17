@@ -21,8 +21,9 @@ steps:
   - mdrun:
       in:
         output_edr_path: '&nvt.edr' # Explicit edge reference / anchor
+        # nb_calculations_device: gpu  # To run MD on GPU
+        # pme_calculations_device: gpu
         # (This edge can be inferred, but made explicit for demonstration purposes.)
-        #config: {use_gpu: True}
   - gmx_energy:
       in:
         input_energy_path: '*nvt.edr' # Explicit edge dereference / alias
@@ -54,6 +55,7 @@ wic:
           label: 'Update\nTopology'
     (2, mdrun):
       wic:
+        #namespace: gpu  # To run MD on GPU
         graphviz:
           label: 'Molecular\nDynamics'
     (3, gmx_energy):

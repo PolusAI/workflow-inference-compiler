@@ -12,6 +12,8 @@ steps:
             nstxout: 100
             nstenergy: 1
   - mdrun:
+      # in:
+      #   nb_calculations_device: gpu  # To run MD on GPU
   - gmx_energy:
       in:
         config:
@@ -28,6 +30,7 @@ wic:
           label: 'Update\nTopology'
     (2, mdrun):
       wic:
+        # namespace: gpu  # To run MD on GPU
         graphviz:
           label: 'Energy\nMinimization'
     (3, gmx_energy):
