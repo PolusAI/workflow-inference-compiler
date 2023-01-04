@@ -54,7 +54,7 @@ def absolute_paths(config: Json, cachedir_path: Path) -> Json:
                     changed_files_lst.sort(key=lambda x: x[1])
                     file = changed_files_lst[-1][0] # most recent
                     new_val = str(Path(file).absolute()) # type: ignore
-        new_json[key] = new_val
+        new_json[key] = new_val 
     return new_json
 
 

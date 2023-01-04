@@ -49,7 +49,6 @@ def is_isomorphic_with_timeout(gm: isomorphism.GraphMatcher, yml_path_str: str) 
 
 
 @pytest.mark.slow
-@pytest.mark.parallel
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples)
 def test_run_examples(yml_path_str: str, yml_path: Path) -> None:
     """Runs all of the examples in the examples/ directory. Note that some of

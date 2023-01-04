@@ -277,7 +277,6 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
             y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
             sub_namespaces = get_inlineable_subworkflows(y_t, tools, False, namespaces_init + [step_name_i])
             namespaces += sub_namespaces
-
     return namespaces
 
 
@@ -320,14 +319,14 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
 
     # TODO: We really need to inline the wic tags as well. This may be complicated
     # because due to overloading we may need to modify parent wic tags.
-
+    
     for i, step_key in enumerate(steps_keys):
         yaml_stem = Path(yaml_name).stem
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         if step_key in subkeys:
             sub_yml_tree = steps[i][step_key]['subtree']
             sub_parentargs = steps[i][step_key]['parentargs']
-
+            
             if namespaces[0] == step_name_i:
                 if len(namespaces) == 1:
                     steps_inits = steps[:i] # Exclude step i
@@ -349,7 +348,7 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
                     # and since inlineing removes the subworkflow, parentargs does not
                     # appear to be inlineing invariant! However, using ~ syntax helps.
                     steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': sub_parentargs}
-
+    
     return YamlTree(step_id, yaml_tree)
 
 

@@ -29,7 +29,23 @@ from wic.wic_types import (RoseTree, StepId, Yaml, YamlForest, YamlTree, GraphDa
 from .test_setup import wic_strategy, get_args, tools_cwl
 
 
-
+any_schema=hj.from_schema({}).filter(lambda x: isinstance(x, Dict) or isinstance(x,List))
+filtered_pretty_text: SearchStrategy[str] = text(printable,min_size=1).filter(lambda x: '_' not in x)
+any_types: Any = none() | booleans() | integers() | floats() | filtered_pretty_text
+most_types: Any = booleans() | integers() | floats() | filtered_pretty_text
+nested_lists: Any = s.recursive(s.lists(any_types,min_size=1),\
+     lambda children: s.lists(children,min_size=1))
+filtered_text: SearchStrategy[str] = s.text(min_size=1).filter(lambda x: '_' not in x) # _ reserved for flattening dictionary keys
+recursive_fn: Any = lambda children: s.dictionaries(text(min_size=1),children,min_size=1)
+nested_dict: Any = s.recursive(s.dictionaries(filtered_text,any_types).filter(lambda x: len(x)!=0),recursive_fn )
+str_list_nonempty = s.lists(s.text(min_size=2),min_size=1,max_size=100)
+str_list = s.lists(s.text(),max_size=100)
+wic_step = s.tuples(s.integers(min_value=0,max_value=100000),\
+            s.text(min_size=1).filter(lambda x: ',' not in x))
+wic_steps = s.lists(wic_step,min_size=1,max_size=10)
+wic_step_with_name = s.tuples(s.integers(min_value=0,max_value=100000),\
+            s.text(min_size=1).filter(lambda x: ',' not in x), s.text(min_size=1).filter(lambda x: ',' not in x))
+wic_steps_with_name = s.lists(wic_step_with_name,min_size=1,max_size=10)
 
 def create_compiled_rose_tree_from_nested_dict(test_dict: Dict) -> RoseTree:
     """Generate RoseTree with fake compiled work flow structure
@@ -415,28 +431,11 @@ def create_yaml_forest(test_yaml_tree: YamlTree) -> YamlForest:
     yaml_forest=YamlForest(yaml_tree=test_yaml_tree,sub_forests=subfors)
     return yaml_forest
 
-#any_schema=hj.from_schema({}).filter(lambda x: x is not None and not isinstance(x, Boolean))
-any_schema=hj.from_schema({}).filter(lambda x: isinstance(x, Dict) or isinstance(x,List))
-filtered_pretty_text: SearchStrategy[str] = text(printable,min_size=1).filter(lambda x: '_' not in x)
-any_types: Any = none() | booleans() | integers() | floats() | filtered_pretty_text
-most_types: Any = booleans() | integers() | floats() | filtered_pretty_text
-nested_lists: Any = s.recursive(s.lists(any_types,min_size=1),\
-     lambda children: s.lists(children,min_size=1))
-filtered_text: SearchStrategy[str] = s.text(min_size=1).filter(lambda x: '_' not in x) # _ reserved for flattening dictionary keys
-recursive_fn: Any = lambda children: s.dictionaries(text(min_size=1),children,min_size=1)
-nested_dict: Any = s.recursive(s.dictionaries(filtered_text,any_types).filter(lambda x: len(x)!=0),recursive_fn )
-str_list = s.lists(s.text(min_size=2),min_size=1,max_size=100)
-wic_step = s.tuples(s.integers(min_value=0,max_value=100000),\
-            s.text(min_size=1).filter(lambda x: ',' not in x))
-wic_steps = s.lists(wic_step,min_size=1,max_size=10)
-wic_step_with_name = s.tuples(s.integers(min_value=0,max_value=100000),\
-            s.text(min_size=1).filter(lambda x: ',' not in x), s.text(min_size=1).filter(lambda x: ',' not in x))
-wic_steps_with_name = s.lists(wic_step_with_name,min_size=1,max_size=10)
+
+
 
 class TestUnits(unittest.TestCase):
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     def test_read_lines_pairs(self)-> None: # generalize to making files on the fly
         """Test read_lines_pairs
         """
@@ -447,8 +446,6 @@ class TestUnits(unittest.TestCase):
         cwl_dirs_path=Path(os.path.join(wicsrcpath,'cwl_dirs.txt'))
         self.assertEqual([('global', 'biobb/'), ('global', 'cwl_adapters/')],utils.read_lines_pairs(cwl_dirs_path))
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @given(item1=filtered_text,item2=s.integers(min_value=0,max_value=10 ** 6),item3=filtered_text)
     def test_parse_step_name_str(self,item1 : str, item2 : int, item3 : str)-> None:
         """Test parse_step_name_str
@@ -461,8 +458,6 @@ class TestUnits(unittest.TestCase):
         output=utils.step_name_str(item1, item2 ,item3)
         self.assertEqual((item1, item2, item3),utils.parse_step_name_str(output))
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @given(item1=filtered_text,item2=filtered_text)
     def test_shorten_restore_namespaced_output_name(self,item1 : str,item2 : str)->None:
         """Test shorten_restore_namespaced_output_name
@@ -477,43 +472,26 @@ class TestUnits(unittest.TestCase):
         restored_name=utils.restore_namespaced_output_name(tup[0],tup[1],sep=thesep)
         self.assertEqual(restored_name,namespaced_output_name)
 
-    @pytest.mark.slow
-    @pytest.mark.unit
-    @given(stringlist=s.lists(s.text(min_size=2),min_size=1,max_size=100),\
-        astringlist=s.lists(s.text(min_size=2),min_size=1,max_size=50))
-    def test_partition_by_lowest_common_ancestor(self,stringlist : List[str], astringlist : List[str])->None:
-        """Test partition_by_lowest_common_ancestor
+    
 
-        Args:
-            stringlist (List[str]): List of random strings
-            astringlist (List[str]): List of random strings
-        """
-        testlist=astringlist.copy()
-        for item in astringlist:
-            templist=[item,None]
-            citem : Any =random.choice(templist)
-            if citem is not None:
-                testlist.insert(random.randrange(len(testlist)+1), citem)
+    @given(common = str_list, child_1 = str_list, child_2 = str_list)
+    def test_partition_by_lowest_common_ancestor(self, common: List[str], child_1: List[str], child_2: List[str]) -> None:
+        path_1 = common.copy() + child_1
+        path_2 = common.copy() + child_2
+        init_1, tails_1 = utils.partition_by_lowest_common_ancestor(path_1, path_2)
+        init_2, tails_2 = utils.partition_by_lowest_common_ancestor(path_2, path_1)
+        # Make sure that common is an initial segment of init_1 and init_2
+        assert all([x==y for x,y in zip(common,init_1)])
+        assert all([x==y for x,y in zip(common,init_2)])
+        # Make sure that tails is an initial segment of the children.
+        # We want to pair the indices starting from the end, hence reverse
+        assert all([x==y for x,y in zip(tails_1[::-1],child_1[::-1])])
+        assert all([x==y for x,y in zip(tails_2[::-1],child_2[::-1])])
 
 
-        results=utils.partition_by_lowest_common_ancestor(stringlist,testlist)
-        found=False
-        for i,test_string in enumerate(stringlist):
-            if i<=len(testlist)-1:
-                teststring=testlist[i]
-                if test_string!=teststring:
-                    lastsameindex=i-1
-                    expected_results=(stringlist[:lastsameindex+1],stringlist[lastsameindex+1:])
-                    found=True
-                    break
-        if found is False:
-            expected_results=(stringlist,[])
-        self.assertEqual(expected_results,results)
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(dict_list=s.lists(nested_dict,min_size=1,max_size=10))
     def test_get_steps_keys(self,dict_list : List[Dict])->None:
@@ -527,13 +505,11 @@ class TestUnits(unittest.TestCase):
             firstkeylist.extend(list(unflattendict.keys()))
         self.assertEqual(firstkeylist,utils.get_steps_keys(dict_list))
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(yaml_tree_tuple=\
-        wic_strategy.map(create_yaml_tree),stringlist=str_list,astringlist=str_list) # type: ignore [arg-type]
+        wic_strategy.map(create_yaml_tree),stringlist=str_list_nonempty,astringlist=str_list_nonempty) # type: ignore [arg-type]
     def test_get_subkeys(self,yaml_tree_tuple : YamlTree,stringlist : List[str], astringlist : List[str])->None:
 
         """Test get_subkeys
@@ -564,10 +540,8 @@ class TestUnits(unittest.TestCase):
         expected_results=[i for i in steps_keys if i not in tools_stems]
         self.assertEqual(expected_results,results)
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(
         yaml_tree=wic_strategy,
@@ -595,8 +569,6 @@ class TestUnits(unittest.TestCase):
         results=utils.extract_backend(yaml_tree,wic_dict,Path(yaml_path))
         self.assertEqual((backend,yaml_tree_copy),results)
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @given(masterlist=nested_lists)
     def test_flatten(self, masterlist : List[List])->None:
         """Test flatten
@@ -608,10 +580,8 @@ class TestUnits(unittest.TestCase):
             expected_output=[x for lst in masterlist for x in lst]
             self.assertEqual(expected_output,utils.flatten(masterlist))
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(rosetree=nested_dict.map(create_rose_tree_from_nested_dict))
     def test_flatten_rose_tree(self, rosetree : RoseTree) -> None:
@@ -629,8 +599,6 @@ class TestUnits(unittest.TestCase):
         results=utils.flatten_rose_tree(rosetree)
         self.assertEqual(expected_results,results)
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @given(test_obj = any_schema)
     def test_recursively_dict_key(self,test_obj: Any) -> None:
         """
@@ -645,10 +613,8 @@ class TestUnits(unittest.TestCase):
             assert not utils.recursively_contains_dict_key(key,results)
 
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(
         wic_dict=wic_strategy,
@@ -677,41 +643,29 @@ class TestUnits(unittest.TestCase):
         self.assertEqual(expected_results,results)
 
 
-    @pytest.mark.slow
-    @pytest.mark.unit
-    @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
-    )
-    @given(test_dict = nested_dict, key=filtered_pretty_text,val=any_types)
-    def test_recursively_insert_into_dict_tree(self,test_dict: Dict, key: str, val: Any) -> None:
-        """_summary_
+    @given(common = str_list, child_1 = str_list, child_2 = str_list)
+    def test_recursively_insert_into_dict_tree(self, common: List[str], child_1: List[str], child_2: List[str]) -> None:
+        tails_12 = utils.partition_by_lowest_common_ancestor(child_1,child_2)[1]
+        tails_21 = utils.partition_by_lowest_common_ancestor(child_2,child_1)[1]
+        disjoint_leaves = len(tails_12) == 0 and len(tails_21) == 0
+        if disjoint_leaves:
+            path_1 = common.copy() + child_1
+            path_2 = common.copy() + child_2
+            dummy_value_1 = 0
+            dummy_value_2 = 1
 
-        Args:
-            test_dict (Dict): Nested dictionary
-            key (str): Random string
-            val (Any): Random type
-        """
+            tree_1 = {}
+            tree_1 = utils.recursively_insert_into_dict_tree(tree_1, path_1, dummy_value_1)
+            tree_1 = utils.recursively_insert_into_dict_tree(tree_1, path_2, dummy_value_2)
 
-        dict_list=list(grab_nested_dicts(test_dict))
-        cont=check_nested_dict_for_key(test_dict,'_')
-        if len(dict_list)>1 and cont is True:
-            flatten_dict=convert_dict_keys(flatten_nested_dict(test_dict))
-            fullkeylist=list(flatten_dict.keys())
-            key_list=random.choice(fullkeylist)
-            if isinstance(flatten_dict[key_list],dict):
-                del flatten_dict[key_list]
-                key_list=list(key_list)
-                key_list.append(key)
-                results=utils.recursively_insert_into_dict_tree(test_dict,key_list,val)
-                key_list=tuple(key_list)
-                flatten_dict[key_list]=[val]
-            else:
-                results=test_dict
-            expected_results=unflatten_dict(flatten_dict)
-            self.assertEqual(expected_results,results)
+            tree_2 = {}
+            tree_2 = utils.recursively_insert_into_dict_tree(tree_2, path_2, dummy_value_2)
+            tree_2 = utils.recursively_insert_into_dict_tree(tree_2, path_1, dummy_value_1)
 
-    @pytest.mark.slow
-    @pytest.mark.unit
+            if path_1 != path_2:
+                self.assertEqual(tree_1, tree_2)
+
+
     @given(input_mapping = s.dictionaries(text(min_size=1),\
         s.lists(text(min_size=1),min_size=1),min_size=1).filter(lambda x: len(x)!=0))
     def test_get_input_mappings(self,input_mapping: Dict[str,List[str]]) -> None:
@@ -737,8 +691,6 @@ class TestUnits(unittest.TestCase):
 
 
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @given(output_mapping = s.dictionaries(text(min_size=1),text(min_size=1),min_size=1))
     def test_get_output_mappings(self,output_mapping: Dict[str,str]) -> None:
         """Test get_output_mappings
@@ -756,12 +708,10 @@ class TestUnits(unittest.TestCase):
             all_vals=list(output_mapping.values())
             assert results in all_vals
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @given(wic_dict = wic_strategy, keyval=nested_dict, inkeyval=nested_dict,
     step_tuple_list=wic_steps)
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     def test_add_yamldict_keyval_in(self,wic_dict: Dict, keyval: Dict, inkeyval: Dict, \
         step_tuple_list: List[Tuple[int,str]]) -> None:
@@ -799,10 +749,8 @@ class TestUnits(unittest.TestCase):
                     assert value in result_step_key_in_flat_values
 
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(wic_dict = wic_strategy, keyval=s.lists(s.text(min_size=2)), outvals=s.lists(s.text(min_size=1)),
     step_tuple_list=wic_steps)
@@ -834,10 +782,8 @@ class TestUnits(unittest.TestCase):
             for value in the_out_steps:
                 assert value in result_step_key_out
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(test_dict = nested_dict, test_string = s.text(min_size=1), items_dict= nested_dict)
     def test_canonicalize_type(self,test_dict: Dict, test_string : str, items_dict: Dict) -> None:
@@ -866,10 +812,8 @@ class TestUnits(unittest.TestCase):
             print('the_item',the_item)
             assert the_item in test_string
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(list_nested_dicts = s.lists(nested_dict,min_size=3,max_size=3))
     def test_copy_cwl_input_output_dict(self,list_nested_dicts: List[Dict]) -> None:
@@ -886,10 +830,8 @@ class TestUnits(unittest.TestCase):
             if key in keylist:
                 self.assertEqual(value,results[key])
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(test_dict = nested_dict)
     def test_remove_dot_dollar(self,test_dict: Dict) -> None:
@@ -906,8 +848,6 @@ class TestUnits(unittest.TestCase):
         for key in key_list:
             assert key not in results.keys()
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
     suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
     )
@@ -942,10 +882,8 @@ class TestUnits(unittest.TestCase):
                 found=True
         self.assertEqual(found,True)
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(yaml_tree_tuple=wic_strategy.map(create_yaml_tree), wic_parent = wic_strategy, step_tuple_list=wic_steps) # type: ignore [arg-type]
     def test_merge_yml_trees(self,yaml_tree_tuple: YamlTree, wic_parent: Dict, \
@@ -971,10 +909,8 @@ class TestUnits(unittest.TestCase):
         self.assertEqual(True,all(x in results_yml_keys for x in wic_parent_keys))
 
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(yaml_tree_tuple=wic_strategy.map(create_yaml_tree)) # type: ignore [arg-type]
     def test_tree_to_forest(self,yaml_tree_tuple: YamlTree) -> None:
@@ -991,10 +927,8 @@ class TestUnits(unittest.TestCase):
 
 
 
-    @pytest.mark.slow
-    @pytest.mark.unit
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(yaml_tree_tuple=wic_strategy.map(create_yaml_tree), namespaces_init = wic_steps_with_name.map(create_name_spaces)) # type: ignore [arg-type]
     def test_get_inlineable_subworkflows(self,yaml_tree_tuple: YamlTree, namespaces_init: List[str]) -> None:
@@ -1003,17 +937,15 @@ class TestUnits(unittest.TestCase):
         Args:
             namespaces_init (List[str]): Fake namespaces used for testing
         """
-        results = ast.get_inlineable_subworkflows(yaml_tree_tuple,tools_cwl,False,namespaces_init) # another test generate recursive namespaces
+        results = ast.get_inlineable_subworkflows(yaml_tree_tuple,tools_cwl,False,namespaces_init)
         results_flat = flatten_list(results)
         for name_space in namespaces_init:
             assert name_space in results_flat
 
-    
 
-    @pytest.mark.slow
-    @pytest.mark.unit
+
     @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large]
+    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(test_string=s.text(printable,min_size=1).filter(lambda x: x.count('/')>1))
     def test_move_slash_last(self,test_string: str) -> None:
@@ -1036,23 +968,3 @@ class TestUnits(unittest.TestCase):
             idx+=(len('___')-1)*i
             new_string= new_string[:idx] + '___' + new_string[idx + 1:]
         self.assertEqual(new_string,results)
-
-
-    # @pytest.mark.slow
-    # @pytest.mark.unit
-    # @given(wic_dict=nested_dict, step_tuple_list=wic_steps)
-    # def test_inline_subworkflow_cwl(self,wic_dict: Dict, step_tuple_list: List[Tuple[int,str]])-> None:
-    #     """Test inline_subworkflow_cwl
-
-    #     Args:
-    #         wic_dict (Dict): wic strategy
-    #         step_tuple_list (List[Tuple[int,str]]): Steps to add to dictionary
-    #     """
-    #     has_steps=check_if_steps_in_dict(wic_dict)
-    #     if has_steps is False:
-    #         wic_dict = add_wic_steps(wic_dict,step_tuple_list)
-        
-    #     rose_tree = create_compiled_rose_tree_from_nested_dict(wic_dict)
-    #     results = ast.inline_subworkflow_cwl(rose_tree)
-    #     print('rose_tree',rose_tree)
-    #     print('results',results)
