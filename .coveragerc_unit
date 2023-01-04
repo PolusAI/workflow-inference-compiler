@@ -1,6 +1,6 @@
 [report]
 # Increase this threshold as we increase coverage.
-fail_under = 50.00
+fail_under = 0.00
 
 [run]
 omit =

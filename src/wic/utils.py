@@ -429,7 +429,7 @@ def recursively_contains_dict_key(key: str, obj: Any) -> bool:
         bool: True if key is found, else False.
     """
     if isinstance(obj, List):
-        return any([recursively_delete_dict_key(key, x) for x in obj])
+        return any([recursively_contains_dict_key(key, x) for x in obj])
     if isinstance(obj, Dict):
         return (key in obj.keys()) or any(recursively_contains_dict_key(key, val) for val in obj.values())
     return False

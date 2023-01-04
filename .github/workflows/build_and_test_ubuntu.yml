@@ -80,11 +80,10 @@ jobs:
       working-directory: ${{github.workspace}}
       run: pytest --cov -m serial --cov-config=.coveragerc_serial
 
-    - name: Run PyTest Parallel Tests
-      working-directory: ${{github.workspace}}
-      run: pytest --cov -m parallel --workers 4 --cov-config=.coveragerc_parallel
-
     - name: Run PyTest Unit Tests
       working-directory: ${{github.workspace}}
       run: pytest --cov -m unit --workers 4 --cov-config=.coveragerc_unit
 
+    - name: Run PyTest Parallel Tests
+      working-directory: ${{github.workspace}}
+      run: pytest --cov -m parallel --workers 4 --cov-config=.coveragerc_parallel

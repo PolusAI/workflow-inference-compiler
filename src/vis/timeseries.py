@@ -7,7 +7,7 @@ import time
 from typing import List, Dict, Tuple
 
 import matplotlib
-from matplotlib import _pylab_helpers # type: ignore
+from matplotlib import _pylab_helpers
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import UnivariateSpline
