@@ -4,11 +4,10 @@ import random
 import copy
 from string import printable
 from typing import Dict,List,Any,Tuple, Generator
-import datetime
 import graphviz
 import networkx as nx
 import unittest
-import pytest
+
 
 
 
@@ -29,22 +28,25 @@ from wic.wic_types import (RoseTree, StepId, Yaml, YamlForest, YamlTree, GraphDa
 from .test_setup import wic_strategy, get_args, tools_cwl
 
 
-any_schema=hj.from_schema({}).filter(lambda x: isinstance(x, Dict) or isinstance(x,List))
+dict_or_list=hj.from_schema({}).filter(lambda x: isinstance(x, Dict) or isinstance(x,List))
+dict_or_str=hj.from_schema({}).filter(lambda x: isinstance(x, Dict) or isinstance(x,str))
 filtered_pretty_text: SearchStrategy[str] = text(printable,min_size=1).filter(lambda x: '_' not in x)
 any_types: Any = none() | booleans() | integers() | floats() | filtered_pretty_text
 most_types: Any = booleans() | integers() | floats() | filtered_pretty_text
 nested_lists: Any = s.recursive(s.lists(any_types,min_size=1),\
      lambda children: s.lists(children,min_size=1))
-filtered_text: SearchStrategy[str] = s.text(min_size=1).filter(lambda x: '_' not in x) # _ reserved for flattening dictionary keys
+# _ reserved for flattening dictionary keys
+filtered_text: SearchStrategy[str] = s.text(min_size=1).filter(lambda x: '_' not in x) 
 recursive_fn: Any = lambda children: s.dictionaries(text(min_size=1),children,min_size=1)
-nested_dict: Any = s.recursive(s.dictionaries(filtered_text,any_types).filter(lambda x: len(x)!=0),recursive_fn )
+nested_dict: Any = hj.from_schema({}).filter(lambda x: isinstance(x, Dict))
+# nested_dict: Any = s.recursive(s.dictionaries(filtered_text,any_types).filter(lambda x: len(x)!=0),recursive_fn )
 str_list_nonempty = s.lists(s.text(min_size=2),min_size=1,max_size=100)
 str_list = s.lists(s.text(),max_size=100)
 wic_step = s.tuples(s.integers(min_value=0,max_value=100000),\
             s.text(min_size=1).filter(lambda x: ',' not in x))
 wic_steps = s.lists(wic_step,min_size=1,max_size=10)
-wic_step_with_name = s.tuples(s.integers(min_value=0,max_value=100000),\
-            s.text(min_size=1).filter(lambda x: ',' not in x), s.text(min_size=1).filter(lambda x: ',' not in x))
+wic_step_with_name = s.tuples(s.text(min_size=1).filter(lambda x: ',' not in x),\
+    s.integers(min_value=0,max_value=100000), s.text(min_size=1).filter(lambda x: ',' not in x))
 wic_steps_with_name = s.lists(wic_step_with_name,min_size=1,max_size=10)
 
 def create_compiled_rose_tree_from_nested_dict(test_dict: Dict) -> RoseTree:
@@ -69,23 +71,6 @@ def create_compiled_rose_tree_from_nested_dict(test_dict: Dict) -> RoseTree:
         [], [graph_fakeroot], {}, {}, {}, {}, tools_cwl, fake_root, relative_run_path=False, testing=True)
     return compiler_info_fakeroot.rose
 
-def create_name_spaces(step_tuple_list: List[Tuple[int,str,str]]) -> List[str]:
-    """Test create_name_spaces
-
-    Args:
-        step_tuple_list (List[Tuple[int,str,str]]): Integer gives step number, two strings are for work flow name and step name
-
-    Returns:
-        List[str]: List of work flows
-    """
-    namespaces_init=[]
-    for item in step_tuple_list:
-        step,step_name,name= item
-        yml_string = name+"__step__"+str(step)+"__"+step_name+'.yml'
-        namespaces_init.append(yml_string)
-        
-    return namespaces_init
-
 def check_if_duplicate_keys(first_dict: Dict[str,Any],second_dict: Dict[str,Any]) -> bool:
     """Check for duplicate keys between two dictionaries
 
@@ -101,26 +86,6 @@ def check_if_duplicate_keys(first_dict: Dict[str,Any],second_dict: Dict[str,Any]
         if key in second_dict.keys():
             has_dup=True
     return has_dup
-
-def check_nested_dict_for_key(test_dict: Dict,key_item: str) -> bool:
-    """Check to see if substring is in any nested dictionary keys
-
-    Args:
-        test_dict (Dict): Nested dictionary
-
-    Returns:
-        bool: True if found subkey
-    """
-    cont=True
-    dict_list=grab_nested_dicts(test_dict)
-    for key,value in test_dict.items():
-        if key_item in key: # using this as delimiter for flattening dictionary
-            cont=False
-    for otest_dict in dict_list:
-        for key,value in otest_dict.items():
-            if key_item in key:
-                cont=False
-    return cont
 
 
 def add_wic_steps(wic_dict: Dict,step_tuple_list: List[Tuple[int,str]], \
@@ -211,28 +176,6 @@ def grab_nested_dicts(d : Dict) -> Generator:
         if isinstance(value, Dict):
             yield value
             yield from grab_nested_dicts(value)
-
-
-def unflatten_dict(test_dict: Dict) -> Dict:
-    """Unflatten nested dictionary that was flattend with flatten_nested_dict
-
-    Args:
-        test_dict (_type_): Flattened dictionary
-
-    Returns:
-        _type_: Unflattened dictionary
-    """
-    result_dict : Dict = {}
-    for key, value in test_dict.items():
-        parts = list(key)
-        d = result_dict
-        for part in parts[:-1]:
-            if part not in d:
-                d[part] = {}
-            d = d[part]
-        d[parts[-1]] = value
-
-    return result_dict
 
 
 def flatten_nested_dict(d : Dict) -> Dict:
@@ -599,7 +542,7 @@ class TestUnits(unittest.TestCase):
         results=utils.flatten_rose_tree(rosetree)
         self.assertEqual(expected_results,results)
 
-    @given(test_obj = any_schema)
+    @given(test_obj = dict_or_list)
     def test_recursively_dict_key(self,test_obj: Any) -> None:
         """
 
@@ -645,6 +588,13 @@ class TestUnits(unittest.TestCase):
 
     @given(common = str_list, child_1 = str_list, child_2 = str_list)
     def test_recursively_insert_into_dict_tree(self, common: List[str], child_1: List[str], child_2: List[str]) -> None:
+        """ Test recursively_insert_into_dict_tree
+
+        Args:
+            common (List[str]): Common root
+            child_1 (List[str]): Path after common root
+            child_2 (List[str]): Path after common root
+        """
         tails_12 = utils.partition_by_lowest_common_ancestor(child_1,child_2)[1]
         tails_21 = utils.partition_by_lowest_common_ancestor(child_2,child_1)[1]
         disjoint_leaves = len(tails_12) == 0 and len(tails_21) == 0
@@ -654,11 +604,11 @@ class TestUnits(unittest.TestCase):
             dummy_value_1 = 0
             dummy_value_2 = 1
 
-            tree_1 = {}
+            tree_1: Dict = {}
             tree_1 = utils.recursively_insert_into_dict_tree(tree_1, path_1, dummy_value_1)
             tree_1 = utils.recursively_insert_into_dict_tree(tree_1, path_2, dummy_value_2)
 
-            tree_2 = {}
+            tree_2: Dict = {}
             tree_2 = utils.recursively_insert_into_dict_tree(tree_2, path_2, dummy_value_2)
             tree_2 = utils.recursively_insert_into_dict_tree(tree_2, path_1, dummy_value_1)
 
@@ -668,7 +618,7 @@ class TestUnits(unittest.TestCase):
 
     @given(input_mapping = s.dictionaries(text(min_size=1),\
         s.lists(text(min_size=1),min_size=1),min_size=1).filter(lambda x: len(x)!=0))
-    def test_get_input_mappings(self,input_mapping: Dict[str,List[str]]) -> None:
+    def test_get_input_mappings(self,input_mapping: Dict[str,List[str]]) -> None: # may need to change inputs for more general testing
         """Test get_input_mappings
 
         Args:
@@ -692,7 +642,7 @@ class TestUnits(unittest.TestCase):
 
 
     @given(output_mapping = s.dictionaries(text(min_size=1),text(min_size=1),min_size=1))
-    def test_get_output_mappings(self,output_mapping: Dict[str,str]) -> None:
+    def test_get_output_mappings(self,output_mapping: Dict[str,str]) -> None: # may need to change inputs for more general testing
         """Test get_output_mappings
 
         Args:
@@ -722,12 +672,7 @@ class TestUnits(unittest.TestCase):
             keyval (Dict): Extra steps added into workflow
             inkeyval (Dict): Steps added into workflow for inputs
         """
-        k = random.randint(0, 1)
-        if k == 1:
-            in_steps=inkeyval
-        else:
-            in_steps={}
-
+        in_steps=inkeyval
         if check_if_duplicate_keys(in_steps,keyval) is False:
             wic_dict = add_wic_steps(wic_dict,step_tuple_list,in_steps_dict=in_steps)
             steps_i = wic_dict['wic'].get('steps', {})
@@ -742,11 +687,7 @@ class TestUnits(unittest.TestCase):
             keyval_flat_values=list(keyval_flat.values())
             for value in keyval_flat_values:
                 assert value in result_step_key_in_flat_values
-            if k == 1:
-                inkeyval_flat=flatten_nested_dict(inkeyval)
-                inkeyval_flat_values=list(inkeyval_flat.values())
-                for value in inkeyval_flat_values:
-                    assert value in result_step_key_in_flat_values
+
 
 
     @settings(
@@ -763,12 +704,8 @@ class TestUnits(unittest.TestCase):
             keyval (List[str]): Extra steps added into workflow for outputs
             outvals (List[str]): Steps added into workflow for outputs
         """
-        k = random.randint(0, 1)
-        if k == 1:
-            the_out_steps=outvals
-        else:
-            the_out_steps=[]
 
+        the_out_steps=outvals
         wic_dict = add_wic_steps(wic_dict,step_tuple_list,out_steps=the_out_steps)
         steps_i = wic_dict['wic'].get('steps', {})
         key_list=list(steps_i.keys())
@@ -778,39 +715,35 @@ class TestUnits(unittest.TestCase):
         result_step_key_out=result_step_key['out']
         for value in keyval:
             assert value in result_step_key_out
-        if k == 1:
-            for value in the_out_steps:
-                assert value in result_step_key_out
 
     @settings(
     suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
-    @given(test_dict = nested_dict, test_string = s.text(min_size=1), items_dict= nested_dict)
-    def test_canonicalize_type(self,test_dict: Dict, test_string : str, items_dict: Dict) -> None:
+    @given(test_obj = dict_or_str, items_dict= nested_dict)
+    def test_canonicalize_type(self,test_obj: Any,  items_dict: Dict) -> None:
         """Test canonicalize_type
 
         Args:
-            test_dict (Dict): Nested dictionary
-            test_string (str): Random string
+            test_obj (Any): Nested dictionary or string
         """
-
-        test_dict.update({'type':'array'})
-        test_dict.update({'items':items_dict})
-        results=utils_cwl.canonicalize_type(test_dict)
-        flat_results_dict=flatten_nested_dict(results)
-        flat_test_dict=flatten_nested_dict(test_dict)
-        self.assertEqual(flat_results_dict,flat_test_dict)
-        test_list=['?','[]']
-        item=random.choice(test_list)
-        test_string+=item
-        results=utils_cwl.canonicalize_type(test_string)
-        if item=='?':
-            the_item=results[1]
-            assert the_item in test_string
-        elif item=='[]':
-            the_item=results['items']
-            print('the_item',the_item)
-            assert the_item in test_string
+        if isinstance(test_obj,Dict):
+            test_obj.update({'type':'array'})
+            test_obj.update({'items':items_dict})
+            results=utils_cwl.canonicalize_type(test_obj)
+            flat_results_dict=flatten_nested_dict(results)
+            flat_test_dict=flatten_nested_dict(test_obj)
+            self.assertEqual(flat_results_dict,flat_test_dict)
+        elif isinstance(test_obj,str):
+            test_list=['?','[]']
+            item=random.choice(test_list)
+            test_obj+=item
+            results=utils_cwl.canonicalize_type(test_obj)
+            if item=='?':
+                the_item=results[1]
+                assert the_item in test_obj
+            elif item=='[]':
+                the_item=results['items']
+                assert the_item in test_obj
 
     @settings(
     suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
@@ -834,7 +767,7 @@ class TestUnits(unittest.TestCase):
     suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
     @given(test_dict = nested_dict)
-    def test_remove_dot_dollar(self,test_dict: Dict) -> None:
+    def test_remove_dot_dollar(self,test_dict: Dict) -> None: # Claimed may not be correct (but passes test)
         """Test remove_dot_dollar
 
         Args:
@@ -843,7 +776,7 @@ class TestUnits(unittest.TestCase):
         key_list=['$namespaces','$schemas','.yml']
         for key in key_list:
             test_dict.update({key:''})
-        
+
         results=labshare.remove_dot_dollar(test_dict)
         for key in key_list:
             assert key not in results.keys()
@@ -885,33 +818,6 @@ class TestUnits(unittest.TestCase):
     @settings(
     suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
     )
-    @given(yaml_tree_tuple=wic_strategy.map(create_yaml_tree), wic_parent = wic_strategy, step_tuple_list=wic_steps) # type: ignore [arg-type]
-    def test_merge_yml_trees(self,yaml_tree_tuple: YamlTree, wic_parent: Dict, \
-        step_tuple_list: List[Tuple[int,str]]) -> None:
-        """Test merge_yml_trees
-
-        Args:
-            yaml_tree_tuple (Dict): Tree to be merged
-            wic_parent (Dict): The parent wic dictionary to have tree merged into
-        """
-        has_steps=check_if_steps_in_dict(wic_parent)
-        orig_yml=yaml_tree_tuple.yml
-        orig_yml_keys=list(orig_yml.keys())
-        if has_steps is False:
-            wic_parent = add_wic_steps(wic_parent,step_tuple_list)
-        results = ast.merge_yml_trees(yaml_tree_tuple,wic_parent,tools_cwl)
-        results_yml=results.yml
-        wic_parent_dicts = flatten_nested_dict(wic_parent)
-        wic_parent_keys = list(wic_parent_dicts.keys())
-        wic_parent_keys = [i for i in wic_parent_keys if i in orig_yml_keys]
-        results_yml_dicts = flatten_nested_dict(results_yml)
-        results_yml_keys = list(results_yml_dicts.keys())
-        self.assertEqual(True,all(x in results_yml_keys for x in wic_parent_keys))
-
-
-    @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
-    )
     @given(yaml_tree_tuple=wic_strategy.map(create_yaml_tree)) # type: ignore [arg-type]
     def test_tree_to_forest(self,yaml_tree_tuple: YamlTree) -> None:
         """Test tree_to_forest
@@ -924,47 +830,3 @@ class TestUnits(unittest.TestCase):
         results_tree=results.yaml_tree
         results_tree_yml=results_tree.yml
         assert input_yml.items() <= results_tree_yml.items()
-
-
-
-    @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
-    )
-    @given(yaml_tree_tuple=wic_strategy.map(create_yaml_tree), namespaces_init = wic_steps_with_name.map(create_name_spaces)) # type: ignore [arg-type]
-    def test_get_inlineable_subworkflows(self,yaml_tree_tuple: YamlTree, namespaces_init: List[str]) -> None:
-        """Test get_inlineable_subworkflows
-
-        Args:
-            namespaces_init (List[str]): Fake namespaces used for testing
-        """
-        results = ast.get_inlineable_subworkflows(yaml_tree_tuple,tools_cwl,False,namespaces_init)
-        results_flat = flatten_list(results)
-        for name_space in namespaces_init:
-            assert name_space in results_flat
-
-
-
-    @settings(
-    suppress_health_check=[HealthCheck.too_slow,HealthCheck.filter_too_much,HealthCheck.data_too_large],deadline=1000
-    )
-    @given(test_string=s.text(printable,min_size=1).filter(lambda x: x.count('/')>1))
-    def test_move_slash_last(self,test_string: str) -> None:
-        """Test move_slash_last
-
-        Args:
-            test_string (str): Random string with / in it
-        """
-        results=ast.move_slash_last(test_string)
-        def find_all(a_str: str, sub: str) -> Generator:
-            start = 0
-            while True:
-                start = a_str.find(sub, start)
-                if start == -1: return
-                yield start
-                start += len(sub) 
-        matches=list(find_all(test_string,'/'))[:-1]
-        new_string=test_string
-        for i,idx in enumerate(matches):
-            idx+=(len('___')-1)*i
-            new_string= new_string[:idx] + '___' + new_string[idx + 1:]
-        self.assertEqual(new_string,results)

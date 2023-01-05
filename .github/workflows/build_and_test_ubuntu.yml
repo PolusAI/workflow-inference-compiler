@@ -82,7 +82,7 @@ jobs:
 
     - name: Run PyTest Unit Tests
       working-directory: ${{github.workspace}}
-      run: pytest --cov -k test_units.py --workers 4 --cov-config=.coveragerc_unit
+      run: pytest --cov -k test_units.py --workers 4
 
     - name: Run PyTest Examples Tests
       working-directory: ${{github.workspace}}
