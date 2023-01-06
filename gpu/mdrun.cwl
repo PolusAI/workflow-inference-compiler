@@ -15,8 +15,6 @@ hints:
   cwltool:CUDARequirement:
     cudaVersionMin: "11.4"
     cudaComputeCapabilityMin: "3.0"
-    deviceCountMin: 1
-    deviceCountMax: 4
     cudaDeviceCount: 0
   DockerRequirement:
     dockerPull: nvcr.io/hpc/gromacs:2021
@@ -31,7 +29,17 @@ inputs:
     inputBinding:
       prefix: -nb
       position: 1
-    default: cpu    # runs faster
+    default: gpu
+
+  bonded_calculations_device:
+    label: Device to perform bonded interactions on
+    doc: |-
+      Device to perform bonded interaction
+    type: string?
+    inputBinding:
+      prefix: -bonded
+      position: 2
+    default: gpu
 
   pme_calculations_device:
     label: Device to perform PME calculations on
@@ -40,8 +48,8 @@ inputs:
     type: string?
     inputBinding:
       prefix: -pme
-      position: 2
-    default: cpu    # runs faster
+      position: 3
+    default: gpu
 
   total_number_threads:
     label: Total number of threads to start
@@ -50,8 +58,8 @@ inputs:
     type: int
     inputBinding:
       prefix: -nt
-      position: 3
-    default: 1     # runs faster
+      position: 4
+    default: 1     # Disable the CPU-GPU load-balancing
 
   input_tpr_path:
     label: Path to the portable binary run input file TPR
@@ -65,7 +73,7 @@ inputs:
     format:
     - edam:format_2333
     inputBinding:
-      position: 4
+      position: 5
       prefix: -s
 
   output_trr_path:
@@ -80,7 +88,7 @@ inputs:
     format:
     - edam:format_3910
     inputBinding:
-      position: 5
+      position: 6
       prefix: -o
     default: system.trr
 
@@ -96,7 +104,7 @@ inputs:
     format:
     - edam:format_2033
     inputBinding:
-      position: 6
+      position: 7
       prefix: -c
     default: system.gro
 
@@ -112,7 +120,7 @@ inputs:
     format:
     - edam:format_2330
     inputBinding:
-      position: 7
+      position: 8
       prefix: -e
     default: system.edr
 
@@ -128,7 +136,7 @@ inputs:
     format:
     - edam:format_2330
     inputBinding:
-      position: 8
+      position: 9
       prefix: -g
     default: system.log
 

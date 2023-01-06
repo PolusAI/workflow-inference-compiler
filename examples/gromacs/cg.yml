@@ -13,7 +13,8 @@ steps:
             nstenergy: 1
   - mdrun:
       # in:
-      #   nb_calculations_device: gpu  # To run MD on GPU
+      #   bonded_calculations_device: cpu # GPU implementation is only supported for dynamical integrator like (md, sd, etc)..
+      #   pme_calculations_device: cpu
   - gmx_energy:
       in:
         config:
