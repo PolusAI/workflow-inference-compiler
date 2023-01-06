@@ -26,8 +26,6 @@ steps:
         output_crd_path: '&npt.gro'  # Explicitly specify for rmsd
         #output_trr_path: '&npt.trr'
         output_edr_path: 'npt.edr'
-        # nb_calculations_device: gpu  # To run MD on GPU
-        # pme_calculations_device: gpu
   - gmx_energy:
       in:
         config:
@@ -57,7 +55,7 @@ wic:
           label: 'Update\nTopology'
     (2, mdrun):
       wic:
-        #namespace: gpu  # To run MD on GPU
+        # namespace: gpu  # To run MD on GPU
         graphviz:
           label: 'Molecular\nDynamics'
     (3, gmx_energy):
