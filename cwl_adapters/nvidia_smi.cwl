@@ -8,8 +8,6 @@ hints:
   cwltool:CUDARequirement:
     cudaVersionMin: "11.4"
     cudaComputeCapabilityMin: "3.0"
-    deviceCountMin: 1
-    deviceCountMax: 4
     cudaDeviceCount: 0
   DockerRequirement:
     dockerPull: nvidia/cuda:11.4.0-base-ubuntu20.04
