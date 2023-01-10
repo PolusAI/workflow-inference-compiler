@@ -62,7 +62,7 @@ wic:
           label: 'Update\nTopology'
     (3, mdrun):
       wic:
-        # namespace: gpu  # To run MD on GPU
+        namespace: gpu  # To run MD on GPU
         graphviz:
           label: 'Molecular\nDynamics'
     (4, cwl_watcher_analysis.yml):
