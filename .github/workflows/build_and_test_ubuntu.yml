@@ -40,6 +40,11 @@ jobs:
         conda config --show
         ./conda_devtools.sh
 
+    - name: Docker Pull
+      working-directory: ${{github.workspace}}
+      # For self-hosted runners, make sure the docker cache is up-to-date.
+      run: ./dockerPull.sh
+
     - name: Install Workflow Inference Compiler
       working-directory: ${{github.workspace}}
       run: pip install ".[test]"
