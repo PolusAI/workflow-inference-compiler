@@ -9,5 +9,6 @@
 # Namespace Directory
 global      biobb/
 global      cwl_adapters/
+gpu         gpu/
 # foo       a/relative/path/
 # bar       /an/absolute/path/
