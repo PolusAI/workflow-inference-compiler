@@ -24,3 +24,11 @@ conda install -y -c conda-forge wget
 # You can NOT `conda install cwltool` and then `pip install toil` !
 conda install -y -c conda-forge pip
 pip install 'toil[cwl]'
+
+# Temporarily use my fork of cwltool due to --gpus bug
+git clone https://github.com/jfennick/cwltool.git
+cd cwltool
+git switch cudaDeviceCount_fix
+pip install .
+cd ..
+rm -rf cwltool
