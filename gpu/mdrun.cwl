@@ -52,18 +52,24 @@ inputs:
       position: 3
     default: gpu
 
-  total_number_threads:
-    label: Total number of threads to start
+  number_threads_openmp:
+    label: Number of openmp threads to start
     doc: |-
-      Total number of threads to start
+      Number of openmp threads to start
     type: int
+# Cannot set total number of threads -nt with the gromacs/gromacs images, else:
 # "Fatal error:
 # Setting the total number of threads is only supported with thread-MPI and
 # GROMACS was compiled without thread-MPI"
-#    inputBinding:
-#      prefix: -nt
-#      position: 4
-    default: 1     # Disable the CPU-GPU load-balancing
+    inputBinding:
+      prefix: -ntomp
+      position: 4
+    default: 2 # We want to essentially disable the CPU-GPU load-balancing.
+    # However, since some operations are CPU only, using only 1 CPU will
+    # slow down overall runtime (see Amdahl's Law). However, we also do NOT
+    # want to just use all CPUs, because if we run many simulations in
+    # parallel this will massively oversubscribe the CPUs.
+    # N^2 oversubscription is not okay; 2*N oversubscription is okay.
 
   input_tpr_path:
     label: Path to the portable binary run input file TPR
