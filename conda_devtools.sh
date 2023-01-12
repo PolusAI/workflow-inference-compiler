@@ -13,8 +13,6 @@
 conda install -y -c conda-forge nodejs graphviz openbabel mdanalysis
 # NOTE: cwltool needs nodejs for InlineJavascriptRequirement
 
-# See https://github.com/kevlened/pytest-parallel/pull/119
-conda install -y -c conda-forge "pytest==7.1.3" pytest-cov pytest-parallel mypy pylint types-requests types-PyYAML types-setuptools
 # NOTE: https://github.com/wearepal/data-science-types has been archived and is
 # no longer under active development. So most of the API is covered, but there
 # are some functions which are missing stubs.
@@ -26,3 +24,11 @@ conda install -y -c conda-forge wget
 # You can NOT `conda install cwltool` and then `pip install toil` !
 conda install -y -c conda-forge pip
 pip install 'toil[cwl]'
+
+# Temporarily use my fork of cwltool due to --gpus bug
+git clone https://github.com/jfennick/cwltool.git
+cd cwltool
+git switch cudaDeviceCount_fix
+pip install .
+cd ..
+rm -rf cwltool

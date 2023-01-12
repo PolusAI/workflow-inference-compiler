@@ -53,7 +53,7 @@ wic:
           label: 'Update\nTopology'
     (2, mdrun):
       wic:
-        # namespace: gpu  # To run MD on GPU
+        namespace: gpu  # To run MD on GPU
         graphviz:
           label: 'Molecular\nDynamics'
     (3, gmx_energy):

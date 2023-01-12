@@ -13,3 +13,10 @@ steps:
 wic:
   graphviz:
     label: Minimization
+  steps:
+    (1, steep.yml):
+      wic:
+        inlineable: False
+    (2, cg.yml):
+      wic:
+        inlineable: False

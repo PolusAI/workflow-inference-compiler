@@ -12,9 +12,9 @@ steps:
             nstxout: 100
             nstenergy: 1
   - mdrun:
-      # in:
-      #   bonded_calculations_device: cpu # GPU implementation is only supported for dynamical integrator like (md, sd, etc)..
-      #   pme_calculations_device: cpu
+      in:
+        bonded_calculations_device: cpu # GPU implementation IS supported for md integrator, is NOT supported for sd integrator, etc.
+        pme_calculations_device: cpu
   - gmx_energy:
       in:
         config:
@@ -31,7 +31,7 @@ wic:
           label: 'Update\nTopology'
     (2, mdrun):
       wic:
-        # namespace: gpu  # To run MD on GPU
+        namespace: gpu  # To run MD on GPU
         graphviz:
           label: 'Energy\nMinimization'
     (3, gmx_energy):

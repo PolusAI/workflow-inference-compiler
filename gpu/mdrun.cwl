@@ -17,7 +17,8 @@ hints:
     cudaComputeCapabilityMin: "3.0"
     cudaDeviceCount: 0
   DockerRequirement:
-    dockerPull: nvcr.io/hpc/gromacs:2021
+    dockerPull: gromacs/gromacs:2021.4 # uses CUDA 10.1 which is compatible with our EC2 instances.
+    # NOTE: None of the nvcr.io/hpc/gromacs images seem to work
 
 inputs:
 
@@ -56,9 +57,12 @@ inputs:
     doc: |-
       Total number of threads to start
     type: int
-    inputBinding:
-      prefix: -nt
-      position: 4
+# "Fatal error:
+# Setting the total number of threads is only supported with thread-MPI and
+# GROMACS was compiled without thread-MPI"
+#    inputBinding:
+#      prefix: -nt
+#      position: 4
     default: 1     # Disable the CPU-GPU load-balancing
 
   input_tpr_path:
