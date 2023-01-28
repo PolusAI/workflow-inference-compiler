@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from . import auto_gen_header
+from .utils_yaml import NoAliasDumper
 from .wic_types import (ExplicitEdgeCalls, Namespaces, NodeData, RoseTree, StepId, Json, Yaml, YamlForest, YamlTree)
 
 
@@ -323,17 +324,6 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     dfs_lists = [[f] + fs for f, fs in zip(forests, sub_forests)]
     dfs = flatten(dfs_lists)
     return dfs
-
-# snakeyaml (a cromwell dependency) refuses to parse yaml files with more than
-# 50 anchors/aliases to prevent Billion Laughs attacks.
-# See https://en.wikipedia.org/wiki/Billion_laughs_attack
-# Solution: Inline the contents of the aliases into the anchors.
-# See https://ttl255.com/yaml-anchors-and-aliases-and-how-to-disable-them/#override
-
-
-class NoAliasDumper(yaml.SafeDumper):
-    def ignore_aliases(self, data: Any) -> bool:
-        return True
 
 
 def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> None:

@@ -7,6 +7,7 @@ import requests
 import yaml
 
 from . import __version__, utils
+from wic.utils_yaml import wic_loader
 from .wic_types import KV, Cwl, NodeData, RoseTree, StepId, Tools
 
 TIMEOUT = 60  # seconds
@@ -42,7 +43,7 @@ def remove_dot_dollar(tree: Cwl) -> Cwl:
     tree_str = str(yaml.dump(tree, sort_keys=False, line_break='\n', indent=2))
     tree_str_no_dd = tree_str.replace('$namespaces', 'namespaces').replace(
         '$schemas', 'schemas').replace('.yml', '_yml')
-    tree_no_dd: Cwl = yaml.safe_load(tree_str_no_dd)  # This effectively copies tree
+    tree_no_dd: Cwl = yaml.load(tree_str_no_dd, Loader=wic_loader())  # This effectively copies tree
     return tree_no_dd
 
 
@@ -59,7 +60,7 @@ def pretty_print_request(request: requests.PreparedRequest) -> None:
             body_str = body.decode('utf-8')
         else:
             body_str = body
-        print('request.body\n', yaml.dump(yaml.safe_load(body_str)))
+        print('request.body\n', yaml.dump(yaml.load(body_str, Loader=wic_loader())))
     else:
         print('request.body is None')
 
