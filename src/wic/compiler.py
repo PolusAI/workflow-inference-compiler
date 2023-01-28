@@ -529,23 +529,33 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                         arg_val['source'] = step_name_j + '/' + out_name
                         break
                 steps[i][step_key]['in'][arg_key] = arg_val"""
-            elif isinstance(arg_val, Dict) and arg_val['source'][0] == '&':
-                arg_val['source'] = arg_val['source'][1:]  # Remove &
+            elif isinstance(arg_val, Dict) and '&' in arg_val['source']:
+                splits = arg_val['source'].split('&')
+                # TODO: Either add these to the schema, or to the except clauses
+                if not len(splits) == 2:
+                    raise Exception(f"Error! {arg_val['source']} contains more than one &")
+                (filename, edgedef) = splits
+                if edgedef == '':
+                    raise Exception(f"Error! {arg_val['source']} cannot end in &")
+
                 # print('arg_key, arg_val['source']', arg_key, arg_val['source'])
                 # NOTE: There can only be one definition, but multiple call sites.
-                if not explicit_edge_defs_copy.get(arg_val['source']):
+                if not explicit_edge_defs_copy.get(edgedef):
                     # if first time encountering arg_val, i.e. if defining
-                    inputs_workflow.update({in_name: in_dict})
-                    in_dict = {**in_dict, 'value': arg_val}
-                    inputs_file_workflow.update({in_name: in_dict})
-                    steps[i][step_key]['in'][arg_key] = {'source': in_name}
-                    explicit_edge_defs_copy.update({arg_val['source']: (namespaces + [step_name_i], arg_key)})
+                    if not filename == '':
+                        inputs_workflow.update({in_name: in_dict})
+                        in_dict = {**in_dict, 'value': {'source': filename}}
+                        inputs_file_workflow.update({in_name: in_dict})
+                        steps[i][step_key]['in'][arg_key] = {'source': in_name}
+                    else:
+                        del steps[i][step_key]['in'][arg_key]
+                    explicit_edge_defs_copy.update({edgedef: (namespaces + [step_name_i], arg_key)})
                     # Add a 'dummy' value to explicit_edge_calls, because
                     # that determines sub_args_provided when the recursion returns.
-                    explicit_edge_calls_copy.update({in_name: (namespaces + [step_name_i], arg_key)})
+                    explicit_edge_calls_copy.update({edgedef: (namespaces + [step_name_i], arg_key)})
                     # TODO: Show input node?
                 else:
-                    raise Exception(f"Error! Multiple definitions of &{arg_val['source']}!")
+                    raise Exception(f"Error! Multiple definitions of &{edgedef}!")
             elif isinstance(arg_val, Dict) and arg_val['source'][0] == '*' and 'cwl_watcher' not in step_key:
                 # NOTE: Exclude cwl_watcher from explicit edge dereferences.
                 # Since cwl_watcher requires explicit filenames for globbing,
