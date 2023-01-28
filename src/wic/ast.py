@@ -11,6 +11,7 @@ import yaml
 
 from . import python_cwl_adapter, utils
 from .wic_types import Yaml, Tools, YamlTree, YamlForest, StepId, Tool
+from wic.utils_yaml import wic_loader
 
 # NOTE: AST = Abstract Syntax Tree
 
@@ -106,7 +107,7 @@ def read_ast_from_disk(homedir: str,
 
             # Load the high-level yaml sub workflow file.
             with open(yaml_path, mode='r', encoding='utf-8') as y:
-                sub_yaml_tree_raw: Yaml = yaml.safe_load(y.read())
+                sub_yaml_tree_raw: Yaml = yaml.load(y.read(), Loader=wic_loader())
 
             y_t = YamlTree(StepId(step_key, plugin_ns), sub_yaml_tree_raw)
             (step_id_, sub_yml_tree) = read_ast_from_disk(homedir, y_t, yml_paths, tools, validator,
