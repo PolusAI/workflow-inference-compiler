@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 import yaml
 
 from . import utils
+from wic.utils_yaml import wic_loader
 from .wic_types import Namespaces, Yaml, Tools, YamlTree, YamlForest, StepId, NodeData, RoseTree
 
 # NOTE: AST = Abstract Syntax Tree
@@ -87,7 +88,7 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
 
             # Load the high-level yaml sub workflow file.
             with open(yaml_path, mode='r', encoding='utf-8') as y:
-                sub_yaml_tree_raw: Yaml = yaml.safe_load(y.read())
+                sub_yaml_tree_raw: Yaml = yaml.load(y.read(), Loader=wic_loader())
 
             try:
                 validator.validate(sub_yaml_tree_raw)

@@ -1,9 +1,9 @@
 steps:
 - ints_array:
     in:
-      ints_array: '&arr'
+      ints_array: !& {arr:}
       maxval: 10
 - echo:
     scatter: [message]
     in:
-      message: '*arr'
+      message: !* arr
