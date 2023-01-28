@@ -39,6 +39,17 @@ inputs:
       position: 3
     default: system.pdb
 
+  ligand_residue_name:
+    label: The residue name of ligand
+    doc: |-
+      The residue name of ligand
+    type: string
+    format:
+    - edam:format_2330
+    inputBinding:
+      position: 4
+    default: MOL
+
 outputs:
   output_pdb_path:
     label: Path to the output file

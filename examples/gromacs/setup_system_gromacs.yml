@@ -1,0 +1,88 @@
+# This is based on the excellent gromacs CWL tutorial
+# https://mmb.irbbarcelona.org/biobb/workflows/tutorials/protein-complex_md_setup#ligtop
+
+steps:
+  - pdb:
+      in:
+        output_pdb_path: '&complex_rcsb.pdb'
+        config: {"pdb_code": 1BTY, "filter": False}
+  - extract_molecule:
+      in:
+        input_structure_path: '*complex_rcsb.pdb'
+        output_molecule_path: '&protein.pdb'
+  - prepare_protein_gromacs.yml:
+  - extract_heteroatoms:
+      in:
+        input_structure_path: '*complex_rcsb.pdb'
+        output_heteroatom_path: '&ligand_rcsb.pdb'
+        config: {'heteroatoms' : [{"name": "BEN"}]}
+  - python3_pdb_to_pdb:
+      in:
+        script: /rename_residues_MOL.py # NOTE: Initial / required
+        input_pdb_path: '*ligand_rcsb.pdb'
+        output_pdb_path: '&ligand.pdb'
+        ligand_residue_name: BEN
+  - prepare_ligand_gromacs.yml:
+  - create_complex_gromacs.yml:
+  - stability.yml:
+      in:
+        nsteps: 10000
+        dt: 0.002 # ps
+        temperature: 298.0 # K
+        pressure: 1.0  #
+
+wic:
+  graphviz:
+    label: Molecular Dynamics Setup
+  steps:
+    (1, pdb):
+      wic:
+        graphviz:
+          label: Load Complex PDB File
+    (2, extract_molecule):
+      wic:
+        graphviz:
+          label: Extract Protein
+    (3, prepare_protein_gromacs.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
+        graphviz:
+          label: Fix Protein
+    (4, extract_heteroatoms):
+      wic:
+        graphviz:
+          label: Extract Ligand
+    (5, python3_rename_ligand_pdb):
+      wic:
+        graphviz:
+         label: Molecular Dynamics Setup
+    (6, prepare_ligand_gromacs.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
+        graphviz:
+          label: Generate Ligand\nTopology & Parameters
+    (7, create_complex_gromacs.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
+        graphviz:
+          label: Create Complex\nTopology & Parameters
+    (8, stability.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~ inputs
+        steps:
+          (2, basic.yml):
+            wic:
+              steps:
+                (3, prod.yml):
+                  wic:
+                    steps:
+                      (4, cwl_watcher_analysis.yml):
+                        wic:
+                          backend: protein
+          (3, analysis.yml):
+            wic:
+              steps:
+                (1, analysis_realtime.yml):
+                  wic:
+                    backend:  protein
+

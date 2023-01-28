@@ -1,0 +1,36 @@
+# NOTE: We're not using the results of the structure_check steps,
+# and they're cluttering up the DAG, so comment out for now.
+steps:
+  - fix_amides:
+      in:
+        input_pdb_path: "*protein.pdb"
+        output_pdb_path: protein_fix_amides.pdb
+  - fix_side_chain:
+      in:
+        output_pdb_path: protein_fix_side_chain.pdb
+  - pdb2gmx:
+      in:
+        output_crd_path: '&protein_pdb2gmx.gro'
+        output_top_zip_path: '&protein_pdb2gmx_top.zip'
+        config:
+          water_type: spce
+          force_field: amber99sb-ildn
+          ignh: True
+          merge: False
+
+wic:
+  graphviz:
+    label: Molecular\nModeling
+  steps:
+    (1, fix_amides):
+      wic:
+        graphviz:
+          label: 'Fix Amides'
+    (2, fix_side_chain):
+      wic:
+        graphviz:
+          label: 'Fix Side Chains'
+    (3, pdb2gmx):
+      wic:
+        graphviz:
+          label: 'Generate\nInitial\nTopology'

@@ -3,28 +3,24 @@ cwlVersion: v1.0
 
 class: CommandLineTool
 
-label: Calculate the Total Charge 
+label: Calculate the net Charge
 
 doc: |-
-  Calculate the total charge of a given ligand
+  Calculate the net charge of a given ligand
 
 baseCommand: python3
-#arguments: ["../scripts/examples/calculate_net_charge.py"]
 
-# hints:
-#   DockerRequirement:
-#     dockerPull: jakefennick/scripts
 requirements:
   InlineJavascriptRequirement: {}
+  DockerRequirement:
+    dockerPull: ndonyapour/scripts
 
 inputs:
   script:
-    type: File
-    format:
-    - edam:format_2330
+    type: string
     inputBinding:
       position: 1
-      #default: ../scripts/examples/calculate_net_charge.py
+
   input_path:
     label: Path to the input file
     doc: |-
@@ -41,8 +37,8 @@ inputs:
       prefix: --input_path
 
   addhydrogens:
-    label: adds hydrogens to the system 
-    doc: adds hydrogens to the system 
+    label: adds hydrogens to the system
+    doc: adds hydrogens to the system
     type: boolean?
     format:
     - edam:format_2330
@@ -67,9 +63,9 @@ inputs:
     default: system.log
 
   net_charge:
-    label: Calculated total charge
+    label: Calculated net charge
     doc: |-
-      Calculated total charge
+      Calculated net charge
     type: string
     format:
     - edam:format_2330
@@ -85,9 +81,9 @@ outputs:
     format: edam:format_2330
 
   net_charge:
-    label: Calculated total charge
+    label: Calculated net charge
     doc: |-
-      Calculated total charge
+      Calculated net charge
     type: int
     outputBinding:
       glob: $(inputs.output_log_path)
@@ -96,7 +92,7 @@ outputs:
         ${
           var lines = self[0].contents.split("\n");
           // The correct line should be of the form
-          // Calculated total charge: 1
+          // Calculated net charge: 1
           var net_charge_line = lines.filter(function(s) {return s.split(" ")[0] == "Calculated"})[0];
           var net_charge_string = net_charge_line.split(" ").filter(function(s) {return !isNaN(parseFloat(s))})[0];
           var net_charge = parseInt(net_charge_string);

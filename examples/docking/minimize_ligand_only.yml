@@ -1,13 +1,15 @@
 inputs:
-  sdf_path:
+  input_path:
     type: File
     format:
-    - edam:format_3814
+    - edam:format_3814 # sdf
+    - edam:format_3816 # mol2
+    - edam:format_1476 # pdb
 
 steps:
   - convert_mol2:
       in:
-        input_path: ~sdf_path
+        input_path: ~input_path
         #input_path: '*ligand.sdf'
         output_mol2_path: '&ligand.mol2'
         arg1: -h # add hydrogens

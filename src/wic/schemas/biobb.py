@@ -222,7 +222,7 @@ def biobb_pdb2gmx_schema() -> Json:
     merge = {'type': 'boolean', 'description': '(False) Merge all chains into a single molecule.'}
 
     schema = default_schema()
-    schema['properties'] = {'water_type': water_type, 'forcefield': forcefield,
+    schema['properties'] = {'water_type': water_type, 'force_field': forcefield,
         'ignh': ignh, 'his': his, 'merge': merge,
         **biobb_container_schema()}
     return schema

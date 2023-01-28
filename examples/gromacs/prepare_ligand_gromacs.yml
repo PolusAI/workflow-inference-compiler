@@ -1,0 +1,58 @@
+steps:
+  - minimize_ligand_only.yml:  # Add hydrogens and minimize the ligand
+      in:
+        input_path: '*ligand.pdb'
+  - python3_calculate_net_charge:
+      in:
+        script: /calculate_net_charge.py
+        input_path: '*ligand_min.mol2'
+        output_log_path: calc_charge_log
+        net_charge: '&mol_charge'
+  - acpype: # Generate ligand topology
+      in:
+        input_path: '*ligand_min.mol2'
+        output_gro_path: '&ligand_params.gro'
+        output_itp_path: '&ligand_params.itp'
+        output_top_path: '&ligand_params.top'
+        base_name:  output_acpype
+        net_charge: '*mol_charge'
+  # Preparing Ligand Restraints
+  - make_ndx: # Creating an index file for the small molecule heavy atoms
+      in:
+        input_structure_path: '*ligand_params.gro'
+        output_ndx_path: '&ligand_index.ndx'
+        config: {"selection": "0 & ! a H*"}
+  - genrestr:
+      in:
+        input_structure_path: '*ligand_params.gro'
+        input_ndx_path: '*ligand_index.ndx'
+        output_itp_path: '&ligand_posres.itp'
+        config:
+          force_constants: 1000 1000 1000
+          restrained_group: System
+
+wic:
+  graphviz:
+    label: Generate Ligand\nTopology & Parameters
+  steps:
+    (1, minimize_ligand_only.yml):
+      wic:
+        inlineable: False # Due to yml wic tag inlineing issue and ~input_path
+        graphviz:
+          label: Add Hydrogen Atoms\n and Minimize Ligand
+    (2, python3_calculate_net_charge):
+      wic:
+        graphviz:
+          label: Calculate\n the Net Charge
+    (3, acpype):
+      wic:
+        graphviz:
+          label: Generate Ligand Topology
+    (4, make_ndx):
+      wic:
+        graphviz:
+          label: Create an Index File\nof Heavy Atoms
+    (5, genrestr):
+      wic:
+        graphviz:
+          label: Generate the Position Restraints File
