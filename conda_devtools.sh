@@ -19,7 +19,7 @@ conda install -y -c conda-forge nodejs graphviz openbabel mdanalysis
 conda install -y -c conda-forge data-science-types
 
 conda install -y -c conda-forge wget
-conda-install -y -c conda-forge zip # Not installed by default on ubuntu
+conda install -y -c conda-forge zip # Not installed by default on ubuntu
 
 # NOTE: The [cwl] extra installs an embedded cwltool within toil-cwl-runner.
 # You can NOT `conda install cwltool` and then `pip install toil` !
