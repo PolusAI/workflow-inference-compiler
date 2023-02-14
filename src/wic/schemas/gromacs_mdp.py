@@ -51,8 +51,11 @@ def gromacs_mdp_schema() -> Json:
     Returns:
         Json: A formal schema of the gromacs mdp options, including documentation.
     """
-    gromacs_mdp_html_file = 'gromacs_mdp.html'
-    if Path(gromacs_mdp_html_file).exists():
+    # TODO: Gromacs just updated their mdp options html page for gromacs 2023.
+    # The new html tags are slightly different, so this screen scraper needs updated.
+    # For now, we can store the old version of the html in this repository.
+    gromacs_mdp_html_file = Path(__file__).parent / 'gromacs_mdp.html'
+    if gromacs_mdp_html_file.exists():
         with open(gromacs_mdp_html_file, mode='r', encoding='utf-8') as f:
             html_content = f.read()
     else:
