@@ -22,7 +22,7 @@ hints:
 
 inputs:
 
-  nb_calculations_device:
+  nb_terms:
     label: Device to perform non-bonded interactions on
     doc: |-
       Device to perform non-bonded interaction
@@ -32,7 +32,7 @@ inputs:
       position: 1
     default: gpu
 
-  bonded_calculations_device:
+  bonded_terms:
     label: Device to perform bonded interactions on
     doc: |-
       Device to perform bonded interaction
@@ -42,7 +42,7 @@ inputs:
       position: 2
     default: gpu
 
-  pme_calculations_device:
+  pme_terms:
     label: Device to perform PME calculations on
     doc: |-
       Device to perform PME calculations on

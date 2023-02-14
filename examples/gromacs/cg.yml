@@ -13,8 +13,8 @@ steps:
             nstenergy: 1
   - mdrun:
       in:
-        bonded_calculations_device: cpu # GPU implementation IS supported for md integrator, is NOT supported for sd integrator, etc.
-        pme_calculations_device: cpu
+        bonded_terms: cpu # GPU implementation IS supported for md integrator, is NOT supported for sd integrator, etc.
+        pme_terms: cpu
   - gmx_energy:
       in:
         config:
