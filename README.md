@@ -7,19 +7,41 @@ The documentation is available on [readthedocs](https://workflow-inference-compi
 ## Quick Start
 See the [installation guide](docs/installguide.md) for more details, but:
 ```
-git clone --recursive https://github.com/jfennick/workflow_inference_compiler.git
-cd workflow_inference_compiler
+git clone --recursive https://github.com/PolusAI/workflow-inference-compiler.git
+cd workflow-inference-compiler
 conda create --name wic
 conda activate wic
 ./conda_devtools.sh
-pip install .
+pip install -e ".[test]"
 wic --yaml examples/gromacs/tutorial.yml --run_local --quiet
 ```
-That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the workflow, and run it locally.
+That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the root workflow, and run it locally.
+
+```yaml
+label: Conjugate Gradient
+steps:
+  - grompp:
+      in:
+        config:
+          mdp:
+            integrator: cg
+            nsteps: 1000
+  - mdrun:
+      in:
+        # Use GPU by default
+        bonded_terms: cpu
+        pme_terms: cpu
+  - gmx_energy:
+      in:
+        config:
+          terms: [Potential]
+        output_xvg_path: energy_min_cg.xvg
+```
+The subworkflow [examples/gromacs/cg.yml](examples/gromacs/cg.yml) is shown above, and the GraphViz diagram of the root workflow [examples/gromacs/tutorial.yml](examples/gromacs/tutorial.yml) is shown below.
 
 ![Workflow](examples/gromacs/tutorial.yml.gv.png)
 
-Then, in another terminal, use the following command to view the plots in real-time.
+If you add the --parallel flag to the above command then, in another terminal, you can view the plots in real-time:
 ```
 conda activate wic
 timeseries_plots
@@ -33,7 +55,7 @@ You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipyn
 conda create --name vis
 conda activate vis
 ./nglview_install.sh
-pip install .
+pip install -e ".[test]"
 ```
 
 ![Plots](docs/tree_viewer.png)

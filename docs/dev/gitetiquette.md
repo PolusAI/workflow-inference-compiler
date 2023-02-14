@@ -12,11 +12,13 @@ Ideally, branches should be cleaned up before merging using `git rebase --intera
 
 In general, smaller commits are better, at least from the point of view that is easier to squash small commits together than [splitting commits](https://git-scm.com/docs/git-rebase#_splitting_commits) into individual hunks. Commits should try to be self-contained, and only change one logically related feature at a time.
 
-I am personally guilty of the occasional mega-commit, so I will strive to improve my git habits.
+### Pull Requests
+
+Like commits, PRs should try to be self-contained and small and most importantly easily reviewable. If your PR is greater than ~250 lines, the probability of getting it merged drops rapidly.
 
 ## Testing and CI/CD
 
-Before pushing, please run `pytest --cov -m 'not slow'` or preferably the full `pytest --cov`.
+Before pushing, please run `pytest -m serial` or preferably the full `pytest -m serial && pytest -m "not serial" --workers 4`.
 
 ## .gitignore
 

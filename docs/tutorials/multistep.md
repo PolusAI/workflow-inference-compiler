@@ -72,7 +72,7 @@ steps:
 ```
 
 ```
-Error! /Users/jakefennick/workflow_inference_compiler/docs/tutorials/protein_fix_amides.pdb does not exist!
+Error! /Users/jakefennick/workflow-inference-compiler/docs/tutorials/protein_fix_amides.pdb does not exist!
 (Did you forget to use an explicit edge?)
 See https://workflow-inference-compiler.readthedocs.io/en/latest/userguide.html#explicit-edges
 ```

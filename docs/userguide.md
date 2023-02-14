@@ -165,27 +165,30 @@ As previously mentioned, one of the beautiful things about the declarative appro
 
 ### Authentication Access Token
 
-When using `--run_compute` you will also need to use `--compute_access_token $ACCESS_TOKEN`. Unfortunately, there is currently no programmatic way of obtaining the access token via an API. You will need to manually perform the following steps:
+When using `--run_compute` you will also need to use `--compute_access_token $ACCESS_TOKEN`. Unfortunately, there is currently no programmatic way of obtaining the access token via an API from the command line. You will need to manually perform the following steps:
 
-* Go to https://a-qa.labshare.org
-* Click Login and then Azure
+* Go to https://compute.scb-ncats.io/explorer/
+* Click the green Authorize button. You will be taken to the NIH login page.
+* Enter your NIH username and password, then 
 * Authenticate (using Microsoft Authenticator)
-* You should be redirected to https://a-qa.labshare.org/tenants/polus-qa/dashboard
-* Open the Javascript Console
-* Click on Session Storage
-* Click on the key oidc.user:https://a-qa.labshare.org/_auth/vTest/auth/polus-qa/:auth-ui
-* Copy the massive hash string under the "access_token" tag
+* You will be returned to https://compute.scb-ncats.io/explorer/
+* Click Close (NOT Logout!)
+* Scroll down to [HealthController](https://compute.scb-ncats.io/explorer/#/HealthController/HealthController.ping)
+* Click Try It Out and then click Execute.
+* You should see a massive hash string after "authorization: bearer".
+* Copy the massive hash string. Be careful not to copy any other characters (like blank spaces).
 * In a bash terminal, create the environment variable `export ACCESS_TOKEN=...` (where ... means paste in the hash string)
 
-Unfortunately, the access_token currently expires after about an hour (see "expires_at" tag), so you will need to repeat these steps periodically.
+Unfortunately, the access token currently expires after about an hour, so you will need to repeat these steps periodically.
 
 ### Workflow Status
 
-After submitting a workflow, users can check on its status by logging into login.hpc.ncats.io and using the `squeue` command. Currently, the workflows are executed under the placeholder svc-polus user.
+After submitting a workflow, users can check on its status either using https://compute.scb-ncats.io/explorer/ or by directly logging into dali.ncats.nih.gov and using the `squeue` command. Currently, the workflows are executed under the placeholder svc-polus user.
 
 ```
-ssh login.hpc.ncats.io
+ssh <username>@dali.ncats.nih.gov
 ```
+NOTE: The above server is behind the NIH VPN; you must enable the VPN to access it.
 
 ```
 watch -n5 squeue -u svc-polus

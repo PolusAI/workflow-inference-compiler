@@ -25,6 +25,8 @@ parser.add_argument('--quiet', default=False, action="store_true",
                     help='''Disable verbose output. This will not print out the commands used for each step.''')
 parser.add_argument('--cwl_runner', type=str, required=False, default='cwltool', choices=['cwltool', 'toil-cwl-runner'],
                     help='The CWL runner to use for running workflows locally.')
+parser.add_argument('--ignore_docker', default=False, action="store_true",
+                    help='Do not check whether docker is installed before running workflows.')
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--run_local', default=False, action="store_true",
