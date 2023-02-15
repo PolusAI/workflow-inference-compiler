@@ -375,7 +375,7 @@ def pause_no_show(interval: float) -> None:
 
 figure_closed = False
 
-def on_close(event) -> None: # type: ignore
+def on_close(_event) -> None: # type: ignore
     """This event handler is used to terminate the polling loop when the matplotlib figure is closed."""
     global figure_closed
     figure_closed = True

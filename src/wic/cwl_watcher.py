@@ -58,14 +58,14 @@ def absolute_paths(config: Json, cachedir_path: Path) -> Json:
     return new_json
 
 
-def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
+def rerun_cwltool(_directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
                   args_vals: Json, tools_cwl: Tools, yml_paths: Dict[str, Dict[str, Path]],
                   validator: Draft202012Validator, root_workflow_yml_path: Path) -> None:
     """This will speculatively execute cwltool for real-time analysis purposes.\n
     It will NOT check for return code 0. See docs/userguide.md
 
     Args:
-        directory_realtime (Path): The working directory of the main workflow.\n
+        _directory_realtime (Path): The working directory of the main workflow.\n
         Currently unused to avoid this workflow from overwriting files from the main\n
         workflow (which by design will likely be running concurrently with this code).
         cachedir_path (Path): The --cachedir directory of the main workflow.
@@ -120,7 +120,7 @@ def rerun_cwltool(directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
                                                   tools_cwl, True, relative_run_path=False, testing=False)
         rose_tree = compiler_info.rose
         working_dir = Path('.') # Use a new working directory.
-        # Can also use `directory_realtime` at the risk of overwriting other files.
+        # Can also use `_directory_realtime` at the risk of overwriting other files.
         utils.write_to_disk(rose_tree, working_dir, relative_run_path=False)
 
         time_final = time.time()
