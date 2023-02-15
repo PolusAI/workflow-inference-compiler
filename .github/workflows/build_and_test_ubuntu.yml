@@ -72,7 +72,7 @@ jobs:
 
       - name: MyPy Check Type Annotations
         if: always()
-        run: mypy --no-incremental src/ tests/
+        run: mypy --no-incremental src/ tests/ api.py auth/
         # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
         # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
         # NOTE: We need to use --no-incremental because there is a bug in mypy.
@@ -81,7 +81,7 @@ jobs:
 
       - name: PyLint Check Code Quality
         if: always()
-        run: pylint src/ tests/
+        run: pylint src/ tests/ api.py auth/
         # NOTE: See fail-under threshold in .pylintrc
 
       - name: PEP8 Code Formatting
@@ -89,7 +89,7 @@ jobs:
         id: autopep8
         uses: peter-evans/autopep8@v2
         with:
-          args: --exit-code --recursive --diff --max-line-length 120 examples/ src/ tests/
+          args: --exit-code --recursive --diff --max-line-length 120 examples/ src/ tests/ api.py auth/
       - name: Fail if autopep8 made changes
         if: steps.autopep8.outputs.exit-code == 2
         run: exit 1
