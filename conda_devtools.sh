@@ -25,3 +25,13 @@ conda install -y -c conda-forge zip # Not installed by default on ubuntu
 # You can NOT `conda install cwltool` and then `pip install toil` !
 conda install -y -c conda-forge pip
 pip install 'toil[cwl]'
+
+# The ruptures library needs to compile its binary wheel during pip install
+# Even though the compilers are already installed
+# (i.e. the below command prints "All requested packages are already installed.")
+# if you don't explicitly install the compilers package,
+# the ruptures binary wheel build will fail with
+# "#  include <stdlib.h>"
+# ...
+# "ERROR: Failed building wheel for ruptures"
+conda install -y -c conda-forge compilers
