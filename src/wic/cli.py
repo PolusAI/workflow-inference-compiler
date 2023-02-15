@@ -15,7 +15,8 @@ parser.add_argument('--yml_dirs_file', type=str, required=False, default='yml_di
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')
 parser.add_argument('--insert_steps_automatically', default=False, action="store_true",
-                    help='Attempt to fix inference failures by speculatively inserting workflow steps from a curated whitelist.')
+                    help='''Attempt to fix inference failures by speculatively
+                    inserting workflow steps from a curated whitelist.''')
 
 parser.add_argument('--parallel', default=False, action="store_true",
                     help='''When running locally, execute independent steps in parallel.
@@ -25,6 +26,8 @@ parser.add_argument('--quiet', default=False, action="store_true",
                     help='''Disable verbose output. This will not print out the commands used for each step.''')
 parser.add_argument('--cwl_runner', type=str, required=False, default='cwltool', choices=['cwltool', 'toil-cwl-runner'],
                     help='The CWL runner to use for running workflows locally.')
+parser.add_argument('--ignore_docker', default=False, action="store_true",
+                    help='Do not check whether docker is installed before running workflows.')
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--run_local', default=False, action="store_true",
@@ -51,10 +54,10 @@ parser.add_argument('--no_skip_dollar_schemas', default=False, action="store_tru
 parser.add_argument('--cachedir', type=str, required=False, default='cachedir',
                     help='The directory to save intermediate results; useful with RealtimePlots.py')
 
-aws_url = 'http://compute.ci.aws.labshare.org'
-ncats_url = 'https://compute.scb-ncats.io/'
+AWS_URL = 'http://compute.ci.aws.labshare.org'
+NCATS_URL = 'https://compute.scb-ncats.io/'
 
-parser.add_argument('--compute_url', type=str, default=ncats_url,
+parser.add_argument('--compute_url', type=str, default=NCATS_URL,
                     help='The URL associated with the labshare Compute API. Required for --run_compute')
 parser.add_argument('--compute_access_token', type=str, required=('--run_compute' in sys.argv),
                     help="""The access_token used for authentication. Required for --run_compute

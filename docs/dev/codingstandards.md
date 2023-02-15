@@ -31,7 +31,7 @@ def step_name_str(yaml_stem: str, i: int, step_key: str) -> str:
 
 ## Integration / Regression Tests
 
-We have a small number of integration / regression tests located in `tests/`. These tests are very powerful and have been extremely helpful in catching various issues. The command `pytest` will run the full set of tests, which takes about 20-30 minutes on a laptop. For interactive development purposes this is too slow, so you can use `pytest -m fast` or `pytest -m 'not slow'`. These commands test the compiler only (not the runtime) and only take about 15 seconds and 2 minutes, respectively.
+We have a small number of integration / regression tests located in `tests/`. These tests are very powerful and have been extremely helpful in catching various issues. The command `pytest -m serial && pytest -m "not serial" --workers 4` will run the full set of tests, which takes about an hour on a laptop with a GPU. For interactive development purposes this is too slow, so you can use `pytest -m serial`. This command tests the compiler only (not the runtime) and only takes about a minute.
 
 In addition to the above tests, we need to add some unit tests. Due to the highly recursive nature of the compilation algorithm, it has proven difficult to test functions in isolation. There will probably need to be some refactoring to facilitate this.
 
@@ -41,7 +41,7 @@ We are using the pytest-cov code coverage plugin to make sure our tests are exer
 
 ## CI/CD
 
-Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `mypy --no-incremental src/ tests/`, `pylint src/ tests/`, and `pytest --cov --workers 4`. Before pushing, please run `pytest --cov --workers 4 -m 'not slow'` or preferably the full `pytest --cov --workers 4`.
+Our Continuous Integration / Continuous Delivery files can be found in `.github/workflows/*.yml`. After every `git push`, this creates an isolated development environment and runs `mypy --no-incremental src/ tests/`, `pylint src/ tests/`, and `pytest`. Before pushing, please run `pytest -m serial` or preferably the full `pytest -m serial && pytest -m "not serial" --workers 4`.
 
 ## Linting
 

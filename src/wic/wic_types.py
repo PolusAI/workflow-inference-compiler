@@ -45,7 +45,7 @@ StepName1 = str
 DiGraph = Any # graphviz.DiGraph
 
 class GraphData():
-
+    # pylint:disable=too-few-public-methods
     def __init__(self,
                  name: str, # TODO: Should this be StepId?
                  nodes: List[Tuple[str, Dict]] = [],

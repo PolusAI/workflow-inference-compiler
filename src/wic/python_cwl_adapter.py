@@ -5,10 +5,10 @@ import sys
 from types import ModuleType
 from typing import Dict, Any
 
-driver_script =  '/python_cwl_driver.py'
-types_script = '/workflow_types.py'
+DRIVER_SCRIPT =  '/python_cwl_driver.py'
+TYPES_SCRIPT = '/workflow_types.py'
 
-types_script_rel = 'examples/scripts/workflow_types.py'
+TYPES_SCRIPT_REL = 'examples/scripts/workflow_types.py'
 
 # NOTE: VERY IMPORTANT: Since we have to programmaticaly import the python file in the compiler,
 # and since the act of importing it executes the entire file (i.e. including import statements),
@@ -137,16 +137,15 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
     def input_binding(position: int, prefix: str = '') -> Dict[str, Any]:
         if prefix == '':
             return {'inputBinding': {'position': position}}
-        else:
-            return {'inputBinding': {'position': position, 'prefix': f'--{prefix}'}}
+        return {'inputBinding': {'position': position, 'prefix': f'--{prefix}'}}
 
     inputs: Dict[str, Any]  = {}
     #driver_script_file = {'class': 'File', 'path': driver_script}
     inputs['driver_script'] = {'type': 'string', 'format': 'edam:format_2330',
-                               **input_binding(1), 'default': driver_script} # driver_script_file
+                               **input_binding(1), 'default': DRIVER_SCRIPT} # driver_script_file
     #workflow_types_file = {'class': 'File', 'path': types_script}
     inputs['workflow_types'] = {'type': 'string', 'format': 'edam:format_2330',
-                                **input_binding(2), 'default': types_script} # workflow_types_file
+                                **input_binding(2), 'default': TYPES_SCRIPT} # workflow_types_file
     inputs['script'] = {'type': 'File', 'format': 'edam:format_2330', **input_binding(3)}
     for i, (arg_key, arg_val) in enumerate(module_inputs.items()):
         inputs[arg_key] = {**arg_val, **input_binding(i+4, arg_key)}
@@ -181,7 +180,7 @@ def get_module(python_script_mod: str, python_script_path: Path, yml_args: Dict[
     Returns:
         ModuleType: The Module object associated with the given python script.
     """
-    import_python_file('workflow_types', Path(types_script_rel))
+    import_python_file('workflow_types', Path(TYPES_SCRIPT_REL))
     module_ = import_python_file(python_script_mod, python_script_path)
     #print(module_.inputs)
     #print(module_.outputs)
