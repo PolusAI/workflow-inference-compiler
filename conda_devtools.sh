@@ -13,6 +13,11 @@
 conda install -y -c conda-forge nodejs graphviz openbabel mdanalysis
 # NOTE: cwltool needs nodejs for InlineJavascriptRequirement
 
+# "Warning: Could not load "/miniconda/bin/../lib/graphviz/libgvplugin_pango.so.6"
+#  - It was found, so perhaps one of its dependents was not.  Try ldd."
+# See https://github.com/conda-forge/graphviz-feedstock/issues/35#issuecomment-786368065
+conda install -y -c conda-forge xorg-libxrender
+
 # NOTE: https://github.com/wearepal/data-science-types has been archived and is
 # no longer under active development. So most of the API is covered, but there
 # are some functions which are missing stubs.
