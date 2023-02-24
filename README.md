@@ -6,6 +6,10 @@ Scientific computing can be difficult in practice due to various complex softwar
 
 ## Documentation
 The documentation is available on [readthedocs](https://workflow-inference-compiler.readthedocs.io/en/latest/).
+
+## Need help?
+If you have any issues feel free to email me directly at jake.fennick at nih.gov
+
 ## Quick Start
 See the [installation guide](docs/installguide.md) for more details, but:
 ```
