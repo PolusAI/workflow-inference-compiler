@@ -8,7 +8,7 @@ import hypothesis_jsonschema as hj
 
 import wic
 import wic.cli
-import wic.main
+import wic.plugins
 import wic.schemas
 import wic.schemas.wic_schema
 import wic.utils
@@ -28,8 +28,8 @@ def get_args(yaml_path: str = '') -> argparse.Namespace:
     return args
 
 
-tools_cwl = wic.main.get_tools_cwl(get_args().cwl_dirs_file)
-yml_paths = wic.main.get_yml_paths(get_args().yml_dirs_file)
+tools_cwl = wic.plugins.get_tools_cwl(get_args().cwl_dirs_file)
+yml_paths = wic.plugins.get_yml_paths(get_args().yml_dirs_file)
 yaml_stems = wic.utils.flatten([list(p) for p in yml_paths.values()])
 schema_store: Dict[str, Json] = {}
 validator = wic.schemas.wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)

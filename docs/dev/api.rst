@@ -41,9 +41,17 @@ wic.main
 ------------------------------------
 .. automodule:: wic.main
 
+wic.plugins
+------------------------------------
+.. automodule:: wic.plugins
+
 wic.python_cwl_adapter
 ------------------------------------
 .. automodule:: wic.python_cwl_adapter
+
+wic.run_local
+------------------------------------
+.. automodule:: wic.run_local
 
 wic.schemas.biobb
 ------------------------------------

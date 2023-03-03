@@ -46,6 +46,8 @@ Most of the plugins have been packaged up into [docker](https://www.docker.com) 
 
 When running Docker for Mac, in some cases execution will hang. See [all containers hang](https://github.com/docker/for-mac/issues/5081) and [error waiting for container](https://github.com/docker/for-mac/issues/5139) for details. The current workaround is to simply restart Docker.
 
+If you are experiencing hanging, and if the command `ps aux | grep com.docker | wc -l` returns more than 1000, this is likely the issue. If restarting Docker via the GUI doesn't work, try `sudo pkill com.docker && sudo pkill Docker`.
+
 ## conda
 
 [conda](https://en.wikipedia.org/wiki/Conda_(package_manager)) is an open source, cross platform package management system. It can install both Python dependencies and system binary dependencies, so conda is essentially a replacement for `pip`. The associated package distributions named `anaconda` and `miniconda` provide a database of packages that can be used with the `conda` command. (There is also an open source package distribution called [conda-forge](https://conda-forge.org)) Either one works, so if you already have anaconda installed then great. Otherwise, [miniconda](https://docs.conda.io/en/latest/miniconda.html) is all you need.
