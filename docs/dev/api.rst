@@ -49,6 +49,10 @@ wic.python_cwl_adapter
 ------------------------------------
 .. automodule:: wic.python_cwl_adapter
 
+wic.run_local
+------------------------------------
+.. automodule:: wic.run_local
+
 wic.schemas.biobb
 ------------------------------------
 .. automodule:: wic.schemas.biobb
