@@ -43,6 +43,8 @@ parser.add_argument('--compute_driver', type=str, required=False, default='slurm
 
 parser.add_argument('--cwl_inline_subworkflows', default=('--run_compute' in sys.argv), action="store_true",
                     help='Before generating the cwl file, inline all subworkflows. Required for --run_compute')
+parser.add_argument('--inference_disable', default=False, action="store_true",
+                    help='Disables use of the inference algorithm when compiling.')
 parser.add_argument('--inference_use_naming_conventions', default=False, action="store_true",
                     help='Enables the use of naming conventions in the inference algorithm')
 parser.add_argument('--validate_plugins', default=False, action="store_true",
