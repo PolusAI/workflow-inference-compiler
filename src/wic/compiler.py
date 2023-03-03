@@ -743,6 +743,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # NOTE: We already added an edge to the appropriate subgraph above.
                 # TODO: vars_workflow_output_internal?
             else:
+                if args.inference_disable:
+                    continue
                 conversions: List[StepId] = []
                 in_name_in_inputs_file_workflow: bool = (in_name in inputs_file_workflow)
                 arg_key_in_yaml_tree_inputs: bool = (arg_key in yaml_tree.get('inputs', {}))
