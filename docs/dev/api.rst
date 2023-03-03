@@ -41,6 +41,10 @@ wic.main
 ------------------------------------
 .. automodule:: wic.main
 
+wic.plugins
+------------------------------------
+.. automodule:: wic.plugins
+
 wic.python_cwl_adapter
 ------------------------------------
 .. automodule:: wic.python_cwl_adapter

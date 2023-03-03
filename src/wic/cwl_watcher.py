@@ -14,7 +14,8 @@ import networkx as nx
 from jsonschema import Draft202012Validator
 
 from . import ast, cli, compiler, inference, utils
-from .main import get_tools_cwl, get_yml_paths, stage_input_files
+from .main import stage_input_files
+from .plugins import get_tools_cwl, get_yml_paths
 from .schemas import wic_schema
 from .wic_types import GraphData, GraphReps, Json, StepId, Tools, YamlTree
 
