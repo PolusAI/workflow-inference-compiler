@@ -6,7 +6,6 @@ import re
 from typing import Dict
 
 import cwltool.load_tool
-import cwltool.main
 import yaml
 
 from . import utils
