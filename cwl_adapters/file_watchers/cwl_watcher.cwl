@@ -66,28 +66,6 @@ inputs:
       position: 5
       prefix: --config
 
-  cwl_dirs_file:
-    label: Configuration file which lists the directories which contains the CWL CommandLineTools
-    doc: |
-      Configuration file which lists the directories which contains the CWL CommandLineTools
-    type: string
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 6
-      prefix: --cwl_dirs_file
-
-  yml_dirs_file:
-    label: Configuration file which lists the directories which contains the YAML Workflows
-    doc: |
-      Configuration file which lists the directories which contains the YAML Workflows
-    type: string
-    format:
-    - edam:format_2330 # 'Textual format'
-    inputBinding:
-      position: 7
-      prefix: --yml_dirs_file
-
   root_workflow_yml_path:
     label: The full absolute path to the root workflow yml file.
     doc: |
@@ -96,8 +74,19 @@ inputs:
     format:
     - edam:format_2330 # 'Textual format'
     inputBinding:
-      position: 8
+      position: 6
       prefix: --root_workflow_yml_path
+
+  homedir:
+    label: The full absolute path to the uers home directory.
+    doc: |
+      The full absolute path to the root users home directory.
+    type: string
+    format:
+    - edam:format_2330 # 'Textual format'
+    inputBinding:
+      position: 7
+      prefix: --homedir
 
 outputs:
   output_log_path:
