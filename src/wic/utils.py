@@ -502,18 +502,27 @@ def get_step_name_1(step_1_names: List[str],
     return step_name_1
 
 
-def copy_config_files() -> None:
-    """Copies the following configuration files to the current working directory:\n
+def copy_config_files(homedir: str) -> None:
+    """Copies the following configuration files to ~/wic/\n
     cwl_dirs.txt, yml_dirs.txt, renaming_conventions.txt, inference_rules.txt
+
+    Args:
+        homedir (str): The users home directory
     """
     files = ['cwl_dirs.txt', 'yml_dirs.txt', 'renaming_conventions.txt', 'inference_rules.txt']
     src_dir = Path(__file__).parent
-    cwd = Path('.')
+    wicdir = Path(homedir) / 'wic'
+    wicdir.mkdir(exist_ok=True)
 
     for file in files:
-        if not (cwd / file).exists():
-            cmd = ['cp', str(src_dir / file), str(cwd / file)]
+        if not (wicdir / file).exists():
+            print(f'Writing {str(wicdir / file)}')
+            print('Please check this file and make sure that the paths in it are correct.')
+            cmd = ['cp', str(src_dir / file), str(wicdir / file)]
             sub.run(cmd, check=True)
+
+    write_absolute_config_files(wicdir / 'cwl_dirs.txt')
+    write_absolute_config_files(wicdir / 'yml_dirs.txt')
 
 
 def recursively_insert_into_dict_tree(tree: Dict, keys: List[str], val: Any) -> Dict:
@@ -672,8 +681,8 @@ def get_output_mapping(output_mapping: Dict[str, str], out_key: str) -> str:
     return out_key
 
 
-def write_absolute_config_files(args: argparse.Namespace, in_dict_in: Yaml, namespaces: Namespaces,
-                                step_name_i: str, explicit_edge_calls_copy: ExplicitEdgeCalls) -> None:
+def write_absolute_yaml_tags(args: argparse.Namespace, in_dict_in: Yaml, namespaces: Namespaces,
+                             step_name_i: str, explicit_edge_calls_copy: ExplicitEdgeCalls) -> None:
     """cwl_watcher requires all paths to be absolute.
 
     Args:
@@ -691,25 +700,27 @@ def write_absolute_config_files(args: argparse.Namespace, in_dict_in: Yaml, name
     in_dict_in['root_workflow_yml_path'] = str(Path(args.yaml).parent.absolute())
 
     in_dict_in['cachedir_path'] = str(cachedir_path)
-    cwl_dirs_file_abs = str(Path(args.cwl_dirs_file).absolute())[:-4] + '_absolute.txt'
-    in_dict_in['cwl_dirs_file'] = cwl_dirs_file_abs
-    yml_dirs_file_abs = str(Path(args.yml_dirs_file).absolute())[:-4] + '_absolute.txt'
-    in_dict_in['yml_dirs_file'] = yml_dirs_file_abs
+    in_dict_in['homedir'] = args.homedir
 
     # Add a 'dummy' values to explicit_edge_calls, because
     # that determines sub_args_provided when the recursion returns.
-    arg_keys_ = ['root_workflow_yml_path', 'cachedir_path', 'cwl_dirs_file', 'yml_dirs_file']
+    arg_keys_ = ['root_workflow_yml_path', 'cachedir_path', 'homedir']
     for arg_key_ in arg_keys_:
         in_name_ = f'{step_name_i}___{arg_key_}'  # {step_name_i}_input___{arg_key}
         explicit_edge_calls_copy.update({in_name_: (namespaces + [step_name_i], arg_key_)})
 
-    # NOTE: Make the paths within *_dirs_file absolute here
-    ns_paths = read_lines_pairs(Path(args.yml_dirs_file))
-    pairs_abs = [ns + ' ' + str(Path(path).absolute()) for ns, path in ns_paths]
-    with open(yml_dirs_file_abs, mode='w', encoding='utf-8') as f:
-        f.write('\n'.join(pairs_abs))
+    write_absolute_config_files(Path(args.homedir) / 'wic' / 'cwl_dirs.txt')
+    write_absolute_config_files(Path(args.homedir) / 'wic' / 'yml_dirs.txt')
 
-    ns_paths = read_lines_pairs(Path(args.cwl_dirs_file))
+
+def write_absolute_config_files(dirs_file: Path) -> None:
+    """Makes the paths within the \*_dirs.txt files absolute
+
+    Args:
+        dirs_file (Path): The path to the \*_dirs.txt file
+        dirs_file_abs (str): The path to the absolute \*_dirs.txt file
+    """
+    ns_paths = read_lines_pairs(dirs_file)
     pairs_abs = [ns + ' ' + str(Path(path).absolute()) for ns, path in ns_paths]
-    with open(cwl_dirs_file_abs, mode='w', encoding='utf-8') as f:
+    with open(dirs_file, mode='w', encoding='utf-8') as f:
         f.write('\n'.join(pairs_abs))

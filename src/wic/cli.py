@@ -1,16 +1,15 @@
 import argparse
 import sys
+from pathlib import Path
 
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
 parser.add_argument('--yaml', type=str, required=('--generate_schemas_only' not in sys.argv),
                     help='Yaml workflow file')
 
 parser.add_argument('--generate_schemas_only', default=False, action="store_true",
-                    help='Generate schemas for the files in --cwl_dirs_file and --yml_dirs_file.')
-parser.add_argument('--cwl_dirs_file', type=str, required=False, default='cwl_dirs.txt',
-                    help='Configuration file which lists the directories which contains the CWL CommandLineTools')
-parser.add_argument('--yml_dirs_file', type=str, required=False, default='yml_dirs.txt',
-                    help='Configuration file which lists the directories which contains the YAML Workflows')
+                    help='Generate schemas for the files in ~/wic/cwl_dirs.txt and ~/wic/yml_dirs.txt')
+parser.add_argument('--homedir', type=str, required=False, default=str(Path().home()),
+                    help='The users home directory. This is necessary because CWL clears environment variables (e.g. HOME)')
 # Change default to True for now. See comment in compiler.py
 parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
                     help='Enable output files which are used between steps (for debugging).')

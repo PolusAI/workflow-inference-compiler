@@ -1,5 +1,6 @@
 import argparse
 import sys
+from pathlib import Path
 import time
 from pathlib import Path
 from typing import Dict
@@ -30,8 +31,9 @@ def get_args(yaml_path: str = '') -> argparse.Namespace:
     return args
 
 
-tools_cwl = wic.plugins.get_tools_cwl(Path(get_args().cwl_dirs_file))
-yml_paths = wic.plugins.get_yml_paths(Path(get_args().yml_dirs_file))
+args = get_args()
+tools_cwl = wic.plugins.get_tools_cwl(args.homedir)
+yml_paths = wic.plugins.get_yml_paths(args.homedir)
 yaml_stems = wic.utils.flatten([list(p) for p in yml_paths.values()])
 schema_store: Dict[str, Json] = {}
 validator = wic.schemas.wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)
@@ -41,7 +43,7 @@ yml_paths_tuples = [(yml_path_str, yml_path)
                     for yml_path_str, yml_path in yml_paths_dict.items()]
 
 for yml_path_str, yml_path in yml_paths_tuples:
-    schema = wic.schemas.wic_schema.compile_workflow_generate_schema(yml_path_str, yml_path,
+    schema = wic.schemas.wic_schema.compile_workflow_generate_schema(args.homedir, yml_path_str, yml_path,
                                                                      tools_cwl, yml_paths, validator)
     # overwrite placeholders in schema_store. See comment in get_validator()
     schema_store[schema['$id']] = schema
