@@ -1,4 +1,4 @@
-name: Build And Run Test on Ubuntu
+name: Build And Run Test
 
 on:
   push:
@@ -8,65 +8,94 @@ on:
 env:
   BUILD_TYPE: Release
 
-jobs:
-  Build_and_Run_PyTest:
-    name: Build and Run PyTest
-    runs-on: [self-hosted, linux]
-    defaults:
-      run:
-        shell: bash -l {0}
+defaults:
+  run:
+    shell: bash -l {0}
 
+jobs:
+  checkout:
+    name: Checkout source code
+    runs-on: [self-hosted, linux]
     steps:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
 
+  conda_setup:
+    name: Setup conda
+    runs-on: [self-hosted, linux]
+    steps:
     - uses: conda-incubator/setup-miniconda@v2
       with:
         miniconda-version: "latest"
         activate-environment: wic
         channels: conda-forge
         python-version: "3.*"
+    - working-directory: ${{github.workspace}}
+      run: conda init bash
 
-    - name: Install System Dependencies from Conda
+  conda_install:
+    needs: [checkout, conda_setup]
+    name: Install System Dependencies from Conda
+    runs-on: [self-hosted, linux]
+    steps:
 # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
 #      run: sudo apt install cwltool
 # Use conda to install cwltool (version 3.1.20220224085855)
-      working-directory: ${{github.workspace}}
-      run: |
-        conda info
-        conda list
-        conda config --show-sources
-        conda config --show
-        ./conda_devtools.sh
+    - working-directory: ${{github.workspace}}
+      run: ./conda_devtools.sh
 
-    - name: Docker Pull
-      working-directory: ${{github.workspace}}
-      # For self-hosted runners, make sure the docker cache is up-to-date.
+  docker_pull:
+    needs: [checkout, conda_setup]
+    name: Docker pull
+    runs-on: [self-hosted, linux]
+    steps:
+    - working-directory: ${{github.workspace}}
       run: ./dockerPull.sh
+      # For self-hosted runners, make sure the docker cache is up-to-date.
 
-    - name: Install Workflow Inference Compiler
-      working-directory: ${{github.workspace}}
+  wic_install:
+    needs: [conda_install]
+    name: Install Workflow Inference Compiler
+    runs-on: [self-hosted, linux]
+    steps:
+    - working-directory: ${{github.workspace}}
       run: pip install ".[test]"
 
-    - name: Run MyPy
-      working-directory: ${{github.workspace}}
+  mypy:
+    needs: [wic_install]
+    name: Run MyPy
+    runs-on: [self-hosted, linux]
+    steps:
+    - working-directory: ${{github.workspace}}
+      run: mypy --no-incremental src/ tests/
       # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
       # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
       # NOTE: We need to use --no-incremental because there is a bug in mypy.
       # This bug most often occurs when using ruamel library.
       # See https://github.com/python/mypy/issues/12664
-      run: mypy --no-incremental src/ tests/
 
-    - name: Run PyLint
-      working-directory: ${{github.workspace}}
-      # NOTE: See fail-under threshold in .pylintrc
+  pylint:
+    needs: [wic_install]
+    name: Run PyLint
+    runs-on: [self-hosted, linux]
+    steps:
+    - working-directory: ${{github.workspace}}
       run: pylint src/ tests/
+      # NOTE: See fail-under threshold in .pylintrc
 
-    - name: Run PyTest Serial Tests
-      working-directory: ${{github.workspace}}
+  pytest_serial:
+    needs: [wic_install]
+    name: Run PyTest Serial Tests
+    runs-on: [self-hosted, linux]
+    steps:
+    - working-directory: ${{github.workspace}}
       run: pytest --cov -m serial --cov-config=.coveragerc_serial
 
-    - name: Run PyTest Parallel Tests
-      working-directory: ${{github.workspace}}
+  pytest_parallel:
+    needs: [wic_install, docker_pull]
+    name: Run PyTest Parallel Tests
+    runs-on: [self-hosted, linux]
+    steps:
+    - working-directory: ${{github.workspace}}
       run: pytest --cov -m "not serial" --workers 4 --cov-config=.coveragerc_parallel
