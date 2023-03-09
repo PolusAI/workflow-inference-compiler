@@ -180,5 +180,6 @@ These vscode extensions are recommended for developers:
 * Docker
 * CWL (Rabix/Benten)
 * Git Extension Pack
+* Github Actions (Mathieu Dutour)
 * autoDocstring
 * Protein Viewer
