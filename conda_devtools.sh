@@ -23,7 +23,7 @@ $CONDA install -y -c conda-forge pypy
 #$CONDA install -y -c conda-forge -c michellab biosimspace
 # At runtime, CWL uses the Docker image jakefennick/biosimspace
 
-$CONDA install -y -c conda-forge nodejs graphviz openbabel mdanalysis
+$CONDA install -y -c conda-forge nodejs graphviz # openbabel mdanalysis
 # NOTE: cwltool needs nodejs for InlineJavascriptRequirement
 
 # "Warning: Could not load "/miniconda/bin/../lib/graphviz/libgvplugin_pango.so.6"
