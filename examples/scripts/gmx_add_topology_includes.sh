@@ -1,3 +1,4 @@
+#!/bin/bash -e
 # NOTE: These include statements MUST be in this order. In particular, we
 # cannot simply use cat $1 because we need to interleave the amber99sb-ildn.ff
 # includes around ligand_GMX.itp, and because we need to remove the [ defaults ]

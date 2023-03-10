@@ -1,5 +1,5 @@
-#!/bin/bash
+#!/bin/bash -e
 echo "ROOT"
-cat $1 | grep -v ROOT | grep -v BRANCH | grep -v TORSDOF
+grep -v ROOT "$1" | grep -v BRANCH | grep -v TORSDOF
 echo "ENDROOT"
 echo "TORSDOF 0"

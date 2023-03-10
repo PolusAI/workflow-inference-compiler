@@ -58,6 +58,10 @@ jobs:
     # Use conda to install cwltool (version 3.1.20220224085855)
         run: ./conda_devtools.sh
 
+      - name: ShellCheck Script Quality
+        if: always()
+        run: shellcheck $(find . -name "*.sh" -not -path "./biobb/*" -and -not -path "./3/*")
+
       - name: Install Workflow Inference Compiler
         if: always()
         run: pip install ".[all]"
