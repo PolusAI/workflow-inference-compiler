@@ -22,13 +22,15 @@ jobs:
         submodules: recursive
 
   conda_setup:
-    name: Setup conda
+    name: Setup conda / mamba
     runs-on: [self-hosted, linux]
     steps:
     - uses: conda-incubator/setup-miniconda@v2
       with:
-        miniconda-version: "latest"
+        miniforge-variant: Mambaforge-pypy3
+        miniforge-version: latest
         activate-environment: wic
+        use-mamba: true
         channels: conda-forge
         python-version: "3.*"
     - working-directory: ${{github.workspace}}
@@ -36,7 +38,7 @@ jobs:
 
   conda_install:
     needs: [checkout, conda_setup]
-    name: Install System Dependencies from Conda
+    name: Install System Dependencies from Conda / Mamba
     runs-on: [self-hosted, linux]
     steps:
 # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
