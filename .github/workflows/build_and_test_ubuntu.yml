@@ -86,13 +86,15 @@ jobs:
       run: pylint src/ tests/
       # NOTE: See fail-under threshold in .pylintrc
 
+# NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+
   pytest_serial:
     needs: [wic_install]
     name: Run PyTest Serial Tests
     runs-on: [self-hosted, linux]
     steps:
     - working-directory: ${{github.workspace}}
-      run: pytest --cov -m serial --cov-config=.coveragerc_serial
+      run: pytest -m serial # --cov --cov-config=.coveragerc_serial
 
   pytest_parallel:
     needs: [wic_install, docker_pull]
@@ -100,4 +102,4 @@ jobs:
     runs-on: [self-hosted, linux]
     steps:
     - working-directory: ${{github.workspace}}
-      run: pytest --cov -m "not serial" --workers 4 --cov-config=.coveragerc_parallel
+      run: pytest -m "not serial" --workers 4 # --cov --cov-config=.coveragerc_parallel
