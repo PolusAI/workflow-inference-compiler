@@ -1,13 +1,14 @@
 FROM ubuntu:22.04
 
-# Install miniconda
+# Install conda / mamba
 RUN apt-get update && apt-get install -y wget
-RUN MINICONDA="Miniconda3-latest-Linux-x86_64.sh" && \
-    wget --quiet https://repo.continuum.io/miniconda/$MINICONDA && \
-    chmod +x $MINICONDA && \
-    ./$MINICONDA -b -p /miniconda && \
-    rm -f $MINICONDA
-ENV PATH /miniconda/bin:$PATH
+
+RUN CONDA="Mambaforge-pypy3-Linux-x86_64.sh" && \
+    wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \
+    chmod +x $CONDA && \
+    ./$CONDA -b -p /mambaforge-pypy3 && \
+    rm -f $CONDA
+ENV PATH /mambaforge-pypy3/bin:$PATH
 
 # Install wic
 RUN apt-get install -y git
