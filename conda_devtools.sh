@@ -53,3 +53,9 @@ pip install 'toil[cwl]'
 # ...
 # "ERROR: Failed building wheel for ruptures"
 $CONDA install -y -c conda-forge compilers
+
+# The ruptures library also needs openblas. Otherwise:
+# "../../scipy/meson.build:134:0: ERROR:
+#  Dependency lookup for OpenBLAS with method 'pkgconfig' failed:
+#  Pkg-config binary for machine 1 not found. Giving up."
+$CONDA install -y -c conda-forge openblas
