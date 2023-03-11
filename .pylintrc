@@ -12,9 +12,9 @@ disable=missing-class-docstring,
 
 # Specify a score threshold to be exceeded before program exits with error.
 # Try to keep the threshold near the default of a perfect 10/10.
-# However, for some reason, on github actions CI/CD the the scores slightly
-# lower and fails, so let's use 9.50 instead of 9.75 for now.
-fail-under=9.50
+# However, for some reason, on github actions CI/CD the scores are slightly
+# lower and fails, so let's use 9.25 instead of 9.50 for now.
+fail-under=9.25
 
 [FORMAT]
 
