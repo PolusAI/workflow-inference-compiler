@@ -9,7 +9,7 @@ fi
 # pypy is ~2X faster than the regular python interpreter.
 # We need to install it first so the dependency solver installs it bundled with python 3.9
 # (pypy is not yet compatible with 3.10 and 3.11)
-$CONDA install -y -c conda-forge pypy
+$CONDA install -y -c conda-forge pypy "python<3.10"
 
 # Comment out pymol-bundle because it conflicts with `pip install toil[cwl]` below.
 #mamba install -y -c conda-forge -c schrodinger pymol-bundle
