@@ -94,7 +94,7 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
                 print(f'See validation_{yaml_path.stem}.txt for detailed technical information.')
                 # Do not display a nasty stack trace to the user; hide it in a file.
                 with open(f'validation_{yaml_path.stem}.txt', mode='w', encoding='utf-8') as f:
-                    traceback.print_exception(e, file=f)
+                    traceback.print_exception(etype=type(e), value=e, tb=None, file=f)
                 sys.exit(1)
 
             y_t = YamlTree(StepId(step_key, plugin_ns), sub_yaml_tree_raw)
