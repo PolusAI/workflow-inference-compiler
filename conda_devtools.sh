@@ -6,6 +6,8 @@ if [ $(which mamba) ]; then
     CONDA=mamba
 fi
 
+#$CONDA clean --all --yes
+
 # pypy is ~2X faster than the regular python interpreter.
 # We need to install it first so the dependency solver installs it bundled with python 3.9
 # (pypy is not yet compatible with 3.10 and 3.11)
@@ -39,10 +41,7 @@ $CONDA install -y -c conda-forge data-science-types
 $CONDA install -y -c conda-forge wget
 $CONDA install -y -c conda-forge zip # Not installed by default on ubuntu
 
-# NOTE: The [cwl] extra installs an embedded cwltool within toil-cwl-runner.
-# You can NOT `conda install cwltool` and then `pip install toil` !
-$CONDA install -y -c conda-forge pip
-pip install 'toil[cwl]'
+$CONDA install -y -c conda-forge shellcheck
 
 # The ruptures library needs to compile its binary wheel during pip install
 # Even though the compilers are already installed
@@ -54,8 +53,17 @@ pip install 'toil[cwl]'
 # "ERROR: Failed building wheel for ruptures"
 $CONDA install -y -c conda-forge compilers
 
-# The ruptures library also needs openblas. Otherwise:
+# The ruptures library also needs pkg-config and openblas. Otherwise:
 # "../../scipy/meson.build:134:0: ERROR:
 #  Dependency lookup for OpenBLAS with method 'pkgconfig' failed:
 #  Pkg-config binary for machine 1 not found. Giving up."
-$CONDA install -y -c conda-forge openblas
+#  Or my personal favorite:
+# "../../meson.build:63:0: ERROR: Compiler gfortran can not compile programs."
+$CONDA install -y -c conda-forge pkg-config openblas
+
+# NOTE: The [cwl] extra installs an embedded cwltool within toil-cwl-runner.
+# You can NOT `conda install cwltool` and then `pip install toil` !
+# NOTE: ruamel.yaml (a dependency of toil/cwtool) also requires compilers
+$CONDA install -y -c conda-forge pip
+#pip cache purge
+pip install 'toil[cwl]'
