@@ -10,7 +10,9 @@ env:
 
 defaults:
   run:
-    shell: bash -l {0}
+    shell: bash -l {0} # Invoke bash in login mode, NOT interactive mode.
+    # This will cause bash to look for the startup file ~/.bash_profile, NOT ~/.bashrc
+    # This is important since conda init writes to ~/.bashrc
 
 jobs:
   checkout:
@@ -35,6 +37,7 @@ jobs:
         python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
     - working-directory: ${{github.workspace}}
       run: conda init bash
+    - run: cp ~/.bashrc ~/.bash_profile # See note above
 
   conda_install:
     needs: [checkout, conda_setup]
