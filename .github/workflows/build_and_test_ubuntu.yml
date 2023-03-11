@@ -84,7 +84,17 @@ jobs:
         run: pylint src/ tests/
         # NOTE: See fail-under threshold in .pylintrc
 
-# NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      - name: PEP8 Code Formatting
+        if: always()
+        id: autopep8
+        uses: peter-evans/autopep8@v2
+        with:
+          args: --exit-code --recursive --diff --max-line-length 120 examples/ src/ tests/
+      - name: Fail if autopep8 made changes
+        if: steps.autopep8.outputs.exit-code == 2
+        run: exit 1
+
+  # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
 
       - name: PyTest CWL Embedding Independence
         if: always()
