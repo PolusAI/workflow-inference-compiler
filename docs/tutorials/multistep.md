@@ -1,4 +1,4 @@
-## Multi-step workflows
+# Multi-step workflows
 
 Our first multi step workflow will consist of downloading a protein from an online database. Unfortunately, experiments are typically unable to resolve all of the atoms and/or residues, so it is necessary to 'fix' the initial data.
 
@@ -42,7 +42,7 @@ docs/tutorials/multistep1.yml.gv.png
 </tr>
 </table>
 
-### Explicit Edges
+## Explicit Edges
 
 The first thing you might notice is that all of the filenames are prefixed with `&` and then `*` (and they are in quotes). This is the syntax for explicitly creating an edge between an output and a later input. Note that `&` must come first and can only be defined once, but then you can use `*` multiple times in any later step.
 
@@ -77,13 +77,13 @@ Error! /Users/jakefennick/workflow-inference-compiler/docs/tutorials/protein_fix
 See https://workflow-inference-compiler.readthedocs.io/en/latest/userguide.html#explicit-edges
 ```
 
-### Visualizing the results
+## Visualizing the results
 
 This particular workflow creates files which represent 3D coordinates, so we can view them in the Jupyter notebook `src/vis/viewer.ipynb`. Make sure you are using the `vis` conda environment as mentioned in the installation guide.
 
 ![Multistep](protein.png)
 
-### Edge Inference
+## Edge Inference
 
 Creating explicit edges can be a bit tedious and verbose, but in many cases the correct edges can be determined automatically. In this case, all of the steps take the previous pdb file as input and produce an output pdb file, so this is rather trivial. However, for more complex workflows edge inference can drastically simplify the yml files. Note that explicit edges are drawn in blue, and inferred edges are drawn in black/white.
 
