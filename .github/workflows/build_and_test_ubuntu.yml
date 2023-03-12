@@ -24,10 +24,12 @@ jobs:
         submodules: recursive
 
   conda_setup:
+    needs: [checkout]
     name: Setup conda / mamba
     runs-on: ubuntu-latest
     steps:
-    - uses: conda-incubator/setup-miniconda@v2
+    - name: Setup conda / mamba
+      uses: conda-incubator/setup-miniconda@v2
       with:
         miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest

@@ -11,6 +11,7 @@ See the [installation guide](docs/installguide.md) for more details, but:
 ```
 git clone --recursive https://github.com/PolusAI/workflow-inference-compiler.git
 cd workflow-inference-compiler
+./install_conda.sh
 conda create --name wic
 conda activate wic
 ./conda_devtools.sh
@@ -54,6 +55,7 @@ timeseries_plots
 You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipynb`. The visualization currently needs to be in its own conda environment.
 
 ```
+./install_conda.sh
 conda create --name vis
 conda activate vis
 ./nglview_install.sh
