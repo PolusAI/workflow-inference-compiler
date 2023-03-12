@@ -14,107 +14,84 @@ defaults:
     # This will cause bash to look for the startup file ~/.bash_profile, NOT ~/.bashrc
     # This is important since conda init writes to ~/.bashrc
 
+# https://docs.github.com/en/actions/learn-github-actions/understanding-github-actions#jobs
+# Rather than use a single job with a linear pipeline of steps, you may be
+# tempted to make each step into a separate job and specify the dependencies
+# using the `needs` syntax for more parallelism.
+# However, data cannot be shared between jobs because each job will be run on a
+# different runner. Even on a self-hosted runner, the `needs` syntax does not
+# guarantee that the data can be shared!
+
+# Using if: always() allows all steps to run, while still properly reporting failure.
+# See https://stackoverflow.com/questions/62045967/github-actions-is-there-a-way-to-continue-on-error-while-still-getting-correct
+
 jobs:
-  checkout:
-    name: Checkout source code
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-      with:
-        submodules: recursive
+  build_and_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest] # , windows-latest, macos-latest
+    runs-on: ${{ matrix.os }}
 
-  conda_setup:
-    needs: [checkout]
-    name: Setup conda / mamba
-    runs-on: ubuntu-latest
     steps:
-    - name: Setup conda / mamba
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        miniforge-variant: Mambaforge-pypy3
-        miniforge-version: latest
-        activate-environment: wic
-        use-mamba: true
-        channels: conda-forge
-        python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
-    - working-directory: ${{github.workspace}}
-      run: conda init bash
-    - run: cp ~/.bashrc ~/.bash_profile # See note above
+      - name: Checkout source code
+        if: always()
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
-  conda_install:
-    needs: [checkout, conda_setup]
-    name: Install System Dependencies from Conda / Mamba
-    runs-on: ubuntu-latest
-    steps:
-# The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
-#      run: sudo apt install cwltool
-# Use conda to install cwltool (version 3.1.20220224085855)
-    - working-directory: ${{github.workspace}}
-      run: ./conda_devtools.sh
+      - name: Setup conda / mamba
+        if: always()
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniforge-variant: Mambaforge-pypy3
+          miniforge-version: latest
+          activate-environment: wic
+          use-mamba: true
+          channels: conda-forge
+          python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
 
-  docs:
-    needs: [checkout]
-    name: Build Documentation
-    runs-on: [self-hosted, linux]
-    steps:
-    - uses: ammaraskar/sphinx-action@master
-      with:
-        docs-folder: "docs/"
+      - name: Install System Dependencies from Conda / Mamba
+        if: always()
+    # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
+    #      run: sudo apt install cwltool
+    # Use conda to install cwltool (version 3.1.20220224085855)
+        run: ./conda_devtools.sh
 
-  wic_install:
-    needs: [conda_install]
-    name: Install Workflow Inference Compiler
-    runs-on: ubuntu-latest
-    steps:
-    - working-directory: ${{github.workspace}}
-      run: pip install ".[all]"
+      - name: Install Workflow Inference Compiler
+        if: always()
+        run: pip install ".[all]"
 
-  mypy:
-    needs: [wic_install]
-    name: MyPy Check Type Annotations
-    runs-on: ubuntu-latest
-    steps:
-    - working-directory: ${{github.workspace}}
-      run: mypy --no-incremental src/ tests/
-      # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
-      # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
-      # NOTE: We need to use --no-incremental because there is a bug in mypy.
-      # This bug most often occurs when using ruamel library.
-      # See https://github.com/python/mypy/issues/12664
+      - name: Build Documentation
+        if: always()
+        run: cd docs && make html
 
-  pylint:
-    needs: [wic_install]
-    name: PyLint Check Code Quality
-    runs-on: ubuntu-latest
-    steps:
-      - working-directory: ${{github.workspace}}
+      - name: MyPy Check Type Annotations
+        if: always()
+        run: mypy --no-incremental src/ tests/
+        # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
+        # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
+        # NOTE: We need to use --no-incremental because there is a bug in mypy.
+        # This bug most often occurs when using ruamel library.
+        # See https://github.com/python/mypy/issues/12664
+
+      - name: PyLint Check Code Quality
+        if: always()
         run: pylint src/ tests/
         # NOTE: See fail-under threshold in .pylintrc
 
 # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
 
-  pytest_cwl_embedding_independence:
-    needs: [wic_install]
-    name: PyTest CWL Embedding Independence
-    runs-on: ubuntu-latest
-    steps:
-    - working-directory: ${{github.workspace}}
-      run: pytest -k test_cwl_embedding_independence # --cov --cov-config=.coveragerc_serial
-      # NOTE: This test MUST be run in serial! See is_isomorphic_with_timeout()
+      - name: PyTest CWL Embedding Independence
+        if: always()
+        run: pytest -k test_cwl_embedding_independence # --cov --cov-config=.coveragerc_serial
+        # NOTE: This test MUST be run in serial! See is_isomorphic_with_timeout()
 
-  pytest_inline_subworkflows:
-    needs: [wic_install]
-    name: PyTest Inline Subworkflows
-    runs-on: ubuntu-latest
-    steps:
-    - working-directory: ${{github.workspace}}
-      run: pytest -k test_inline_subworkflows # --cov --cov-config=.coveragerc_serial
-      # NOTE: This test MUST be run in serial! See is_isomorphic_with_timeout()
+      - name: PyTest Inline Subworkflows
+        if: always()
+        run: pytest -k test_inline_subworkflows # --cov --cov-config=.coveragerc_serial
+        # NOTE: This test MUST be run in serial! See is_isomorphic_with_timeout()
 
-  pytest_fuzzy_compile:
-    needs: [wic_install]
-    name: PyTest Fuzzy Compile Test
-    runs-on: ubuntu-latest
-    steps:
-    - working-directory: ${{github.workspace}}
-      run: pytest -k test_fuzzy_compile
+      - name: PyTest Fuzzy Compile Test
+        if: always()
+        run: pytest -k test_fuzzy_compile
