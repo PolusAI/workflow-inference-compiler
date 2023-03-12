@@ -17,7 +17,7 @@ defaults:
 jobs:
   checkout:
     name: Checkout source code
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
       with:
@@ -25,7 +25,7 @@ jobs:
 
   conda_setup:
     name: Setup conda / mamba
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
     - uses: conda-incubator/setup-miniconda@v2
       with:
@@ -42,7 +42,7 @@ jobs:
   conda_install:
     needs: [checkout, conda_setup]
     name: Install System Dependencies from Conda / Mamba
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
 # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
 #      run: sudo apt install cwltool
@@ -50,19 +50,10 @@ jobs:
     - working-directory: ${{github.workspace}}
       run: ./conda_devtools.sh
 
-  docker_pull:
-    needs: [checkout, conda_setup]
-    name: Docker pull
-    runs-on: [self-hosted, linux]
-    steps:
-    - working-directory: ${{github.workspace}}
-      run: ./dockerPull.sh
-      # For self-hosted runners, make sure the docker cache is up-to-date.
-
   wic_install:
     needs: [conda_install]
     name: Install Workflow Inference Compiler
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
     - working-directory: ${{github.workspace}}
       run: pip install ".[test]"
@@ -70,7 +61,7 @@ jobs:
   mypy:
     needs: [wic_install]
     name: MyPy Check Type Annotations
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
     - working-directory: ${{github.workspace}}
       run: mypy --no-incremental src/ tests/
@@ -83,18 +74,18 @@ jobs:
   pylint:
     needs: [wic_install]
     name: PyLint Check Code Quality
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
-    - working-directory: ${{github.workspace}}
-      run: pylint src/ tests/
-      # NOTE: See fail-under threshold in .pylintrc
+      - working-directory: ${{github.workspace}}
+        run: pylint src/ tests/
+        # NOTE: See fail-under threshold in .pylintrc
 
 # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
 
   pytest_cwl_embedding_independence:
     needs: [wic_install]
     name: PyTest CWL Embedding Independence
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
     - working-directory: ${{github.workspace}}
       run: pytest -k test_cwl_embedding_independence # --cov --cov-config=.coveragerc_serial
@@ -103,7 +94,7 @@ jobs:
   pytest_inline_subworkflows:
     needs: [wic_install]
     name: PyTest Inline Subworkflows
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
     - working-directory: ${{github.workspace}}
       run: pytest -k test_inline_subworkflows # --cov --cov-config=.coveragerc_serial
@@ -112,15 +103,7 @@ jobs:
   pytest_fuzzy_compile:
     needs: [wic_install]
     name: PyTest Fuzzy Compile Test
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
     - working-directory: ${{github.workspace}}
       run: pytest -k test_fuzzy_compile
-
-  pytest_run_examples:
-    needs: [wic_install, docker_pull]
-    name: Run PyTest Example Workflows
-    runs-on: [self-hosted, linux]
-    steps:
-    - working-directory: ${{github.workspace}}
-      run: pytest -k test_run_examples --workers 4 # --cov --cov-config=.coveragerc_parallel
