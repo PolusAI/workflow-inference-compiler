@@ -80,7 +80,7 @@ jobs:
     runs-on: [self-hosted, linux]
     steps:
       - working-directory: ${{github.workspace}}
-        run: pip install ".[test]"
+        run: pip install ".[all]"
 
   pytest_run_examples:
     needs: [wic_install, docker_pull]

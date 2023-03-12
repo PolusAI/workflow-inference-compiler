@@ -15,7 +15,7 @@ cd workflow-inference-compiler
 conda create --name wic
 conda activate wic
 ./conda_devtools.sh
-pip install -e ".[test]"
+pip install -e ".[all]"
 wic --yaml examples/gromacs/tutorial.yml --run_local --quiet
 ```
 That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the root workflow, and run it locally.
@@ -59,7 +59,7 @@ You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipyn
 conda create --name vis
 conda activate vis
 ./nglview_install.sh
-pip install -e ".[test]"
+pip install -e ".[all]"
 ```
 
 ![Plots](docs/tree_viewer.png)

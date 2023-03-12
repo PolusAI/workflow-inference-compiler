@@ -21,6 +21,6 @@ RUN git clone --recursive https://github.com/PolusAI/workflow-inference-compiler
 # But this is a Docker image; we don't necessarily need to additionally isolate
 # wic within a conda environment. Let's just install it globally!
 RUN cd workflow-inference-compiler && ./conda_devtools.sh
-RUN cd workflow-inference-compiler && pip install -e ".[test]"
+RUN cd workflow-inference-compiler && pip install -e ".[all]"
 
 ADD Dockerfile .

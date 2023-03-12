@@ -72,7 +72,7 @@ conda activate wic
 To install into the wic environment, simply use the following command:
 
 ```
-pip install -e ".[test]"
+pip install -e ".[all]"
 ```
 
 You should now have the `wic` executable available in your terminal.
@@ -86,7 +86,7 @@ The visualization currently needs to be in its own conda environment.
 conda create --name vis
 conda activate vis
 ./nglview_install.sh
-pip install -e ".[test]"
+pip install -e ".[all]"
 ```
 
 ## testing
