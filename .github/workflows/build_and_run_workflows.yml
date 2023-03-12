@@ -15,78 +15,38 @@ defaults:
     # This is important since conda init writes to ~/.bashrc
 
 jobs:
-  checkout:
-    name: Checkout source code
+  build_and_run:
     runs-on: [self-hosted, linux]
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
 
-  conda_setup:
-    name: Setup conda / mamba
-    runs-on: [self-hosted, linux]
     steps:
-      - uses: conda-incubator/setup-miniconda@v2
-        with:
-          miniforge-variant: Mambaforge-pypy3
-          miniforge-version: latest
-          activate-environment: wic
-          use-mamba: true
-          channels: conda-forge
-          python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
-          run-post: false # IMPORTANT!
-          # To help ensure isolation and reproducibility, setup-miniconda will
-          # automatically nuke the conda install from orbit when the JOB is done,
-          # NOT when the entire workflow is done. This is fine if you follow the
-          # examples on the internet and jam all of your steps into a single job.
-          # However, if you want to explicitly specify a DAG of jobs using the
-          # needs: syntax (for more parallelism), then you need to use
-          # run-post: false to prevent the setup-miniconda action from deletingj
-          # conda before the sebsequent jobs can use it. Moreover, for self-hosted
-          # runners, we might not want to delete conda even after the entire
-          # workflow finishes, because there could be other workflows running
-          # concurrently on the same machine. So it seems we will have to leave
-          # conda installed, and manually ssh into the self-hosted runners and
-          # manually nuke conda from orbit as necessary. This is perhaps actually
-          # a feature, since this means we are essentially getting cacheing.
-      - working-directory: ${{github.workspace}}
-        run: conda init bash
-      - run: cp ~/.bashrc ~/.bash_profile # See note above
+    - name: Checkout source code
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
 
-  conda_install:
-    needs: [checkout, conda_setup]
-    name: Install System Dependencies from Conda / Mamba
-    runs-on: [self-hosted, linux]
-    steps:
+    - name: Setup conda / mamba
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        miniforge-variant: Mambaforge-pypy3
+        miniforge-version: latest
+        activate-environment: wic
+        use-mamba: true
+        channels: conda-forge
+        python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
+
+    - name: Install System Dependencies from Conda / Mamba
       # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
       #      run: sudo apt install cwltool
       # Use conda to install cwltool (version 3.1.20220224085855)
-      - working-directory: ${{github.workspace}}
-        run: ./conda_devtools.sh
+      run: ./conda_devtools.sh
 
-  docker_pull:
-    needs: [checkout, conda_setup]
-    name: Docker pull
-    runs-on: [self-hosted, linux]
-    steps:
-      - working-directory: ${{github.workspace}}
-        run: ./dockerPull.sh
-        # For self-hosted runners, make sure the docker cache is up-to-date.
+    - name: Docker pull
+      run: ./dockerPull.sh
+      # For self-hosted runners, make sure the docker cache is up-to-date.
 
-  wic_install:
-    needs: [conda_install]
-    name: Install Workflow Inference Compiler
-    runs-on: [self-hosted, linux]
-    steps:
-      - working-directory: ${{github.workspace}}
-        run: pip install ".[all]"
+    - name: Install Workflow Inference Compiler
+      run: pip install ".[all]"
 
-  pytest_run_examples:
-    needs: [wic_install, docker_pull]
-    name: PyTest Run Example Workflows
-    runs-on: [self-hosted, linux]
-    steps:
-      - working-directory: ${{github.workspace}}
-        # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-        run: pytest -k test_run_examples --workers 4 # --cov
+    - name: PyTest Run Example Workflows
+      # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      run: pytest -k test_run_examples --workers 4 # --cov
