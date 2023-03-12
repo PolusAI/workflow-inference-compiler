@@ -1,6 +1,6 @@
-## Hello World
+# Hello World
 
-### Writing a workflow
+## Writing a workflow
 
 First we will start with the classic Hello World example:
 
@@ -13,7 +13,7 @@ steps:
 
 A workflow is just a list of steps. Here we just have a single step, which executes the unix `echo` command with the input `Hello World`. Workflows are written in YAML format. We will discuss the YAML syntax later, but for now just note that **indentation is important**. In particular, the `in:` tag must be indented two spaces beyond the step name (`echo` in this case). Similarly, all of the inputs must be indented two spaces beyond the `in:` tag (`message` in this case).
 
-### Running a workflow
+## Running a workflow
 
 From the main directory (the directory containing `examples/`), run the following command:
 

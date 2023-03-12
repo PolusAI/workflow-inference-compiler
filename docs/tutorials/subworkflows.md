@@ -1,4 +1,4 @@
-## Subworkflows e.g. "macros"
+# Subworkflows e.g. "macros"
 
 In the previous tutorial, we listed all of the workflow steps in a single file. Alternatively, we can extract some of the steps into another workflow.
 
