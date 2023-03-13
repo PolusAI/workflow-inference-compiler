@@ -55,6 +55,7 @@ If you are experiencing hanging, and if the command `ps aux | grep com.docker | 
 After conda is installed, enter the following commands:
 
 ```
+./install_conda.sh
 conda create --name wic
 conda activate wic
 ./conda_devtools.sh
@@ -71,7 +72,7 @@ conda activate wic
 To install into the wic environment, simply use the following command:
 
 ```
-pip install -e ".[test]"
+pip install -e ".[all]"
 ```
 
 You should now have the `wic` executable available in your terminal.
@@ -81,10 +82,11 @@ You should now have the `wic` executable available in your terminal.
 The visualization currently needs to be in its own conda environment.
 
 ```
+./install_conda.sh
 conda create --name vis
 conda activate vis
 ./nglview_install.sh
-pip install -e ".[test]"
+pip install -e ".[all]"
 ```
 
 ## testing
