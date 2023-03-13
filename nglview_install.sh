@@ -1,3 +1,4 @@
+#!/bin/bash -e
 # nglview has a transitive dependency on mistune==2.0.4 which conflicts with
 # cwltool's transitive dependency of mistune==0.8.4. Fortunately,
 # nglview and cwltool do not need to be installed into the same conda environment.
