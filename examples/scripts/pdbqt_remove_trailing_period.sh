@@ -1,5 +1,5 @@
-#!/bin/bash
+#!/bin/bash -e
 #echo "ROOT"
-cat $1 | sed 's/\.$//g'
+sed 's/\.$//g' "$1"
 #echo "ENDROOT"
 #echo "TORSDOF 0"
