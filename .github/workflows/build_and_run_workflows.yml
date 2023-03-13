@@ -1,0 +1,52 @@
+name: Run Examples
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+defaults:
+  run:
+    shell: bash -l {0} # Invoke bash in login mode, NOT interactive mode.
+    # This will cause bash to look for the startup file ~/.bash_profile, NOT ~/.bashrc
+    # This is important since conda init writes to ~/.bashrc
+
+jobs:
+  build_and_run:
+    runs-on: [self-hosted, linux]
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Setup conda / mamba
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        miniforge-variant: Mambaforge-pypy3
+        miniforge-version: latest
+        activate-environment: wic
+        use-mamba: true
+        channels: conda-forge
+        python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
+
+    - name: Install System Dependencies from Conda / Mamba
+      # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
+      #      run: sudo apt install cwltool
+      # Use conda to install cwltool (version 3.1.20220224085855)
+      run: ./conda_devtools.sh
+
+    - name: Docker pull
+      run: ./dockerPull.sh
+      # For self-hosted runners, make sure the docker cache is up-to-date.
+
+    - name: Install Workflow Inference Compiler
+      run: pip install ".[all]"
+
+    - name: PyTest Run Example Workflows
+      # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      run: pytest -k test_run_examples --workers 4 # --cov

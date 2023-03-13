@@ -4,9 +4,16 @@ import time
 import threading
 from typing import Dict, List
 
-from IPython.display import display
-import mdtraj
-import nglview as nv
+# NOTE: The sphinx documentation automodule feature needs to load all of the
+# modules, but as noted in nglview_install.sh, there are dependency conflicts
+# that prevent us from using a single conda environment. Since sphinx will be
+# running in the wic environment, we can simply catch these errors for now.
+try:
+    from IPython.display import display
+    import mdtraj
+    import nglview as nv
+except:
+    pass
 
 from ipytree import Tree, Node
 from ipywidgets import HBox

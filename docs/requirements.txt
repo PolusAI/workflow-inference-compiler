@@ -1,5 +1,6 @@
 # https://docs.readthedocs.io/en/stable/intro/getting-started-with-sphinx.html
 # "We strongly recommend to pin the Sphinx version used for your project to build the docs to avoid potential future incompatibilities."
-sphinx==4.5.*
+sphinx==6.1.*
 myst-parser
 sphinx-autodoc-typehints
+ipytree
