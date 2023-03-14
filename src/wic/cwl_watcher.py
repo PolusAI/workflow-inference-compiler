@@ -42,7 +42,7 @@ def absolute_paths(config: Json, cachedir_path: Path) -> Json:
             new_val = val
             # TODO: Improve this heuristic
             if 'input' in key and 'path' in key:
-                new_val = str(cachedir_path / val) # type: ignore
+                new_val = str(cachedir_path / val)  # type: ignore
                 changed_files = file_watcher_glob(cachedir_path, val, {})
                 # We require unique filenames, so there should only be one file.
                 # (except for files that get created within the cwl_watcher workflow itself)
@@ -53,8 +53,8 @@ def absolute_paths(config: Json, cachedir_path: Path) -> Json:
                     if len(changed_files_lst) != 1:
                         print(f'Warning! Changed files should be length one! {val}\n{changed_files_lst}')
                     changed_files_lst.sort(key=lambda x: x[1])
-                    file = changed_files_lst[-1][0] # most recent
-                    new_val = str(Path(file).absolute()) # type: ignore
+                    file = changed_files_lst[-1][0]  # most recent
+                    new_val = str(Path(file).absolute())  # type: ignore
         new_json[key] = new_val
     return new_json
 
@@ -82,15 +82,15 @@ def rerun_cwltool(_directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
         args_vals_new = absolute_paths(args_vals, cachedir_path)
 
         # Construct a single-step workflow and add its arguments
-        #import yaml
+        # import yaml
         if Path(cwl_tool).suffix == '.yml':
             yaml_path = cwl_tool
             wic_steps = {'steps': {f'(1, {cwl_tool})': {'wic': {'steps': args_vals_new}}}}
             root_yaml_tree = {'wic': wic_steps, 'steps': [{cwl_tool: None}]}
-            #print('root_yaml_tree')
-            #print(yaml.dump(root_yaml_tree))
+            # print('root_yaml_tree')
+            # print(yaml.dump(root_yaml_tree))
             # TODO: Support other namespaces
-            plugin_ns = 'global' # wic['wic'].get('namespace', 'global')
+            plugin_ns = 'global'  # wic['wic'].get('namespace', 'global')
             step_id = StepId(yaml_path, plugin_ns)
             y_t = YamlTree(step_id, root_yaml_tree)
             yaml_tree_raw = ast.read_ast_from_disk(y_t, yml_paths, tools_cwl, validator)
@@ -98,9 +98,9 @@ def rerun_cwltool(_directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
             yml = yaml_tree.yml
         else:
             yml = {'steps': [{cwl_tool: args_vals_new}]}
-        #print('yml')
-        #print(yml)
-        #print(yaml.dump(yml))
+        # print('yml')
+        # print(yml)
+        # print(yaml.dump(yml))
 
         # Measure compile time
         time_initial = time.time()
@@ -112,7 +112,7 @@ def rerun_cwltool(_directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
             args = cli.parser.parse_args()
 
         # TODO: Support other namespaces
-        plugin_ns = 'global' # wic['wic'].get('namespace', 'global')
+        plugin_ns = 'global'  # wic['wic'].get('namespace', 'global')
         yaml_path = f'{cwl_tool}_only.yml'
         stepid = StepId(yaml_path, plugin_ns)
         yaml_tree = YamlTree(stepid, yml)
@@ -120,7 +120,7 @@ def rerun_cwltool(_directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [subgraph], {}, {}, {}, {},
                                                   tools_cwl, True, relative_run_path=False, testing=False)
         rose_tree = compiler_info.rose
-        working_dir = Path('.') # Use a new working directory.
+        working_dir = Path('.')  # Use a new working directory.
         # Can also use `_directory_realtime` at the risk of overwriting other files.
         utils.write_to_disk(rose_tree, working_dir, relative_run_path=False)
 
@@ -140,10 +140,10 @@ def rerun_cwltool(_directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
         # make the paths absolute in f'{cwl_tool}_only_inputs.yml' here.
         cmd: List[str] = ['cwltool', '--cachedir', str(cachedir_path),
                           f'{cwl_tool}_only.cwl', f'{cwl_tool}_only_inputs.yml']
-        #proc = sub.run(self.cmd, cwd=working_dir)
-        #cmd = self.cmd
+        # proc = sub.run(self.cmd, cwd=working_dir)
+        # cmd = self.cmd
         print('Running', cmd)
-        proc = sub.run(cmd, cwd=working_dir, check=False) # See below!
+        proc = sub.run(cmd, cwd=working_dir, check=False)  # See below!
         print('inner cwltool completed')
         # Don't check the return code because the file may not exist yet, or
         # because speculative execution may fail for any number of reasons.
@@ -221,21 +221,21 @@ def cli_watcher() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(prog='main', description='Speculatively execute a high-level yaml workflow file.')
     parser.add_argument('--cwl_tool', type=str, required=True,
-                    help='CWL or YML filestem')
+                        help='CWL or YML filestem')
     parser.add_argument('--cachedir_path', type=str, required=True,
-                    help='This should be set to the --cachedir option from the main cli')
+                        help='This should be set to the --cachedir option from the main cli')
     parser.add_argument('--file_pattern', type=str, required=True,
-                    help='This glob pattern is used to find files within --cachedir_path')
+                        help='This glob pattern is used to find files within --cachedir_path')
     parser.add_argument('--max_times', type=str, required=True,
-                    help='--cwl_tool will be speculatively executed at most max_times')
+                        help='--cwl_tool will be speculatively executed at most max_times')
     parser.add_argument('--config', type=str, required=True,
-                    help='This should be a json-encoded representation of the config: YAML subtag of --cwl_tool')
+                        help='This should be a json-encoded representation of the config: YAML subtag of --cwl_tool')
     parser.add_argument('--cwl_dirs_file', type=str, required=True,
-                    help='Configuration file which lists the directories which contains the CWL CommandLineTools')
+                        help='Configuration file which lists the directories which contains the CWL CommandLineTools')
     parser.add_argument('--yml_dirs_file', type=str, required=True,
-                    help='Configuration file which lists the directories which contains the YAML Workflows')
+                        help='Configuration file which lists the directories which contains the YAML Workflows')
     parser.add_argument('--root_workflow_yml_path', type=str, required=True,
-                    help='The full absolute path to the root workflow yml file.')
+                        help='The full absolute path to the root workflow yml file.')
     return parser.parse_args()
 
 
@@ -301,14 +301,14 @@ def main() -> None:
                                   root_workflow_yml_path)
             prev_files = {**prev_files, **changed_files}
 
-            time.sleep(1.0) # Wait at least 1 second so we don't just spin.
+            time.sleep(1.0)  # Wait at least 1 second so we don't just spin.
             i += 1
     except KeyboardInterrupt:
         pass
-    #observer.stop()
-    #observer.join()
+    # observer.stop()
+    # observer.join()
 
-    failed = False # Your analysis goes here
+    failed = False  # Your analysis goes here
     if failed:
         print(f'{cwl_tool} failed!')
         sys.exit(1)

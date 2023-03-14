@@ -2,10 +2,11 @@ import argparse
 import sys
 from typing import List, Tuple
 
-parser = argparse.ArgumentParser(prog='main', description='Parse one or more autodock_vina log files and filter the poses by docking score.')
+parser = argparse.ArgumentParser(
+    prog='main', description='Parse one or more autodock_vina log files and filter the poses by docking score.')
 parser.add_argument('--input_log_path')
 parser.add_argument('--input_log_paths', nargs='+', default=[])
-parser.add_argument('--input_txt_path', required=False) # Experimental data
+parser.add_argument('--input_txt_path', required=False)  # Experimental data
 parser.add_argument('--docking_score_cutoff', type=float)
 parser.add_argument('--max_num_poses_per_ligand', type=int)
 parser.add_argument('--max_num_poses_total', type=int)
@@ -87,10 +88,10 @@ else:
                 scores_all.append(scores)
                 parsing = False
 
-    if parsing: # When we reach end of file, we need to append one last time.
+    if parsing:  # When we reach end of file, we need to append one last time.
         scores_all.append(scores)
 
-if args.input_txt_path: # If we have experimental data
+if args.input_txt_path:  # If we have experimental data
     with open(args.input_txt_path, mode='r', encoding='utf-8') as f:
         lines_exp = f.readlines()
     if len(lines_exp) != len(scores_all):
@@ -98,29 +99,29 @@ if args.input_txt_path: # If we have experimental data
         sys.exit(1)
 
     # Now we need to globally sort (by the docking score) and apply the max total, while preserving the 2D structure.
-    indexed_scores_exp = [] # : List[Tuple[float, Tuple[int, int], float, float]]
+    indexed_scores_exp = []  # : List[Tuple[float, Tuple[int, int], float, float]]
     for mol_idx, scores in enumerate(scores_all):
-        split = lines_exp[mol_idx].split() # NOTE: Important.
+        split = lines_exp[mol_idx].split()  # NOTE: Important.
         # This is how we duplicate the experimental data for each binding mode
         # to workaround the fact that for CWL scatter dotproduct, the arrays
         # must be the same length. This is why all 'extra' data must be
         # 'factored through' each filtering operation. :(
         smiles = split[0]
         datum = float(split[1])
-        temp_exp = [] # type: ignore #: List[Tuple[float, Tuple[int, int], float, float]]
+        temp_exp = []  # type: ignore #: List[Tuple[float, Tuple[int, int], float, float]]
         for mode_idx, score in enumerate(scores):
             if score < docking_score_cutoff and len(temp_exp) < max_num_poses_per_ligand:
                 if len(split) > 2:
                     dG = float(split[2])
                     temp_exp.append((score, (mol_idx, mode_idx), datum, dG))
                 else:
-                    temp_exp.append((score, (mol_idx, mode_idx), datum)) # type: ignore
+                    temp_exp.append((score, (mol_idx, mode_idx), datum))  # type: ignore
         for t1 in temp_exp:
             indexed_scores_exp.append(t1)
 
-    indexed_scores_exp.sort(key=lambda x: x[0]) # Sort by the docking scores
-    indexed_scores_exp = indexed_scores_exp[:max_num_poses_total] # Truncate upto max total
-    #indexed_scores_exp.sort(key=lambda x: x[1]) # Sort by the index tuple, which uses dictionary order.
+    indexed_scores_exp.sort(key=lambda x: x[0])  # Sort by the docking scores
+    indexed_scores_exp = indexed_scores_exp[:max_num_poses_total]  # Truncate upto max total
+    # indexed_scores_exp.sort(key=lambda x: x[1]) # Sort by the index tuple, which uses dictionary order.
 
     indices_all = []
     for (score, (mol_idx, mode_idx), datum, dG) in indexed_scores_exp:
@@ -139,9 +140,9 @@ else:
         for t2 in temp:
             indexed_scores.append(t2)
 
-    indexed_scores.sort(key=lambda x: x[0]) # Sort by the docking scores
-    indexed_scores = indexed_scores[:max_num_poses_total] # Truncate upto max total
-    #indexed_scores.sort(key=lambda x: x[1]) # Sort by the index tuple, which uses dictionary order.
+    indexed_scores.sort(key=lambda x: x[0])  # Sort by the docking scores
+    indexed_scores = indexed_scores[:max_num_poses_total]  # Truncate upto max total
+    # indexed_scores.sort(key=lambda x: x[1]) # Sort by the index tuple, which uses dictionary order.
 
     indices_all = []
     for (score, (mol_idx, mode_idx)) in indexed_scores:
@@ -153,8 +154,8 @@ else:
 # TODO: Since outputEval doesn't seem to work for outputting 2D arrays,
 # Try to specify the outputs by writing cwl.output.json
 # See https://cwl.discourse.group/t/cwl-output-json/579
-#outputs: Dict[str, Any] = {}
-#outputs['output_batch_pdbqt_path'] = [[]]
+# outputs: Dict[str, Any] = {}
+# outputs['output_batch_pdbqt_path'] = [[]]
 
-#with open('cwl.output.json', mode='w', encoding='utf-8') as f:
+# with open('cwl.output.json', mode='w', encoding='utf-8') as f:
 #    f.write(json.dumps(outputs))

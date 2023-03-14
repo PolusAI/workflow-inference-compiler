@@ -35,12 +35,12 @@ schema_store: Dict[str, Json] = {}
 validator = wic.schemas.wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)
 
 yml_paths_tuples = [(yml_path_str, yml_path)
-    for yml_namespace, yml_paths_dict in yml_paths.items()
-    for yml_path_str, yml_path in yml_paths_dict.items()]
+                    for yml_namespace, yml_paths_dict in yml_paths.items()
+                    for yml_path_str, yml_path in yml_paths_dict.items()]
 
 for yml_path_str, yml_path in yml_paths_tuples:
     schema = wic.schemas.wic_schema.compile_workflow_generate_schema(yml_path_str, yml_path,
-                                                            tools_cwl, yml_paths, validator)
+                                                                     tools_cwl, yml_paths, validator)
     # overwrite placeholders in schema_store. See comment in get_validator()
     schema_store[schema['$id']] = schema
 
@@ -71,12 +71,14 @@ def wic_yaml_filter_backends_or_steps(yml: Yaml) -> bool:
     """
     return ('backends' in yml or 'steps' in yml)
 
+
 time_initial = time.time()
 
 wic_schema = wic.schemas.wic_schema.wic_main_schema(tools_cwl, yaml_stems, schema_store, hypothesis=True)
 # NOTE: The CLI version of mypy and the VSCode version of mypy disagree on the
 # following line. The "type: ignore" comment is NOT unused.
-wic_strategy = hj.from_schema(wic_schema).filter(wic_yaml_filter_blank_steps).filter(wic_yaml_filter_backends_or_steps) # type: ignore
+wic_strategy = hj.from_schema(wic_schema).filter(wic_yaml_filter_blank_steps).filter(
+    wic_yaml_filter_backends_or_steps)  # type: ignore
 
 time_final = time.time()
 print(f'from_schema time: {round(time_final - time_initial, 4)} seconds')

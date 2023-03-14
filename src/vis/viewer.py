@@ -42,15 +42,15 @@ def make_ipytree_nodes(prov_tree: Dict, rootdir: str) -> List[Node]:
             for (location, namespaced_output_name, basename) in val:
                 yaml_stem_init, shortened = utils.shorten_namespaced_output_name(namespaced_output_name)
                 parentdirs = yaml_stem_init + '/' + shortened.replace('___', '/')
-                dest = rootdir + 'outdir/' + parentdirs +  '/' + basename
+                dest = rootdir + 'outdir/' + parentdirs + '/' + basename
                 idx = 2
                 while dest in dests:
                     stem = Path(basename).stem
                     suffix = Path(basename).suffix
                     basename_ = stem + f'_{idx}' + suffix
-                    dest = rootdir + 'outdir/' + parentdirs +  '/' + basename_
+                    dest = rootdir + 'outdir/' + parentdirs + '/' + basename_
                     idx += 1
-                if idx > 2: # If the while loop ran at least once
+                if idx > 2:  # If the while loop ran at least once
                     basename = basename_
                 dests.add(dest)
                 child = Node(basename)
@@ -62,11 +62,11 @@ def make_ipytree_nodes(prov_tree: Dict, rootdir: str) -> List[Node]:
                 child.id = parentdirs
                 children.append(child)
         # NOTE: See utils.shorten_namespaced_output_name()
-        if len(key.split('__')) == 4: # i.e. if key is a namespace, not an output_name
+        if len(key.split('__')) == 4:  # i.e. if key is a namespace, not an output_name
             (_, i, step_key) = utils.parse_step_name_str(key)
             key = f'step {i+1} {step_key}'
         node = Node(key, children)
-        node.id = '' # See above comment.
+        node.id = ''  # See above comment.
         node.opened = False
         nodes.append(node)
     return nodes
@@ -83,7 +83,7 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
         HBox: An ipywidget which contains ipytree on the left and nglview on the right.
     """
     nglwidget = nv.NGLWidget()
-    nglwidget._set_size('100%', '800px') # pylint: disable=protected-access
+    nglwidget._set_size('100%', '800px')  # pylint: disable=protected-access
 
     output_json_file = Path(rootdir + 'provenance/workflow/primary-output.json')
     if not output_json_file.exists():
@@ -96,12 +96,12 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
 
     files = utils.parse_provenance_output_files(output_json)
     prov_tree = utils.provenance_list_to_tree(files)
-    #import yaml
-    #print(yaml.dump(prov_tree))
+    # import yaml
+    # print(yaml.dump(prov_tree))
     children = make_ipytree_nodes(prov_tree, rootdir)
 
     rootnode = Node("Workflow", children)
-    tree  = Tree(nodes=[rootnode], multiple_selection=False)
+    tree = Tree(nodes=[rootnode], multiple_selection=False)
     components: List = []
 
     def clear_components() -> None:
@@ -110,13 +110,13 @@ def tree_viewer(rootdir: str = '../../') -> HBox:
         components.clear()
 
     def on_selected_change(change: Dict) -> None:
-        #print('change[new]', change['new'])
+        # print('change[new]', change['new'])
         parentdirs = change['new'][0].id
         basename = change['new'][0].name
-        #print('parentdirs:', parentdirs)
+        # print('parentdirs:', parentdirs)
         if parentdirs != '':
             filepath = rootdir + 'outdir/' + parentdirs + '/' + basename
-            #print(filepath)
+            # print(filepath)
             if Path(filepath).exists():
                 mdtraj_exts = [".pdb", ".pdb.gz", ".h5", ".lh5", ".prmtop", ".parm7", ".prm7",
                                ".psf", ".mol2", ".hoomdxml", ".gro", ".arc", ".hdf5", ".gsd"]
@@ -167,7 +167,7 @@ def realtime_viewer_body(num_iterations: int, cachedir_path: str, file_patterns:
     coords_file = ''
     top_file = ''
     nglwidget = nv.NGLWidget()
-    nglwidget._set_size('100%', '800px') # pylint: disable=protected-access
+    nglwidget._set_size('100%', '800px')  # pylint: disable=protected-access
     display(nglwidget)
     for t in range(num_iterations):
         try:
@@ -179,30 +179,30 @@ def realtime_viewer_body(num_iterations: int, cachedir_path: str, file_patterns:
             if len(changed_files_list) == 0:
                 continue
             for file, time_ in changed_files_list:
-                #print(file)
+                # print(file)
                 if Path(file).suffix == '.trr':
                     coords_file = file
                 if Path(file).suffix == '.pdb':
                     top_file = file
             prev_files = {**prev_files, **changed_files}
 
-            #print('coords_file', coords_file)
-            #print('top_file', top_file)
+            # print('coords_file', coords_file)
+            # print('top_file', top_file)
             if top_file != '':
                 traj: mdtraj.Trajectory
                 if coords_file != '':
                     traj = mdtraj.load(coords_file, top=top_file)
                 else:
-                    traj = mdtraj.load(top_file) # pdb files implicitly contain topology info
-                #print(traj)
-                #num_frames = 10
-                #traj = traj[-num_frames:] # Slice the most recent num_frames
-                traj = traj[-1] # Use -1 for most recent frame only
+                    traj = mdtraj.load(top_file)  # pdb files implicitly contain topology info
+                # print(traj)
+                # num_frames = 10
+                # traj = traj[-num_frames:] # Slice the most recent num_frames
+                traj = traj[-1]  # Use -1 for most recent frame only
 
-                if nglwidget.n_components == 0: # First time
+                if nglwidget.n_components == 0:  # First time
                     component = nglwidget.add_trajectory(traj)
                 else:
-                    if nglwidget.max_frame + 1 != traj.n_frames: # max_frame starts from 0
+                    if nglwidget.max_frame + 1 != traj.n_frames:  # max_frame starts from 0
                         # Removing and adding a new trajectory allows increasing
                         # the number of frames. However, this causes the UI to 'blink'
                         nglwidget.remove_component(component)
@@ -231,7 +231,7 @@ def realtime_viewer_body(num_iterations: int, cachedir_path: str, file_patterns:
                 pass
             elif isinstance(e, OSError) and (oserror1 in str(e) or oserror2 in str(e)):
                 pass
-            elif isinstance(e, AssertionError): # and assertionerror in str(e):
+            elif isinstance(e, AssertionError):  # and assertionerror in str(e):
                 pass
             elif isinstance(e, ValueError) and (ve1 in str(e) or ve2 in str(e) or ve3 in str(e)):
                 pass

@@ -21,12 +21,17 @@ Yaml = KV
 # I have chosen to use NamedTuple to emphasize the immutability aspect (see below).
 # See https://mypy.readthedocs.io/en/stable/kinds_of_types.html#named-tuples
 
+
 class Tool(NamedTuple):
     run_path: str
     cwl: Cwl
+
+
 class StepId(NamedTuple):
-    stem: str # filename without extension
-    plugin_ns: str # left column of yml_paths.txt
+    stem: str  # filename without extension
+    plugin_ns: str  # left column of yml_paths.txt
+
+
 Tools = Dict[StepId, Tool]
 
 # NOTE: Please read the Namespacing section of docs/devguide.md !!!
@@ -42,12 +47,13 @@ ExplicitEdgeDefs = Dict[str, ExplicitEdgeDef]
 ExplicitEdgeCalls = Dict[str, ExplicitEdgeDef]
 PluginID = int
 StepName1 = str
-DiGraph = Any # graphviz.DiGraph
+DiGraph = Any  # graphviz.DiGraph
+
 
 class GraphData():
     # pylint:disable=too-few-public-methods
     def __init__(self,
-                 name: str, # TODO: Should this be StepId?
+                 name: str,  # TODO: Should this be StepId?
                  nodes: List[Tuple[str, Dict]] = [],
                  edges: List[Tuple[str, str, Dict]] = [],
                  subgraphs: List[Any] = [],
@@ -67,6 +73,8 @@ class GraphReps(NamedTuple):
     graphviz: DiGraph
     networkx: nx.DiGraph
     graphdata: GraphData
+
+
 YamlDSLArgs = Yaml
 
 # Since we cannot store extra tags in CWL files, we need a data structure
@@ -76,19 +84,23 @@ YamlDSLArgs = Yaml
 # Unfortunately, since mypy does not support Algebraic Data Types (ADTs)
 # we have to break the recursion by replacing the recursive instance of RoseTree with Any :(
 DataType = Any
+
+
 class RoseTree(NamedTuple):
     data: DataType
-    sub_trees: List[Any] # Any = RoseTree
+    sub_trees: List[Any]  # Any = RoseTree
 # Note that instead of DataType we could provide a specific type, but remember that
 # a Rose Tree is defined by its structure, not by the specific type of data it contains.
 # We can simply cast to a specific type at each call site, i.e.
 # data: SpecificType = rose_tree.data
 
 # Now we can define a specific data type for a single node in our Abstract Syntax Tree.
+
+
 class NodeData(NamedTuple):
     namespaces: Namespaces
     name: str
-    yml: Yaml # i.e. The AST that was compiled.
+    yml: Yaml  # i.e. The AST that was compiled.
     # If this is not the AST that was passed in, then the compiler introduced
     # some modifications (i.e. file format conversions) and you need to recompile
     compiled_cwl: Cwl
@@ -99,6 +111,7 @@ class NodeData(NamedTuple):
     inputs_workflow: WorkflowInputs
     step_name_1: StepName1
 
+
 class EnvData(NamedTuple):
     input_mapping: Dict[str, List[str]]
     output_mapping: Dict[str, str]
@@ -106,6 +119,7 @@ class EnvData(NamedTuple):
     vars_workflow_output_internal: InternalOutputs
     explicit_edge_defs: ExplicitEdgeDefs
     explicit_edge_calls: ExplicitEdgeCalls
+
 
 class CompilerInfo(NamedTuple):
     rose: RoseTree
@@ -121,9 +135,13 @@ class CompilerInfo(NamedTuple):
 # If we need to insert steps (i.e. file format conversions), that will happen
 # after edge inference, so there should not be a uniqueness issue w.r.t. step
 # number re-indexing.
+
+
 class YamlTree(NamedTuple):
     step_id: StepId
     yml: Yaml
+
+
 class YamlForest(NamedTuple):
     yaml_tree: YamlTree
-    sub_forests: List[Tuple[StepId, Any]] # Any = YamlForest
+    sub_forests: List[Tuple[StepId, Any]]  # Any = YamlForest

@@ -19,7 +19,8 @@ def parse_arguments() -> argparse.Namespace:
     args = parser.parse_args()
     return args
 
-def get_net_charge(file_path: str, addhydrogens:bool=False) -> Optional[int]:
+
+def get_net_charge(file_path: str, addhydrogens: bool = False) -> Optional[int]:
     """ Calculate net charge for a given small ligand
 
     Args:
@@ -60,10 +61,10 @@ def main() -> None:
     """
     args = parse_arguments()
     net_charge = get_net_charge(args.input_path,
-                                    addhydrogens=args.addhydrogens)
+                                addhydrogens=args.addhydrogens)
     with open(args.output_log_path, mode='w', encoding='utf-8') as wfile:
         wfile.write(f'Calculated net charge: {net_charge}')
 
+
 if __name__ == '__main__':
     main()
-    
