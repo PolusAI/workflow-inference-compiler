@@ -30,6 +30,7 @@ def parse_arguments() -> argparse.Namespace:
     args = parser.parse_args()
     return args
 
+
 def calculate_dG(Kd: float) -> float:
     """ Calculates binding free energy from Kd
 
@@ -41,7 +42,7 @@ def calculate_dG(Kd: float) -> float:
     """
     # Calculate the binding free energy from Kd so we can make the correlation plots.
     # See https://en.wikipedia.org/wiki/Binding_constant
-    ideal_gas_constant = 8.31446261815324 # J/(Mol*K)
+    ideal_gas_constant = 8.31446261815324  # J/(Mol*K)
     kcal_per_joule = 4184
     # NOTE: Unfortunately, the temperature at which experimental Kd binding data was taken
     # is often not recorded. Thus, we are forced to guess. The two standard guesses are
@@ -52,7 +53,7 @@ def calculate_dG(Kd: float) -> float:
     # thus at a very high concentration. The size of the unit cell bounds the volume.
     # For shorter simulations where the ligand has not explored the entire box, it may
     # be less. See the Yank paper for a method of calculating the correct volumes.
-    standard_concentration = 1 # Units of mol / L, but see comment above.
+    standard_concentration = 1  # Units of mol / L, but see comment above.
     dG = RT * math.log(Kd / standard_concentration)
     return dG
 
@@ -85,7 +86,7 @@ def read_index_file(index_file_path: str) -> pd.DataFrame:
             # Kd conversion to micro molar
             unit = re.split(r"=[-+]?(?:\d*\.\d+|\d+)", words[4])[1]
             standard_type = re.split(r"=[-+]?(?:\d*\.\d+|\d+)", words[4])[0]
-            kd = float(re.findall(r"[-+]?(?:\d*\.\d+|\d+)",words[4])[0])
+            kd = float(re.findall(r"[-+]?(?:\d*\.\d+|\d+)", words[4])[0])
             data['Kd_Ki'].append(standard_type)
             data['value'].append(kd * unit_conv[unit])
             data['ligand_name'].append(re.findall(r'\((.*?)\)', words[7])[0])
@@ -93,8 +94,8 @@ def read_index_file(index_file_path: str) -> pd.DataFrame:
     return pd.DataFrame.from_dict(data)
 
 
-def load_data(index_file_name: str, base_dir: str, query:str, output_txt_path:str,
-              min_row: int=1, max_row: int=-1, convert_Kd_dG: bool=False) -> None:
+def load_data(index_file_name: str, base_dir: str, query: str, output_txt_path: str,
+              min_row: int = 1, max_row: int = -1, convert_Kd_dG: bool = False) -> None:
     """ Filters Kd data beased on a query
 
     Args:
@@ -124,7 +125,7 @@ def load_data(index_file_name: str, base_dir: str, query:str, output_txt_path:st
     df = df[['PDB_code', 'value', 'Kd_Ki']]
     binding_data: List[str] = []
     convert_Kd_dG = distutils.util.strtobool(convert_Kd_dG)
-    microMolar = 0.000001 # uM
+    microMolar = 0.000001  # uM
     for _, row in enumerate(df.values):
 
         (pdbcode, binding_datum, kd_ki) = row
@@ -139,7 +140,6 @@ def load_data(index_file_name: str, base_dir: str, query:str, output_txt_path:st
     with open(output_txt_path, mode='w', encoding='utf-8') as f:
         f.write('\n'.join(binding_data))
 
-
     # copy pdb and sdf files
     for _, row in df.iterrows():
         pdbcode = row['PDB_code']
@@ -149,11 +149,12 @@ def load_data(index_file_name: str, base_dir: str, query:str, output_txt_path:st
         dist_pdb_path = f'{pdbcode}_protein.pdb'
         subprocess.run(["cp", f"{source_pdb_path}", f"{dist_pdb_path}"])
         source_sdf_path = osp.join(base_dir,
-                                    pdbcode,
+                                   pdbcode,
                                    f'{pdbcode}_ligand.sdf')
 
         dist_sdf_path = f'{pdbcode}_ligand.sdf'
         subprocess.run(["cp", f"{source_sdf_path}", f"{dist_sdf_path}"])
+
 
 def main() -> None:
     """ Reads the command line arguments
@@ -161,6 +162,7 @@ def main() -> None:
     args = parse_arguments()
     load_data(args.index_file_name, args.base_dir, args.query, args.output_txt_path,
               min_row=args.min_row, max_row=args.max_row, convert_Kd_dG=args.convert_Kd_dG)
+
 
 if __name__ == '__main__':
     main()

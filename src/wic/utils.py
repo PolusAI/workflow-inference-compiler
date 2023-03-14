@@ -66,7 +66,7 @@ def parse_step_name_str(step_name: str) -> Tuple[str, int, str]:
     Returns:
         Tuple[str, int, str]: The parameters used to create step_name
     """
-    vals = step_name.split('__') # double underscore
+    vals = step_name.split('__')  # double underscore
     if not len(vals) == 4:
         raise Exception(f"Error! {step_name} is not of the format \n"
                         + '{yaml_stem}__step__{i+1}__{step_key}\n'
@@ -155,8 +155,8 @@ def partition_by_lowest_common_ancestor(nss1: Namespaces, nss2: Namespaces) -> T
     # Only partition nss1; if you want to partition nss1
     # just switch the arguments at the call site.
     if nss1 == [] or nss2 == []:
-        return ([], nss1) # Base case
-    if nss1[0] == nss2[0]: # Keep going
+        return ([], nss1)  # Base case
+    if nss1[0] == nss2[0]:  # Keep going
         (nss1_heads, nss1_tails) = partition_by_lowest_common_ancestor(nss1[1:], nss2[1:])
         return ([nss1[0]] + nss1_heads, nss1_tails)
     return ([], nss1)
@@ -175,7 +175,7 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
     steps_keys = []
     for step in steps:
         steps_keys += list(step)
-    #print(steps_keys)
+    # print(steps_keys)
     return steps_keys
 
 
@@ -190,7 +190,7 @@ def get_subkeys(steps_keys: List[str], tools_stems: List[str]) -> List[str]:
     Returns:
         List[str]: The list of step keys associated with subworkflows of the current workflow.
     """
-    exceptions = ['python_script'] # special case
+    exceptions = ['python_script']  # special case
     return [key for key in steps_keys if (key not in tools_stems) and (key not in exceptions)]
 
 
@@ -220,7 +220,6 @@ def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Y
         if backend == '':
             raise Exception(f'Error! No backend in {yaml_path}!')
 
-
         plugin_ns = wic.get('namespace', 'global')
         stepid = StepId(backend, plugin_ns)
         if stepid not in wic['backends']:
@@ -231,12 +230,12 @@ def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Y
         steps = wic['backends'][stepid]['steps']
         yaml_tree_copy.update({'steps': steps})
         # TODO: Use the entire back_tree? Useful for inputs:
-        #back_tree = wic['backends'][stepid]
-        #if 'wic' in back_tree:
+        # back_tree = wic['backends'][stepid]
+        # if 'wic' in back_tree:
         #    del back_tree['wic']
-        #yaml_tree_copy.update(back_tree)
+        # yaml_tree_copy.update(back_tree)
     elif 'steps' in yaml_tree_copy:
-        pass # steps = yaml_tree_copy['steps']
+        pass  # steps = yaml_tree_copy['steps']
     else:
         raise Exception(f'Error! No backends and/or steps in {yaml_path}!')
     return (backend, yaml_tree_copy)
@@ -290,7 +289,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     Returns:
         List[YamlForest]: The flattened forest
     """
-    #pretty_print_forest(forest)
+    # pretty_print_forest(forest)
     if forest == {}:
         return []
     yaml_tree = forest.yaml_tree.yml
@@ -298,7 +297,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     plugin_ns = wic['wic'].get('namespace', 'global')
 
     if 'backends' in wic['wic']:
-        #pretty_print_forest(forest)
+        # pretty_print_forest(forest)
         back_name = ''
         if 'default_backend' in wic['wic']:
             back_name = wic['wic']['default_backend']
@@ -320,7 +319,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     forests = [f[1] for f in forest.sub_forests]
     sub_forests = [flatten_forest(f) for f in forests]
     # Use depth first search flattening to match flatten_rose_tree()
-    #bfs = forests + flatten(sub_forests)
+    # bfs = forests + flatten(sub_forests)
     dfs_lists = [[f] + fs for f, fs in zip(forests, sub_forests)]
     dfs = flatten(dfs_lists)
     return dfs
@@ -330,6 +329,8 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
 # See https://en.wikipedia.org/wiki/Billion_laughs_attack
 # Solution: Inline the contents of the aliases into the anchors.
 # See https://ttl255.com/yaml-anchors-and-aliases-and-how-to-disable-them/#override
+
+
 class NoAliasDumper(yaml.SafeDumper):
     def ignore_aliases(self, data: Any) -> bool:
         return True
@@ -412,7 +413,7 @@ def recursively_delete_dict_key(key: str, obj: Any) -> Any:
     if isinstance(obj, Dict):
         new_dict = {}
         for key_ in obj.keys():
-            if not key_ == key: # i.e. effectively delete key
+            if not key_ == key:  # i.e. effectively delete key
                 new_dict[key_] = recursively_delete_dict_key(key, obj[key_])
         return new_dict
     return obj
@@ -557,8 +558,8 @@ def provenance_list_to_tree(files: List[Tuple[str, str, str]]) -> Dict:
     tree: Dict = {}
     for location, namespaced_output_name, basename in files:
         namespaces = namespaced_output_name.split('___')
-        #print(yaml.dump(tree))
-        #print((location, namespaced_output_name, basename))
+        # print(yaml.dump(tree))
+        # print((location, namespaced_output_name, basename))
         tree = recursively_insert_into_dict_tree(tree, namespaces, (location, namespaced_output_name, basename))
     return tree
 
@@ -590,9 +591,9 @@ def parse_provenance_output_files_(obj: Any, parentdirs: str) -> List[Tuple[str,
     """
     if isinstance(obj, Dict):
         if obj.get('class', '') == 'File':
-            return [(str(obj['location']), parentdirs, str(obj['basename']))] # This basename is a file name
+            return [(str(obj['location']), parentdirs, str(obj['basename']))]  # This basename is a file name
         if obj.get('class', '') == 'Directory':
-            subdir = parentdirs + '/' + obj['basename'] # This basename is a directory name
+            subdir = parentdirs + '/' + obj['basename']  # This basename is a directory name
             return parse_provenance_output_files_(obj['listing'], subdir)
     if isinstance(obj, List):
         files = []
@@ -615,7 +616,7 @@ def get_input_mappings(input_mapping: Dict[str, List[str]], arg_keys: List[str],
     Returns:
         List[str]: A list of the workflow step inputs / call sites, recursively namespaced.
     """
-    #print('arg_keys', arg_keys)
+    # print('arg_keys', arg_keys)
     # Since each workflow input can be used in many workflow steps, we
     # need to (recursively) find all of the leaves of the mapping tree
     # corresponding to the root arg_key/in_name. Since we already added all
@@ -638,7 +639,7 @@ def get_input_mappings(input_mapping: Dict[str, List[str]], arg_keys: List[str],
                 else:
                     arg_keys_accum.append([arg_key_])
             arg_keys = [y for x in arg_keys_accum for y in x]
-            #print('arg_keys', arg_keys)
+            # print('arg_keys', arg_keys)
 
     return arg_keys
 
@@ -653,20 +654,20 @@ def get_output_mapping(output_mapping: Dict[str, str], out_key: str) -> str:
     Returns:
         str: The workflow step output / return location, recursively namespaced.
     """
-    #print('out_key', out_key)
+    # print('out_key', out_key)
     # Similarly, we need to find the fixed-point of output_mapping.
     # This is simpler since a workflow output can only come from one workflow step.
-    #if not out_key_in_yaml_tree_outputs:
+    # if not out_key_in_yaml_tree_outputs:
     done = False
     while not done:
         done = True
-        #out_key = f'{step_name_j}___{out_key}' # TODO: Check this
+        # out_key = f'{step_name_j}___{out_key}' # TODO: Check this
         if out_key in output_mapping:
             # Remove the intermediate variables associated with subworkflow boundaries.
             out_key_init_namespaces = out_key.split('___')[:-1]
             out_key = '___'.join(out_key_init_namespaces + [output_mapping[out_key]])
             done = False
-        #print('out_key', out_key)
+        # print('out_key', out_key)
 
     return out_key
 
@@ -686,7 +687,7 @@ def write_absolute_config_files(args: argparse.Namespace, in_dict_in: Yaml, name
     # cachedir_path needs to be an absolute path, but for reproducibility
     # we don't want users' home directories in the yml files.
     cachedir_path = Path(args.cachedir).absolute()
-    #print('setting cachedir_path to', cachedir_path)
+    # print('setting cachedir_path to', cachedir_path)
     in_dict_in['root_workflow_yml_path'] = str(Path(args.yaml).parent.absolute())
 
     in_dict_in['cachedir_path'] = str(cachedir_path)
@@ -699,7 +700,7 @@ def write_absolute_config_files(args: argparse.Namespace, in_dict_in: Yaml, name
     # that determines sub_args_provided when the recursion returns.
     arg_keys_ = ['root_workflow_yml_path', 'cachedir_path', 'cwl_dirs_file', 'yml_dirs_file']
     for arg_key_ in arg_keys_:
-        in_name_ = f'{step_name_i}___{arg_key_}' # {step_name_i}_input___{arg_key}
+        in_name_ = f'{step_name_i}___{arg_key_}'  # {step_name_i}_input___{arg_key}
         explicit_edge_calls_copy.update({in_name_: (namespaces + [step_name_i], arg_key_)})
 
     # NOTE: Make the paths within *_dirs_file absolute here

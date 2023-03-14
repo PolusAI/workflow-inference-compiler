@@ -9,7 +9,7 @@ import yaml
 from . import __version__, utils
 from .wic_types import KV, Cwl, NodeData, RoseTree, StepId, Tools
 
-TIMEOUT = 60 # seconds
+TIMEOUT = 60  # seconds
 
 
 def delete_previously_uploaded(args: argparse.Namespace, plugins_or_pipelines: str, name: str) -> None:
@@ -22,7 +22,7 @@ def delete_previously_uploaded(args: argparse.Namespace, plugins_or_pipelines: s
     access_token = args.compute_access_token
 
     response = requests.delete(args.compute_url + f'/compute/{plugins_or_pipelines}/' + name + ':' + __version__,
-                                headers = {'Authorization': f'Bearer {access_token}'}, timeout=TIMEOUT)
+                               headers={'Authorization': f'Bearer {access_token}'}, timeout=TIMEOUT)
     print('delete', response.json())
     # TODO: Check response for success
 
@@ -40,7 +40,8 @@ def remove_dot_dollar(tree: Cwl) -> Cwl:
         Cwl: A Cwl document with . and $ removed from $namespaces and $schemas
     """
     tree_str = str(yaml.dump(tree, sort_keys=False, line_break='\n', indent=2))
-    tree_str_no_dd = tree_str.replace('$namespaces', 'namespaces').replace('$schemas', 'schemas').replace('.yml', '_yml')
+    tree_str_no_dd = tree_str.replace('$namespaces', 'namespaces').replace(
+        '$schemas', 'schemas').replace('.yml', '_yml')
     tree_no_dd: Cwl = yaml.safe_load(tree_str_no_dd)  # This effectively copies tree
     return tree_no_dd
 
@@ -91,8 +92,8 @@ def upload_plugin(compute_url: str, access_token: str, tool: Cwl, name: str) -> 
 
     # Use http POST request to upload a primitive CommandLineTool / define a plugin and get its id hash.
     response = requests.post(compute_url + '/compute/plugins',
-                             headers = {'Authorization': f'Bearer {access_token}'},
-                             json = compute_plugin, timeout=TIMEOUT)
+                             headers={'Authorization': f'Bearer {access_token}'},
+                             json=compute_plugin, timeout=TIMEOUT)
     r_json = response.json()
 
     # {'error': {'statusCode': 422, 'name': 'UnprocessableEntityError',
@@ -107,9 +108,9 @@ def upload_plugin(compute_url: str, access_token: str, tool: Cwl, name: str) -> 
         print(r_json)
         raise Exception(f'Error! Labshare plugin upload failed for {name}.')
 
-    plugin_id: str = r_json['id'] # hash
+    plugin_id: str = r_json['id']  # hash
     compute_plugin['id'] = plugin_id
-    compute_plugin.update({'id': plugin_id}) # Necessary ?
+    compute_plugin.update({'id': plugin_id})  # Necessary ?
     return plugin_id
 
 
@@ -122,7 +123,7 @@ def print_plugins(compute_url: str) -> None:
     r = requests.get(compute_url + '/compute/plugins/', timeout=TIMEOUT)
     for j in r.json():
         print(f"id {j.get('id')} class {j.get('class')} name {j.get('name')}")
-        #print(j)
+        # print(j)
     print(len(r.json()))
 
 
@@ -142,7 +143,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         str: The unique id of the workflow
     """
     access_token = args.compute_access_token
-    #print('access_token', access_token)
+    # print('access_token', access_token)
 
     sub_node_data: NodeData = rose_tree.data
     yaml_stem = sub_node_data.name
@@ -151,7 +152,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
     yaml_inputs = sub_node_data.workflow_inputs_file
 
     sub_rose_trees: Dict[str, RoseTree] = {r.data.name: r for r in rose_tree.sub_trees}
-    #print(list(sub_rose_trees))
+    # print(list(sub_rose_trees))
 
     steps = cwl_tree['steps']
 
@@ -160,10 +161,10 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
     for step in steps:
         step_key = utils.parse_step_name_str(step)[-1]
         steps_keys.append(step_key)
-    #print(steps_keys)
+    # print(steps_keys)
 
-    #tools_stems = [stepid.stem for stepid in tools]
-    #subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    # tools_stems = [stepid.stem for stepid in tools]
+    # subkeys = utils.get_subkeys(steps_keys, tools_stems)
 
     cwl_tree_no_dd = remove_dot_dollar(cwl_tree)
     yaml_inputs_no_dd = remove_dot_dollar(yaml_inputs)
@@ -179,36 +180,36 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
         stem = Path(step_key).stem
 
-        #if step_key in subkeys: # and not is_root, but the former implies the latter
-            #plugin_id = upload_plugin(args.compute_url, access_token, cwl_tree_run, yaml_stem)
+        # if step_key in subkeys: # and not is_root, but the former implies the latter
+        # plugin_id = upload_plugin(args.compute_url, access_token, cwl_tree_run, yaml_stem)
         if stem in sub_rose_trees:
             subworkflow_id = upload_all(sub_rose_trees[stem], tools, args, False)
             run_val = f'pipeline:{stem}:{__version__}'
         else:
             # i.e. If this is either a primitive CommandLineTool and/or
             # a 'primitive' Workflow that we did NOT recursively generate.
-            #delete_previously_uploaded(args, 'plugins', stem)
+            # delete_previously_uploaded(args, 'plugins', stem)
             step_id = StepId(stem, plugin_ns_i)
             tool_i = tools[step_id].cwl
             plugin_id = upload_plugin(args.compute_url, access_token, tool_i, stem)
             run_val = f'plugin:{stem}:{__version__}'
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
-        step_name_i = step_name_i.replace('.yml', '_yml') # Due to calling remove_dot_dollar above
+        step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
         cwl_tree_run['steps'][step_name_i]['run'] = run_val
 
     workflow_id: str = ''
     if is_root:
         compute_workflow = {
             "name": yaml_stem,
-            #"version": __version__, # no version for workflows
+            # "version": __version__, # no version for workflows
             "driver": args.compute_driver,
             "cwlJobInputs": yaml_inputs_no_dd,
             **cwl_tree_run
         }
         # Use http POST request to upload a complete Workflow (w/ inputs) and get its id hash.
         response = requests.post(args.compute_url + '/compute/workflows',
-                                 headers = {'Authorization': f'Bearer {access_token}'},
-                                 json = compute_workflow, timeout=TIMEOUT)
+                                 headers={'Authorization': f'Bearer {access_token}'},
+                                 json=compute_workflow, timeout=TIMEOUT)
         r_json = response.json()
         print('post response')
         j = r_json
@@ -217,7 +218,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
             pretty_print_request(response.request)
             print(r_json)
             raise Exception(f'Error! Labshare workflow upload failed for {yaml_stem}.')
-        workflow_id = r_json['id'] # hash
+        workflow_id = r_json['id']  # hash
     else:
         #  "owner": "string",
         #  "additionalProp1": {}
@@ -231,15 +232,15 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
         # Need to remove headers and/or requirements? i.e.
         # Use 1.0 because cromwell only supports 1.0 and we are not using 1.1 / 1.2 features.
         # Eventually we will want to use 1.2 to support conditional workflows
-        #yaml_tree['cwlVersion'] = 'v1.0'
-        #yaml_tree['class'] = 'Workflow'
-        #yaml_tree['requirements'] = subworkreqdict
+        # yaml_tree['cwlVersion'] = 'v1.0'
+        # yaml_tree['class'] = 'Workflow'
+        # yaml_tree['requirements'] = subworkreqdict
 
-        #delete_previously_uploaded(args, 'pipelines', yaml_stem)
+        # delete_previously_uploaded(args, 'pipelines', yaml_stem)
         # Use http POST request to upload a subworkflow / "pipeline" (no inputs) and get its id hash.
         response = requests.post(args.compute_url + '/compute/pipelines',
-                                 headers = {'Authorization': f'Bearer {access_token}'},
-                                 json = compute_pipeline, timeout=TIMEOUT)
+                                 headers={'Authorization': f'Bearer {access_token}'},
+                                 json=compute_pipeline, timeout=TIMEOUT)
         r_json = response.json()
 
         # {'error': {'statusCode': 422, 'name': 'UnprocessableEntityError',
@@ -255,8 +256,8 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
             pretty_print_request(response.request)
             print(r_json)
             raise Exception(f'Error! Labshare workflow upload failed for {yaml_stem}.')
-        workflow_id = r_json['id'] # hash
-    #if is_root:
+        workflow_id = r_json['id']  # hash
+    # if is_root:
     #    print_plugins(args.compute_url)
 
     return workflow_id

@@ -84,7 +84,7 @@ def perform_edge_inference(args: argparse.Namespace,
     if 'format' in in_tool[arg_key]:
         in_formats = in_tool[arg_key]['format']
         in_dict['format'] = in_formats
-    #print('step_name_i, arg_key, in_formats', step_name_i, arg_key, in_formats)
+    # print('step_name_i, arg_key, in_formats', step_name_i, arg_key, in_formats)
     format_matches_all = []
     attempted_matches_all = []
     break_inference = False
@@ -98,7 +98,7 @@ def perform_edge_inference(args: argparse.Namespace,
         # and so we definitely want to use reverse order here. As mentioned,
         # it doesn't necessarily make sense for CommandLineTools, but the
         # important thing is that we just define the order for users some way.
-        out_keys = list(tool_j.cwl['outputs'])[::-1] # Reverse order!
+        out_keys = list(tool_j.cwl['outputs'])[::-1]  # Reverse order!
         format_matches = []
         attempted_matches = []
         inference_rules = get_inference_rules(wic_step_j, Path(steps_keys[j]).stem)
@@ -107,11 +107,11 @@ def perform_edge_inference(args: argparse.Namespace,
             namespaces_embedded = out_key.split('___')
             namespace_emb_last = '' if len(namespaces_embedded) <= 1 else namespaces_embedded[:-1][-1]  # -2?
             if break_inference and namespace_emb_last != namespace_emb_last_break:
-                break # Only break once the namespace changes, i.e. on the next step
+                break  # Only break once the namespace changes, i.e. on the next step
             inference_rule = inference_rules.get(out_key, 'default')
             # Apply 'continue' rule before iteration, to prevent matching
             # TODO: This currently causes an infinite loop.
-            #if inference_rule == 'continue':
+            # if inference_rule == 'continue':
             #    continue
 
             out_dict = utils_cwl.copy_cwl_input_output_dict(out_tool[out_key])
@@ -124,14 +124,14 @@ def perform_edge_inference(args: argparse.Namespace,
             if 'format' in out_tool[out_key]:
                 out_format = out_tool[out_key]['format']
                 out_dict['format'] = out_format
-            #if out_format == '':
+            # if out_format == '':
             #    #print('Warning! No output format! Cannot possibly match!')
             #    print('Warning! No output format! Will match anything!')
             #    print(f'out_key {out_key}')
-            #print('out_key, out_format, rule', out_key, out_format, inference_rule)
+            # print('out_key, out_format, rule', out_key, out_format, inference_rule)
             attempted_matches.append((out_key, out_format))
             # Great! We found an 'exact' type and format match.
-            if (out_dict['type'] == in_dict['type']) and (out_format in in_formats): # or out_format == ''
+            if (out_dict['type'] == in_dict['type']) and (out_format in in_formats):  # or out_format == ''
                 format_matches.append((out_key, out_format))
 
             # Apply 'break' rule after iteration, to allow matching
@@ -151,12 +151,12 @@ def perform_edge_inference(args: argparse.Namespace,
         # NOTE: Use underscores to prevent excluding e.g. 'topology'
         # This isn't great, but works for now (until someone uses '_log_' ...)
         format_matches = [x for x in format_matches if not '_log_' in x[0]]
-        #print('format_matches', format_matches)
+        # print('format_matches', format_matches)
         if not len(format_matches) == 0:
             # By default, simply choose the first (i.e. most-recent) matching format
             out_key = format_matches[0][0]
 
-            if args.inference_use_naming_conventions: # default False
+            if args.inference_use_naming_conventions:  # default False
                 if len(format_matches) == 1:
                     # Great! We found a unique format match.
                     out_key = format_matches[0][0]
@@ -177,33 +177,33 @@ def perform_edge_inference(args: argparse.Namespace,
                             name_matches.append((out_key, out_format))
 
                     if len(name_matches) == 0:
-                        #s = f"""Found multiple outputs with compatible types and formats
-                        #(but no matching names) for input {arg_key}"""
-                        #print(s)
-                        #for m in format_matches:
+                        # s = f"""Found multiple outputs with compatible types and formats
+                        # (but no matching names) for input {arg_key}"""
+                        # print(s)
+                        # for m in format_matches:
                         #    print(m)
-                        #print(f'Arbitrarily choosing the first match {format_matches[0][0]}')
+                        # print(f'Arbitrarily choosing the first match {format_matches[0][0]}')
                         out_key = format_matches[0][0]
                     elif len(name_matches) == 1:
-# NOTE: This clause currently causes problems with file format conversions.
-# Specifically, we want to convert from format A to B, perform the calculation
-# in format B, then convert the results back to format A. However, if the
-# naming conventions of the result do not match the second conversion
-# (but DO match the first conversion), the files will be directly converted
-# fom A to B to A, thus skipping the calculation in B entirely!
+                        # NOTE: This clause currently causes problems with file format conversions.
+                        # Specifically, we want to convert from format A to B, perform the calculation
+                        # in format B, then convert the results back to format A. However, if the
+                        # naming conventions of the result do not match the second conversion
+                        # (but DO match the first conversion), the files will be directly converted
+                        # fom A to B to A, thus skipping the calculation in B entirely!
                         # Great! We found a unique match.
                         out_key = name_matches[0][0]
-                        #print('unique match', out_key)
+                        # print('unique match', out_key)
                     else:
-                        #s = f"""Found multiple outputs with compatible types and formats
-                        #(and multiple matching names) for input {arg_key}"""
-                        #print(s)
-                        #for m in name_matches:
+                        # s = f"""Found multiple outputs with compatible types and formats
+                        # (and multiple matching names) for input {arg_key}"""
+                        # print(s)
+                        # for m in name_matches:
                         #    print(m)
-                        #print(f'Arbitrarily choosing the first match {name_matches[0][0]}')
+                        # print(f'Arbitrarily choosing the first match {name_matches[0][0]}')
                         out_key = name_matches[0][0]
 
-            #print('match!', j)  # We found a match!
+            # print('match!', j)  # We found a match!
             # Generate a new namespace for out_key using the step number and add to inputs
             step_name_j = utils.step_name_str(yaml_stem, j, steps_keys[j])
 
@@ -213,11 +213,11 @@ def perform_edge_inference(args: argparse.Namespace,
             else:
                 vars_workflow_output_internal.append(f'{step_name_j}/{out_key}')
 
-            #arg_val = {'source': f'{step_name_j}/{out_key}'}
+            # arg_val = {'source': f'{step_name_j}/{out_key}'}
             arg_val = f'{step_name_j}/{out_key}'
             arg_keyval = {arg_key: arg_val}
             steps_i = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
-            #print(f'inference i {i} y arg_key {arg_key}')
+            # print(f'inference i {i} y arg_key {arg_key}')
 
             arg_keys = [in_name] if in_name in input_mapping else [arg_key]
             arg_keys = utils.get_input_mappings(input_mapping, arg_keys, arg_key_in_yaml_tree_inputs)
@@ -266,8 +266,8 @@ def perform_edge_inference(args: argparse.Namespace,
     # APE forces the user to manually choose which solution is correct. We want
     # to find unique solutions (if possible), so limit to n=1 inserted steps.
     out_formats = [out_format for attempted_matches in attempted_matches_all
-                              for (out_key_, out_format) in attempted_matches]
-    #print('out_formats', out_formats)
+                   for (out_key_, out_format) in attempted_matches]
+    # print('out_formats', out_formats)
     for in_format in in_formats:
         for out_format in out_formats:
             # Obviously we don't need a conversion if the file formats are the same.
@@ -296,14 +296,14 @@ def perform_edge_inference(args: argparse.Namespace,
                 # match). See docs/algorithms.md for more details.
                 if in_format in tool_out_formats and out_format in tool_in_formats_flat:
                     # We may have found a file format conversion.
-                    #print('step_id.stem, in_format, out_format:', step_id.stem, in_format, out_format)
+                    # print('step_id.stem, in_format, out_format:', step_id.stem, in_format, out_format)
                     conversions.append(step_id)
 
     match = False
     if not match:
-        #print(f'inference i {i} n arg_key {arg_key}')
+        # print(f'inference i {i} n arg_key {arg_key}')
         # Use triple underscore for namespacing so we can split later
-        in_name = f'{step_name_i}___{arg_key}' # {step_name_i}_input___{arg_key}
+        in_name = f'{step_name_i}___{arg_key}'  # {step_name_i}_input___{arg_key}
 
         # This just means we need to defer to the parent workflow.
         # There will actually be an error only if no parent supplies an
@@ -326,7 +326,7 @@ def perform_edge_inference(args: argparse.Namespace,
         # which should match in the parent workflow.
         inputs_workflow.update({in_name: in_dict})
 
-        #arg_keyval = {arg_key: {'source': in_name}}
+        # arg_keyval = {arg_key: {'source': in_name}}
         arg_keyval = {arg_key: in_name}
         steps_i = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
         return steps_i
@@ -357,7 +357,7 @@ def get_inference_rules(wic: Yaml, step_key_parent: str) -> Dict[str, str]:
             namespace = utils.step_name_str(Path(step_key_parent).stem, step_num - 1, step_key)
             rules_child = get_inference_rules(wic_child, step_key)
             for rule_key, rule_val in rules_child.items():
-                rules[namespace + '___' + rule_key] = rule_val # Namespaceing
+                rules[namespace + '___' + rule_key] = rule_val  # Namespaceing
         return rules
     if 'inference' in wic.get('wic', {}):
         rules = wic['wic']['inference']

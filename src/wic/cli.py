@@ -31,9 +31,9 @@ parser.add_argument('--ignore_docker', default=False, action="store_true",
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--run_local', default=False, action="store_true",
-                    help='After generating the cwl file(s), run it on your local machine.')
+                       help='After generating the cwl file(s), run it on your local machine.')
 group_run.add_argument('--run_compute', default=False, action="store_true",
-                    help='After generating the cwl file(s), run it on the remote labshare Compute platform.')
+                       help='After generating the cwl file(s), run it on the remote labshare Compute platform.')
 parser.add_argument('--compute_driver', type=str, required=False, default='slurm', choices=['slurm', 'argo'],
                     help='The driver to use for running workflows on labshare Compute.')
 # Use required=('--run_compute' in sys.argv) make other args conditionally required.

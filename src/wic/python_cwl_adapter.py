@@ -5,7 +5,7 @@ import sys
 from types import ModuleType
 from typing import Dict, Any
 
-DRIVER_SCRIPT =  '/python_cwl_driver.py'
+DRIVER_SCRIPT = '/python_cwl_driver.py'
 TYPES_SCRIPT = '/workflow_types.py'
 
 TYPES_SCRIPT_REL = 'examples/scripts/workflow_types.py'
@@ -45,18 +45,18 @@ def import_python_file(python_module_name: str, python_file_path: Path) -> Modul
     # and https://stackoverflow.com/questions/65206129/importlib-not-utilising-recognising-path
     spec = importlib.util.spec_from_file_location(
         name=python_module_name,  # module name (not file name)
-        location=str(python_file_path.absolute()) # ABSOLUTE path!
+        location=str(python_file_path.absolute())  # ABSOLUTE path!
     )
     if spec:
         module_ = importlib.util.module_from_spec(spec)
         sys.modules[python_module_name] = module_
 
         try:
-            spec.loader.exec_module(module_) # type: ignore
+            spec.loader.exec_module(module_)  # type: ignore
         except Exception as e:
             raise Exception(f'Error! Cannot load python_script {python_file_path}') from e
         # Note that now (after calling exec_module) we can call import_module without error
-        #module_ = importlib.import_module(python_module_name)
+        # module_ = importlib.import_module(python_module_name)
     else:
         raise Exception(f'Error! Cannot load python_script spec {spec} from file\n{python_file_path}')
     return module_
@@ -73,17 +73,17 @@ def get_main_args(module_: ModuleType) -> Dict[str, Any]:
     """
     # importing at the top-level causes a circular import error
     # (jsonschema transitively imports inspect)
-    import inspect # pylint: disable=import-outside-toplevel
+    import inspect  # pylint: disable=import-outside-toplevel
 
     anns = inspect.getfullargspec(module_.main).annotations
-    ret = {'return': anns.get('return')} # Separate out the return type
+    ret = {'return': anns.get('return')}  # Separate out the return type
     if 'return' in anns:
         del anns['return']
-    #print(anns)
-    #print(ret)
+    # print(anns)
+    # print(ret)
 
-    #print(inspect.signature(module_.main).parameters)
-    #print(inspect.signature(module_.main).return_annotation)
+    # print(inspect.signature(module_.main).parameters)
+    # print(inspect.signature(module_.main).return_annotation)
     return anns
 
 
@@ -129,8 +129,8 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
     types_entry = '$(inputs.workflow_types)'
     driver_entry = '$(inputs.driver_script)'
     script_entry = '$(inputs.script)'
-    requirements = {'DockerRequirement': {'dockerPull': 'jakefennick/scripts'}, # without docker
-                    #'InitialWorkDirRequirement': {'listing': [script_entry]}, #[types_entry,driver_entry,script_entry]
+    requirements = {'DockerRequirement': {'dockerPull': 'jakefennick/scripts'},  # without docker
+                    # 'InitialWorkDirRequirement': {'listing': [script_entry]}, #[types_entry,driver_entry,script_entry]
                     'InlineJavascriptRequirement': {}}
     yaml_tree['requirements'] = requirements
 
@@ -139,17 +139,17 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
             return {'inputBinding': {'position': position}}
         return {'inputBinding': {'position': position, 'prefix': f'--{prefix}'}}
 
-    inputs: Dict[str, Any]  = {}
-    #driver_script_file = {'class': 'File', 'path': driver_script}
+    inputs: Dict[str, Any] = {}
+    # driver_script_file = {'class': 'File', 'path': driver_script}
     inputs['driver_script'] = {'type': 'string', 'format': 'edam:format_2330',
-                               **input_binding(1), 'default': DRIVER_SCRIPT} # driver_script_file
-    #workflow_types_file = {'class': 'File', 'path': types_script}
+                               **input_binding(1), 'default': DRIVER_SCRIPT}  # driver_script_file
+    # workflow_types_file = {'class': 'File', 'path': types_script}
     inputs['workflow_types'] = {'type': 'string', 'format': 'edam:format_2330',
-                                **input_binding(2), 'default': TYPES_SCRIPT} # workflow_types_file
+                                **input_binding(2), 'default': TYPES_SCRIPT}  # workflow_types_file
     inputs['script'] = {'type': 'File', 'format': 'edam:format_2330', **input_binding(3)}
     for i, (arg_key, arg_val) in enumerate(module_inputs.items()):
         inputs[arg_key] = {**arg_val, **input_binding(i+4, arg_key)}
-    #inputs['args'] = {'type': 'string', **input_binding(4)}
+    # inputs['args'] = {'type': 'string', **input_binding(4)}
     yaml_tree['inputs'] = inputs
 
     outputs: Dict[str, Any] = {}
@@ -157,12 +157,12 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
         outputs[arg_key] = {**arg_val, 'outputBinding': {'glob': glob_pattern}}
     # output_all is optional, but good for debugging bad glob patterns
     output_all = {'type':
-                    {'type': 'array',
-                        'items': ['Directory', 'File']},
-                'outputBinding': {'glob': '.'},
-                'format': 'edam:format_2330'} # 'Textual format'
+                  {'type': 'array',
+                   'items': ['Directory', 'File']},
+                  'outputBinding': {'glob': '.'},
+                  'format': 'edam:format_2330'}  # 'Textual format'
     # This crashes toil-cwl-runner, but not cwltool.
-    #outputs['output_all'] = output_all
+    # outputs['output_all'] = output_all
     yaml_tree['outputs'] = outputs
 
     yaml_tree['stdout'] = 'stdout'
@@ -182,8 +182,8 @@ def get_module(python_script_mod: str, python_script_path: Path, yml_args: Dict[
     """
     import_python_file('workflow_types', Path(TYPES_SCRIPT_REL))
     module_ = import_python_file(python_script_mod, python_script_path)
-    #print(module_.inputs)
-    #print(module_.outputs)
+    # print(module_.inputs)
+    # print(module_.outputs)
 
     main_args = get_main_args(module_)
     check_args_match_inputs(module_, main_args)
@@ -215,6 +215,6 @@ def get_inputs_workflow(module_inputs: Dict[str, Any], python_script_path: str,
             inputs_workflow[arg] = yml_val
         else:
             inputs_workflow[arg] = {'class': 'File', 'format': module_inputs[arg]['format'], 'path': yml_val}
-    #inputs_workflow = {'script': f'{python_script}.py', **yml_args}
-    #inputs_workflow = {'script': f'{python_script}.py', 'args': json.dumps(yml_args)}
+    # inputs_workflow = {'script': f'{python_script}.py', **yml_args}
+    # inputs_workflow = {'script': f'{python_script}.py', 'args': json.dumps(yml_args)}
     return inputs_workflow
