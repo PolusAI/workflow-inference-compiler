@@ -33,7 +33,7 @@ G = pymol.cmd.select('G', f'genion and name CA and ({indices_receptor})')
 # However, pymol just needs to extract the topology information, so we can use
 # genion.gro and overwrite the coordinates from the trajectory file prod.trr
 pymol.cmd.load(geniongro, 'prod')
-interval = 1 # Only load every nth frame.
+interval = 1  # Only load every nth frame.
 
 # NOTE: Pymol performs an alignment using an average across all frames in the trajectory;
 # See https://sourceforge.net/p/pymol/mailman/message/29514454/
@@ -48,16 +48,16 @@ ALIGN_SEPARATELY = False
 if ALIGN_SEPARATELY:
     # We can process each frame individually and concatenate the pdb files together.
     # Unfortunately, re-seeking into the trajectory file causes this loop to be O(n^2)
-    sub.run(['rm', savepdb], check=False) # Delete savepdb (if it exists) due to >> below.
+    sub.run(['rm', savepdb], check=False)  # Delete savepdb (if it exists) due to >> below.
 
     # First load all of the states so we can call count_states.
     pymol.cmd.load(geniongro, 'num_states')
     pymol.cmd.load_traj(prodtrr, 'num_states')
     num_states = pymol.cmd.count_states('num_states')
-    #print('num_states', num_states)
+    # print('num_states', num_states)
 
-    #states = range(1, 1 + num_states)
-    #interval = max(1, round(num_states/1000)) # More than 1000 = SLOW
+    # states = range(1, 1 + num_states)
+    # interval = max(1, round(num_states/1000)) # More than 1000 = SLOW
     states = [interval*i for i in range(1, 1 + int(num_states/interval))]
 
     pymol.cmd.load(geniongro, 'aligned_sep')
@@ -67,15 +67,15 @@ if ALIGN_SEPARATELY:
 
         P = pymol.cmd.select('P', f'prod and name CA and ({indices_receptor})')
         F = pymol.cmd.pair_fit('P', 'G')
-        #print(F)
+        # print(F)
 
         pymol.cmd.select('N', f'prod and ({indices_receptor} or {indices_ligand})')
-        pymol.cmd.save(f'{state}.pdb', 'N', -1) # 0 == all states (default -1 == current state only)
+        pymol.cmd.save(f'{state}.pdb', 'N', -1)  # 0 == all states (default -1 == current state only)
 
         # For interactive visualization / comparison, load the aligned results.
-        #pymol.cmd.select('T', 'prod')
-        pymol.cmd.save('temp.pdb', 'prod', -1) # 0 == all states (default -1 == current state only)
-        pymol.cmd.load_traj('temp.pdb', 'aligned_sep', state=1+idx) # 0 = append
+        # pymol.cmd.select('T', 'prod')
+        pymol.cmd.save('temp.pdb', 'prod', -1)  # 0 == all states (default -1 == current state only)
+        pymol.cmd.load_traj('temp.pdb', 'aligned_sep', state=1+idx)  # 0 = append
         sub.run(['rm', 'temp.pdb'], check=False)
 
         # Now concatenate the individual pdb files into savepdb
@@ -84,8 +84,8 @@ if ALIGN_SEPARATELY:
         sub.run(['rm', f'{state}.pdb'], check=False)
 
     # For interactive visualization / comparison, load the aligned results.
-    #pymol.cmd.load(savepdb, 'aligned_sep')
-    #pymol.cmd.load_traj(savepdb, 'aligned_sep')
+    # pymol.cmd.load(savepdb, 'aligned_sep')
+    # pymol.cmd.load_traj(savepdb, 'aligned_sep')
 
 ALIGN_AVERAGED = True
 if ALIGN_AVERAGED:
@@ -94,10 +94,10 @@ if ALIGN_AVERAGED:
 
     P = pymol.cmd.select('P', f'prod and name CA and ({indices_receptor})')
     F = pymol.cmd.pair_fit('P', 'G')
-    #print(F)
+    # print(F)
 
     pymol.cmd.select('N', f'prod and ({indices_receptor} or {indices_ligand})')
-    pymol.cmd.save(savepdb, 'N', 0) # 0 == all states (default -1 == current state only)
+    pymol.cmd.save(savepdb, 'N', 0)  # 0 == all states (default -1 == current state only)
 
 MDTRAJ = True
 if MDTRAJ:
@@ -109,7 +109,7 @@ if MDTRAJ:
     print(gro)
     # NOTE: Setting coordinates= in the constructor only loads the first frame!
     trr = MDAnalysis.Universe(topology=geniongro)
-    trr.trajectory = TRR.TRRReader(prodtrr) # This loads all frames.
+    trr.trajectory = TRR.TRRReader(prodtrr)  # This loads all frames.
     print(trr)
 
     # Don't forget to call .run()! Otherwise, it will silently do nothing

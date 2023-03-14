@@ -72,8 +72,8 @@ class TestFuzzyCompile(unittest.TestCase):
             if multi_def_str in str(e) or unbound_lit_var in str(e) or python_script in str(e):
                 pass
             else:
-                #import yaml
-                #print(yaml.dump(yml))
+                # import yaml
+                # print(yaml.dump(yml))
                 raise e
 
 

@@ -1,3 +1,6 @@
+from workflow_types import *
+
+
 def main(input_tpr_path, input_trr_path, output_png_path):
     import MDAnalysis as mda
     import nmrformd
@@ -17,9 +20,9 @@ def main(input_tpr_path, input_trr_path, output_png_path):
         "font.serif": ["Palatino"],
     })
 
-    fig = plt.figure(figsize=(14,7))
+    fig = plt.figure(figsize=(14, 7))
     ax1 = plt.subplot(1, 2, 1)
-    ax1.loglog(nmr_result.f, 1/nmr_result.R1, 'o', markersize=8) # [:-250]
+    ax1.loglog(nmr_result.f, 1/nmr_result.R1, 'o', markersize=8)  # [:-250]
     ax1.set_xlabel(r"$f$ (MHz)", fontdict=font)
     ax1.set_ylabel(r'$T_1$ (s)', fontdict=font)
     ax1.spines["top"].set_linewidth(2)
@@ -35,10 +38,10 @@ def main(input_tpr_path, input_trr_path, output_png_path):
     ax1.yaxis.set_ticks_position('both')
     plt.xticks(fontsize=fontsize)
     plt.yticks(fontsize=fontsize)
-    #plt.xlim(5e2, 5e5)
-    #plt.ylim(1, 100)
+    # plt.xlim(5e2, 5e5)
+    # plt.ylim(1, 100)
     ax2 = plt.subplot(1, 2, 2)
-    ax2.semilogx(nmr_result.t, nmr_result.gij[0], 'o', markersize=8) # [:-250]
+    ax2.semilogx(nmr_result.t, nmr_result.gij[0], 'o', markersize=8)  # [:-250]
     ax2.set_xlabel(r"$t$ (ps)", fontdict=font)
     ax2.set_ylabel(r'$C$', fontdict=font)
     ax2.spines["top"].set_linewidth(2)
@@ -54,13 +57,12 @@ def main(input_tpr_path, input_trr_path, output_png_path):
     ax2.yaxis.set_ticks_position('both')
     plt.xticks(fontsize=fontsize)
     plt.yticks(fontsize=fontsize)
-    #plt.xlim(5e-1, 5e2)
-    #plt.ylim(-0.5e10, 5e10)
+    # plt.xlim(5e-1, 5e2)
+    # plt.ylim(-0.5e10, 5e10)
     fig.tight_layout()
     plt.savefig(output_png_path)
 
 
-from workflow_types import *
 # NOTE: No other top-level imports supported
 
 inputs = {'input_tpr_path': tprfile,

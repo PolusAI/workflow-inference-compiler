@@ -73,7 +73,7 @@ def store_tabular_data(filepath: Path, use_stem: bool = True) -> None:
     data = np.array(floats)
     if use_stem:
         filepath = Path(filepath.stem)
-    for i , dataglob_i in enumerate(data_glob):
+    for i, dataglob_i in enumerate(data_glob):
         (pathold, data_old_) = dataglob_i
         if filepath == pathold:
             data_glob[i] = (filepath, data)
@@ -94,15 +94,15 @@ def initialize_plots(nrows: int, ncols: int) -> Tuple[matplotlib.pyplot.Figure, 
     Returns:
         Tuple[matplotlib.pyplot.Figure, List[List[matplotlib.pyplot.Axes]]]: The main figure and subplots axes
     """
-    plt.style.use('dark_background') # type: ignore
+    plt.style.use('dark_background')  # type: ignore
     fig, axes2d = plt.subplots(nrows=nrows, ncols=ncols, figsize=(18, 9.5))
     # The purpose of calling suptitle is to take up some blank space. suptitle
     # displays a title above all of the subplots, but NOT for the window itself.
     fig.suptitle('')
-    plt.get_current_fig_manager().set_window_title('Real-time Analysis Plots') # type: ignore
+    plt.get_current_fig_manager().set_window_title('Real-time Analysis Plots')  # type: ignore
     fig.tight_layout()
     plt.subplots_adjust(left=0.05, wspace=0.24, bottom=0.05, hspace=0.24)
-    plt.show(block=False) # type: ignore
+    plt.show(block=False)  # type: ignore
     return (fig, axes2d)
 
 
@@ -147,7 +147,7 @@ def cluster_intervals_zscore(intervals_0: List[Tuple[int, int]], ys: np.ndarray,
         corresponding y-data are clustered w.r.t. the zscore distance.
     """
     intervals: List[Tuple[int, int]] = copy.deepcopy(intervals_0)
-    intervals.sort(key=lambda x: x[1] - x[0], reverse=True) # length of interval
+    intervals.sort(key=lambda x: x[1] - x[0], reverse=True)  # length of interval
 
     ys_segmented: Dict[Tuple[int, int], np.ndarray] = {}
     for (i1, i2) in intervals:
@@ -199,38 +199,38 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
     # Declare global variables locally
     global data_glob_changed
     if data_glob_changed:
-        #print('updating plots')
+        # print('updating plots')
         idx_ax = 0
         for path, data in data_glob:
             if idx_ax >= nrows*ncols:
                 # TODO: resize plot grid
                 # initialize_plots(...)
                 break
-            #print(num y cols, len(data[0]))
+            # print(num y cols, len(data[0]))
             # Plot multiple y values individually
             col_indices = list(range(1, len(data[0])))
             if 'radius_gyration' == Path(path).stem:
                 col_indices = [1]
             for idx_y_col in col_indices:
                 if len(data.shape) == 2:
-                    xs = data[:,0]
-                    ys = data[:,idx_y_col]
+                    xs = data[:, 0]
+                    ys = data[:, idx_y_col]
                 elif len(data.shape) == 1:
-                    #print('path', path)
-                    #print('data', data)
+                    # print('path', path)
+                    # print('data', data)
                     ys = data[:]
                     xs = np.array(list(range(len(ys))))
                 else:
                     print('Error! data.shape is not of length 1 or 2:', data.shape)
                     print('path', path)
                     continue
-                #print(path)
-                #print(xs)
-                #print(ys)
+                # print(path)
+                # print(xs)
+                # print(ys)
 
                 interval_indices_clustered = [[(0, len(xs))]]
                 changepoints = []
-                min_size=10
+                min_size = 10
                 if len(xs) > min_size:
                     # Use Change Point Detection to partition the timeseries
                     # into piecewise 'constant' segments.
@@ -239,7 +239,7 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     # C implementation is much faster
                     try:
                         algo = rpt.KernelCPD(kernel='rbf', min_size=min_size).fit(ys)
-                        indices = algo.predict(pen=100) # Large penalty = less segments
+                        indices = algo.predict(pen=100)  # Large penalty = less segments
                         indices_zero = [0] + indices
                         interval_indices = list(zip(indices_zero, indices_zero[1:]))
                         interval_indices_clustered = cluster_intervals_zscore(interval_indices, ys)
@@ -265,9 +265,9 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     idx_ax_col = int(idx_ax / ncols)
                     idx_ax_row = idx_ax - (ncols * idx_ax_col)
                     ax = axes2d[idx_ax_col][idx_ax_row]
-                    ax.clear() # type: ignore
-                    ax.ticklabel_format(style='sci', scilimits=(-2,3), axis='both') # type: ignore
-                    cmap = plt.get_cmap("tab10") # type: ignore
+                    ax.clear()  # type: ignore
+                    ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='both')  # type: ignore
+                    cmap = plt.get_cmap("tab10")  # type: ignore
                     colors = [cmap(i) for i in range(len(xs_segmented))]
 
                     # For plotting purposes only, ignore first 1% of data
@@ -276,11 +276,11 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                     ymax = max(ys[int(len(ys)/100):])
                     if plot_histogram:
                         if not (np.isnan(ymin) or np.isnan(ymax)):
-                            ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True, # type: ignore
-                                    histtype='barstacked', bins='sqrt', color=colors) # type: ignore
+                            ax.hist(ys_segmented, range=(ymin, ymax), stacked=True, density=True,  # type: ignore
+                                    histtype='barstacked', bins='sqrt', color=colors)  # type: ignore
                         else:
-                            ax.hist(ys_segmented, stacked=True, density=True, # type: ignore
-                                    histtype='barstacked', bins='sqrt', color=colors) # type: ignore
+                            ax.hist(ys_segmented, stacked=True, density=True,  # type: ignore
+                                    histtype='barstacked', bins='sqrt', color=colors)  # type: ignore
                         ax.set_xlim(xmin=0)
 
                         filename = Path(path).stem + '.xvg'
@@ -303,7 +303,7 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                             ax.scatter(xs_seg, ys_seg, marker='o', s=(72./fig.dpi)**2, color=colors[i])  # type: ignore
 
                         # Smooth the timeseries using spline interpolaton of degree k
-                        k=3
+                        k = 3
                         if len(ys) > k:
                             spline = UnivariateSpline(xs, ys, k=k)
                             # "Number of knots will be increased until the smoothing condition is satisfied:
@@ -312,7 +312,7 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                             # but currently produces visually appealing results.
                             std_ys = np.std(ys)
                             sfactor = abs(np.mean(ys))
-                            if std_ys < 1.0: # if 'rmsd' in Path(path).stem or 'gyration' in Path(path).stem:
+                            if std_ys < 1.0:  # if 'rmsd' in Path(path).stem or 'gyration' in Path(path).stem:
                                 sfactor = math.sqrt(sfactor)
                             if 'total' in Path(path).stem:
                                 # The total energy is controlled by the thermostat,
@@ -321,15 +321,15 @@ def update_plots(fig: matplotlib.pyplot.Figure, axes2d: List[List[matplotlib.pyp
                                 sfactor = (std_ys ** 2) * sfactor
                             else:
                                 sfactor = math.sqrt(std_ys) * sfactor
-                            if std_ys < 1.0: # if 'rmsd' in Path(path).stem or 'gyration' in Path(path).stem:
+                            if std_ys < 1.0:  # if 'rmsd' in Path(path).stem or 'gyration' in Path(path).stem:
                                 sfactor = math.sqrt(sfactor)
-                            #print('path, sfactor', path, sfactor)
+                            # print('path, sfactor', path, sfactor)
                             spline.set_smoothing_factor(sfactor)
                             ys_spline = spline(xs)
                             ax.plot(xs, ys_spline, color='white')
 
                         for cp_xval in changepoints:
-                            ax.vlines(cp_xval, ymin, ymax, color='gray') # type: ignore
+                            ax.vlines(cp_xval, ymin, ymax, color='gray')  # type: ignore
 
                         filename = Path(path).stem + '.xvg'
                         if filename in labels:
@@ -358,7 +358,7 @@ def pause_no_show(interval: float) -> None:
         canvas = manager.canvas
         if canvas.figure.stale:
             canvas.draw_idle()
-        #show(block=False)
+        # show(block=False)
         canvas.start_event_loop(interval)
     else:
         time.sleep(interval)
@@ -375,7 +375,8 @@ def pause_no_show(interval: float) -> None:
 
 figure_closed = False
 
-def on_close(_event) -> None: # type: ignore
+
+def on_close(_event) -> None:  # type: ignore
     """This event handler is used to terminate the polling loop when the matplotlib figure is closed."""
     global figure_closed
     figure_closed = True
@@ -386,15 +387,15 @@ def main() -> None:
     cachedir_path = sys.argv[1] if len(sys.argv) > 1 else '.'
     file_patterns = sys.argv[2:] if len(sys.argv) > 2 else ['*.xvg', '*.dat']
 
-    #event_handler = TabularDataHandler(patterns=[file_pattern])
-    #observer = PollingObserver() # This does not work!
-    #observer.schedule(event_handler, cachedir_path, recursive=True)
-    #observer.start()
+    # event_handler = TabularDataHandler(patterns=[file_pattern])
+    # observer = PollingObserver() # This does not work!
+    # observer.schedule(event_handler, cachedir_path, recursive=True)
+    # observer.start()
 
     nrows: int = 3
     ncols: int = 4
     (fig, axes2d) = initialize_plots(nrows, ncols)
-    fig.canvas.mpl_connect('close_event', on_close) # type: ignore
+    fig.canvas.mpl_connect('close_event', on_close)  # type: ignore
     prev_files: Dict[str, float] = {}
     try:
         while not figure_closed:
@@ -416,8 +417,9 @@ def main() -> None:
             update_plots(fig, axes2d)
     except KeyboardInterrupt:
         pass
-    #observer.stop()
-    #observer.join()
+    # observer.stop()
+    # observer.join()
+
 
 if __name__ == "__main__":
     main()

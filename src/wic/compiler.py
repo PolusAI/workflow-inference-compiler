@@ -51,10 +51,10 @@ def compile_workflow(yaml_tree_ast: YamlTree,
     # If everything is working correctly, we should thus reach the fixed point
     # in at most n-1 iterations. However, due to the possibility of bugs in the
     # implementation and/or spurious inputs, we should guarantee termination.
-    max_iters = 100 # 100 ought to be plenty. TODO: calculate n-1 from steps:
+    max_iters = 100  # 100 ought to be plenty. TODO: calculate n-1 from steps:
     i = 0
     while ast_modified and i < max_iters:
-        subgraphs = copy.deepcopy(subgraphs_) # See comment below!
+        subgraphs = copy.deepcopy(subgraphs_)  # See comment below!
         compiler_info = compile_workflow_once(yaml_tree, args, namespaces, subgraphs,
                                               explicit_edge_defs, explicit_edge_calls,
                                               input_mapping, output_mapping,
@@ -62,9 +62,9 @@ def compile_workflow(yaml_tree_ast: YamlTree,
         node_data: NodeData = compiler_info.rose.data
         ast_modified = not yaml_tree.yml == node_data.yml
         if ast_modified:
-            #import yaml
-            #print(yaml.dump(node_data.yml))
-            #print()
+            # import yaml
+            # print(yaml.dump(node_data.yml))
+            # print()
             yaml_tree = YamlTree(yaml_tree_ast.step_id, node_data.yml)
         i += 1
 
@@ -99,17 +99,17 @@ def compile_workflow(yaml_tree_ast: YamlTree,
 
 
 def compile_workflow_once(yaml_tree_ast: YamlTree,
-                     args: argparse.Namespace,
-                     namespaces: Namespaces,
-                     subgraphs: List[GraphReps],
-                     explicit_edge_defs: ExplicitEdgeDefs,
-                     explicit_edge_calls: ExplicitEdgeCalls,
-                     input_mapping: Dict[str, List[str]],
-                     output_mapping: Dict[str, str],
-                     tools: Tools,
-                     is_root: bool,
-                     relative_run_path: bool,
-                     testing: bool) -> CompilerInfo:
+                          args: argparse.Namespace,
+                          namespaces: Namespaces,
+                          subgraphs: List[GraphReps],
+                          explicit_edge_defs: ExplicitEdgeDefs,
+                          explicit_edge_calls: ExplicitEdgeCalls,
+                          input_mapping: Dict[str, List[str]],
+                          output_mapping: Dict[str, str],
+                          tools: Tools,
+                          is_root: bool,
+                          relative_run_path: bool,
+                          testing: bool) -> CompilerInfo:
     """STOP: Have you read the Developer's Guide?? docs/devguide.md\n
     Recursively compiles yml workflow definition ASTs to CWL file contents
 
@@ -147,7 +147,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
     # Check for top-level yml dsl args
     wic = {'wic': yaml_tree.get('wic', {})}
-    #import yaml; print(yaml.dump(wic))
+    # import yaml; print(yaml.dump(wic))
     if 'wic' in yaml_tree:
         del yaml_tree['wic']
     wic_steps = wic['wic'].get('steps', {})
@@ -199,12 +199,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
     rose_tree_list = []
 
-    graph = subgraphs[-1] # Get the current graph
+    graph = subgraphs[-1]  # Get the current graph
     graph_gv = graph.graphviz
     graph_nx = graph.networkx
     graphdata = graph.graphdata
 
-    #plugin_ns = wic['wic'].get('namespace', 'global')
+    # plugin_ns = wic['wic'].get('namespace', 'global')
 
     tools_lst: List[Tool] = []
 
@@ -213,7 +213,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         stem = Path(step_key).stem
         wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
         # NOTE: See comments in read_ast_from_disk()
-        plugin_ns_i = wic_step_i.get('wic', {}).get('namespace', 'global') # plugin_ns ??
+        plugin_ns_i = wic_step_i.get('wic', {}).get('namespace', 'global')  # plugin_ns ??
         stepid = StepId(stem, plugin_ns_i)
 
         # Recursively compile subworkflows, adding compiled cwl file contents to tools
@@ -229,7 +229,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             style = step_i_wic_graphviz.get('style', '')
 
             subgraph_gv = graphviz.Digraph(name=f'cluster_{step_key}')
-            subgraph_gv.attr(label=label) # str(path)
+            subgraph_gv.attr(label=label)  # str(path)
             subgraph_gv.attr(color='lightblue')  # color of outline
             if style != '':
                 subgraph_gv.attr(style=style)
@@ -239,21 +239,21 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
             # Checkpoint / restore environment
             if wic_step_i.get('wic', {}).get('environment', {}).get('action', '') == 'checkpoint':
-                #print('checkpointing environment')
+                # print('checkpointing environment')
                 explicit_edge_defs_chk = copy.deepcopy(explicit_edge_defs_copy)
                 explicit_edge_calls_chk = copy.deepcopy(explicit_edge_calls_copy)
             if wic_step_i.get('wic', {}).get('environment', {}).get('action', '') == 'restore':
                 save_defs = wic_step_i.get('wic', {}).get('environment', {}).get('save_defs', [])
                 merge_keyvals_defs = {}
-                #merge_keyvals_calls = {}
+                # merge_keyvals_calls = {}
                 for key in save_defs:
                     merge_keyvals_defs[key] = explicit_edge_defs_copy[key]
-                    #merge_keyvals_calls[key] = explicit_edge_calls_copy[key]
-                #print('restoring environment')
-                explicit_edge_defs_copy = copy.deepcopy(explicit_edge_defs_chk) # deepcopy?
-                explicit_edge_calls_copy = copy.deepcopy(explicit_edge_calls_chk) # deepcopy?
+                    # merge_keyvals_calls[key] = explicit_edge_calls_copy[key]
+                # print('restoring environment')
+                explicit_edge_defs_copy = copy.deepcopy(explicit_edge_defs_chk)  # deepcopy?
+                explicit_edge_calls_copy = copy.deepcopy(explicit_edge_calls_chk)  # deepcopy?
                 explicit_edge_defs_copy.update(merge_keyvals_defs)
-                #explicit_edge_calls_copy.update(merge_keyvals_calls)
+                # explicit_edge_calls_copy.update(merge_keyvals_calls)
 
             sub_compiler_info = compile_workflow(sub_yaml_tree, args, namespaces + [step_name_i],
                                                  subgraphs + [subgraph], explicit_edge_defs_copy,
@@ -279,8 +279,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 print('AST modified', step_key)
                 wic_steps[f'({i+1}, {step_key})'] = {'wic': sub_node_data.yml.get('wic', {})}
                 wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
-                #import yaml
-                #print(yaml.dump(wic_steps))
+                # import yaml
+                # print(yaml.dump(wic_steps))
 
             # Add arguments to the compiled subworkflow (if any), being careful
             # to remove any child wic: metadata annotations. Post-compilation
@@ -290,10 +290,10 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 del wic_step_i_copy['wic']
             # NOTE: To support overloading, the metadata args must overwrite the parent args!
             args_provided_dict = merge(steps[i][step_key]['parentargs'], wic_step_i_copy,
-                                    strategy=Strategy.TYPESAFE_REPLACE) # TYPESAFE_ADDITIVE ?
+                                       strategy=Strategy.TYPESAFE_REPLACE)  # TYPESAFE_ADDITIVE ?
             steps[i][step_key] = args_provided_dict
 
-            sibling_subgraphs.append(sub_node_data.graph) # TODO: Just subgraph?
+            sibling_subgraphs.append(sub_node_data.graph)  # TODO: Just subgraph?
             step_1_names.append(sub_node_data.step_name_1)
             tool_i = Tool(stem + '.cwl', sub_node_data.compiled_cwl)
 
@@ -302,7 +302,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # inputs_workflow.update(sub_node_data.inputs_workflow)
             inputs_namespaced_list = []
             for k, val in sub_env_data.inputs_file_workflow.items():
-                input_namespaced = (f'{step_name_i}___{k}', val) # _{step_key}_input___{k}
+                input_namespaced = (f'{step_name_i}___{k}', val)  # _{step_key}_input___{k}
                 inputs_namespaced_list.append(input_namespaced)
             inputs_namespaced = dict(inputs_namespaced_list)
             inputs_file_workflow.update(inputs_namespaced)
@@ -334,7 +334,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 filepath = 'autogenerated/' + '___'.join(namespaces + [python_script_mod + '.cwl'])
                 with open(filepath, mode='w', encoding='utf-8') as f:
                     f.write(yaml.dump(generated_cwl, sort_keys=False, line_break='\n', indent=2))
-                #step_id = StepId(python_script_mod, 'global')
+                # step_id = StepId(python_script_mod, 'global')
                 # NOTE: The name 'python_script' is obviously not namespaced, and may
                 # prevent using more than one script in a workflow. However, filepath
                 # is indeed namespaced, so maybe it is okay.
@@ -351,7 +351,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # intermittent 'syntax errors'.
             pass
             # Actually, this is a significant performance bottleneck and isn't really necessary.
-            #utils_graphs.make_tool_dag(stem, tool_i, args.graph_dark_theme)
+            # utils_graphs.make_tool_dag(stem, tool_i, args.graph_dark_theme)
 
         # Add run tag, using relative or flat-directory paths
         # NOTE: run: path issues were causing test_cwl_embedding_independence()
@@ -362,7 +362,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 run_path = step_name_i + '/' + run_path
             else:
                 run_path = ('../' * len(namespaces)) + run_path
-                run_path = '../' + run_path # Relative to autogenerated/
+                run_path = '../' + run_path  # Relative to autogenerated/
         else:
             if step_key in subkeys:
                 run_path = '___'.join(namespaces + [step_name_i, run_path])
@@ -378,19 +378,19 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             steps[i][step_key]['in'] = {}
 
         if 'cwl_watcher' == step_key:
-            in_dict_in = steps[i][step_key]['in'] # NOTE: Mutates in_dict_in
+            in_dict_in = steps[i][step_key]['in']  # NOTE: Mutates in_dict_in
             utils.write_absolute_config_files(args, in_dict_in, namespaces, step_name_i, explicit_edge_calls_copy)
 
         args_provided = []
         if steps[i][step_key] and 'in' in steps[i][step_key]:
             args_provided = list(steps[i][step_key]['in'])
-        #print(args_provided)
+        # print(args_provided)
 
         in_tool = tool_i.cwl['inputs']
-        #print(list(in_tool.keys()))
+        # print(list(in_tool.keys()))
         if tool_i.cwl['class'] == 'CommandLineTool':
             args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or
-                 (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?'))]
+                                                            (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?'))]
         elif tool_i.cwl['class'] == 'Workflow':
             args_required = list(in_tool)
 
@@ -409,10 +409,10 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # (Solution: refactor all required arguments out of config and list
         # them as explicit inputs in the cwl files, then modify the python
         # files accordingly.)
-        #print(args_required)
+        # print(args_required)
 
         sub_args_provided = [arg for arg in args_required if arg in explicit_edge_calls_copy]
-        #print(sub_args_provided)
+        # print(sub_args_provided)
 
         label = step_key
         if args.graph_label_stepname:
@@ -438,13 +438,13 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # NOTE: NOT wic_graphviz_step_i
             # get the label (if any) from the subworkflow
             # TODO: This causes test_cwl_embedding_independence to fail.
-            #yml = sub_node_data.yml if ast_modified else sub_yaml_tree.yml
-            #step_i_wic_graphviz = yml.get('wic', {}).get('graphviz', {})
+            # yml = sub_node_data.yml if ast_modified else sub_yaml_tree.yml
+            # step_i_wic_graphviz = yml.get('wic', {}).get('graphviz', {})
             # TODO: For file format conversions, figure out why this is using
             # the label from the parent workflow.
-            #label = step_i_wic_graphviz.get('label', label)
+            # label = step_i_wic_graphviz.get('label', label)
             default_style = 'rounded, filled'
-            style = '' #step_i_wic_graphviz.get('style', '')
+            style = ''  # step_i_wic_graphviz.get('style', '')
             style = default_style if style == '' else default_style + ', ' + style
             attrs = {'label': label, 'shape': 'box', 'style': style, 'fillcolor': 'lightblue'}
             graph_gv.node(step_node_name, **attrs)
@@ -459,11 +459,11 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # Convert native YAML to a JSON-encoded string for specific tags.
             tags = ['config']
             if arg_key in tags and isinstance(arg_val, Dict):
-                arg_val = json.dumps(arg_val) # Do NOT wrap config: in {'source': ...}
+                arg_val = json.dumps(arg_val)  # Do NOT wrap config: in {'source': ...}
             elif isinstance(arg_val, str):
                 arg_val = {'source': arg_val}
             # Use triple underscore for namespacing so we can split later
-            in_name = f'{step_name_i}___{arg_key}' # {step_name_i}_input___{arg_key}
+            in_name = f'{step_name_i}___{arg_key}'  # {step_name_i}_input___{arg_key}
 
             # Add auxillary inputs for scatter steps
             if str(arg_key).startswith('__') and str(arg_key).endswith('__'):
@@ -510,7 +510,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # TODO: We have ~ syntax for input mapping; no notation for output mapping!
                 # For now, use nasty hack below.
 
-                steps[i][step_key]['in'][arg_key] = arg_val # Leave un-evaluated? or
+                steps[i][step_key]['in'][arg_key] = arg_val  # Leave un-evaluated? or
                 """# Prepend the autogenerated step name
                 (step_name, out_name) = arg_val['source'].split('/')
                 for j in reversed(range(i)):
@@ -525,7 +525,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 steps[i][step_key]['in'][arg_key] = arg_val"""
             elif isinstance(arg_val, Dict) and arg_val['source'][0] == '&':
                 arg_val['source'] = arg_val['source'][1:]  # Remove &
-                #print('arg_key, arg_val['source']', arg_key, arg_val['source'])
+                # print('arg_key, arg_val['source']', arg_key, arg_val['source'])
                 # NOTE: There can only be one definition, but multiple call sites.
                 if not explicit_edge_defs_copy.get(arg_val['source']):
                     # if first time encountering arg_val, i.e. if defining
@@ -562,7 +562,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     # that determines sub_args_provided when the recursion returns.
                     explicit_edge_calls_copy.update({in_name: (namespaces + [step_name_i], arg_key)})
                 else:
-                    (nss_def_init, var) =  explicit_edge_defs_copy[arg_val['source']]
+                    (nss_def_init, var) = explicit_edge_defs_copy[arg_val['source']]
 
                     nss_def_embedded = var.split('___')[:-1]
                     nss_call_embedded = arg_key.split('___')[:-1]
@@ -588,8 +588,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     # Note that the outputs from the definition site are bubbled
                     # up the call stack until they reach the common namespace.
                     if (len(nss_call_tails) == 1 or
-                        'valueFrom' in arg_val): # TODO: This is a temporary hack to implement scattering.
-                        #'scatter' in wic_step_i): # TODO: Figure out why this doesn't work.
+                            'valueFrom' in arg_val):  # TODO: This is a temporary hack to implement scattering.
+                        # 'scatter' in wic_step_i): # TODO: Figure out why this doesn't work.
                         # TODO: Check this comment.
                         # The definition site recursion (only, if any) has completed
                         # and we are already in the common namespace, thus
@@ -657,12 +657,11 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # NOTE: See comment above about excluding cwl_watcher from
                 # explicit edge dereferences.
                 if (isinstance(arg_val, Dict) and arg_val['source'][0] == '*' and
-                    'cwl_watcher' in step_key and 'file_pattern' not in arg_key):
-                    arg_val['source'] = arg_val['source'][1:] # Remove *, except for file_pattern
-
+                        'cwl_watcher' in step_key and 'file_pattern' not in arg_key):
+                    arg_val['source'] = arg_val['source'][1:]  # Remove *, except for file_pattern
 
                 if (arg_key in steps[i][step_key].get('scatter', []) or
-                    (isinstance(arg_val, Dict) and 'valueFrom' in arg_val)):
+                        (isinstance(arg_val, Dict) and 'valueFrom' in arg_val)):
                     # Promote scattered input types to arrays
                     in_dict['type'] = {'type': 'array', 'items': in_dict['type']}
 
@@ -686,14 +685,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     graphdata.edges.append((input_node_name, step_node_name, {}))
 
         for arg_key in args_required:
-            #print('arg_key', arg_key)
+            # print('arg_key', arg_key)
             in_name = f'{step_name_i}___{arg_key}'
             if arg_key in args_provided:
                 continue  # We already covered this case above.
             if in_name in inputs_file_workflow:
                 # We provided an explicit argument (but not an edge) in a subworkflow,
                 # and now we just need to pass it up to the root workflow.
-                #print('passing', in_name)
+                # print('passing', in_name)
                 in_dict = utils_cwl.copy_cwl_input_output_dict(in_tool[arg_key])
                 inputs_workflow.update({in_name: in_dict})
                 arg_keyval = {arg_key: in_name}
@@ -701,7 +700,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
                 # Obviously since we supplied a value, we do NOT want to perform edge inference.
                 continue
-            if arg_key in sub_args_provided: # Edges have been explicitly provided
+            if arg_key in sub_args_provided:  # Edges have been explicitly provided
                 # The definition site recursion (if any) and the call site
                 # recursion (yes, see above), have both completed and we are
                 # now in the common namespace, thus
@@ -749,14 +748,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 in_name_in_inputs_file_workflow: bool = (in_name in inputs_file_workflow)
                 arg_key_in_yaml_tree_inputs: bool = (arg_key in yaml_tree.get('inputs', {}))
                 steps[i] = inference.perform_edge_inference(args, tools, tools_lst, steps_keys,
-                    yaml_stem, i, steps, arg_key, graph, is_root, namespaces,
-                    vars_workflow_output_internal, input_mapping_copy, output_mapping_copy, inputs_workflow, in_name,
-                    in_name_in_inputs_file_workflow, arg_key_in_yaml_tree_inputs, conversions, wic_steps, testing)
+                                                            yaml_stem, i, steps, arg_key, graph, is_root, namespaces,
+                                                            vars_workflow_output_internal, input_mapping_copy, output_mapping_copy, inputs_workflow, in_name,
+                                                            in_name_in_inputs_file_workflow, arg_key_in_yaml_tree_inputs, conversions, wic_steps, testing)
                 # NOTE: For now, perform_edge_inference mutably appends to
                 # inputs_workflow and vars_workflow_output_internal.
 
                 # Automatically insert file format conversion
-                conversions = list(set(conversions)) # Remove duplicates
+                conversions = list(set(conversions))  # Remove duplicates
                 if len(conversions) != 0 and args.insert_steps_automatically:
                     conversion = conversions[0]
                     print('Automaticaly inserting file format conversion', conversion, i)
@@ -773,8 +772,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                                        inputs_file_workflow, vars_workflow_output_internal,
                                        explicit_edge_defs_copy, explicit_edge_calls_copy)
                     compiler_info = CompilerInfo(rose_tree, env_data)
-                    #node_data_dummy = NodeData(None, None, yaml_tree_mod, None, None, None, None, None, None, None)
-                    #compiler_info_dummy = CompilerInfo(RoseTree(node_data_dummy, None), None)
+                    # node_data_dummy = NodeData(None, None, yaml_tree_mod, None, None, None, None, None, None, None)
+                    # compiler_info_dummy = CompilerInfo(RoseTree(node_data_dummy, None), None)
                     return compiler_info
 
         # Add CommandLineTool/Subworkflow outputs tags to workflow out tags.
@@ -783,14 +782,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         out_keyvals = {}
         for out_key, out_dict in tool_i.cwl['outputs'].items():
             out_keyvals[out_key] = utils_cwl.copy_cwl_input_output_dict(out_dict)
-            #print(out_key, out_keyvals[out_key])
-        if not out_keyvals: # FYI out_keyvals should never be {}
+            # print(out_key, out_keyvals[out_key])
+        if not out_keyvals:  # FYI out_keyvals should never be {}
             print(f'Error! no outputs for step {step_key}')
         outputs_workflow.append(out_keyvals)
 
         steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs'].keys()))
 
-        #print()
+        # print()
 
     # NOTE: add_subgraphs currently mutates graph
     wic_graphviz = wic['wic'].get('graphviz', {})
@@ -800,7 +799,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     for num, name in ranksame_pairs:
         step_name_num = utils.step_name_str(yaml_stem, num-1, name)
         step_name_nss = '___'.join(namespaces + [step_name_num])
-        steps_ranksame.append(f'"{step_name_nss}"') # Escape with double quotes.
+        steps_ranksame.append(f'"{step_name_nss}"')  # Escape with double quotes.
     utils_graphs.add_subgraphs(args, graph, sibling_subgraphs, namespaces, step_1_names, steps_ranksame)
     step_name_1 = utils.get_step_name_1(step_1_names, yaml_stem, namespaces, steps_keys, subkeys)
 
@@ -816,7 +815,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
     workflow_outputs = utils_cwl.get_workflow_outputs(args, namespaces, is_root, yaml_stem,
-        steps, outputs_workflow, vars_workflow_output_internal, graph, tools_lst, step_node_name)
+                                                      steps, outputs_workflow, vars_workflow_output_internal, graph, tools_lst, step_node_name)
     # Add the provided workflow outputs to the workflow outputs from each step
     outputs_combined = {**yaml_tree.get('outputs', {}), **workflow_outputs}
     yaml_tree.update({'outputs': outputs_combined})
@@ -829,7 +828,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     steps_dict = {}
     for i, step_key in enumerate(steps_keys):
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
-        #steps[i] = {step_name_i: steps[i][step_key]}
+        # steps[i] = {step_name_i: steps[i][step_key]}
         steps_dict.update({step_name_i: steps[i][step_key]})
     yaml_tree.update({'steps': steps_dict})
 
@@ -839,11 +838,11 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         new_keyval: WorkflowInputsFile = {}
         if 'File' == in_dict['type']:
             # path = Path(in_dict['value']).name # NOTE: Use .name ?
-            newval = {'class': 'File', 'path': in_dict['value']['source']} # type: ignore
+            newval = {'class': 'File', 'path': in_dict['value']['source']}  # type: ignore
             if 'format' in in_dict:
                 in_format = in_dict['format']
                 if isinstance(in_format, List):
-                    in_format = list(set(in_format)) # get uniques
+                    in_format = list(set(in_format))  # get uniques
                     if len(in_format) > 1:
                         print(f'NOTE: More than one input file format for {key}')
                         print(f'formats: {in_format}')
@@ -857,7 +856,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             arg_val = in_dict['value']
             new_val = arg_val['source'] if isinstance(arg_val, Dict) else arg_val
             new_keyval = {key: new_val}
-        #else:
+        # else:
         #    raise Exception(f"Error! Unknown type: {in_dict['type']}")
         yaml_inputs.update(new_keyval)
 
@@ -901,7 +900,7 @@ def insert_step_into_workflow(yaml_tree_orig: Yaml, stepid: StepId, tools: Tools
         if 'format' in out_val:
             inference_rules_dict[out_key] = inference_rules.get(out_val['format'], 'default')
     inf_dict = {'wic': {'inference': inference_rules_dict}}
-    keystr = f'({i+1}, {stepid.stem})' # The yml file uses 1-based indexing
+    keystr = f'({i+1}, {stepid.stem})'  # The yml file uses 1-based indexing
 
     if 'wic' in yaml_tree_mod:
         if 'steps' in yaml_tree_mod['wic']:
