@@ -12,7 +12,7 @@ gro = MDAnalysis.Universe(topology=input_gro_path, coordinates=input_gro_path)
 print(gro)
 # NOTE: Setting coordinates= in the constructor only loads the first frame!
 trr = MDAnalysis.Universe(topology=input_gro_path)
-trr.trajectory = TRR.TRRReader(input_trr_path) # This loads all frames.
+trr.trajectory = TRR.TRRReader(input_trr_path)  # This loads all frames.
 print(trr)
 
 # Don't forget to call .run()! Otherwise, it will silently do nothing

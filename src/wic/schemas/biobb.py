@@ -6,6 +6,7 @@ from .gromacs_mdp import gromacs_mdp_schema, gromacs_selection_groups
 # manually curated below (to add detailed enums, etc). Otherwise, we could also
 # attempt to screen-scrape the associated URLs as in gromacs_mdp.py
 
+
 def default_schema(url: bool = False) -> Json:
     """A basic default schema (to avoid copy & paste).
 
@@ -36,10 +37,12 @@ def biobb_container_schema() -> Json:
     restart = {'type': 'boolean', 'description': '(False) [WF property] Do not execute if output files exist.'}
     container_path = {'type': 'string', 'description': '(None) Path to the binary executable of your container.'}
     container_image = {'type': 'string', 'description': '(“gromacs/gromacs:latest”) Container Image identifier.'}
-    container_volume_path = {'type': 'string', 'description': '(“/data”) Path to an internal directory in the container.'}
+    container_volume_path = {'type': 'string',
+                             'description': '(“/data”) Path to an internal directory in the container.'}
     container_working_dir = {'type': 'string', 'description': '(None) Path to the internal CWD in the container.'}
     container_user_id = {'type': 'string', 'description': '(None) User number id to be mapped inside the container.'}
-    container_shell_path = {'type': 'string', 'description': '(“/bin/bash”) Path to the binary executable of the container shell.'}
+    container_shell_path = {'type': 'string',
+                            'description': '(“/bin/bash”) Path to the binary executable of the container shell.'}
     container = {'gmx_lib': gmx_lib, 'gmx_path': gmx_path,
                  'remove_tmp': remove_tmp, 'restart': restart,
                  'container_path': container_path,
@@ -65,12 +68,12 @@ def biobb_selection_schema() -> Json:
     for group, desc in gromacs_selection_groups().items():
         g_s = {'type': 'string', 'const': group, 'description': desc}
         groups_schemas.append(g_s)
-    groups_schemas.append({'type': 'string', 'pattern': '^resname.*'}) # TODO: Check for other patterns
+    groups_schemas.append({'type': 'string', 'pattern': '^resname.*'})  # TODO: Check for other patterns
     # NOTE: Use anyOf instead of enum so we can add descriptions to each value
     desc = """(“System”) Group where the rms will be performed.
     If input_index_path provided, check the file for the accepted values."""
     groups = {'anyOf': groups_schemas, 'description': desc}
-    #groups = {'type': 'string', 'enum': [s['const'] for s in groups_schemas]}
+    # groups = {'type': 'string', 'enum': [s['const'] for s in groups_schemas]}
     # NOTE: This schema appears to trigger some kind of a bug in the vscode YAML
     # extension. Specifically, IntelliSense code completion will not work when
     # there is not enough information for at least one exact match. For example,
@@ -80,7 +83,7 @@ def biobb_selection_schema() -> Json:
 
     schema = default_schema()
     schema['properties'] = {'xvg': xvg, 'selection': groups,
-        **biobb_container_schema()} # no gmx_lib ??
+                            **biobb_container_schema()}  # no gmx_lib ??
     return schema
 
 
@@ -94,20 +97,20 @@ def biobb_gmx_energy_schema() -> Json:
     xvg = {'type': 'string', 'enum': ['xmgrace', 'xmgr', 'none'], 'description': '(“none”) XVG plot formatting.'}
     # TODO: Check this list; the documentation appears to have typos...
     terms_list = ['Angle', 'Proper-Dih.', 'Improper-Dih.', 'LJ-14', 'Coulomb-14',
-        'LJ-(SR)', 'Coulomb-(SR)', 'Coul.-recip.', 'Position-Rest.', 'Potential',
-        'Kinetic-En.', 'Total-Energy', 'Temperature', 'Pressure', 'Constr.-rmsd',
-        'Box-X', 'Box-Y', 'Box-Z', 'Volume', 'Density', 'pV', 'Enthalpy', 'Vir-XX',
-        'Vir-XY', 'Vir-XZ', 'Vir-YX', 'Vir-YY', 'Vir-YZ', 'Vir-ZX', 'Vir-ZY',
-        'Vir-ZZ', 'Pres-XX', 'Pres-XY', 'Pres-XZ', 'Pres-YX', 'Pres-YY',
-        'Pres-YZ', 'Pres-ZX', 'Pres-ZY', 'Pres-ZZ', 'Surf*SurfTen', 'Box-Vel-XX',
-        'Box-Vel-YY', 'Box-Vel-ZZ', 'Mu-X', 'Mu-Y', 'Mu-Z', 'T-Protein',
-        'T-non-Protein', 'Lamb-Protein', 'Lamb-non-Protein']
+                  'LJ-(SR)', 'Coulomb-(SR)', 'Coul.-recip.', 'Position-Rest.', 'Potential',
+                  'Kinetic-En.', 'Total-Energy', 'Temperature', 'Pressure', 'Constr.-rmsd',
+                  'Box-X', 'Box-Y', 'Box-Z', 'Volume', 'Density', 'pV', 'Enthalpy', 'Vir-XX',
+                  'Vir-XY', 'Vir-XZ', 'Vir-YX', 'Vir-YY', 'Vir-YZ', 'Vir-ZX', 'Vir-ZY',
+                  'Vir-ZZ', 'Pres-XX', 'Pres-XY', 'Pres-XZ', 'Pres-YX', 'Pres-YY',
+                  'Pres-YZ', 'Pres-ZX', 'Pres-ZY', 'Pres-ZZ', 'Surf*SurfTen', 'Box-Vel-XX',
+                  'Box-Vel-YY', 'Box-Vel-ZZ', 'Mu-X', 'Mu-Y', 'Mu-Z', 'T-Protein',
+                  'T-non-Protein', 'Lamb-Protein', 'Lamb-non-Protein']
     terms_schema = {'type': 'string', 'enum': terms_list}
     terms = {'type': 'array', 'items': terms_schema, 'description': '([“Potential”]) Energy terms.'}
 
     schema = default_schema()
     schema['properties'] = {'xvg': xvg, 'terms': terms,
-        **biobb_container_schema()} # no gmx_lib ??
+                            **biobb_container_schema()}  # no gmx_lib ??
     return schema
 
 
@@ -119,15 +122,15 @@ def biobb_genion_schema() -> Json:
     """
     # See https://biobb-md.readthedocs.io/en/latest/gromacs.html#module-gromacs.genion
     replaced_group = {'type': 'string', 'description':
-        '(“SOL”) Group of molecules that will be replaced by the solvent.'}
+                      '(“SOL”) Group of molecules that will be replaced by the solvent.'}
     neutral = {'type': 'boolean', 'description': '(False) Neutralize the charge of the system.'}
     concentration = {'type': 'number', 'description': '(0.05) [0~10|0.01] Concentration of the ions in (mol/liter).'}
     seed = {'type': 'number', 'description': '(1993) Seed for random number generator.'}
 
     schema = default_schema()
     schema['properties'] = {'replaced_group': replaced_group, 'neutral': neutral,
-        'concentration': concentration, 'seed': seed,
-        **biobb_container_schema()}
+                            'concentration': concentration, 'seed': seed,
+                            **biobb_container_schema()}
     return schema
 
 
@@ -143,7 +146,7 @@ def biobb_solvate_schema() -> Json:
 
     schema = default_schema()
     schema['properties'] = {'shell': shell,
-        **biobb_container_schema()}
+                            **biobb_container_schema()}
     return schema
 
 
@@ -167,8 +170,8 @@ def biobb_editconf_schema() -> Json:
 
     schema = default_schema()
     schema['properties'] = {'distance_to_molecule': distance_to_molecule,
-        'box_type': box_type, 'center_molecule': center_molecule,
-        **biobb_container_schema()}
+                            'box_type': box_type, 'center_molecule': center_molecule,
+                            **biobb_container_schema()}
     return schema
 
 
@@ -181,24 +184,31 @@ def biobb_mdrun_schema() -> Json:
     """
     # See https://biobb-md.readthedocs.io/en/latest/gromacs.html#module-gromacs.mdrun
     mpi_bin = {'type': 'string', 'description': '(None) Path to the MPI runner. Usually “mpirun” or “srun”.'}
-    mpi_np = {'type': 'number', 'description': '(0) [0~1000|1] Number of MPI processes. Usually an integer bigger than 1.'}
+    mpi_np = {'type': 'number',
+              'description': '(0) [0~1000|1] Number of MPI processes. Usually an integer bigger than 1.'}
     mpi_flags = {'type': 'string', 'description': '(None) Path to the MPI hostlist file.'}
-    checkpoint_time = {'type': 'number', 'description': '(15) [0~1000|1] Checkpoint writing interval in minutes. Only enabled if an output_cpt_path is provided.'}
-    num_threads = {'type': 'number', 'description': '(0) [0~1000|1] Let GROMACS guess. The number of threads that are going to be used.'}
-    num_threads_mpi = {'type': 'number', 'description': '(0) [0~1000|1] Let GROMACS guess. The number of GROMACS MPI threads that are going to be used.'}
-    num_threads_omp = {'type': 'number', 'description': '(0) [0~1000|1] Let GROMACS guess. The number of GROMACS OPENMP threads that are going to be used.'}
-    num_threads_omp_pme = {'type': 'number', 'description': '(0) [0~1000|1] Let GROMACS guess. The number of GROMACS OPENMP_PME threads that are going to be used.'}
+    checkpoint_time = {
+        'type': 'number', 'description': '(15) [0~1000|1] Checkpoint writing interval in minutes. Only enabled if an output_cpt_path is provided.'}
+    num_threads = {'type': 'number',
+                   'description': '(0) [0~1000|1] Let GROMACS guess. The number of threads that are going to be used.'}
+    num_threads_mpi = {
+        'type': 'number', 'description': '(0) [0~1000|1] Let GROMACS guess. The number of GROMACS MPI threads that are going to be used.'}
+    num_threads_omp = {
+        'type': 'number', 'description': '(0) [0~1000|1] Let GROMACS guess. The number of GROMACS OPENMP threads that are going to be used.'}
+    num_threads_omp_pme = {
+        'type': 'number', 'description': '(0) [0~1000|1] Let GROMACS guess. The number of GROMACS OPENMP_PME threads that are going to be used.'}
     use_gpu = {'type': 'boolean', 'description': '(False) Use settings appropriate for GPU. Adds: -nb gpu -pme gpu'}
     gpu_id = {'type': 'string', 'description': '(None) List of unique GPU device IDs available to use.'}
-    gpu_tasks = {'type': 'string', 'description': '(None) List of GPU device IDs, mapping each PP task on each node to a device.'}
+    gpu_tasks = {'type': 'string',
+                 'description': '(None) List of GPU device IDs, mapping each PP task on each node to a device.'}
 
     schema = default_schema()
     schema['properties'] = {'mpi_bin': mpi_bin, 'mpi_np': mpi_np,
-        'mpi_flags': mpi_flags, 'checkpoint_time': checkpoint_time,
-        'num_threads': num_threads, 'num_threads_mpi': num_threads_mpi,
-        'num_threads_omp': num_threads_omp, 'num_threads_omp_pme': num_threads_omp_pme,
-        'use_gpu': use_gpu, 'gpu_id': gpu_id, 'gpu_tasks': gpu_tasks,
-        **biobb_container_schema()}
+                            'mpi_flags': mpi_flags, 'checkpoint_time': checkpoint_time,
+                            'num_threads': num_threads, 'num_threads_mpi': num_threads_mpi,
+                            'num_threads_omp': num_threads_omp, 'num_threads_omp_pme': num_threads_omp_pme,
+                            'use_gpu': use_gpu, 'gpu_id': gpu_id, 'gpu_tasks': gpu_tasks,
+                            **biobb_container_schema()}
     return schema
 
 
@@ -223,8 +233,8 @@ def biobb_pdb2gmx_schema() -> Json:
 
     schema = default_schema()
     schema['properties'] = {'water_type': water_type, 'forcefield': forcefield,
-        'ignh': ignh, 'his': his, 'merge': merge,
-        **biobb_container_schema()}
+                            'ignh': ignh, 'his': his, 'merge': merge,
+                            **biobb_container_schema()}
     return schema
 
 
@@ -252,12 +262,12 @@ def biobb_str_check_add_hydrogens_schema() -> Json:
     """
     # See https://biobb-structure-utils.readthedocs.io/en/latest/utils.html#utils-str-check-add-hydrogens-module
     charges = {'type': 'boolean', 'description':
-        '(False) Whether or not to add charges to the output file. If True the output is in PDBQT format.'}
+               '(False) Whether or not to add charges to the output file. If True the output is in PDBQT format.'}
     mode = {'type': 'string', 'enum': ['auto', 'list', 'ph'], 'description': '(auto) Selection mode'}
     p_h = {'type': 'number', 'minimum': 0, 'maximum': 14, 'description':
-        '(7.4) Add hydrogens appropriate for pH. Only in case mode ph selected.'}
+           '(7.4) Add hydrogens appropriate for pH. Only in case mode ph selected.'}
     lst = {'type': 'string', 'description':
-        'List of residues to modify separated by commas (i.e HISA234HID,HISB33HIE). Only in case mode list selected.'}
+           'List of residues to modify separated by commas (i.e HISA234HID,HISB33HIE). Only in case mode list selected.'}
     keep_canonical_resnames = {'type': 'boolean', 'description': '(False) Whether or not keep canonical residue names'}
     binary_path = {'type': 'string', 'description': '(“check_structure”) path to the check_structure application'}
     remove_tmp = {'type': 'boolean', 'description': '(True) Remove temporal files.'}
@@ -278,18 +288,18 @@ def biobb_pdb4amber_run_schema() -> Json:
     """
     # See https://biobb-amber.readthedocs.io/en/latest/pdb4amber.html#module-pdb4amber.pdb4amber_run
     remove_hydrogens = {'type': 'boolean', 'description':
-        '(False) Remove hydrogen atoms from the PDB file.'}
+                        '(False) Remove hydrogen atoms from the PDB file.'}
     remove_waters = {'type': 'boolean', 'description':
-        '(False) Remove water molecules from the PDB file.'}
+                     '(False) Remove water molecules from the PDB file.'}
     constant_ph = {'type': 'boolean', 'description':
-        '(False) Rename ionizable residues e.g. GLU,ASP,HIS for constant pH simulation.'}
+                   '(False) Rename ionizable residues e.g. GLU,ASP,HIS for constant pH simulation.'}
     binary_path = {'type': 'string', 'description': '(“pdb4amber”) Path to the pdb4amber executable binary.'}
     remove_tmp = {'type': 'boolean', 'description': '(True) Remove temporal files.'}
     restart = {'type': 'boolean', 'description': '(False) Do not execute if output files exist.'}
 
     schema = default_schema(url=True)
     schema['properties'] = {'remove_hydrogens': remove_hydrogens, 'remove_waters': remove_waters,
-                            'constant_pH': constant_ph, # NOTE: capital H
+                            'constant_pH': constant_ph,  # NOTE: capital H
                             'binary_path': binary_path, 'remove_tmp': remove_tmp, 'restart': restart}
     return schema
 
@@ -312,8 +322,8 @@ config_schemas = {
     'gmx_rms': biobb_selection_schema(),
     'gmx_rgyr': biobb_selection_schema(),
     'extract_model': {**default_schema(),
-                      'properties': {'models': {'type': 'array', 'items': {'type': 'integer', 'minimum': 0}}}}, # 1?
-    'extract_model_pdbqt': {**default_schema(), 'properties': {'model': {'type': 'integer', 'minimum': 0}}}, # 1?
+                      'properties': {'models': {'type': 'array', 'items': {'type': 'integer', 'minimum': 0}}}},  # 1?
+    'extract_model_pdbqt': {**default_schema(), 'properties': {'model': {'type': 'integer', 'minimum': 0}}},  # 1?
     'str_check_add_hydrogens': biobb_str_check_add_hydrogens_schema(),
     'pdb4amber_run': biobb_pdb4amber_run_schema(),
     'process_mdout': biobb_process_mdout_schema,

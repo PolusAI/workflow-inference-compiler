@@ -17,6 +17,8 @@ from .wic_types import Namespaces, Yaml, Tools, YamlTree, YamlForest, StepId, No
 # TODO: Check for inline-ing subworkflows more than once and, if there are not
 # any modifications from any parent dsl args, use yaml anchors and aliases.
 # That way, we should be able to serialize back to disk without duplication.
+
+
 def read_ast_from_disk(yaml_tree_tuple: YamlTree,
                        yml_paths: Dict[str, Dict[str, Path]],
                        tools: Tools,
@@ -130,7 +132,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
 
     # Check for top-level yml dsl args
     wic_self = {'wic': yaml_tree.get('wic', {})}
-    wic = merge(wic_self, wic_parent, strategy=Strategy.TYPESAFE_REPLACE) # TYPESAFE_ADDITIVE ?
+    wic = merge(wic_self, wic_parent, strategy=Strategy.TYPESAFE_REPLACE)  # TYPESAFE_ADDITIVE ?
     # Here we want to ADD wic: as a top-level yaml tag.
     # In the compilation phase, we want to remove it.
     yaml_tree['wic'] = wic['wic']
@@ -181,7 +183,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
                 args_provided_dict_self = steps[i][step_key]
             # NOTE: To support overloading, the parent args must overwrite the child args!
             args_provided_dict = merge(args_provided_dict_self, sub_yml_tree,
-                                    strategy=Strategy.TYPESAFE_REPLACE) # TYPESAFE_ADDITIVE ?
+                                       strategy=Strategy.TYPESAFE_REPLACE)  # TYPESAFE_ADDITIVE ?
             # Now mutably overwrite the self args with the merged args
             steps[i][step_key] = args_provided_dict
 
@@ -300,10 +302,10 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
 
     wic = {'wic': yaml_tree.get('wic', {})}
     if 'backends' in wic['wic']:
-        if len(namespaces) == 1: # and namespaces[0] == yaml_name ?
+        if len(namespaces) == 1:  # and namespaces[0] == yaml_name ?
             (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, wic['wic'], Path(''))
-            yaml_tree = {'steps': yaml_tree['steps']} # Remove wic tag
-            return YamlTree(step_id, yaml_tree) # TODO: check step_id
+            yaml_tree = {'steps': yaml_tree['steps']}  # Remove wic tag
+            return YamlTree(step_id, yaml_tree)  # TODO: check step_id
 
         # Pass namespaces through unmodified
         backends_trees = []
@@ -330,8 +332,8 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
 
             if namespaces[0] == step_name_i:
                 if len(namespaces) == 1:
-                    steps_inits = steps[:i] # Exclude step i
-                    steps_tails = steps[i+1:] # Exclude step i
+                    steps_inits = steps[:i]  # Exclude step i
+                    steps_tails = steps[i+1:]  # Exclude step i
                     # Inline sub-steps.
                     sub_steps: List[Yaml] = sub_yml_tree['steps']
                     yaml_tree['steps'] = steps_inits + sub_steps + steps_tails
@@ -389,24 +391,24 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
 
     node_data: NodeData = rose_tree.data
     cwl_tree = copy.deepcopy(node_data.compiled_cwl)
-    #print('cwl_tree', yaml.dump(cwl_tree))
-    #print('subtrees')
-    #for t in rose_tree.sub_trees:
+    # print('cwl_tree', yaml.dump(cwl_tree))
+    # print('subtrees')
+    # for t in rose_tree.sub_trees:
     #    print(yaml.dump(t.data.compiled_cwl))
 
     steps = cwl_tree['steps']
     steps_keys = list(steps.keys())
     # NOTE: Only use the last namespace since we are recursively inlineing.
-    subkeysdict = {t.data.namespaces[-1]:copy.deepcopy(t.data.compiled_cwl)
-                   for t in sub_trees} # NOT rose_tree.sub_trees
-    #print('subkeys', list(subkeysdict.keys()))
-    #print('steps_keys', steps_keys)
+    subkeysdict = {t.data.namespaces[-1]: copy.deepcopy(t.data.compiled_cwl)
+                   for t in sub_trees}  # NOT rose_tree.sub_trees
+    # print('subkeys', list(subkeysdict.keys()))
+    # print('steps_keys', steps_keys)
     steps_new = {}
 
     count = 0
     for i, step_key in enumerate(steps_keys):
         if step_key in list(subkeysdict.keys()):
-            count += 1 # Check that we inline all subworkflows
+            count += 1  # Check that we inline all subworkflows
             inputs = steps[step_key]['in']
             scattervars = steps[step_key].get('scatter', [])
 
@@ -436,14 +438,14 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
                         if isinstance(newval, str):
                             source_new = move_slash_last(newval)
                             # NOTE: Do not namespace; already namespaced in parent workflow.
-                            newval = source_new # step_key + '___' + source_new
+                            newval = source_new  # step_key + '___' + source_new
 
                         if isinstance(newval, Dict) and 'source' in newval:
                             source_new = move_slash_last(newval['source'])
                             # NOTE: Do not namespace; already namespaced in parent workflow.
-                            newval['source'] = source_new # step_key + '___' + source_new
+                            newval['source'] = source_new  # step_key + '___' + source_new
 
-                        substep_inputs_new[subinputkey] = newval # Overwrite
+                        substep_inputs_new[subinputkey] = newval  # Overwrite
                         # Copy any input variables referenced, i.e.
                         # initial scatter and/or slice for step 1
                         m = re.match(r'.*\[inputs\.(.*)\].*', str(newval))
@@ -466,7 +468,7 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
 # but for now let's require the user to manually modify their yml.
                     if scattervars:
                         if ((isinstance(subinputval, str) and '/' in subinputval) or
-                            (isinstance(subinputval, Dict) and '/' in subinputval['source'])):
+                                (isinstance(subinputval, Dict) and '/' in subinputval['source'])):
                             if 'scatter' in substepval:
                                 if subinputkey not in substepval['scatter']:
                                     substepval['scatter'] += [subinputkey]
@@ -505,21 +507,21 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
     outputs_new = {}
     for outkey, outval in outputs.items():
         if 'output_all' in outkey:
-            continue # Skip for now.
+            continue  # Skip for now.
 
         outval['outputSource'] = move_slash_last(outval['outputSource'])
         outputs_new[outkey] = outval
 
     cwl_tree['outputs'] = outputs_new
 
-    data = NodeData(node_data.namespaces, node_data.name, node_data.yml, cwl_tree, # NOTE: Only updating cwl_tree
+    data = NodeData(node_data.namespaces, node_data.name, node_data.yml, cwl_tree,  # NOTE: Only updating cwl_tree
                     node_data.workflow_inputs_file, node_data.explicit_edge_defs,
                     node_data.explicit_edge_calls, node_data.graph,
                     node_data.inputs_workflow, node_data.step_name_1)
 
-    #print('cwl_tree', yaml.dump(cwl_tree))
-    #print('subtrees')
-    #for t in rose_tree.sub_trees:
+    # print('cwl_tree', yaml.dump(cwl_tree))
+    # print('subtrees')
+    # for t in rose_tree.sub_trees:
     #    print(yaml.dump(t.data.compiled_cwl))
 
     return RoseTree(data, [])

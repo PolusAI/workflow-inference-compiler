@@ -40,7 +40,7 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
         if 'wic' in sub_wic_copy:
             del sub_wic_copy['wic']
         if (utils.recursively_contains_dict_key('valueFrom', in_step) or
-            utils.recursively_contains_dict_key('valueFrom', sub_wic_copy)):
+                utils.recursively_contains_dict_key('valueFrom', sub_wic_copy)):
             stepinp = ['StepInputExpressionRequirement', 'InlineJavascriptRequirement']
 
     if (not subkeys == []) or any(bools):
@@ -182,10 +182,10 @@ def get_workflow_outputs(args: argparse.Namespace,
             # we recompile all subworkflows as if they were root. Thus, for now
             # we need to enable args.cwl_output_intermediate_files
             # Exclude intermediate 'output' files.
-            if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files: # and is_root
+            if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:  # and is_root
                 continue
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
-            #print('out_name', out_name)
+            # print('out_name', out_name)
 
         for out_key, out_dict in outputs_workflow[i].items():
             out_dict['type'] = canonicalize_type(out_dict['type'])
@@ -196,7 +196,7 @@ def get_workflow_outputs(args: argparse.Namespace,
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             out_var = f'{step_name_i}/{out_key}'
             workflow_outputs.update({out_name: {**out_dict, 'outputSource': out_var}})
-        #print('workflow_outputs', workflow_outputs)
+        # print('workflow_outputs', workflow_outputs)
     # NOTE: The fix_conflicts 'feature' of cwltool prevents files from being
     # overwritten by appending _2, _3 etc.
     # The problem is that these renamed files now no longer match the glob
@@ -206,13 +206,13 @@ def get_workflow_outputs(args: argparse.Namespace,
     # One workaround is to simply output all files.
     # TODO: glob "." is still returning null; need to use InitialWorkDirRequirement??
     output_all = {'output_all':
-                    {'type':
-                        {'type': 'array',
-                         'items': ['Directory', 'File']},
-                     'outputBinding': {'glob': '\".\"'},
-                     'format': 'edam:format_2330'}} # 'Textual format'
+                  {'type':
+                   {'type': 'array',
+                    'items': ['Directory', 'File']},
+                   'outputBinding': {'glob': '\".\"'},
+                   'format': 'edam:format_2330'}}  # 'Textual format'
     # This crashes toil-cwl-runner, but not cwltool.
-    #workflow_outputs.update(output_all) # type: ignore
+    # workflow_outputs.update(output_all) # type: ignore
     return workflow_outputs
 
 
@@ -254,5 +254,5 @@ def copy_cwl_input_output_dict(io_dict: Dict, remove_qmark: bool = False) -> Dic
     new_dict = {'type': canonicalize_type(io_type)}
     for key in ['format', 'label', 'doc']:
         if key in io_dict:
-            new_dict[key] = io_dict[key] # copy.deepcopy() ?
+            new_dict[key] = io_dict[key]  # copy.deepcopy() ?
     return new_dict

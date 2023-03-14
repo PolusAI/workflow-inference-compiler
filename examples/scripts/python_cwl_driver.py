@@ -1,25 +1,25 @@
 import importlib
 import importlib.util
-#import json
+# import json
 import sys
 from pathlib import Path
 from types import ModuleType
 
 workflow_types_path = sys.argv[1]
-#print('workflow_types_path', workflow_types_path)
+# print('workflow_types_path', workflow_types_path)
 workflow_types_mod = Path(workflow_types_path).name[:-3]
-#print('workflow_types_mod', workflow_types_mod)
+# print('workflow_types_mod', workflow_types_mod)
 
 python_script_path = sys.argv[2]
-#print('python_script_path', python_script_path)
+# print('python_script_path', python_script_path)
 python_script_mod = Path(python_script_path).name[:-3]
-#print('python_script_mod', python_script_mod)
+# print('python_script_mod', python_script_mod)
 
 # Method #1: Just use a single giant JSON-encoded dict.
-#cli_args = sys.argv[3]
-#print('cli_args', cli_args)
-#cli_args_dict = json.loads(cli_args)
-#print('cli_args_dict', cli_args_dict)
+# cli_args = sys.argv[3]
+# print('cli_args', cli_args)
+# cli_args_dict = json.loads(cli_args)
+# print('cli_args_dict', cli_args_dict)
 
 # Method #2: Assume the remaining arguments are key-val pairs.
 # This has the advantage of not requiring an additional config_tag_* step,
@@ -33,8 +33,8 @@ if len(cli_args) % 2 != 0:
 
 cli_args_dict = {}
 for idx in range(int(len(cli_args) / 2)):
-    arg_key = cli_args[2*idx][2:] # remove --
-    arg_val = cli_args[2*idx+1] # json.loads() ?
+    arg_key = cli_args[2*idx][2:]  # remove --
+    arg_val = cli_args[2*idx+1]  # json.loads() ?
     cli_args_dict[arg_key] = arg_val
 
 
@@ -63,14 +63,14 @@ def import_python_file(python_module_name: str, python_file_path: Path) -> Modul
     # and https://stackoverflow.com/questions/65206129/importlib-not-utilising-recognising-path
     spec = importlib.util.spec_from_file_location(
         name=python_module_name,  # module name (not file name)
-        location=str(python_file_path.absolute()) # ABSOLUTE path!
+        location=str(python_file_path.absolute())  # ABSOLUTE path!
     )
     if spec:
         module_ = importlib.util.module_from_spec(spec)
         sys.modules[python_module_name] = module_
-        spec.loader.exec_module(module_) # type: ignore
+        spec.loader.exec_module(module_)  # type: ignore
         # Note that now (after calling exec_module) we can call import_module without error
-        #module_ = importlib.import_module(python_module_name)
+        # module_ = importlib.import_module(python_module_name)
     else:
         print(f'Error! Cannot load {spec}')
         sys.exit(1)

@@ -4,10 +4,13 @@ import distutils.util
 import math
 from typing import List
 
+from workflow_types import *
+
+
 def calculate_dG(Kd):
     # Calculate the binding free energy from Kd so we can make the correlation plots.
     # See https://en.wikipedia.org/wiki/Binding_constant
-    ideal_gas_constant = 8.31446261815324 # J/(Mol*K)
+    ideal_gas_constant = 8.31446261815324  # J/(Mol*K)
     kcal_per_joule = 4184
     # NOTE: Unfortunately, the temperature at which experimental Kd binding data was taken
     # is often not recorded. Thus, we are forced to guess. The two standard guesses are
@@ -18,7 +21,7 @@ def calculate_dG(Kd):
     # thus at a very high concentration. The size of the unit cell bounds the volume.
     # For shorter simulations where the ligand has not explored the entire box, it may
     # be less. See the Yank paper for a method of calculating the correct volumes.
-    standard_concentration = 1 # Units of mol / L, but see comment above.
+    standard_concentration = 1  # Units of mol / L, but see comment above.
     dG = RT * math.log(Kd / standard_concentration)
     return dG
 
@@ -30,15 +33,15 @@ def main(input_excel_path, query, min_row, max_row, smiles_column,
     from rdkit import Chem
     from rdkit.Chem import AllChem
 
-    df = pandas.read_excel(input_excel_path, sheet_name=1) # Requires openpyxl
+    df = pandas.read_excel(input_excel_path, sheet_name=1)  # Requires openpyxl
 
     print(df.shape)
     print(df.columns)
-    #print(df)
+    # print(df)
     print()
 
     # Determine the categorical column values for query purposes
-    #for col in df.columns:
+    # for col in df.columns:
     #    s = list(set(df[col]))
     #    if len(s) < 100: # If more than 100 unique values, column is probably not categorical
     #        print(col, s)
@@ -87,7 +90,7 @@ def main(input_excel_path, query, min_row, max_row, smiles_column,
     for idx, row in enumerate(df.values):
 
         (smiles, binding_datum) = row
-        microMolar = 0.000001 # uM
+        microMolar = 0.000001  # uM
         binding_datum = binding_datum * microMolar
 
         if convert_Kd_dG:
@@ -104,16 +107,15 @@ def main(input_excel_path, query, min_row, max_row, smiles_column,
         AllChem.EmbedMolecule(mol_3D)
         AllChem.MMFFOptimizeMolecule(mol_3D)
 
-        filename = f'{idx}.sdf' # chemblid is NOT unique!
+        filename = f'{idx}.sdf'  # chemblid is NOT unique!
         writer = Chem.SDWriter(filename)
-        #writer = Chem.rdmolfiles.PDBWriter(filename)
+        # writer = Chem.rdmolfiles.PDBWriter(filename)
         writer.write(mol_3D)
         writer.close()
 
     with open(output_txt_path, mode='w', encoding='utf-8') as f:
         f.write('\n'.join(smiles_binding_data))
 
-from workflow_types import *
 
 inputs = {'input_excel_path': xlsxfile,
           'query': string,
