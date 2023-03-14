@@ -1,3 +1,4 @@
+from typing import Dict, List
 from ..wic_types import Json
 from .gromacs_mdp import gromacs_mdp_schema, gromacs_selection_groups
 
@@ -318,6 +319,348 @@ def biobb_pdb4amber_run_schema() -> Json:
     return schema
 
 
+def cpptraj_mask() -> List[Dict[str, str]]:
+    """ Mask options for the cpptraj functions
+
+    Returns:
+        List[Dict[str, str]]: A list of dicts
+    """
+    names = ['all-atoms', 'c-alpha', 'backbone', 'heavy-atoms', 'side-chain', 'solute', 'ions', 'solvent']
+    descs = ['All system atoms', 'All c-alpha atoms; protein only', 'Backbone atoms', 'All not backbone atoms',
+             'All system atoms except solvent atoms', 'All ion molecules', 'All solvent atoms']
+    masks = [{'type': 'string', 'const': name, 'description': desc} for name, desc in zip(names, descs)]
+    return masks
+
+
+def cpptraj_reference() -> List[Dict[str, str]]:
+    """ Reference options for the cpptraj functions
+
+    Returns:
+         List[Dict[str, str]]: A list of dicts
+    """
+
+    names = ['firts', 'average', 'experimental']
+    descs = ['Use the first trajectory frame as reference',
+             'Use the average of all trajectory frames as reference',
+             'Use the experimental structure as reference']
+
+    refs = [{'type': 'string', 'const': name, 'description': desc} for name, desc in zip(names, descs)]
+    return refs
+
+
+def cpptraj_fields() -> List[Dict[str, str]]:
+    """ Fields options for cpptraj function
+
+    Returns:
+         List[Dict[str, str]]: A list of dicts
+    """
+    range = '[1~100000|1]'
+    start = {'type': 'number', f'description': '(1) {range} Starting frame for slicing'}
+    end = {'type': 'number', f'description': '(-1) {range} Ending frame for slicing'}
+    steps = {'type': 'number', f'description': '(1) {range} Step for slicing'}
+
+    return [start, end, steps]
+
+
+def cpptraj_fileformat() -> List[Dict[str, str]]:
+    """ File format options for the cpptraj functions
+
+    Returns:
+        List[Dict[str, str]]: A list of dicts
+    """
+    names = ['crd', 'cdf', 'netcdf', 'nc', 'restart', 'ncrestart', 'restartnc', 'dcd', 'charm'
+             'cor', 'pdb', 'mol2', 'trr', 'gro', 'binpos', 'xtc', 'cif', 'arc', 'sqm', 'sdf', 'conflib']
+    netcdf = 'Format used by netCDF software library for writing and reading chromatography-MS data files'
+    amber = 'AMBER coordinate/restart file with 6 coordinates per line'
+    descs = ['AMBER trajectory format',
+             netcdf, netcdf, netcdf, amber, amber, amber,
+             'AMBER trajectory format',
+             'Format of CHARMM Residue Topology Files (RTF)', 'Charmm COR',
+             'Protein Data Bank format',  'Complete and portable representation of a SYBYL molecule',
+             'Trajectory of a simulation experiment used by GROMACS',
+             'Translation of the ASCII atom coordinate format to binary code',
+             'Portable binary format for trajectories produced by GROMACS package',
+             'Entry format of PDB database in mmCIF format', 'Tinker ARC',
+             'Tinker ARC', 'SQM Input',
+             'One of a family of chemical-data file formats developed by MDL Information Systems',
+             'LMOD Conflib']
+
+    file_format = [{'type': 'string', 'const': name, 'description': desc} for name, desc in zip(names, descs)]
+    return file_format
+
+
+def biobb_cpptraj_rms_schema() -> Json:
+    """A schema for cpptraj_rms options.
+
+    Returns:
+        Json: A schema for cpptraj_rms options.
+    """
+    # See https://biobb-analysis.readthedocs.io/en/latest/ambertools.html#module-ambertools.cpptraj_rms
+
+    start, end, steps = cpptraj_fields()
+    mask = {'anyOf': cpptraj_mask(),
+            'description': 'Mask definition'}
+    reference = {'anyOf': cpptraj_reference(),
+                 'description': 'Reference definition'}
+    schema = default_schema()
+    schema['properties'] = {'start': start, 'end': end, 'steps': steps,
+                            'mask': mask, 'reference': reference}
+    return schema
+
+
+def biobb_cpptraj_rms_nofit_schema() -> Json:
+    """A schema for cpptraj_rms_nofit options.
+
+    Returns:
+        Json: A schema for cpptraj_rms_nofit options.
+    """
+    # See https://biobb-analysis.readthedocs.io/en/latest/ambertools.html#module-ambertools.cpptraj_rms
+
+    start, end, steps = cpptraj_fields()
+    mask = {'anyOf': cpptraj_mask(),
+            'description': 'Mask definition'}
+    reference = {'anyOf': cpptraj_reference(),
+                 'description': 'Reference definition'}
+    nofit = {'type': 'boolean', 'description': '(False) Do not perform best-fit RMSD.'}
+    norotate = {'type': 'boolean',
+                'description': '(False) If calculating best-fit RMSD, translate but do not rotate coordinates.'}
+    nomod = {'type': 'boolean', 'description': '(False) If calculating best-fit RMSD, do not modify coordinates.'}
+    schema = default_schema()
+    schema['properties'] = {'start': start, 'end': end, 'steps': steps,
+                            'mask': mask, 'reference': reference,
+                            'nofit': nofit, 'norotate': norotate, 'nomod': nomod}
+    return schema
+
+
+def biobb_cpptraj_rgyr_schema() -> Json:
+    """A schema for biobb_cpptraj_rgyr options.
+
+    Returns:
+        Json: A schema for biobb_cpptraj_rgyr options.
+    """
+    # See https://biobb-analysis.readthedocs.io/en/latest/ambertools.html#module-ambertools.cpptraj_rgyr
+    start, end, steps = cpptraj_fields()
+    mask = {'anyOf': cpptraj_mask(),
+            'description': 'Mask definition'}
+    schema = default_schema()
+    schema['properties'] = {'start': start, 'end': end, 'steps': steps, 'mask': mask}
+    return schema
+
+
+def cpptraj_selection_schema() -> Json:
+    """A schema for cpptraj_convert options.
+
+    Returns:
+        Json: A schema for cpptraj_convert options.
+    """
+    # See https://biobb-analysis.readthedocs.io/en/latest/ambertools.html#module-ambertools.cpptraj_convert
+    # See https://biobb-analysis.readthedocs.io/en/latest/ambertools.html#module-ambertools.cpptraj_image
+
+    start, end, steps = cpptraj_fields()
+    mask = {'anyOf': cpptraj_mask(),
+            'description': 'Mask definition'}
+    file_format = {'anyOf': cpptraj_fileformat(),
+                   'description': 'Output trajectory format'}
+    schema = default_schema()
+    schema['properties'] = {'start': start, 'end': end, 'steps': steps, 'mask': mask, 'format': file_format}
+    return schema
+
+
+def cpptraj_strip_ambmask_schema() -> Json:
+    """A schema for cpptraj_strip with Amaber mask options.
+
+    Returns:
+        Json: A schema for cpptraj_strip with Amaber mask options.
+    """
+    # See https://biobb-analysis.readthedocs.io/en/latest/ambertools.html#module-ambertools.cpptraj_strip
+    # https://biobb-analysis.readthedocs.io/en/latest/ambertools.html#module-ambertools.cpptraj_image
+
+    start, end, steps = cpptraj_fields()
+    mask = {'type': 'string',  'description': 'Amber atom selection mask definition'}
+    file_format = {'anyOf': cpptraj_fileformat(),
+                   'description': 'Output trajectory format'}
+    schema = default_schema()
+    schema['properties'] = {'start': start, 'end': end, 'steps': steps, 'mask': mask, 'format': file_format}
+    return schema
+
+
+def make_ndx_schema() -> Json:
+    """A schema for make_ndx options.
+
+    Returns:
+        Json: A schema for make_ndx options.
+    """
+    # See https://biobb-md.readthedocs.io/en/latest/gromacs.html#module-gromacs.make_ndx
+    selection = {'type': 'string', 'description': '"a CA C N O" Heavy atoms. Atom selection string'}
+
+    schema = default_schema()
+    schema['properties'] = {'selection': selection}
+    return schema
+
+
+def genrestr_schema() -> Json:
+    """A schema for genrestr options.
+
+    Returns:
+        Json: A schema for genrestr options.
+    """
+    # See https://biobb-md.readthedocs.io/en/latest/gromacs.html?highlight=genrestr#module-gromacs.genrestr
+
+    restrained_group = {'type': 'string', 'description': 'Index group that will be restrained.'}
+    force_constants = {'type': 'string', 'description': 'Array of three floats defining the force constants'}
+    schema = default_schema()
+    schema['properties'] = {'restrained_group': restrained_group, 'force_constants': force_constants}
+    return schema
+
+
+def gmx_trjconv_str_schema() -> Json:
+    """A schema for gmx_trjconv_str options.
+
+    Returns:
+        Json: A schema for gmx_trjconv_str options.
+    """
+    # See https://biobb-analysis.readthedocs.io/en/latest/gromacs.html#module-gromacs.gmx_trjconv_str
+
+    selection = {'type': 'string', 'description': 'Group where the trjconv will be performed'}
+    skip = {'type': 'number', 'description': '[0~10000|1] Only write every nr-th frame.'}
+    start = {'type': 'number', 'description':
+             '[0~10000|1] Time of first frame to read from trajectory (default unit ps).'}
+    end = {'type': 'number', 'description':
+           '[0~10000|1] Time of last frame to read from trajectory (default unit ps).'}
+    dt = {'type': 'number', 'description':
+          'Only write frame when t MOD dt = first time (ps).'}
+    output_name = {'type': 'string', 'description': ' File name for ensemble of output files'}
+    output_type = {'type': 'string', 'description': 'File type for ensemble of output files.'}
+
+    schema = default_schema()
+    schema['properties'] = {'selection': selection, 'skip': skip, 'start': start, 'end': end,
+                            'dt': dt, 'output_name': output_name, 'output_type': output_type}
+    return schema
+
+
+def leap_gen_top_schema() -> Json:
+    """A schema for leap_gen_top options.
+
+    Returns:
+        Json: A schema for leap_gen_top options.
+    """
+    # See https://biobb-amber.readthedocs.io/en/latest/leap.html#module-leap.leap_gen_top
+
+    forcefield = {'type': 'array', 'items': {'type': 'string'},
+                  'description': 'Forcefield to be used for the structure generation'}
+    schema = default_schema()
+    schema['properties'] = {'forcefield': forcefield}
+    return schema
+
+
+def biobb_process_minout_schema() -> Json:
+    """A schema for process_minout options.
+
+    Returns:
+        Json: A schema for process_minout options.
+    """
+    # See https://biobb-amber.readthedocs.io/en/latest/process.html#module-process.process_minout
+
+    minout_energy_terms = ['ANGLE', 'BOND', 'DIHEDRAL', 'EEL', 'EEL14',
+                           'ENERGY', 'GMAX', 'HBOND', 'NAME', 'NSTEP', 'NUMBER',
+                           'RESTRAINT', 'RMS', 'VDW14', 'VDWAALS']
+
+    minout_term_amber = {'type': 'string', 'enum': minout_energy_terms}
+    minout_terms_amber = {'type': 'array', 'items': minout_term_amber,
+                          'description': '([“ENERGY”]) Statistics descriptors.'}
+    return {**default_schema(), 'properties': {'terms': minout_terms_amber}}
+
+
+def biobb_leap_solvate_schema() -> Json:
+    """A schema for leap_solvate options.
+
+    Returns:
+        Json: A schema for leap_solvate options.
+    """
+    # See https://biobb-amber.readthedocs.io/en/latest/leap.html#module-leap.leap_solvate
+    forcefield_terms = ['protein.ff14SB', 'protein.ff19SB', 'DNA.bsc1', 'DNA.OL15', 'RNA.OL3', 'gaff']
+    forcefield = {'type': 'array', 'items': {'type': 'string', 'enum': forcefield_terms},
+                  'description': 'Forcefield to be used for the structure generation.'}
+    water_type_terms = ['POL3BOX', 'QSPCFWBOX', 'SPCBOX', 'SPCFWBOX', 'TIP3PBOX', 'TIP3PFBOX',
+                        'TIP4PBOX', 'TIP4PEWBOX', 'OPCBOX', 'OPC3BOX', 'TIP5PBOX']
+    water_type = {'type': 'string', 'enum': water_type_terms,
+                  'description': 'Water molecule parameters to be used for the topology'}
+    box_type = {'type': 'string', 'enum': ['cubic', 'truncated_octahedron'],
+                'description': '(“truncated_octahedron”) Type for the MD system box'}
+    ions_type_terms = ['ionsjc_tip3p', 'ionsjc_spce', 'ionsff99_tip3p', 'ions_charmm22', 'ionsjc_tip4pew', 'None']
+    ions_type = {'type': 'string', 'enum': ions_type_terms,
+                 'description': '(“ionsjc_tip3p”) Ions type.'}
+    neutralise = {'type': 'boolean', 'description':
+                  '(“False”) Energetically neutralise the system adding the necessary counterions.'}
+    iso = {'type': 'boolean', 'description': '(“False”) Make the box isometric.'}
+    positive_ions_number = {'type': 'number', 'description':
+                            '(0) Number of additional positive ions to include in the system box.'}
+
+    negative_ions_number = {'type': 'number', 'description':
+                            '(0) Number of additional negative ions to include in the system box.'}
+    positive_ions_type = {'type': 'string', 'description':
+                          '(“Na+”) Type of additional positive ions to include in the system box. Values: Na+,K+.'}
+    negative_ions_type = {'type': 'string', 'description':
+                          '(“Cl-”) Type of additional negative ions to include in the system box. Values: Cl-.'}
+
+    distance_to_molecule = {'type': 'number', 'description':
+                            '(“8.0”) Size for the MD system box -in Angstroms-, defined such as the minimum distance between'
+                            'any atom originally present in solute and the edge of the periodic box is given by this distance parameter.'}
+    closeness = {'type': 'number', 'description': '(“1.0”) How close, in Å, solvent ATOMs may come to solute ATOMs.'}
+
+    schema = default_schema()
+    schema['properties'] = {'forcefield': forcefield, 'water_type': water_type, 'box_type': box_type,
+                            'ions_type': ions_type, 'neutralise': neutralise, 'iso': iso,
+                            'positive_ions_number': positive_ions_number, 'negative_ions_number': negative_ions_number,
+                            'positive_ions_type': positive_ions_type, 'negative_ions_type': negative_ions_type,
+                            'distance_to_molecule': distance_to_molecule, 'closeness': closeness}
+
+    return schema
+
+
+def biobb_leap_add_ions_schema() -> Json:
+    """A schema for leap_add_ions options.
+
+    Returns:
+        Json: A schema for leap_add_ions options.
+    """
+    # See https://biobb-amber.readthedocs.io/en/latest/leap.html#module-leap.leap_add_ions
+    forcefield_terms = ['protein.ff14SB', 'protein.ff19SB', 'DNA.bsc1', 'DNA.OL15', 'RNA.OL3', 'gaff']
+    forcefield = {'type': 'array', 'items': {'type': 'string', 'enum': forcefield_terms},
+                  'description': 'Forcefield to be used for the structure generation.'}
+    water_type_terms = ['POL3BOX', 'QSPCFWBOX', 'SPCBOX', 'SPCFWBOX', 'TIP3PBOX', 'TIP3PFBOX',
+                        'TIP4PBOX', 'TIP4PEWBOX', 'OPCBOX', 'OPC3BOX', 'TIP5PBOX']
+    water_type = {'type': 'string', 'enum': water_type_terms,
+                  'description': 'Water molecule parameters to be used for the topology'}
+    box_type = {'type': 'string', 'enum': ['cubic', 'truncated_octahedron'],
+                'description': '(“truncated_octahedron”) Type for the MD system box'}
+    ions_type_terms = ['ionsjc_tip3p', 'ionsjc_spce', 'ionsff99_tip3p', 'ions_charmm22', 'ionsjc_tip4pew', 'None']
+    ions_type = {'type': 'string', 'enum': ions_type_terms,
+                 'description': '(“ionsjc_tip3p”) Ions type.'}
+    neutralise = {'type': 'boolean', 'description':
+                  '(“False”) Energetically neutralise the system adding the necessary counterions.'}
+    ionic_concentration = {'type': 'number', 'description':
+                           '(50) Additional ionic concentration to include in the system box. Units in Mol/L.'}
+    positive_ions_number = {'type': 'number', 'description':
+                            '(0) Number of additional positive ions to include in the system box.'}
+
+    negative_ions_number = {'type': 'number', 'description':
+                            '(0) Number of additional negative ions to include in the system box.'}
+    positive_ions_type = {'type': 'string', 'description':
+                          '(“Na+”) Type of additional positive ions to include in the system box. Values: Na+,K+.'}
+    negative_ions_type = {'type': 'string', 'description':
+                          '(“Cl-”) Type of additional negative ions to include in the system box. Values: Cl-.'}
+
+    schema = default_schema()
+    schema['properties'] = {'forcefield': forcefield, 'water_type': water_type, 'box_type': box_type,
+                            'ions_type': ions_type, 'neutralise': neutralise,
+                            'ionic_concentration': ionic_concentration,
+                            'positive_ions_number': positive_ions_number, 'negative_ions_number': negative_ions_number,
+                            'positive_ions_type': positive_ions_type, 'negative_ions_type': negative_ions_type}
+
+    return schema
+
+
 energy_terms_amber = ['VOLUME', 'TSOLVENT', 'TSOLUTE', 'TEMP', 'PRES',
                       'ETOT', 'ESCF', 'EPTOT', 'EKTOT', 'EKCMT', 'DENSITY']
 term_amber = {'type': 'string', 'enum': energy_terms_amber}
@@ -342,4 +685,17 @@ config_schemas = {
     'str_check_add_hydrogens': biobb_str_check_add_hydrogens_schema(),
     'pdb4amber_run': biobb_pdb4amber_run_schema(),
     'process_mdout': biobb_process_mdout_schema,
+    'cpptraj_rms': biobb_cpptraj_rms_schema(),
+    'cpptraj_rms_nofit': biobb_cpptraj_rms_nofit_schema(),
+    'cpptraj_rgyr': biobb_cpptraj_rgyr_schema(),
+    'cpptraj_strip_ambmask': cpptraj_strip_ambmask_schema(),
+    'cpptraj_convert': cpptraj_selection_schema(),
+    'make_ndx': make_ndx_schema(),
+    'genrestr': genrestr_schema(),
+    'gmx_trjconv_str': gmx_trjconv_str_schema(),
+    'leap_gen_top': leap_gen_top_schema(),
+    'process_minout': biobb_process_minout_schema(),
+    'leap_solvate': biobb_leap_solvate_schema(),
+    'leap_add_ions': biobb_leap_add_ions_schema(),
+    'cpptraj_image': cpptraj_selection_schema()
 }
