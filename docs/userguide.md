@@ -156,7 +156,7 @@ The runtime system intentionally hides the working sub-directories of each step.
 It is assumed that the real-time analysis takes care of the complex log file parsing, etc and produces simple tabular data files (i.e. csv files separated by whitespace instead of a comma). We need to use the same file watching / polling trick as above to locate these tabular data files. The first argument to the following command is the directory in which to look for the files. (By default it is `cachedir` because that is the default value of the  `--cachedir` wic command line argument.) You can also optionally supply the file patterns, which by default are `*.xvg` and `*.dat`.
 
 ```
-timeseries_plots cachedir
+timeseriesplots cachedir <pat1> <pat2> <...>
 ```
 
 ## Labshare Compute
