@@ -5,10 +5,6 @@ vis.filewatcher
 ------------------------------------
 .. automodule:: vis.filewatcher
 
-vis.timeseries
-------------------------------------
-.. automodule:: vis.timeseries
-
 vis.viewer
 ------------------------------------
 .. automodule:: vis.viewer

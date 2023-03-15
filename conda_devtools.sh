@@ -44,27 +44,10 @@ $CONDA install -y -c conda-forge zip # Not installed by default on ubuntu
 
 $CONDA install -y -c conda-forge shellcheck
 
-# The ruptures library needs to compile its binary wheel during pip install
-# Even though the compilers are already installed
-# (i.e. the below command prints "All requested packages are already installed.")
-# if you don't explicitly install the compilers package,
-# the ruptures binary wheel build will fail with
-# "#  include <stdlib.h>"
-# ...
-# "ERROR: Failed building wheel for ruptures"
-$CONDA install -y -c conda-forge compilers
-
-# The ruptures library also needs pkg-config and openblas. Otherwise:
-# "../../scipy/meson.build:134:0: ERROR:
-#  Dependency lookup for OpenBLAS with method 'pkgconfig' failed:
-#  Pkg-config binary for machine 1 not found. Giving up."
-#  Or my personal favorite:
-# "../../meson.build:63:0: ERROR: Compiler gfortran can not compile programs."
-$CONDA install -y -c conda-forge pkg-config openblas
-
 # NOTE: The [cwl] extra installs an embedded cwltool within toil-cwl-runner.
 # You can NOT `conda install cwltool` and then `pip install toil` !
-# NOTE: ruamel.yaml (a dependency of toil/cwtool) also requires compilers
+# NOTE: ruamel.yaml (a dependency of toil/cwtool) requires compilers
+$CONDA install -y -c conda-forge compilers
 $CONDA install -y -c conda-forge pip
 #pip cache purge
 pip install 'toil[cwl]'
