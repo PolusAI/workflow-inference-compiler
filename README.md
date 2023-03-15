@@ -47,7 +47,8 @@ The subworkflow [examples/gromacs/cg.yml](examples/gromacs/cg.yml) is shown abov
 If you add the --parallel flag to the above command then, in another terminal, you can view the plots in real-time:
 ```
 conda activate wic
-timeseries_plots
+pip install timeseriestools
+timeseriesplots
 ```
 
 ![Plots](examples/gromacs/plots.png)
