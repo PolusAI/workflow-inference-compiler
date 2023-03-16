@@ -50,4 +50,3 @@ $CONDA install -y -c conda-forge shellcheck
 $CONDA install -y -c conda-forge compilers
 $CONDA install -y -c conda-forge pip
 #pip cache purge
-pip install 'toil[cwl]'
