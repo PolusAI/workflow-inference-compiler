@@ -212,6 +212,20 @@ def biobb_mdrun_schema() -> Json:
     return schema
 
 
+def biobb_pdb_schema() -> Json:
+    """A schema for downloading pdb files.
+
+    Returns:
+        Json: A schema for downloading pdb files.
+    """
+    # See https://biobb-io.readthedocs.io/en/latest/api.html#module-api.pdb
+    pdb_code = {'type': 'string', 'minLength': 4, 'maxLength': 4, 'description': 'RCSB PDB code'}
+    api_id = {'type': 'string', 'enum': ['pdbe', 'pdb', 'mmb'], 'description': 'PDB REST API mirror'}
+    schema = default_schema()
+    schema['properties'] = {'pdb_code': pdb_code, 'api_id': api_id}
+    return schema
+
+
 def biobb_pdb2gmx_schema() -> Json:
     """A schema for gromacs pdb2gmx options.
 
@@ -232,7 +246,7 @@ def biobb_pdb2gmx_schema() -> Json:
     merge = {'type': 'boolean', 'description': '(False) Merge all chains into a single molecule.'}
 
     schema = default_schema()
-    schema['properties'] = {'water_type': water_type, 'forcefield': forcefield,
+    schema['properties'] = {'water_type': water_type, 'force_field': forcefield,
                             'ignh': ignh, 'his': his, 'merge': merge,
                             **biobb_container_schema()}
     return schema
@@ -312,6 +326,7 @@ biobb_process_mdout_schema = {**default_schema(), 'properties': {'terms': terms_
 
 
 config_schemas = {
+    'pdb': biobb_pdb_schema(),
     'pdb2gmx': biobb_pdb2gmx_schema(),
     'editconf': biobb_editconf_schema(),
     'solvate': biobb_solvate_schema(),
