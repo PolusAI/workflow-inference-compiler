@@ -50,3 +50,9 @@ $CONDA install -y -c conda-forge shellcheck
 $CONDA install -y -c conda-forge compilers
 $CONDA install -y -c conda-forge pip
 #pip cache purge
+
+# NOTE: Although WIC doesn't have explicit dependency on Numpy, a potential issue arises
+# when installing matplotlib. This is because matplotlib may install an incompatible version
+# of Numpy which can cause problems with pytest. As a result, running pytest gives an
+# `Fatal Python error: Illegal instruction` error. So, we need to install it using conda.
+$CONDA install -y -c conda-forge numpy
