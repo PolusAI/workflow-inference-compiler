@@ -16,6 +16,10 @@ defaults:
 
 jobs:
   build_and_run:
+    strategy:
+      fail-fast: false
+      matrix:
+        cwl_runner: ["cwltool", "toil-cwl-runner"]
     runs-on: [self-hosted, linux]
 
     steps:
@@ -49,4 +53,4 @@ jobs:
 
     - name: PyTest Run Example Workflows
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-      run: pytest -k test_run_examples --workers 4 # --cov
+      run: pytest -k test_run_examples --workers 4 --cwl_runner ${{ matrix.cwl_runner }} # --cov
