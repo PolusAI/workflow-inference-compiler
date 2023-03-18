@@ -1,33 +1,21 @@
 import argparse
-from pathlib import Path
-import traceback
-from typing import Dict, Sequence, Union, List
 import copy
+from pathlib import Path
+import sys
+import traceback
+from typing import Dict, List
+from unittest.mock import patch
 
 from fastapi import Request, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-
-
-import logging
-import glob
-import json
-import subprocess as sub
-import sys
-import os
-
 import graphviz
 import networkx as nx
-import yaml
+import uvicorn
 
-from unittest.mock import patch
 from auth.auth import authenticate
-
-import wic
-
 from wic import ast, cli, compiler, inference, labshare, utils, plugins, __version__  # , utils_graphs
 from wic.schemas import wic_schema
-from wic.wic_types import Cwl, GraphData, GraphReps, Json, NodeData, RoseTree, StepId, Tool, Tools, Yaml, YamlTree
+from wic.wic_types import GraphData, GraphReps, Json, NodeData, StepId, YamlTree
 
 
 app = FastAPI()
@@ -42,6 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def get_args(yaml_path: str = '') -> argparse.Namespace:
     """This is used to get mock command line arguments.
 
@@ -54,14 +43,21 @@ def get_args(yaml_path: str = '') -> argparse.Namespace:
         args: argparse.Namespace = cli.parser.parse_args()
     return args
 
+
 @app.get("/", status_code=status.HTTP_200_OK)
 @authenticate
-async def root():
-    return {"message": "the api has 2 routes: compile and inference"}
+async def root() -> Dict[str, str]:
+    """The api has 2 routes: compile and inference
+
+    Returns:
+        Dict[str, str]: {"message": "The api has 2 routes: compile and inference"}
+    """
+    return {"message": "The api has 2 routes: compile and inference"}
+
 
 @app.post("/compile")
 @authenticate
-async def compile_wf(request: Request):
+async def compile_wf(request: Request) -> Json:
     """The compile route compiles the json object fom workflow builder ui which contains steps built in the ui.
 
     Args:
@@ -73,11 +69,11 @@ async def compile_wf(request: Request):
     print('----------Run Workflow!---------')
     root_yaml_tree = await request.json()
 
-    tools_cwl = plugins.get_tools_cwl('cwl_dirs.txt')
+    tools_cwl = plugins.get_tools_cwl(Path('cwl_dirs.txt'))
     # tools_cwl = main.get_tools_cwl('cwl_dirs.txt', True,
     #                           False)
     # This takes ~1 second but it is not really necessary.
-    yml_paths = plugins.get_yml_paths('yml_dirs.txt')
+    yml_paths = plugins.get_yml_paths(Path('yml_dirs.txt'))
 
     # # Perform initialization via mutating global variables (This is not ideal)
     compiler.inference_rules = dict(utils.read_lines_pairs(Path('inference_rules.txt')))
@@ -143,7 +139,7 @@ async def compile_wf(request: Request):
 
     sub_node_data: NodeData = rose_tree.data
     yaml_stem = sub_node_data.name
-    yaml_tree = sub_node_data.yml
+    yaml_tree2 = sub_node_data.yml
     cwl_tree = sub_node_data.compiled_cwl
     yaml_inputs = sub_node_data.workflow_inputs_file
 
@@ -158,7 +154,7 @@ async def compile_wf(request: Request):
     cwl_tree_no_dd = labshare.remove_dot_dollar(cwl_tree)
     yaml_inputs_no_dd = labshare.remove_dot_dollar(yaml_inputs)
 
-    wic2 = yaml_tree.get('wic', {})
+    wic2 = yaml_tree2.get('wic', {})
     wic_steps = wic2.get('steps', {})
 
     # Convert the compiled yaml file to json for labshare Compute.
