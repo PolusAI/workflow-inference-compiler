@@ -50,7 +50,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
     yaml_inputs = rose_tree.data.workflow_inputs_file
     stage_input_files(yaml_inputs, Path(args.yaml).parent.absolute())
 
-    retval = 1 # overwrite if successful
+    retval = 1  # overwrite if successful
 
     yaml_stem = yaml_stem + '_inline' if args.cwl_inline_subworkflows else yaml_stem
     if cwl_runner == 'cwltool':
@@ -100,6 +100,8 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             # Do not display a nasty stack trace to the user; hide it in a file.
             with open(f'error_{yaml_stem}.txt', mode='w', encoding='utf-8') as f:
                 traceback.print_exception(etype=type(e), value=e, tb=None, file=f)
+            if not cachedir:  # if running on CI
+                print(e)
         finally:
             cwltool.main._terminate_processes()  # pylint: disable=protected-access
 
