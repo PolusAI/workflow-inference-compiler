@@ -34,11 +34,6 @@ $CONDA install -y -c conda-forge nodejs graphviz # openbabel mdanalysis
 # See https://github.com/conda-forge/graphviz-feedstock/issues/35#issuecomment-786368065
 $CONDA install -y -c conda-forge xorg-libxrender
 
-# NOTE: https://github.com/wearepal/data-science-types has been archived and is
-# no longer under active development. So most of the API is covered, but there
-# are some functions which are missing stubs.
-$CONDA install -y -c conda-forge data-science-types
-
 $CONDA install -y -c conda-forge wget
 $CONDA install -y -c conda-forge zip # Not installed by default on ubuntu
 
