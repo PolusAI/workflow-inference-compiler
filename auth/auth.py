@@ -1,12 +1,17 @@
 import logging
 import string
-from typing import Any, Awaitable, Callable, Dict  # NOQA
+from typing import Any, Awaitable, Callable
 import inspect
 import requests
 
 from fastapi import Request, HTTPException
 from jose import jwt
+from jose import exceptions
+
 from auth.settings import DEFAULT_USER, SETTINGS
+from wic.wic_types import Json
+
+TIMEOUT = 60  # seconds
 
 logging.basicConfig(
     format="%(asctime)s - %(name)-8s - %(levelname)-8s - %(message)s",
@@ -26,7 +31,7 @@ if IS_OFFLINE:
     )
 
 
-def get_user_info(token: str) -> Dict[str, Any]:
+def get_user_info(token: str) -> Json:
     """Obtains the data for a user from the 'me' endpoint given a Bearer token.
 
     Args:
@@ -37,12 +42,11 @@ def get_user_info(token: str) -> Dict[str, Any]:
     """
     headers = {"Authorization": "Bearer " + token}
     body_data = {"json": True}
-    userData = requests.post(
+    user_ata: Json = requests.post(
         f"{SETTINGS.AUTH_BASE_URL}/{SETTINGS.ME_ENDPOINT}",
-        data=body_data,
-        headers=headers,
+        data=body_data, headers=headers, timeout=TIMEOUT
     ).json()
-    return userData
+    return user_ata
 
 
 def get_token_auth_header(request: Request) -> str:
@@ -71,7 +75,7 @@ def get_token_auth_header(request: Request) -> str:
     return token
 
 
-def get_user(request: Request) -> Dict[Any, Any]:
+def get_user(request: Request) -> Json:
     """Gets user information from Request object.
 
     Args:
@@ -111,6 +115,7 @@ def authenticate(func: Callable[..., Any]) -> Callable[..., Any]:
         Returns a wrapped API endpoint.
     """
     import inspect
+
     async def wrapper(*args: Any, **kwargs: Any) -> Awaitable[Any]:
         request: Request = kwargs["request"]
 
@@ -120,12 +125,13 @@ def authenticate(func: Callable[..., Any]) -> Callable[..., Any]:
             request.state.user_id = DEFAULT_USER
 
         if IS_OFFLINE:
-            return await func(*args, **kwargs)
+            await func(*args, **kwargs)
 
         logging.debug(f"Calling {func.__name__} with auth.")
         token = get_token_auth_header(request)
         jwks = requests.get(
-            f"{SETTINGS.AUTH_BASE_URL}/{SETTINGS.JWKS_ENDPOINT}", verify=False
+            f"{SETTINGS.AUTH_BASE_URL}/{SETTINGS.JWKS_ENDPOINT}",
+            verify=False, timeout=TIMEOUT
         ).json()
         unverified_header = jwt.get_unverified_header(token)
         rsa_key = {}
@@ -138,21 +144,21 @@ def authenticate(func: Callable[..., Any]) -> Callable[..., Any]:
                 jwt.decode(  # NOQA: F841
                     token,
                     rsa_key,
-                    algorithms=[SETTINGS.ALGORITHMS],
+                    algorithms=SETTINGS.ALGORITHMS,
                     audience=SETTINGS.AUTH_BASE_URL,
                     issuer=SETTINGS.AUTH_BASE_URL,
                 )
-            except jwt.ExpiredSignatureError:
-                raise HTTPException(status_code=401, detail="token is expired")
-            except jwt.JWTClaimsError:
+            except exceptions.ExpiredSignatureError as exc:
+                raise HTTPException(status_code=401, detail="token is expired") from exc
+            except exceptions.JWTClaimsError as exc:
                 raise HTTPException(
                     status_code=401,
                     detail="incorrect claims, please check the audience and issuer",
-                )
-            except Exception:
+                ) from exc
+            except Exception as exc:
                 raise HTTPException(
                     status_code=401, detail="Unable to parse authentication token."
-                )
+                ) from exc
             # if SETTINGS.OFFLINE_USER is None:
             #     user_data = get_user(request)
             #     print('user_data......')
@@ -161,7 +167,7 @@ def authenticate(func: Callable[..., Any]) -> Callable[..., Any]:
             #         email = user_data["email"]
             #         if email is not None:
             #             request.state.user_id = normalize_text(email)
-            return await func(*args, **kwargs)
+            await func(*args, **kwargs)
         raise HTTPException(status_code=401, detail="Unable to find appropriate key.")
 
     wrapper.__signature__ = inspect.Signature(  # type: ignore
