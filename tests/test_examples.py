@@ -25,8 +25,63 @@ from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tup
 large_workflows = ['dsb', 'dsb1', 'elm', 'vs_demo_2', 'vs_demo_3', 'vs_demo_4']
 yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in large_workflows]
 
-# TODO: add items to blacklist
-run_blacklist: List[str] = []
+# NOTE: Most of the workflows in this list have free variables because they are subworkflows
+# i.e. if you try to run them, you wil get "Missing required input parameter"
+run_blacklist: List[str] = [
+    'assign_partial_charges_batch',
+    'convert_ligand_mol2_to_pdbqt_mdanalysis',
+    'download_smiles_ligand_db',
+    'convert_ligand_mol2_to_pdbqt_obabel',
+    'analysis_realtime_ligand',
+    'analysis_realtime_complex',
+    'analysis_realtime_protein',
+    'ligand_modeling_docking',
+    'align_protein_CA_pymol',
+    'assign_partial_charges',
+    'minimize_ligand_only',
+    'analysis_final_steps',
+    'autodock_vina_rescore',
+    'analysis_final',
+    'gen_topol_params',
+    'analysis_realtime',
+    'convert_pdbqt',
+    'download_pdb',
+    'setup_vac_min',
+    'npt_gromacs',
+    'setup_pdb',
+    'docking_stability',
+    'npt_amber',
+    'analysis',
+    'solv_ion',
+    'topology',
+    'stability',
+    'docking',
+    'l-bfgs',
+    'basic',
+    'equil',
+    'setup',
+    'steep',
+    'modeling',  # called in tutorial
+    'tutorial',  # called in nmr
+    'prod',
+    'flc',
+    'dsb',
+    'npt',
+    'nvt',
+    'min',
+    'cg',
+    'yank',
+    'fix_protein',
+    # These (currently) always return success, so no point in running them.
+    'cwl_watcher_analysis',
+    'cwl_watcher_complex',
+    'cwl_watcher_ligand',
+    'cwl_watcher_protein',
+]
+
+
+yml_paths_tuples_not_blacklist = [(s, p) for (s, p) in yml_paths_tuples if s not in run_blacklist]
+# currently [vs_demo_2, vs_demo_3, vs_demo_4, elm, nmr, multistep1, multistep2, multistep3, helloworld]
 
 
 def is_isomorphic_with_timeout(g_m: isomorphism.GraphMatcher, yml_path_str: str) -> None:
@@ -68,8 +123,8 @@ def get_graph_reps(name: str) -> GraphReps:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples)
-def test_run_examples(yml_path_str: str, yml_path: Path, cwl_runner) -> None:
+@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist)
+def test_run_examples(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Runs all of the examples in the examples/ directory. Note that some of
     the yml files lack inputs and cannot be run independently, and are excluded.
     """
@@ -105,11 +160,7 @@ def test_run_examples(yml_path_str: str, yml_path: Path, cwl_runner) -> None:
 
     # NOTE: Do not use --cachedir; we want to actually test everything.
     retval = wic.run_local.run_local(args, rose_tree, None, cwl_runner)
-
-    if yaml_stem in run_blacklist:
-        assert 0
-    else:
-        assert retval == 0
+    assert retval == 0
     return
 
 
