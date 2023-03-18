@@ -47,7 +47,7 @@ jobs:
 
       - name: Setup mamba (linux, macos)
         if: runner.os != 'Windows'
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest
@@ -58,7 +58,7 @@ jobs:
 
       - name: Setup conda (windows)
         if: runner.os == 'Windows'
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-version: latest
           activate-environment: wic
