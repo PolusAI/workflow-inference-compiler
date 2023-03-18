@@ -34,7 +34,7 @@ jobs:
         submodules: recursive
 
     - name: Setup conda / mamba
-      uses: conda-incubator/setup-miniconda@v2
+      uses: conda-incubator/setup-miniconda@v2.2.0
       with:
         miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest
