@@ -45,15 +45,23 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup conda / mamba
-        if: always()
+      - name: Setup mamba (linux, macos)
+        if: runner.os != 'Windows'
         uses: conda-incubator/setup-miniconda@v2
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest
           activate-environment: wic
           use-mamba: true
-          mamba-version: "*" # enable mamba solving
+          channels: conda-forge
+          python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
+
+      - name: Setup conda (windows)
+        if: runner.os == 'Windows'
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniforge-version: latest
+          activate-environment: wic
           channels: conda-forge
           python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
 
