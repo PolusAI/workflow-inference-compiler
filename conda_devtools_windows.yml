@@ -19,8 +19,8 @@ dependencies:
   - xorg-libxrender
   - shellcheck
 # wget and zip cause errors in the setup-miniconda github action on windows.
-  - wget
-  - zip
+#  - wget
+#  - zip
 # NOTE: Although wic doesn't have an explicit dependency on numpy, several
 # issues arise when numpy is installed as a transitive dependency of matplotlib.
 # On linux and macos, using pip to install numpy may cause this error with pytest:
@@ -31,4 +31,4 @@ dependencies:
 # "pip._vendor.resolvelib.resolvers.ResolutionTooDeep: 2000000"
 # See https://pip.pypa.io/en/stable/topics/dependency-resolution/#backtracking
 # So on windows, we want to let pip install numpy (transitively).
-  - numpy
+#  - numpy
