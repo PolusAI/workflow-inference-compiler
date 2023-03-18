@@ -33,18 +33,16 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Setup conda / mamba
+    - name: Setup mamba (linux, macos)
       uses: conda-incubator/setup-miniconda@v2.2.0
       with:
         miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest
+        environment-file: conda_devtools.yml
         activate-environment: wic
         use-mamba: true
         channels: conda-forge
         python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
-
-    - name: Install System Dependencies from Conda / Mamba
-      run: ./conda_devtools.sh
 
     - name: Docker pull
       run: ./dockerPull.sh
