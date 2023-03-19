@@ -80,6 +80,10 @@ jobs:
         if: runner.os == 'Windows'
         run: pip install ".[test,doc]"
 
+      - name: Install Workflow Inference Compiler runners (windows)
+        if: runner.os == 'Windows'
+        run: pip install ".[runners]"
+
       - name: Build Documentation
         if: always()
         run: cd docs && make html
