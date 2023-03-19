@@ -72,9 +72,13 @@ jobs:
         # "SC1017 (error): Literal carriage return. Run script through tr -d '\r' ."
         run: shellcheck -e SC1017 $(find . -name "*.sh" -not -path "./biobb/*" -and -not -path "./3/*")
 
-      - name: Install Workflow Inference Compiler
-        if: always()
+      - name: Install Workflow Inference Compiler (linux, macos)
+        if: runner.os != 'Windows'
         run: pip install ".[all]"
+
+      - name: Install Workflow Inference Compiler (windows)
+        if: runner.os == 'Windows'
+        run: pip install ".[test,doc]"
 
       - name: Build Documentation
         if: always()
