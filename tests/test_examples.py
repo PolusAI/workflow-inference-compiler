@@ -1,6 +1,7 @@
 import subprocess as sub
 from pathlib import Path
 import signal
+import sys
 from typing import List
 
 import graphviz
@@ -96,14 +97,20 @@ def is_isomorphic_with_timeout(g_m: isomorphism.GraphMatcher, yml_path_str: str)
         line2 = f'Consider adding {yml_path_str} to the large_workflows list.'
         raise Exception(f'{line1}\n{line2}')
 
-    # See https://docs.python.org/3/library/signal.html#examples
-    # NOTE: You CANNOT use `pytest --workers 4 ...` with this. Otherwise:
-    # "ValueError: signal only works in main thread of the main interpreter"
-    signal.signal(signal.SIGALRM, handler)
+    # See https://github.com/bokeh/bokeh/issues/11627#issuecomment-921576787
+    if sys.platform == 'win32':
+        # Windows does not support alarm, so just use a regular call here.
+        # Note that there is a backup timeout in the github action workflow
+        assert g_m.is_isomorphic()  # See top-level comment above!
+    else:
+        # See https://docs.python.org/3/library/signal.html#examples
+        # NOTE: You CANNOT use `pytest --workers 4 ...` with this. Otherwise:
+        # "ValueError: signal only works in main thread of the main interpreter"
+        signal.signal(signal.SIGALRM, handler)
 
-    signal.alarm(10)  # timeout after 10 seconds
-    assert g_m.is_isomorphic()  # See top-level comment above!
-    signal.alarm(0)  # Disable the alarm
+        signal.alarm(10)  # timeout after 10 seconds
+        assert g_m.is_isomorphic()  # See top-level comment above!
+        signal.alarm(0)  # Disable the alarm
 
 
 def get_graph_reps(name: str) -> GraphReps:
