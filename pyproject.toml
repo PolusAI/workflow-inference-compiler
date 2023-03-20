@@ -1,6 +1,8 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
-requires = ["jupyter_packaging~=0.7.9", "setuptools>=42", "wheel", "versioneer-518"]
+requires = ["jupyter_packaging~=0.7.9", "setuptools>=42,<68", "wheel", "versioneer-518"]
 # NOTE: The above list mostly comes from https://github.com/nglviewer/nglview/pull/969/files
+# NOTE: Use upper bound of <68 for setuptools due to 2to3 error.
+# See https://stackoverflow.com/questions/72414481/error-in-anyjson-setup-command-use-2to3-is-invalid
 
 build-backend = "setuptools.build_meta"
