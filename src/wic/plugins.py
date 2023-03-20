@@ -47,8 +47,11 @@ def validate_cwl(cwl_path_str: str, skip_schemas: bool) -> None:
     """
     # NOTE: This uses NoResolvedFilter to suppress the info messages to stdout.
     loading_context, workflowobj, uri = cwltool.load_tool.fetch_document(cwl_path_str)
+    # NOTE: There has been a breaking change in the API for skip_schemas.
+    # TODO: re-enable skip_schemas while satisfying mypy
+    # loading_context.skip_schemas = skip_schemas
     loading_context, uri = cwltool.load_tool.resolve_and_validate_document(
-        loading_context, workflowobj, uri, preprocess_only=False, skip_schemas=skip_schemas
+        loading_context, workflowobj, uri, preprocess_only=False  # , skip_schemas=skip_schemas
     )
     # NOTE: Although resolve_and_validate_document does some validation,
     # some additional validation is done in make_tool, i.e.
