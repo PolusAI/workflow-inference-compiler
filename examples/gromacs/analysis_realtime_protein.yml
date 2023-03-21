@@ -5,30 +5,52 @@
 # NOTE: Most paths can be inferred, but explicitly specify them anyway because
 # for cwl_watcher and so we can re-order steps in analysis.
 steps:
+# Temporarily use explicit index file
+# Due to a bug in 3.9.0, input_index_path is required.
+# See https://github.com/bioexcel/biobb_analysis/commit/2c08146ea8d7492ee67ea55720e6e77e7a8ff732
+# and https://github.com/bioexcel/biobb_analysis/commit/596d71c918a515786ed1d8b89f6a6f0357fc98f8
+# The bug has been fixed in master, but there are no newer docker images available.
+# See https://quay.io/repository/biocontainers/biobb_analysis?tab=tags&tag=latest
+  - gmxselect:
+      in:
+        input_structure_path: '*min.tpr'
+        config: '{"selection": "Mainchain"}'
+        output_ndx_path: '&mainchain.ndx'
+  - gmxselect:
+      in:
+        input_structure_path: '*prod.gro'
+        config: '{"selection": "Sidechain"}'
+        output_ndx_path: '&sidechain.ndx'
   - gmx_rms:
       in:
         input_traj_path: '*prod.trr'
+        input_structure_path: '*prod.gro'
         config:
           selection: MainChain
+        input_index_path: '*mainchain.ndx'
         output_xvg_path: 'rmsd_equil_mainchain.xvg'
   - gmx_rms:
       in:
         input_traj_path: '*prod.trr'
+        input_structure_path: '*prod.gro'
         config:
           selection: SideChain
+        input_index_path: '*sidechain.ndx'
         output_xvg_path: 'rmsd_equil_sidechain.xvg'
   - gmx_rms:
       in:
         input_traj_path: '*prod.trr'
+        input_structure_path: '*min.tpr'
         config:
           selection: MainChain
+        input_index_path: '*mainchain.ndx'
         output_xvg_path: 'rmsd_xray_mainchain.xvg'
-        input_structure_path: '*min.tpr'
   - gmx_rgyr:
       in:
         input_traj_path: '*prod.trr'
         config:
           selection: MainChain
+        input_index_path: '*mainchain.ndx'
         output_xvg_path: 'radius_gyration.xvg'
         input_structure_path: '*min.tpr'
   - gmx_energy:
@@ -43,27 +65,27 @@ wic:
     #label: Real-time Analysis
     style: invis # Make this subgraph invisible (but NOT the parent graph).
     ranksame:
-    - (1, gmx_rms)
-    - (2, gmx_rms)
     - (3, gmx_rms)
+    - (4, gmx_rms)
+    - (5, gmx_rms)
   steps:
-    (1, gmx_rms):
-      wic:
-        graphviz:
-          label: Mainchain RMSD\nw.r.t. Equil Coords
-    (2, gmx_rms):
-      wic:
-        graphviz:
-          label: Sidechain RMSD\nw.r.t. Equil Coords
     (3, gmx_rms):
       wic:
         graphviz:
+          label: Mainchain RMSD\nw.r.t. Equil Coords
+    (4, gmx_rms):
+      wic:
+        graphviz:
+          label: Sidechain RMSD\nw.r.t. Equil Coords
+    (5, gmx_rms):
+      wic:
+        graphviz:
           label: Mainchain RMSD\nw.r.t. X-ray Coords
-    (4, gmx_rgyr):
+    (6, gmx_rgyr):
       wic:
         graphviz:
           label: Radius of\nGyration
-    (5, gmx_energy):
+    (7, gmx_energy):
       wic:
         graphviz:
           label: Analyze & Plot\nEnergy\nTimeseries
