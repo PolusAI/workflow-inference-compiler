@@ -77,3 +77,5 @@ parser.add_argument('--graph_inline_depth', type=int, required=False, default=sy
                     help='Controls the depth of subgraphs which are displayed.')
 parser.add_argument('--graph_dark_theme', default=False, action="store_true",
                     help='Changees the color of the fonts and edges from white to black.')
+parser.add_argument('--custom_net', type=str, required=False,
+                    help='Passes --custom-net flag to cwltool.')
