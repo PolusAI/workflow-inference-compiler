@@ -62,7 +62,7 @@ steps:
       input_txt_path: '*binding_data.txt'
       docking_score_cutoff: -1.0
       max_num_poses_per_ligand: 1
-      max_num_poses_total: 2 #25 # Use 1 for CI
+      max_num_poses_total: 1 #25 # Use 1 for CI
       docking_scores: '&docking_scores'
       experimental_dGs: '&dGs'
 
