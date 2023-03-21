@@ -144,7 +144,7 @@ def main() -> None:
     # rootgraph.view() # viewing does not work on headless machines (and requires xdg-utils)
 
     if args.run_local:
-        run_local.run_local(args, rose_tree, args.cachedir, args.cwl_runner)
+        run_local.run_local(args, rose_tree, args.cachedir, args.cwl_runner, False)
 
 
 if __name__ == '__main__':
