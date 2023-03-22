@@ -547,15 +547,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 arg_val['source'] = arg_val['source'][1:]  # Remove *
                 if not explicit_edge_defs_copy.get(arg_val['source']):
                     if is_root and not testing:
-                        # TODO: Check this comment.
                         # Even if is_root, we don't want to raise an Exception
                         # here because in test_cwl_embedding_independence, we
                         # recompile all subworkflows as if they were root. That
                         # will cause this code path to be taken but it is not
                         # actually an error. Add a CWL input for testing only.
-                        print(f"Error! No definition found for &{arg_val['source']}!")
-                        print(f"Creating the CWL input {in_name} anyway, but")
-                        print("without any corresponding input value this will fail validation!")
+                        raise Exception(f"Error! No definition found for &{arg_val['source']}!")
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = {'source': in_name}
                     # Add a 'dummy' value to explicit_edge_calls anyway, because
