@@ -1,8 +1,16 @@
 name: Run Examples
 
+# NOTE: For some reason, running the workflows with toil-cwl-runner takes
+# almost exactly twice as much time as cwltool. Since we do not want to triple
+# our CI time on every push, for now let's just run toil-cwl-runner separately
+# every weekday at midnight.
+
 on:
-  push:
-  pull_request:
+  # push:  # Do NOT run toil-cwl-runner on every push!
+  # pull_request: (either on origin or on upsream pull request)
+  schedule:
+  # Instead, run it every weekday at midnight.
+    - cron: '0 0 * * 1-5'
   workflow_dispatch:
 
 env:
@@ -19,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cwl_runner: ["cwltool"]
+        cwl_runner: ["toil-cwl-runner"]
     runs-on: [self-hosted, linux]
 
     steps:
