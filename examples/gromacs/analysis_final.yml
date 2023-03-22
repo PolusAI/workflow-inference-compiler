@@ -36,7 +36,7 @@ wic:
                       fit_selection: resname_MOL
                       center_selection: resname_MOL
                       output_selection: resname_MOL
-                (3, gmx_trjconv_str):
+                (4, gmx_trjconv_str):
                   in:
                     input_crd_path: '*prod_ligand.gro'
     complex:
@@ -57,7 +57,7 @@ wic:
                       fit_selection: (group_Protein)_or_(resname_MOL)
                       center_selection: (group_Protein)_or_(resname_MOL)
                       output_selection: (group_Protein)_or_(resname_MOL)
-                (3, gmx_trjconv_str):
+                (4, gmx_trjconv_str):
                   in:
                     input_crd_path: '*prod_complex.gro'
   graphviz:
