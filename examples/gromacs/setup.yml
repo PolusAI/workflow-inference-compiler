@@ -49,12 +49,23 @@ steps:
         concentration: 0.05 # mol/liter 
       output_top_zip_path: '&genion.zip'
       output_crd_path: '&genion.gro'
+# Temporarily use explicit index file
+# Due to a bug in 3.9.0, input_index_path is required.
+# See https://github.com/bioexcel/biobb_analysis/commit/2c08146ea8d7492ee67ea55720e6e77e7a8ff732
+# and https://github.com/bioexcel/biobb_analysis/commit/596d71c918a515786ed1d8b89f6a6f0357fc98f8
+# The bug has been fixed in master, but there are no newer docker images available.
+# See https://quay.io/repository/biocontainers/biobb_analysis?tab=tags&tag=latest
+- make_ndx:
+    in:
+      input_structure_path: '*genion.gro'
+      output_ndx_path: '&allatomsgenion.ndx'
 - gmx_trjconv_str:
     in:
       #config:
       #  selection: System
-      #input_top_path: '*prod.tpr'
+      input_top_path: '*genion.gro'
       input_crd_path: '*genion.gro'
+      input_index_path: '*allatomsgenion.ndx'
       output_str_path: 'genion.pdb'
 
 wic:
@@ -80,7 +91,7 @@ wic:
       wic:
         graphviz:
           label: 'Neutralize &\nAdd Ions'
-    (5, gmx_trjconv_str):
+    (6, gmx_trjconv_str):
       wic:
         graphviz:
           label: 'Save as PDB File'
