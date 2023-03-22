@@ -2,8 +2,7 @@ import argparse
 import copy
 from pathlib import Path
 import sys
-import traceback
-from typing import Dict, List
+from typing import Dict
 from unittest.mock import patch
 
 from fastapi import Request, FastAPI, status
@@ -70,18 +69,14 @@ async def compile_wf(request: Request) -> Json:
     root_yaml_tree = await request.json()
 
     tools_cwl = plugins.get_tools_cwl(Path('cwl_dirs.txt'))
-    # tools_cwl = main.get_tools_cwl('cwl_dirs.txt', True,
-    #                           False)
-    # This takes ~1 second but it is not really necessary.
     yml_paths = plugins.get_yml_paths(Path('yml_dirs.txt'))
 
-    # # Perform initialization via mutating global variables (This is not ideal)
+    # Perform initialization via mutating global variables (This is not ideal)
     compiler.inference_rules = dict(utils.read_lines_pairs(Path('inference_rules.txt')))
     inference.renaming_conventions = utils.read_lines_pairs(Path('renaming_conventions.txt'))
 
-    # # Generate schemas for validation and vscode IntelliSense code completion
+    # Generate schemas for validation and vscode IntelliSense code completion
     yaml_stems = utils.flatten([list(p) for p in yml_paths.values()])
-    schema_store: Dict[str, Json] = {}
     validator = wic_schema.get_validator(tools_cwl, yaml_stems, write_to_disk=True)
 
     yaml_path = "workflow.json"
@@ -96,29 +91,11 @@ async def compile_wf(request: Request) -> Json:
     yaml_tree = ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
 
     rootgraph = graphviz.Digraph(name=yaml_path)
-    rootgraph.attr(newrank='True')  # See graphviz layout comment above.
-    rootgraph.attr(bgcolor="transparent")  # Useful for making slides
-    font_edge_color = 'white'
-    rootgraph.attr(fontcolor=font_edge_color)
-
-    # This can be used to visually 'inline' all subworkflows (but NOT the CWL).
-    # rootgraph.attr(style='invis')
-    # Note that since invisible objects still affect the graphviz layout (by design),
-    # this can be used to control the layout of the individual nodes, even if
-    # you don't necessarily want subworkflows.
-
-    rootgraph.attr(rankdir='LR')  # When --graph_inline_depth 1, this usually looks better.
     with rootgraph.subgraph(name=f'cluster_{yaml_path}') as subgraph_gv:
-        # get the label (if any) from the workflow
-        step_i_wic_graphviz = yaml_tree.yml.get('wic', {}).get('graphviz', {})
-        label = step_i_wic_graphviz.get('label', yaml_path)
-        subgraph_gv.attr(label=label)
-        subgraph_gv.attr(color='lightblue')  # color of cluster subgraph outline
         subgraph_nx = nx.DiGraph()
         graphdata = GraphData(yaml_path)
         subgraph = GraphReps(subgraph_gv, subgraph_nx, graphdata)
         try:
-            # Uses new version of wic
             compiler_info = compiler.compile_workflow(yaml_tree, get_args(yaml_path), [], [subgraph], {}, {}, {}, {},
                                                       tools_cwl, True, relative_run_path=True, testing=False)
         except Exception as e:
@@ -128,44 +105,29 @@ async def compile_wf(request: Request) -> Json:
             # stage_input_files, we cannot encode file existence in json schema
             # to check the python_script script: tag before compile time.
             print('Failed to compile', yaml_path)
-            print(f'See error_{Path(yaml_path).stem}.txt for detailed technical information.')
-            # Do not display a nasty stack trace to the user; hide it in a file.
-            with open(f'error_{Path(yaml_path).stem}.txt', mode='w', encoding='utf-8') as f:
-                traceback.print_exception(etype=type(e), value=e, tb=None, file=f)
-            sys.exit(1)
+            return {"error": str(e)}
         rose_tree = compiler_info.rose
 
     rose_tree = ast.inline_subworkflow_cwl(rose_tree)
 
     sub_node_data: NodeData = rose_tree.data
     yaml_stem = sub_node_data.name
-    yaml_tree2 = sub_node_data.yml
     cwl_tree = sub_node_data.compiled_cwl
     yaml_inputs = sub_node_data.workflow_inputs_file
 
     steps = cwl_tree['steps']
-
-    # Get the dictionary key (i.e. the name) of each step.
-    steps_keys: List[str] = []
-    for step in steps:
-        step_key = utils.parse_step_name_str(step)[-1]
-        steps_keys.append(step_key)
+    steps_keys = utils.get_steps_keys(steps)
 
     cwl_tree_no_dd = labshare.remove_dot_dollar(cwl_tree)
     yaml_inputs_no_dd = labshare.remove_dot_dollar(yaml_inputs)
-
-    wic2 = yaml_tree2.get('wic', {})
-    wic_steps = wic2.get('steps', {})
 
     # Convert the compiled yaml file to json for labshare Compute.
     # Replace 'run' with plugin:id
     cwl_tree_run = copy.deepcopy(cwl_tree_no_dd)
     for i, step_key in enumerate(steps_keys):
-        sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
-        plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
         stem = Path(step_key).stem
 
-        step_id = StepId(stem, plugin_ns_i)
+        # TODO: get version from ict plugin specs
         run_val = f'plugin:{stem}:{__version__}'
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
@@ -173,7 +135,6 @@ async def compile_wf(request: Request) -> Json:
 
     compute_workflow = {
         "name": yaml_stem,
-        # "version": __version__, # no version for workflows
         "driver": "argo",
         "cwlJobInputs": yaml_inputs_no_dd,
         **cwl_tree_run
