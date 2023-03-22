@@ -55,25 +55,6 @@ STORAGE_TYPES = [".json"]
 
 CACHED_FILES: Dict[str, Dict[str, Any]] = {}
 
-"""
-Documentation tag definitions
-"""
-TAGS = [
-    {
-        "name": "metadata",
-        "description": "Endpoints to get information about data collections and files.",
-    },
-    {
-        "name": "bins",
-        "description": (
-            "Endpoints for binning data, including endpoints for accessing masks."
-        ),
-    },
-    {
-        "name": "selections",
-        "description": "Endpoints for selecting and subsetting data.",
-    },
-]
 
 """
 Reusable Constants

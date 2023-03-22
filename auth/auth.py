@@ -71,7 +71,7 @@ def get_token_auth_header(request: Request) -> str:
     elif len(parts) == 1:
         raise HTTPException(status_code=401, detail="Token not found.")
 
-    token = parts[1]
+    token: str = parts[1]
     return token
 
 
@@ -114,7 +114,6 @@ def authenticate(func: Callable[..., Any]) -> Callable[..., Any]:
     Returns:
         Returns a wrapped API endpoint.
     """
-    import inspect
 
     async def wrapper(*args: Any, **kwargs: Any) -> Awaitable[Any]:
         request: Request = kwargs["request"]
@@ -159,14 +158,6 @@ def authenticate(func: Callable[..., Any]) -> Callable[..., Any]:
                 raise HTTPException(
                     status_code=401, detail="Unable to parse authentication token."
                 ) from exc
-            # if SETTINGS.OFFLINE_USER is None:
-            #     user_data = get_user(request)
-            #     print('user_data......')
-            #     print(user_data)
-            #     if user_data["email"] is not None:
-            #         email = user_data["email"]
-            #         if email is not None:
-            #             request.state.user_id = normalize_text(email)
             await func(*args, **kwargs)
         raise HTTPException(status_code=401, detail="Unable to find appropriate key.")
 
