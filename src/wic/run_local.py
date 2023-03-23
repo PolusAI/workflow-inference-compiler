@@ -91,6 +91,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             # "signal only works in main thread or with __pypy__.thread.enable_signals()"
             proc = sub.run(cmd, check=False)
             retval = proc.returncode
+            return retval  # Skip copying files to outdir/ for CI
         else:
             print('via python API')
             try:
