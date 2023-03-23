@@ -9,8 +9,19 @@ import signal
 import traceback
 from typing import Dict, Optional
 
-import cwltool.load_tool
-import cwltool.main
+try:
+    import cwltool.main
+except ImportError as exc:
+    print('Could not import cwltool.main')
+    # (pwd is imported transitively in cwltool.provenance)
+    print(exc)
+    if exc.msg == "No module named 'pwd'":
+        print('Windows does not have a pwd module')
+        print('If you want to run on windows, you need to install')
+        print('Windows Subsystem for Linux')
+        print('See https://pypi.org/project/cwltool/#ms-windows-users')
+    else:
+        raise exc
 
 from . import utils  # , utils_graphs
 from .wic_types import Yaml, RoseTree
@@ -80,6 +91,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             # "signal only works in main thread or with __pypy__.thread.enable_signals()"
             proc = sub.run(cmd, check=False)
             retval = proc.returncode
+            return retval  # Skip copying files to outdir/ for CI
         else:
             print('via python API')
             try:
