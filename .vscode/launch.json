@@ -2,11 +2,22 @@
 	"version": "0.0.1",
 	"configurations": [
 		{
+			"name": "Python: Current File",
+			"type": "python",
+			"request": "launch",
+			"program": "${file}",
+			"console": "integratedTerminal",
+			"justMyCode": true
+		},
+		{
 			"name": "wic",
 			"type": "python",
 			"request": "launch",
-			"args": ["--yaml", "${file}"],
+			"args": [
+				"--yaml",
+				"${file}"
+			],
 			"module": "wic.main"
-		},
+		}
 	]
 }

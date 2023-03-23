@@ -23,3 +23,4 @@ yml_dirs.txt
 inference_rules.txt
 renaming_conventions.txt
 .hypothesis/
+.env
