@@ -1,4 +1,4 @@
-name: Build And Run Test
+name: Build And Test
 
 on:
   push:
@@ -30,12 +30,12 @@ jobs:
     # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
     # This will prevent DOS attacks from people blasting the CI with rapid fire commits.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ matrix.os }}-${{ github.ref }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest] # , windows-latest, macos-latest
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -45,31 +45,44 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup conda / mamba
-        if: always()
-        uses: conda-incubator/setup-miniconda@v2
+      - name: Setup mamba (linux, macos)
+        if: runner.os != 'Windows'
+        uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest
+          environment-file: conda_devtools.yml
           activate-environment: wic
           use-mamba: true
           channels: conda-forge
           python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
 
-      - name: Install System Dependencies from Conda / Mamba
-        if: always()
-    # The version of cwltool in apt (2.0.20200224214940) does not support CWL version 1.2
-    #      run: sudo apt install cwltool
-    # Use conda to install cwltool (version 3.1.20220224085855)
-        run: ./conda_devtools.sh
+      - name: Setup conda (windows)
+        if: runner.os == 'Windows'
+        uses: conda-incubator/setup-miniconda@v2.2.0
+        with:
+          miniforge-version: latest
+          environment-file: conda_devtools_windows.yml
+          activate-environment: wic
+          channels: conda-forge
+          python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
 
       - name: ShellCheck Script Quality
         if: always()
-        run: shellcheck $(find . -name "*.sh" -not -path "./biobb/*" -and -not -path "./3/*")
+        # "SC1017 (error): Literal carriage return. Run script through tr -d '\r' ."
+        run: shellcheck -e SC1017 $(find . -name "*.sh" -not -path "./biobb/*" -and -not -path "./3/*")
 
-      - name: Install Workflow Inference Compiler
-        if: always()
+      - name: Install Workflow Inference Compiler (linux, macos)
+        if: runner.os != 'Windows'
         run: pip install ".[all]"
+
+      - name: Install Workflow Inference Compiler (windows)
+        if: runner.os == 'Windows'
+        run: pip install ".[test,doc]"
+
+      - name: Install Workflow Inference Compiler runners (windows)
+        if: runner.os == 'Windows'
+        run: pip install ".[runners_src]"
 
       - name: Build Documentation
         if: always()
@@ -92,9 +105,7 @@ jobs:
       - name: PEP8 Code Formatting
         if: always()
         id: autopep8
-        uses: peter-evans/autopep8@v2
-        with:
-          args: --exit-code --recursive --diff --max-line-length 120 examples/ src/ tests/ api.py auth/
+        run: autopep8 --exit-code --recursive --diff --max-line-length 120 examples/ src/ tests/ api.py auth/
       - name: Fail if autopep8 made changes
         if: steps.autopep8.outputs.exit-code == 2
         run: exit 1
@@ -105,11 +116,13 @@ jobs:
         if: always()
         run: pytest -k test_cwl_embedding_independence # --cov --cov-config=.coveragerc_serial
         # NOTE: This test MUST be run in serial! See is_isomorphic_with_timeout()
+        timeout-minutes: 5 # backup timeout for windows
 
       - name: PyTest Inline Subworkflows
         if: always()
         run: pytest -k test_inline_subworkflows # --cov --cov-config=.coveragerc_serial
         # NOTE: This test MUST be run in serial! See is_isomorphic_with_timeout()
+        timeout-minutes: 5 # backup timeout for windows
 
       - name: PyTest Fuzzy Compile Test
         if: always()

@@ -1,0 +1,34 @@
+name: wic
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+# pypy is ~2X faster than the regular python interpreter.
+# We need to install it first so the dependency solver installs it bundled with python 3.9
+# (pypy is not yet compatible with 3.10 and 3.11)
+  - pypy
+  - "python<3.10"
+# NOTE: cwltool needs nodejs for InlineJavascriptRequirement
+  - nodejs
+  - graphviz
+# "Warning: Could not load "/miniconda/bin/../lib/graphviz/libgvplugin_pango.so.6"
+#  - It was found, so perhaps one of its dependents was not.  Try ldd."
+# See https://github.com/conda-forge/graphviz-feedstock/issues/35#issuecomment-786368065
+  - xorg-libxrender
+  - shellcheck
+# wget and zip cause errors in the setup-miniconda github action on windows.
+  - wget
+  - zip
+# NOTE: Although wic doesn't have an explicit dependency on numpy, several
+# issues arise when numpy is installed as a transitive dependency of matplotlib.
+# On linux and macos, using pip to install numpy may cause this error with pytest:
+# "Fatal Python error: Illegal instruction"
+# So on linux and macos, we need to explicitly install numpy using conda.
+# On windows, installing numpy using conda causes massive backtracking when
+# pip is solving dependencies, eventually (~3 hours) generating the exception
+# "pip._vendor.resolvelib.resolvers.ResolutionTooDeep: 2000000"
+# See https://pip.pypa.io/en/stable/topics/dependency-resolution/#backtracking
+# So on windows, we want to let pip install numpy (transitively).
+  - numpy

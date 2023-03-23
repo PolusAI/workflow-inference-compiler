@@ -47,8 +47,11 @@ def validate_cwl(cwl_path_str: str, skip_schemas: bool) -> None:
     """
     # NOTE: This uses NoResolvedFilter to suppress the info messages to stdout.
     loading_context, workflowobj, uri = cwltool.load_tool.fetch_document(cwl_path_str)
+    # NOTE: There has been a breaking change in the API for skip_schemas.
+    # TODO: re-enable skip_schemas while satisfying mypy
+    # loading_context.skip_schemas = skip_schemas
     loading_context, uri = cwltool.load_tool.resolve_and_validate_document(
-        loading_context, workflowobj, uri, preprocess_only=False, skip_schemas=skip_schemas
+        loading_context, workflowobj, uri, preprocess_only=False  # , skip_schemas=skip_schemas
     )
     # NOTE: Although resolve_and_validate_document does some validation,
     # some additional validation is done in make_tool, i.e.
@@ -103,7 +106,7 @@ def get_tools_cwl(cwl_dirs_file: Path, validate_plugins: bool = False, skip_sche
                       'biobb/biobb_adapters/cwl/biobb_vs/vina/autodock_vina.cwl',
                       'biobb/biobb_adapters/cwl/biobb_vs/autodock_vina.cwl']
         for cwl_path_str in cwl_paths_sorted:
-            if any(e in cwl_path_str for e in exceptions):
+            if any(e.replace('/', os.sep) in cwl_path_str for e in exceptions):
                 continue
             # print(cwl_path)
             with open(cwl_path_str, mode='r', encoding='utf-8') as f:
