@@ -25,10 +25,14 @@ dependencies:
 # issues arise when numpy is installed as a transitive dependency of matplotlib.
 # On linux and macos, using pip to install numpy may cause this error with pytest:
 # "Fatal Python error: Illegal instruction"
-# So on linux and macos, we need to explicitly install numpy using conda.
-# On windows, installing numpy using conda causes massive backtracking when
-# pip is solving dependencies, eventually (~3 hours) generating the exception
-# "pip._vendor.resolvelib.resolvers.ResolutionTooDeep: 2000000"
-# See https://pip.pypa.io/en/stable/topics/dependency-resolution/#backtracking
-# So on windows, we want to let pip install numpy (transitively).
+# So we need to explicitly install numpy using conda.
   - numpy
+# The psutil install guide claims that precompiled binary wheels are available,
+# and that it isn't necessary to install compilers. This does not appear to be
+# correct, so install psutil with conda/mamba so we don't have to install compilers.
+  - psutil
+# Similarly, toil[cwl] depends on ruamel.yaml.clib for performance.
+# Install it with conda/mamba here.
+  - ruamel.yaml.clib
+# Simiarly, cryptography needs to build binary wheels
+  - cryptography
