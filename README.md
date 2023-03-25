@@ -14,7 +14,7 @@ cd workflow-inference-compiler
 ./install_conda.sh  # install_conda.bat on Windows
 conda create --name wic
 conda activate wic
-./conda_devtools.sh
+./install_system_deps.sh  # install_system_deps.bat on Windows
 pip install -e ".[all]"
 wic --yaml examples/gromacs/tutorial.yml --run_local --quiet
 ```

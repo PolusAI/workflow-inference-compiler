@@ -23,7 +23,7 @@ WORKDIR /workflow-inference-compiler
 # It still prints that even if we run `conda init bash` first.
 # But this is a Docker image; we don't necessarily need to additionally isolate
 # wic within a conda environment. Let's just install it globally!
-RUN mamba env update --name base --file conda_devtools.yml
+RUN mamba env update --name base --file system_deps.yml
 RUN pip install -e ".[all]"
 
 ADD Dockerfile .

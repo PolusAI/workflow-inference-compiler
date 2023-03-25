@@ -58,7 +58,7 @@ You can install conda and the system dependencies with the following commands:
 ./install_conda.sh  # install_conda.bat on Windows
 conda create --name wic
 conda activate wic
-./conda_devtools.sh
+./install_system_deps.sh  # install_system_deps.bat on Windows
 ```
 
 Note that if you close your terminal, the next time you open your terminal you will need to re-activate the wic environment:
