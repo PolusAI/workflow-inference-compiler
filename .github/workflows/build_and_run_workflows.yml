@@ -38,7 +38,7 @@ jobs:
       with:
         miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest
-        environment-file: conda_devtools.yml
+        environment-file: system_deps.yml
         activate-environment: wic
         use-mamba: true
         channels: conda-forge

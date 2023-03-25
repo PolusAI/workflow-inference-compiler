@@ -51,7 +51,7 @@ jobs:
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest
-          environment-file: conda_devtools.yml
+          environment-file: system_deps.yml
           activate-environment: wic
           use-mamba: true
           channels: conda-forge
@@ -62,7 +62,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-version: latest
-          environment-file: conda_devtools_windows.yml
+          environment-file: system_deps_windows.yml
           activate-environment: wic
           channels: conda-forge
           python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
