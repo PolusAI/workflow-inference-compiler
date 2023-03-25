@@ -52,10 +52,10 @@ If you are experiencing hanging, and if the command `ps aux | grep com.docker | 
 
 [conda](https://en.wikipedia.org/wiki/Conda_(package_manager)) is an open source, cross platform package management system. It can install both Python dependencies and system binary dependencies, so conda is essentially a replacement for `pip`. The associated package distributions named `anaconda` and `miniconda` provide a database of packages that can be used with the `conda` command. (There is also an open source package distribution called [conda-forge](https://conda-forge.org)) Either one works, so if you already have anaconda installed then great. Otherwise, [miniconda](https://docs.conda.io/en/latest/miniconda.html) is all you need.
 
-After conda is installed, enter the following commands:
+You can install conda and the system dependencies with the following commands:
 
 ```
-./install_conda.sh
+./install_conda.sh  # install_conda.bat on Windows
 conda create --name wic
 conda activate wic
 ./conda_devtools.sh

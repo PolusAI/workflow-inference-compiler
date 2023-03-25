@@ -11,7 +11,7 @@ See the [installation guide](docs/installguide.md) for more details, but:
 ```
 git clone --recursive https://github.com/PolusAI/workflow-inference-compiler.git
 cd workflow-inference-compiler
-./install_conda.sh
+./install_conda.sh  # install_conda.bat on Windows
 conda create --name wic
 conda activate wic
 ./conda_devtools.sh
