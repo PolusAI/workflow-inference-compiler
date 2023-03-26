@@ -75,6 +75,11 @@ To install into the wic environment, simply use the following command:
 pip install -e ".[all]"
 ```
 
+Developers should also install the git pre-commit hooks:
+```
+pre-commit install
+```
+
 You should now have the `wic` executable available in your terminal.
 
 ## Jupyter notebook visualization
