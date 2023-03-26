@@ -27,7 +27,7 @@ large_workflows = ['dsb', 'dsb1', 'elm', 'vs_demo_2', 'vs_demo_3', 'vs_demo_4']
 yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in large_workflows]
 
 # NOTE: Most of the workflows in this list have free variables because they are subworkflows
-# i.e. if you try to run them, you wil get "Missing required input parameter"
+# i.e. if you try to run them, you will get "Missing required input parameter"
 run_blacklist: List[str] = [
     'assign_partial_charges_batch',
     'convert_ligand_mol2_to_pdbqt_mdanalysis',

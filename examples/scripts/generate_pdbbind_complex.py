@@ -99,9 +99,9 @@ def load_data(index_file_name: str, base_dir: str, query: str, output_txt_path: 
 
     Args:
         index_file_name (str): The PDBbind index file name
-        base_dir (str): The base directry of the dataset
+        base_dir (str): The base directory of the dataset
         query (str): The Query to perform
-        output_txt_path (str): The ouput text file
+        output_txt_path (str): The output text file
         min_row (int, optional): min index of rows. Defaults to 1.
         max_row (int, optional): max index of rows. Defaults to -1.
         convert_Kd_dG (bool, optional): If this set to True, The dG will be calculated. Defaults to False.

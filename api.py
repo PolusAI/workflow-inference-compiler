@@ -57,7 +57,7 @@ async def root() -> Dict[str, str]:
 @app.post("/compile")
 @authenticate
 async def compile_wf(request: Request) -> Json:
-    """The compile route compiles the json object fom workflow builder ui which contains steps built in the ui.
+    """The compile route compiles the json object from workflow builder ui which contains steps built in the ui.
 
     Args:
         request (Request): request object from workflow builder ui
