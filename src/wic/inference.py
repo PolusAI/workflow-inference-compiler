@@ -190,7 +190,7 @@ def perform_edge_inference(args: argparse.Namespace,
                         # in format B, then convert the results back to format A. However, if the
                         # naming conventions of the result do not match the second conversion
                         # (but DO match the first conversion), the files will be directly converted
-                        # fom A to B to A, thus skipping the calculation in B entirely!
+                        # from A to B to A, thus skipping the calculation in B entirely!
                         # Great! We found a unique match.
                         out_key = name_matches[0][0]
                         # print('unique match', out_key)

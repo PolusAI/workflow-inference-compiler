@@ -10,7 +10,7 @@ TYPES_SCRIPT = '/workflow_types.py'
 
 TYPES_SCRIPT_REL = 'examples/scripts/workflow_types.py'
 
-# NOTE: VERY IMPORTANT: Since we have to programmaticaly import the python file in the compiler,
+# NOTE: VERY IMPORTANT: Since we have to programmatically import the python file in the compiler,
 # and since the act of importing it executes the entire file (i.e. including import statements),
 
 # USERS SHOULD NOT USE TOP-LEVEL IMPORT STATEMENTS!

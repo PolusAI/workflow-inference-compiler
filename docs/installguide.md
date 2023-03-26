@@ -118,7 +118,7 @@ which tests the compiler only (not the runtime) and only takes about a minute.
 
 ### known issues
 
-At runtime, the following warning mesage may be printed to the console repeatedly:
+At runtime, the following warning message may be printed to the console repeatedly:
 
 ```
 WARNING: No ICDs were found. Either,
