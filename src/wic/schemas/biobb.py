@@ -79,7 +79,7 @@ def biobb_selection_schema() -> Json:
     # extension. Specifically, IntelliSense code completion will not work when
     # there is not enough information for at least one exact match. For example,
     # if you type "MainChai" and press ctrl-space, nothing happens. But once you
-    # type "MainChain", IntelliSense correctly suggests "MainChain", "MainChain+Cb",
+    # #type "MainChain", IntelliSense correctly suggests "MainChain", "MainChain+Cb",
     # and "MainChain+H".
 
     schema = default_schema()

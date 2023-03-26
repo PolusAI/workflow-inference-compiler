@@ -1,7 +1,7 @@
 from workflow_types import *
 
 
-def main(input_tpr_path, input_trr_path, output_png_path):
+def main(input_tpr_path, input_trr_path, output_png_path):  # type: ignore[no-untyped-def]
     import MDAnalysis as mda
     import nmrformd
     from matplotlib import pyplot as plt

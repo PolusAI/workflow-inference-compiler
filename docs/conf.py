@@ -1,3 +1,4 @@
+from typing import Dict
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
@@ -29,8 +30,8 @@ author = 'Jake Fennick'
 # ones.
 extensions = [
     'myst_parser',
-    'sphinx.ext.napoleon', # Support google (and numpy) docstring styles
-    "sphinx_autodoc_typehints", # Load AFTER napoleon
+    'sphinx.ext.napoleon',  # Support google (and numpy) docstring styles
+    "sphinx_autodoc_typehints",  # Load AFTER napoleon
     # See https://github.com/agronholm/sphinx-autodoc-typehints/issues/15
     # NOTE: sphinx_autodoc_typehints automatically strips type annotations
     # from the function signature and inserts them into the docstring.
@@ -70,11 +71,10 @@ autodoc_default_options = {
 # can be added to autodoc_type_aliases instead of showing their expansions.
 # However, I can't seem to get it to work.
 # TODO: Consider removing all type aliases in favor of classes.
-from typing import Dict
 autodoc_type_aliases: Dict[str, str] = {
 }
 napoleon_use_param = True
-napoleon_type_aliases: Dict[str, str]  = {
+napoleon_type_aliases: Dict[str, str] = {
 }
 
 # Add any paths that contain templates here, relative to this directory.

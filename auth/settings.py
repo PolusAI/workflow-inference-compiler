@@ -4,17 +4,12 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseSettings
 
-"""
-Setup logger
-"""
+# Setup logger
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("plots.settings")
 
-"""
-Load environment variables
-"""
 
-
+# Load environment variables
 class Settings(BaseSettings):
     """Settings for the API.
     This defines the required inputs for the environment file.
@@ -29,7 +24,7 @@ class Settings(BaseSettings):
     JWKS_ENDPOINT: Optional[str] = None
     OFFLINE_USER: Optional[str] = None
 
-    class Config:  # NOQA:D106
+    class Config:  # NOQA: D106
 
         env_file = ".env"
 
@@ -46,7 +41,7 @@ if not (isinstance(SETTINGS.SELECTION_PATH, Path) and SETTINGS.SELECTION_PATH.ex
         + "Make sure to create a .env file and specify a folder for serving data."
     )
 
-""" Define static types """
+# Define static types
 CLASS_TYPES = ["string"]
 
 SUPPORTED_FORMATS = [".feather", ".arrow", ".csv", ".parquet", ".hdf5"]
@@ -56,7 +51,5 @@ STORAGE_TYPES = [".json"]
 CACHED_FILES: Dict[str, Dict[str, Any]] = {}
 
 
-"""
-Reusable Constants
-"""
+# Reusable Constants
 DEFAULT_USER: str = "default_user"

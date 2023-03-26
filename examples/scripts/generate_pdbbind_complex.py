@@ -1,5 +1,4 @@
 # pylint: disable=import-outside-toplevel,no-member
-# type: ignore
 from collections import defaultdict
 import distutils.util
 import math
@@ -88,7 +87,7 @@ def read_index_file(index_file_path: str) -> pd.DataFrame:
             standard_type = re.split(r"=[-+]?(?:\d*\.\d+|\d+)", words[4])[0]
             kd = float(re.findall(r"[-+]?(?:\d*\.\d+|\d+)", words[4])[0])
             data['Kd_Ki'].append(standard_type)
-            data['value'].append(kd * unit_conv[unit])
+            data['value'].append(str(kd * unit_conv[unit]))
             data['ligand_name'].append(re.findall(r'\((.*?)\)', words[7])[0])
 
     return pd.DataFrame.from_dict(data)
@@ -124,7 +123,6 @@ def load_data(index_file_name: str, base_dir: str, query: str, output_txt_path: 
     # Calculate dG
     df = df[['PDB_code', 'value', 'Kd_Ki']]
     binding_data: List[str] = []
-    convert_Kd_dG = distutils.util.strtobool(convert_Kd_dG)
     microMolar = 0.000001  # uM
     for _, row in enumerate(df.values):
 
