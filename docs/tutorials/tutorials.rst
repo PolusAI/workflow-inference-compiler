@@ -8,3 +8,4 @@ Tutorials
    helloworld.md
    multistep.md
    subworkflows.md
+   naming_conventions.md
