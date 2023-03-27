@@ -168,10 +168,13 @@ def biobb_editconf_schema() -> Json:
     octahedron (truncated octahedron)."""
     box_type = {'type': 'string', 'enum': box_vals, 'description': desc}
     center_molecule = {'type': 'boolean', 'description': '(True) Center molecule in the box.'}
+    box_vector_lengths = {'type': 'array', 'items': {'type': 'number'},
+                          'description': '(None) Array of floats defining the box vector lengths ie "0.5 0.5 0.5".'
+                          'If this option is used the distance_to_molecule property will be ignored.'}
 
     schema = default_schema()
     schema['properties'] = {'distance_to_molecule': distance_to_molecule,
-                            'box_type': box_type, 'center_molecule': center_molecule,
+                            'box_type': box_type, 'center_molecule': center_molecule, 'box_vector_lengths': box_vector_lengths,
                             **biobb_container_schema()}
     return schema
 
