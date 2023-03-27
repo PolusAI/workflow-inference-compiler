@@ -8,5 +8,5 @@ if [ "$(which mamba)" ]; then
 fi
 
 #$CONDA clean --all --yes
-$CONDA install --file conda_devtools.yml
+$CONDA env update --file system_deps.yml
 #pip cache purge

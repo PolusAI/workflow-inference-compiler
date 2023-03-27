@@ -12,7 +12,10 @@ ENV PATH /mambaforge-pypy3/bin:$PATH
 
 # Install wic
 RUN apt-get install -y git
-RUN git clone --recursive https://github.com/PolusAI/workflow-inference-compiler.git
+
+COPY . /workflow-inference-compiler
+WORKDIR /workflow-inference-compiler
+
 #RUN conda create --name wic
 #RUN conda activate wic
 # The above command prints
@@ -20,7 +23,7 @@ RUN git clone --recursive https://github.com/PolusAI/workflow-inference-compiler
 # It still prints that even if we run `conda init bash` first.
 # But this is a Docker image; we don't necessarily need to additionally isolate
 # wic within a conda environment. Let's just install it globally!
-RUN cd workflow-inference-compiler && ./conda_devtools.sh
-RUN cd workflow-inference-compiler && pip install -e ".[all]"
+RUN mamba env update --name base --file system_deps.yml
+RUN pip install -e ".[all]"
 
 ADD Dockerfile .
