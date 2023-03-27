@@ -2,6 +2,7 @@ FROM ubuntu:22.04
 
 # Install miniconda
 RUN apt-get update && apt-get install -y wget
+
 RUN CONDA="Mambaforge-pypy3-Linux-x86_64.sh" && \
     wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \
     chmod +x $CONDA && \
@@ -22,8 +23,10 @@ WORKDIR /workflow-inference-compiler
 # It still prints that even if we run `conda init bash` first.
 # But this is a Docker image; we don't necessarily need to additionally isolate
 # wic within a conda environment. Let's just install it globally!
-RUN ./conda_devtools.sh
+RUN mamba env update --name base --file system_deps.yml
 RUN pip install -e ".[restapi]"
+
+ADD Dockerfile.api .
 
 EXPOSE 3000
 
