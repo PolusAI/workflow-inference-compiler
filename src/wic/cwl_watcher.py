@@ -19,9 +19,9 @@ from .plugins import get_tools_cwl, get_yml_paths
 from .schemas import wic_schema
 from .wic_types import GraphData, GraphReps, Json, StepId, Tools, YamlTree
 
-"""from watchdog.observers import Observer
-from watchdog.observers.polling import PollingObserver
-from watchdog.events import FileSystemEvent, PatternMatchingEventHandler"""
+# from watchdog.observers import Observer
+# from watchdog.observers.polling import PollingObserver
+# from watchdog.events import FileSystemEvent, PatternMatchingEventHandler
 
 
 def absolute_paths(config: Json, cachedir_path: Path) -> Json:
@@ -164,27 +164,27 @@ def rerun_cwltool(_directory_realtime: Path, cachedir_path: Path, cwl_tool: str,
 # our own basic file watcher using glob.
 
 
-"""class SubprocessHandler(PatternMatchingEventHandler):
+# class SubprocessHandler(PatternMatchingEventHandler):
 
-    def __init__(self, cmd: List[str], cachedir_path: str, cwl_tool: str, args_vals: Json, tools_cwl: Tools, **kwargs: Any) -> None:
-        self.cmd = cmd
-        self.lock = False
-        self.cachedir_path = cachedir_path
-        self.cwl_tool = cwl_tool
-        self.args_vals = args_vals
-        self.tools_cwl = tools_cwl
-        super().__init__(**kwargs)
+#     def __init__(self, cmd: List[str], cachedir_path: str, cwl_tool: str, args_vals: Json, tools_cwl: Tools, **kwargs: Any) -> None:
+#         self.cmd = cmd
+#         self.lock = False
+#         self.cachedir_path = cachedir_path
+#         self.cwl_tool = cwl_tool
+#         self.args_vals = args_vals
+#         self.tools_cwl = tools_cwl
+#         super().__init__(**kwargs)
 
-    def on_any_event(self, event: FileSystemEvent) -> None:
-        # Use a lock to prevent us from DOS'ing ourselves
-        global lock
-        if event.event_type == 'modified' and not lock:
-            directory = Path(event._src_path).parent
-            print('directory', directory)
-            #self.lock = True
-            print(event)
-            rerun_cwltool(directory, self.cachedir_path, self.cwl_tool, self.args_vals, self.tools_cwl)
-            #self.lock = False"""
+#     def on_any_event(self, event: FileSystemEvent) -> None:
+#         # Use a lock to prevent us from DOS'ing ourselves
+#         global lock
+#         if event.event_type == 'modified' and not lock:
+#             directory = Path(event._src_path).parent
+#             print('directory', directory)
+#             # self.lock = True
+#             print(event)
+#             rerun_cwltool(directory, self.cachedir_path, self.cwl_tool, self.args_vals, self.tools_cwl)
+#             # self.lock = False
 
 
 def file_watcher_glob(cachedir_path: Path, pattern: str, prev_files: Dict[str, float]) -> Dict[str, float]:

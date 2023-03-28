@@ -75,6 +75,11 @@ To install into the wic environment, simply use the following command:
 pip install -e ".[all]"
 ```
 
+Developers should also install the git pre-commit hooks:
+```
+pre-commit install
+```
+
 You should now have the `wic` executable available in your terminal.
 
 ## Jupyter notebook visualization
@@ -113,7 +118,7 @@ which tests the compiler only (not the runtime) and only takes about a minute.
 
 ### known issues
 
-At runtime, the following warning mesage may be printed to the console repeatedly:
+At runtime, the following warning message may be printed to the console repeatedly:
 
 ```
 WARNING: No ICDs were found. Either,

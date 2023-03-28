@@ -41,27 +41,25 @@ for line in lines:
 
 # After the initial headers, an autodock vina log file consists of
 # 1 or more blocks of the following form:
-"""
-Performing docking (random seed: -193947260) ... 
-0%   10   20   30   40   50   60   70   80   90   100%
-|----|----|----|----|----|----|----|----|----|----|
-***************************************************
+# Performing docking (random seed: -193947260) ...
+# 0%   10   20   30   40   50   60   70   80   90   100%
+# |----|----|----|----|----|----|----|----|----|----|
+# ***************************************************
 
-mode |   affinity | dist from best mode
-     | (kcal/mol) | rmsd l.b.| rmsd u.b.
------+------------+----------+----------
-   1       -5.773          0          0
-   2       -5.577      4.821      7.207
-   3        -5.46      4.053      6.446
-   4        -5.44      1.344      3.349
-   5       -5.431      3.576       5.58
-   6       -5.412      3.012      5.868
-   7       -5.405      1.914      4.145
-   8       -5.403      3.209      6.271
-   9       -5.392      2.556      4.714
-"""
+# mode |   affinity | dist from best mode
+#      | (kcal/mol) | rmsd l.b.| rmsd u.b.
+# -----+------------+----------+----------
+#    1       -5.773          0          0
+#    2       -5.577      4.821      7.207
+#    3        -5.46      4.053      6.446
+#    4        -5.44      1.344      3.349
+#    5       -5.431      3.576       5.58
+#    6       -5.412      3.012      5.868
+#    7       -5.405      1.914      4.145
+#    8       -5.403      3.209      6.271
+#    9       -5.392      2.556      4.714
 # If rescoring, the relevant line from each log file is of the form:
-"""Estimated Free Energy of Binding   : -8.659 (kcal/mol) [=(1)+(2)+(3)-(4)]"""
+# Estimated Free Energy of Binding   : -8.659 (kcal/mol) [=(1)+(2)+(3)-(4)]
 
 scores: List[float] = []
 scores_all: List[List[float]] = []

@@ -76,7 +76,7 @@ def compile_workflow(yaml_tree_ast: YamlTree,
     # add in a separate data structure, return them from compile_workflow_once,
     # and only once we have reached the fixed point then add them here. Due to
     # labeling and styling and other graphviz metadata that is not trivial, so
-    # instead we simply deepcopy and overwite the bodies here.
+    # instead we simply deepcopy and overwrite the bodies here.
     # (NOTE: We now have a separate GraphData structure, so the graphviz and
     # networkx representations can probably be removed from the recursion.)
     # (Also note that you have to do this element-wise; you cannot simply write
@@ -270,7 +270,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             ast_modified = not sub_yaml_tree.yml == sub_node_data.yml
             if ast_modified:
                 # Propagate the updated yaml_tree (and wic: tags) upwards.
-                # Since we already called ast.merge_yml_trees() before initally
+                # Since we already called ast.merge_yml_trees() before initially
                 # compiling, the only way the child wic: tags can differ from
                 # the parent is if there were modifications during compilation.
                 # In other words, it should be safe to simply replace the
@@ -465,7 +465,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # Use triple underscore for namespacing so we can split later
             in_name = f'{step_name_i}___{arg_key}'  # {step_name_i}_input___{arg_key}
 
-            # Add auxillary inputs for scatter steps
+            # Add auxiliary inputs for scatter steps
             if str(arg_key).startswith('__') and str(arg_key).endswith('__'):
                 in_dict = {'type': arg_val['type']}
                 inputs_workflow.update({in_name: in_dict})

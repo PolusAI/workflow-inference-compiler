@@ -1,5 +1,4 @@
 # pylint: disable=import-outside-toplevel,no-member
-# type: ignore
 import distutils.util
 import math
 from typing import List
@@ -7,7 +6,15 @@ from typing import List
 from workflow_types import *
 
 
-def calculate_dG(Kd):
+def calculate_dG(Kd: float) -> float:
+    """ Calculates binding free energy from Kd
+
+    Args:
+        Kd (float): The binding affinity of the protein-ligand complex
+
+    Returns:
+        float: The binding free energy
+    """
     # Calculate the binding free energy from Kd so we can make the correlation plots.
     # See https://en.wikipedia.org/wiki/Binding_constant
     ideal_gas_constant = 8.31446261815324  # J/(Mol*K)
@@ -26,7 +33,7 @@ def calculate_dG(Kd):
     return dG
 
 
-def main(input_excel_path, query, min_row, max_row, smiles_column,
+def main(input_excel_path, query, min_row, max_row, smiles_column,  # type: ignore[no-untyped-def]
          binding_data_column, convert_Kd_dG, output_txt_path):
     import pandas
     import rdkit
@@ -119,8 +126,8 @@ def main(input_excel_path, query, min_row, max_row, smiles_column,
 
 inputs = {'input_excel_path': xlsxfile,
           'query': string,
-          'min_row': {**integer, 'default': 1},
-          'max_row': {**integer, 'default': -1},
+          'min_row': {'type': 'int', 'format': 'edam:format_2330', 'default': 1},
+          'max_row': {'type': 'int', 'format': 'edam:format_2330', 'default': -1},
           'smiles_column': string,
           'binding_data_column': string,
           'convert_Kd_dG': string,

@@ -10,7 +10,7 @@ TYPES_SCRIPT = '/workflow_types.py'
 
 TYPES_SCRIPT_REL = 'examples/scripts/workflow_types.py'
 
-# NOTE: VERY IMPORTANT: Since we have to programmaticaly import the python file in the compiler,
+# NOTE: VERY IMPORTANT: Since we have to programmatically import the python file in the compiler,
 # and since the act of importing it executes the entire file (i.e. including import statements),
 
 # USERS SHOULD NOT USE TOP-LEVEL IMPORT STATEMENTS!
@@ -52,7 +52,10 @@ def import_python_file(python_module_name: str, python_file_path: Path) -> Modul
         sys.modules[python_module_name] = module_
 
         try:
-            spec.loader.exec_module(module_)  # type: ignore
+            if spec.loader:
+                spec.loader.exec_module(module_)  # guard behind if to satisfy mypy
+            else:
+                raise Exception
         except Exception as e:
             raise Exception(f'Error! Cannot load python_script {python_file_path}') from e
         # Note that now (after calling exec_module) we can call import_module without error

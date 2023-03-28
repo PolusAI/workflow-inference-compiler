@@ -16,7 +16,7 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
         yaml_tree (Yaml): A tuple of name and yml AST
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         steps_keys (List[str]): The name of each step in the current CWL workflow
-        wic_steps (Yaml): The metadata assocated with the workflow steps
+        wic_steps (Yaml): The metadata associated with the workflow steps
         subkeys (List[str]): The keys associated with subworkflows
     """
     bools = []

@@ -29,7 +29,7 @@ steps:
 
 - assign_partial_charges.yml:
     scatter: [input_path]
-# NOTE: cwltool uses the CLI args to determine cacheing. In batch mode, the
+# NOTE: cwltool uses the CLI args to determine caching. In batch mode, the
 # ligands are passed (as CLI args) to vina all at once. Thus, if you want to
 # incrementally increase the number of ligands, the previous results will NOT be cached!
 
