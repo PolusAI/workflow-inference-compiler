@@ -49,4 +49,4 @@ We use pylint to check the code for style, formatting, and common mistakes. See 
 
 ### Line Lengths
 
-We are currently using `max-line-length=120`, although there are still some cases where lines exceed that length. Some developers feel strongly about a hard maximum of 100 or even 80 characters; we can try to accomodate a lower limit as necessary.
+We are currently using `max-line-length=120`, although there are still some cases where lines exceed that length. Some developers feel strongly about a hard maximum of 100 or even 80 characters; we can try to accommodate a lower limit as necessary.

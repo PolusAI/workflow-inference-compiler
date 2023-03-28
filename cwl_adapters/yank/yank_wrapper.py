@@ -17,15 +17,15 @@ def check_options(options: Dict[str, Any], args: argparse.Namespace) -> None:
         args (argparse.Namespace): The command line arguments.
     """
     if 'verbose' not in options:
-        options['verbose'] = True #'yes'
+        options['verbose'] = True  # 'yes'
     if 'resume_setup' not in options:
-        options['resume_setup'] = True #'yes'
+        options['resume_setup'] = True  # 'yes'
     if 'resume_simulation' not in options:
-        options['resume_simulation'] = True #'yes'
+        options['resume_simulation'] = True  # 'yes'
 
     if options.get('start_from_trailblaze_samples', '') == 'yes':
         print('Warning: start_from_trailblaze_samples should always be set to no; setting to no')
-    options['start_from_trailblaze_samples'] = False #'no' # yes generates NaNs!
+    options['start_from_trailblaze_samples'] = False  # 'no' # yes generates NaNs!
 
     if 'checkpoint_interval' in options and 'switch_phase_interval' in options:
         if options['switch_phase_interval'] < 0 or options['checkpoint_interval'] < 0:
@@ -54,6 +54,7 @@ def check_options(options: Dict[str, Any], args: argparse.Namespace) -> None:
         options['default_number_of_iterations'] = options['checkpoint_interval']
     if args.phase in ['setup_only', 'trailblaze', 'equilibration']:
         options['default_number_of_iterations'] = 0
+
 
 def make_molecules_tag(args: argparse.Namespace) -> Dict[str, Any]:
     """Returns the basic tags which describe the molecules in a system.
@@ -105,7 +106,7 @@ def make_systems_tag_group2(complex_top_filename: str, ligand_top_filename: str,
         'phase1_path': [complex_top_filename, args.input_complex_crd_path],
         'phase2_path': [ligand_top_filename, args.input_ligand_crd_path],
         'ligand_dsl': 'resname MOL',
-        #'solvent_dsl': 'resname WAT',  # optional
+        # ' solvent_dsl': 'resname WAT',  # optional
         'solvent': 'spce_50mM_acetate_55',
         'gromacs_include_dir': gromacs_include_dir,
     }}}
@@ -130,11 +131,11 @@ def make_experiment_tag(system_name: str = 'system_name') -> Dict[str, Any]:
             'temperature': '302.15*kelvin'},
         'protocol': 'binding-auto',
     }
-        # Cannot use restraints on 32 bit systems :(
-        #restraint:
-        #  #type: FlatBottom
-        #  restrained_ligand_atoms: (resname MOL) and (mass > 1.5)
-        #  restrained_receptor_atoms: f'({residue_indices_str}) and (mass > 1.5)'
+    # Cannot use restraints on 32 bit systems :(
+    # restraint:
+    #   #type: FlatBottom
+    #   restrained_ligand_atoms: (resname MOL) and (mass > 1.5)
+    #   restrained_receptor_atoms: f'({residue_indices_str}) and (mass > 1.5)'
     return exp
 
 
@@ -151,9 +152,9 @@ def unzip_topology_files(zip_path: str) -> str:
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
         filenames = zip_file.namelist()
         # This extracts to a temporary directory which is not writable when using Docker.
-        #zip_file.extractall(Path(outdir).parent)
+        # zip_file.extractall(Path(outdir).parent)
     # Instead, use unzip which extracts in-place (in the same directory)
-    cmd = ['unzip', '-n', zip_path] # Use -n to avoid overwriting files.
+    cmd = ['unzip', '-n', zip_path]  # Use -n to avoid overwriting files.
     sub.run(cmd, check=True)
     top_filenames = [fn for fn in filenames if Path(fn).suffix == '.top']
     if len(top_filenames) != 1:
@@ -216,15 +217,15 @@ def main() -> None:
 
     if group1:
         systems_tag = make_systems_tag_group1()
-    else: # group2
+    else:  # group2
         systems_tag = make_systems_tag_group2(complex_top_filename, ligand_top_filename, args)
 
-    #yaml_dict['systems'] = {**yaml_dict['systems'], **systems_tag['systems']} # merge?
-    yaml_dict['systems'] = systems_tag['systems'] # overwrite
+    # yaml_dict['systems'] = {**yaml_dict['systems'], **systems_tag['systems']} # merge?
+    yaml_dict['systems'] = systems_tag['systems']  # overwrite
 
     yaml_dict['experiment_name'] = make_experiment_tag()
-    #yaml_dict['experiments'] = yaml_dict.get('experiments', []).append('experiment_name') # append?
-    yaml_dict['experiments'] = ['experiment_name'] # overwrite
+    # yaml_dict['experiments'] = yaml_dict.get('experiments', []).append('experiment_name')  # append?
+    yaml_dict['experiments'] = ['experiment_name']  # overwrite
 
     options: Dict[str, Any] = yaml_dict['options']
     check_options(options, args)
@@ -234,7 +235,7 @@ def main() -> None:
         f.write(yaml.dump(yaml_dict))
 
     # Run yank
-    subcommand = ['script', '-y', yaml_filename] # trailblaze, equilibration, production
+    subcommand = ['script', '-y', yaml_filename]  # trailblaze, equilibration, production
     if args.phase == 'setup_only':
         subcommand = ['script', '--setup-only', '-y', yaml_filename]
     if args.phase == 'analyze':

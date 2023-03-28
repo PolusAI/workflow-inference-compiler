@@ -1,4 +1,8 @@
-def main(selection_string, input_pdb_path, output_pdb_path):
+from workflow_types import *
+# NOTE: No other top-level imports supported
+
+
+def main(selection_string, input_pdb_path, output_pdb_path):   # type: ignore[no-untyped-def]
     import mdtraj
     traj = mdtraj.load(input_pdb_path)
     print(traj)
@@ -7,9 +11,6 @@ def main(selection_string, input_pdb_path, output_pdb_path):
     traj.restrict_atoms(selection_indices)
     traj.save(output_pdb_path)
 
-
-from workflow_types import *
-# NOTE: No other top-level imports supported
 
 inputs = {'selection_string': string,
           'input_pdb_path': pdbfile,

@@ -107,7 +107,7 @@ def cwl_type_to_jsonschema_type(type_obj: Json) -> Json:
             return 'boolean'
         if type_obj == 'str':
             return 'string'
-        # CWL suports an Any type; map this to the empty wildcard {} schema
+        # CWL supports an Any type; map this to the empty wildcard {} schema
         if type_obj == 'Any':
             return {}
         # json does not have any File or Directory types
@@ -564,7 +564,7 @@ def get_validator(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[str
     # i.e. This should match 'https://json-schema.org/draft/2020-12/schema'
     # NOTE: If you get nasty errors while developing the schema such as:
     # "jsonschema.exceptions.SchemaError: ... is not valid under any of the given schemas"
-    # try temporarily commmenting this line out to generate the schema anyway.
+    # try temporarily commenting this line out to generate the schema anyway.
     # Then, in any yml file, the very first line should show a "schema stack trace"
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, resolver=resolver)
