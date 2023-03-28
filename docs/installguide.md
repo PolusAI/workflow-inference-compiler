@@ -90,7 +90,7 @@ The visualization currently needs to be in its own conda environment.
 ./install_conda.sh
 conda create --name vis
 conda activate vis
-./nglview_install.sh
+./install_nglview.sh
 pip install -e ".[all]"
 ```
 
