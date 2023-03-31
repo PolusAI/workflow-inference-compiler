@@ -23,13 +23,8 @@ $CONDA install -y pip
 
 pip install jupyterlab ipytree
 
-# See https://github.com/nglviewer/nglview/pull/1045
-# Since nglview appears to be abandoned, I cherry-picked these two commits so
-# we don't have to depend on an external github user for ipywidgets 8 support.
+# Now that https://github.com/nglviewer/nglview/pull/1045 is merged
+# (but not yet released), we can install nglview via the upstream repo.
 pip install "git+https://github.com/jfennick/nglview.git" ipywidgets
-
-# Alternatively, we can pin to the previous version, but this will generate
-# dependency conflicts over time.
-# pip install nglview ipywidgets==7.7.1
 
 jupyter-nbextension enable nglview --py --sys-prefix
