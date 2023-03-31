@@ -30,6 +30,8 @@ parser.add_argument('--ignore_docker_install', default=False, action="store_true
                     help='Do not check whether docker is installed before running workflows.')
 parser.add_argument('--ignore_docker_processes', default=False, action="store_true",
                     help='Do not check whether there are too many running docker processes before running workflows.')
+parser.add_argument('--user_space_docker_cmd', default='docker',
+                    help='Specify which command to use to run OCI containers.')
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--run_local', default=False, action="store_true",
