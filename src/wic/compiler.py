@@ -393,7 +393,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # print(list(in_tool.keys()))
         if tool_i.cwl['class'] == 'CommandLineTool':
             args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or
-                                                            (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?'))]
+                                                            (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?') or
+                                                            (isinstance(in_tool[arg]['type'], List) and 'null' in in_tool[arg]['type']))]
         elif tool_i.cwl['class'] == 'Workflow':
             args_required = list(in_tool)
 

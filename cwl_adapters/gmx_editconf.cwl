@@ -71,11 +71,20 @@ inputs:
     inputBinding:
       position: 5
       prefix: -box
+      
+  box_vector_angles:
+    type:
+      - "null"
+      - type: array
+        items: float
+    inputBinding:
+      position: 6
+      prefix: -angles  
 
   align_principal_axes:
     type: int? # Group number to align (0 == system)
     inputBinding:
-      position: 6
+      position: 7
       prefix: -princ
 
 outputs:
