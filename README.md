@@ -59,7 +59,7 @@ You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipyn
 ./install_conda.sh
 conda create --name vis
 conda activate vis
-./nglview_install.sh
+./install_nglview.sh
 pip install -e ".[all]"
 ```
 
