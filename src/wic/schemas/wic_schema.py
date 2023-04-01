@@ -212,6 +212,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     outputs_props: Json = {}
     for key, val in cwl['outputs'].items():
         metadata = {'title': val.get('label', ''), 'description': val.get('doc', '')}
+        str_nonempty = {'type': 'string', 'minLength': 1, **metadata}
 
         # Add type information, with exceptions
         cwltype = utils_cwl.canonicalize_type(val.get('type', ''))
