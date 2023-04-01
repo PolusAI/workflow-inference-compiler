@@ -175,6 +175,8 @@ Using the default value of true, IntelliSense will additionally suggest any text
 
 ### vscode extensions
 
+When you open the project folder, VSCode should prompt you to install the following list of recommended extensions.
+
 These vscode extensions are strongly recommended for users:
 
 * YAML (Red Hat)
