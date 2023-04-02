@@ -1,6 +1,6 @@
 
 #!/usr/bin/env cwl-runner
-cwlVersion: v1.1
+cwlVersion: v1.0
 
 # NOTE: This file is nearly identical to autodock_vina_batch with the primary difference that
 # --input_batch_pdbqt_path is replaced with --input_ligand_pdbqt_path.
