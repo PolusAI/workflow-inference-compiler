@@ -1,6 +1,6 @@
 
 #!/usr/bin/env cwl-runner
-cwlVersion: v1.1
+cwlVersion: v1.1  # See `loadContents: true` below!
 
 class: CommandLineTool
 
@@ -102,7 +102,9 @@ inputs:
 #    inputBinding:
 #      position: 3
 #      prefix: --input_box_path
-    loadContents: true
+    loadContents: true  # requires cwlVersion: v1.1
+    # See https://www.commonwl.org/v1.1/CommandLineTool.html#Changelog
+    # Curiously, cwlVersion: v1.0 allows loadContents for outputs, but not inputs.
 
 
 # NOTE: This is only used so we can create explicit edges.
