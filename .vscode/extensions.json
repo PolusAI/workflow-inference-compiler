@@ -1,0 +1,14 @@
+{
+    "recommendations": [
+		"redhat.vscode-yaml",
+		"ms-python.python",
+		"matangover.mypy",
+		"ms-vscode-remote.vscode-remote-extensionpack",
+		"ms-azuretools.vscode-docker",
+		"sbg-rabix.benten-cwl",
+		"donjayamanne.git-extension-pack",
+		"me-dutour-mathieu.vscode-github-actions",
+		"jpwerner.autodocstring",
+		"arianjamasb.protein-viewer"
+	]
+}
