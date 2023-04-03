@@ -5,7 +5,7 @@ By default, edge inference uses types and file formats only. This is often suffi
 cwl_adapters/ambiguous.cwl
 
 ```yaml
-cwlVersion: v1.2
+cwlVersion: v1.0
 
 class: CommandLineTool
 

@@ -123,7 +123,7 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
         Dict[str, Any]: A CWL CommandLineTool with the given inputs and outputs.
     """
     yaml_tree: Dict[str, Any] = {}
-    yaml_tree['cwlVersion'] = 'v1.2'
+    yaml_tree['cwlVersion'] = 'v1.0'
     yaml_tree['class'] = 'CommandLineTool'
     yaml_tree['$namespaces'] = {'edam': 'https://edamontology.org/'}
     yaml_tree['$schemas'] = ['https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl']
