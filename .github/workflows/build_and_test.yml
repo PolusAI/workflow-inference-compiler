@@ -78,7 +78,7 @@ jobs:
 
       - name: Install Workflow Inference Compiler (windows)
         if: runner.os == 'Windows'
-        run: pip install ".[all,runners_src]"
+        run: pip install ".[all]"
 
       - name: Build Documentation
         if: always()
