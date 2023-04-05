@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:22.04 as download
 
 # Install miniconda
 RUN apt-get update && apt-get install -y wget
@@ -15,3 +15,12 @@ ADD Dockerfile_data .
 ADD download_data.sh .
 
 RUN ./download_data.sh
+
+# Now copy everything into a minimal alpine linux distro.
+# Ideally we would like to use FROM scratch, but we need the `cp` command.
+FROM alpine as data
+
+COPY --from=download *.sdf ./
+COPY --from=download *.xlsx ./
+COPY --from=download Dockerfile_data ./
+COPY --from=download download_data.sh ./
