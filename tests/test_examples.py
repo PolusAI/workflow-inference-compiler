@@ -105,7 +105,7 @@ def is_isomorphic_with_timeout(g_m: isomorphism.GraphMatcher, yml_path_str: str)
         assert g_m.is_isomorphic()  # See top-level comment above!
     else:
         # See https://docs.python.org/3/library/signal.html#examples
-        # NOTE: You CANNOT use `pytest --workers 4 ...` with this. Otherwise:
+        # NOTE: You CANNOT use `pytest --workers 8 ...` with this. Otherwise:
         # "ValueError: signal only works in main thread of the main interpreter"
         signal.signal(signal.SIGALRM, handler)
 

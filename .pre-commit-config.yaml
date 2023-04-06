@@ -40,37 +40,32 @@ repos:
     # -   id: sort-simple-yaml  # sorts simple yaml files which consist only of top-level keys, preserving comments and blocks.
     -   id: trailing-whitespace  # trims trailing whitespace.
 -   repo: https://github.com/pre-commit/mirrors-autopep8
-    rev: v2.0.2
+    rev: v2.0.4
     hooks:
     -   id: autopep8
         args: [--exit-code, --recursive, --diff, --max-line-length, "120"]
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.1.1
+    rev: v1.5.1
     hooks:
     -   id: mypy
-        args: [--no-strict-optional, --ignore-missing-imports, --no-incremental]
+        args: [--no-strict-optional, --ignore-missing-imports]
         additional_dependencies: # Copied from setup.cfg
-          - types-Pillow
-          - types-PyYAML
-          - types-Pygments
-          - types-backports
-          - types-beautifulsoup4
-          - types-cffi
-          - types-colorama
-          - types-decorator
-          - types-docutils
-          - types-html5lib
-          - types-jsonschema
-          - types-paramiko
-          - types-psutil
-          - types-python-dateutil
-          - types-python-jose
-          - types-pytz
-          - types-pywin32
-          - types-requests
-          - types-setuptools
-          - types-six
-          - types-ujson
+        - lxml-stubs
+        - types-Pillow
+        - types-PyYAML
+        - types-Pygments
+        - types-colorama
+        - types-decorator
+        - types-docutils
+        - types-jsonschema
+        - types-psutil
+        - types-python-jose
+        - types-pytz
+        - types-redis
+        - types-requests
+        - types-setuptools
+        - types-six
+        - types-urllib3
 -   repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.10.0
     hooks:
@@ -85,10 +80,10 @@ repos:
     -   id: rst-inline-touching-normal  # Detect mistake of inline code touching normal text in rst
     -   id: text-unicode-replacement-char  # Forbid files which have a UTF-8 Unicode replacement character
 -   repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.9.0.2
+    rev: v0.9.0.5
     hooks:
     -   id: shellcheck
 - repo: https://github.com/codespell-project/codespell
-  rev: v2.2.4
+  rev: v2.2.5
   hooks:
   - id: codespell
