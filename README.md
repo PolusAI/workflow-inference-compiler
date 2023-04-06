@@ -1,22 +1,37 @@
 # Workflow Inference Compiler
 
-Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but users still need to explicitly specify how to connect the steps. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between steps, and it compiles to CWL for execution. The examples are chosen from classical molecular dynamics but like CWL, the software is general purpose and is not limited to any specific domain.
+Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but users still need to explicitly specify how to connect the steps. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between steps, and it compiles to CWL for execution.
 
 ![BPS Poster](BPS_poster.svg)
 
 ## Documentation
 The documentation is available on [readthedocs](https://workflow-inference-compiler.readthedocs.io/en/latest/).
+## Example Workflows
+The main examples are chosen from classical molecular dynamics but like CWL, the compiler is general purpose and is not limited to any specific domain.
+
+[Molecular Modeling Workflows](https://github.com/PolusAI/mm-workflows)
 ## Quick Start
 See the [installation guide](docs/installguide.md) for more details, but:
 ```
-git clone --recursive https://github.com/PolusAI/workflow-inference-compiler.git
+git clone https://github.com/PolusAI/workflow-inference-compiler.git
 cd workflow-inference-compiler
+
+cd install/
 ./install_conda.sh  # install_conda.bat on Windows
+source ~/.bashrc  # skip on Windows
 conda create --name wic
 conda activate wic
+./install_pypy.sh  # Optional, skip on Arm Macs
 ./install_system_deps.sh  # install_system_deps.bat on Windows
+cd ..
+
 pip install -e ".[all]"
-wic --yaml examples/gromacs/tutorial.yml --run_local --quiet
+pre-commit install  # Required for developers
+
+cd install && ./install_mm-workflows.sh && cd ..
+```
+```
+wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --run_local --quiet
 ```
 That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the root workflow, and run it locally.
 
@@ -40,14 +55,14 @@ steps:
           terms: [Potential]
         output_xvg_path: energy_min_cg.xvg
 ```
-The subworkflow [examples/gromacs/cg.yml](examples/gromacs/cg.yml) is shown above, and the GraphViz diagram of the root workflow [examples/gromacs/tutorial.yml](examples/gromacs/tutorial.yml) is shown below.
+The subworkflow [../mm-workflows/examples/gromacs/cg.yml](../mm-workflows/examples/gromacs/cg.yml) is shown above, and the GraphViz diagram of the root workflow [../mm-workflows/examples/gromacs/tutorial.yml](../mm-workflows/examples/gromacs/tutorial.yml) is shown below.
 
 ![Workflow](examples/gromacs/tutorial.yml.gv.png)
 
 If you add the --parallel flag to the above command then, in another terminal, you can view the plots in real-time:
 ```
 conda activate wic
-pip install timeseriestools
+cd install && ./install_timeseriesplots.sh && cd ..
 timeseriesplots
 ```
 
@@ -56,10 +71,10 @@ timeseriesplots
 You can also view the 3D structures in the Jupyter notebook `src/vis/viewer.ipynb`. The visualization currently needs to be in its own conda environment.
 
 ```
-./install_conda.sh
+install/install_conda.sh
 conda create --name vis
 conda activate vis
-./install_nglview.sh
+install/install_nglview.sh
 pip install -e ".[all]"
 ```
 

@@ -5,7 +5,7 @@ services:
     container_name: wic-api-new
     build:
       context: .
-      dockerfile: ./Dockerfile.api
+      dockerfile: ./Dockerfile_debian_rest_api
     working_dir: /workflow-inference-compiler
     command: uvicorn api:app --host 0.0.0.0 --port 3000 --reload
     environment:

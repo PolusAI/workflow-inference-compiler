@@ -2,40 +2,31 @@
 
 ## download
 
-Rather than download archive files, it is highly recommended to use the [git](https://git-scm.com) version control system. The software and plugins are currently available via the following http or ssh URLs:
+You will first need to install the [git](https://git-scm.com) version control system. Then run the following commands:
 
 ```
-https://github.com/PolusAI/workflow-inference-compiler.git
-```
-```
-git@github.com:PolusAI/workflow-inference-compiler.git
-```
-
-Regular users can use http, but developers should use ssh.
-
-Either way, the commands
-
-```shell
-git clone --recursive <URL>
+git clone https://github.com/PolusAI/workflow-inference-compiler.git
 cd workflow-inference-compiler
+
+cd install/
+./install_conda.sh  # install_conda.bat on Windows
+source ~/.bashrc  # skip on Windows
+conda create --name wic
+conda activate wic
+./install_pypy.sh  # Optional, skip on Arm Macs
+./install_system_deps.sh  # install_system_deps.bat on Windows
+cd ..
+
+pip install -e ".[all]"
+pre-commit install  # Required for developers
+
+cd install && ./install_mm-workflows.sh && cd ..
 ```
 
-should automatically download both the software and the plugins. Note that if you just use
-
-```shell
-git clone <URL>
-cd workflow-inference-compiler
-```
-it will not download the plugins; you will then need to run the following command:
+Developers should fork the upstream repository and clone their fork using the git@ url, then run the command
 
 ```
-git submodule init && git submodule update
-```
-
-Developers who forked the upstream repository should also run the command
-
-```
-git remote add upstream https://github.com/PolusAI/workflow-inference-compiler.git
+git remote add polusai https://github.com/PolusAI/workflow-inference-compiler.git
 ```
 
 ## docker
@@ -48,6 +39,20 @@ When running Docker for Mac, in some cases execution will hang. See [all contain
 
 If you are experiencing hanging, and if the command `ps aux | grep com.docker | wc -l` returns more than 1000, this is likely the issue. If restarting Docker via the GUI doesn't work, try `sudo pkill com.docker && sudo pkill Docker`.
 
+## podman
+
+Alternatively, instead of docker you can use [podman](https://podman.io/whatis.html). podman is a daemonless (more secure) way to run containers. On linux, you can install podman via conda `conda install -c conda-forge podman` or using distro-specific methods. To run workflows with podman, simply append `--user_space_docker_cmd podman` after `--run_local`.
+
+## Installation on Windows
+
+Although compiling workflows natively on Windows is supported, the underlying `cwltool` runner currently requires [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install#install-wsl-command). To install WSL, simply open PowerShell or Windows Command Prompt in **administrator** mode and run the command `wsl --install`. For more information about WSL, see the official [FAQ](https://learn.microsoft.com/en-us/windows/wsl/faq).
+
+To install podman inside of WSL, simply run (from inside WSL) `sudo apt-get update && sudo apt-get install uidmap podman`.
+
+### known issues
+
+Network performance on WSL can be [very slow](https://github.com/microsoft/WSL/issues/4901). This appears to be caused by the "Large Send Offload Version 2" network setting. See [this article](https://townsyio.medium.com/wsl2-how-to-fix-download-speed-3edb0c348e29) for how to disable this setting.
+
 ## conda
 
 [conda](https://en.wikipedia.org/wiki/Conda_(package_manager)) is an open source, cross platform package management system. It can install both Python dependencies and system binary dependencies, so conda is essentially a replacement for `pip`. The associated package distributions named `anaconda` and `miniconda` provide a database of packages that can be used with the `conda` command. (There is also an open source package distribution called [conda-forge](https://conda-forge.org)) Either one works, so if you already have anaconda installed then great. Otherwise, [miniconda](https://docs.conda.io/en/latest/miniconda.html) is all you need.
@@ -56,6 +61,7 @@ You can install conda and the system dependencies with the following commands:
 
 ```
 ./install_conda.sh  # install_conda.bat on Windows
+source ~/.bashrc
 conda create --name wic
 conda activate wic
 ./install_system_deps.sh  # install_system_deps.bat on Windows
@@ -94,18 +100,22 @@ conda activate vis
 pip install -e ".[all]"
 ```
 
+## CUDA
+
+Some of the workflows require an Nvidia CUDA GPU. Please see the Nvidia [installation guides](https://docs.nvidia.com/cuda/#installation-guides) for more information.
+
 ## testing
 
 To test your installation, you can run the example in README.md:
 
 ```
-wic --yaml examples/gromacs/tutorial.yml --run_local --quiet
+wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --run_local --quiet
 ```
 
-You can also run the automated test suite. This will run the full set of tests, which takes about an hour on a laptop with a GPU.
+You can also run the automated test suite. This will run the full set of tests, which takes about an hour on a laptop with an Nvidia GPU.
 
 ```
-pytest -m serial && pytest -m "not serial" --workers 4
+pytest -m serial && pytest -m "not serial" --workers 8
 ```
 
 If you're in a hurry, just run

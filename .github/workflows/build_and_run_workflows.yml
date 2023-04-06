@@ -39,9 +39,6 @@ on:
         required: true
         type: string
 
-env:
-  BUILD_TYPE: Release
-
 defaults:
   run:
     shell: bash -l {0} # Invoke bash in login mode, NOT interactive mode.
@@ -58,12 +55,8 @@ jobs:
     # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
     # This will prevent DOS attacks from people blasting the CI with rapid fire commits.
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.cwl_runner }}-${{ github.ref }}-${{ inputs.sender_repo }}-${{ inputs.mm-workflows_ref}}
+      group: ${{ github.workflow }}-cwltool-${{ github.ref }}-${{ inputs.sender_repo }}-${{ inputs.mm-workflows_ref}}
       cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        cwl_runner: ["cwltool"]
     runs-on: [self-hosted, linux]
 
     steps:
@@ -72,7 +65,6 @@ jobs:
       with:
         repository: ${{ inputs.wic_owner }}/workflow-inference-compiler
         ref: ${{ inputs.wic_ref }}
-        submodules: recursive
         path: wic
 
     - name: Checkout mm-workflows
@@ -90,7 +82,7 @@ jobs:
       with:
         miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest
-        environment-file: wic/system_deps.yml
+        environment-file: wic/install/system_deps.yml
         activate-environment: wic
         use-mamba: true
         channels: conda-forge
@@ -114,7 +106,7 @@ jobs:
     - name: PyTest Run Example Workflows
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-      run: cd wic/ && pytest -k test_run_examples --workers 4 --cwl_runner ${{ matrix.cwl_runner }} # --cov
+      run: cd wic/ && pytest -k test_run_examples --workers 8 --cwl_runner cwltool # --cov
 
     # NOTE: The steps below are for repository_dispatch only. For all other steps, please insert above
     # this comment.
