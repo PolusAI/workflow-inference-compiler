@@ -117,7 +117,7 @@ inputs:
     inputBinding:
       position: 4
       prefix: --net_charge
-  
+
 outputs:
   output_gro_path:
     label: Path to the GRO output file

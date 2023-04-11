@@ -56,7 +56,7 @@ def get_token_auth_header(request: Request) -> str:
         request (Request): request object
 
     Returns:
-        token: token 
+        token: token
     """
     auth = request.headers.get("Authorization", None)
     if not auth:

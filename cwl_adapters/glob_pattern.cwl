@@ -13,7 +13,7 @@ baseCommand: echo # Anything, unused
 requirements:
   InlineJavascriptRequirement: {}
 
-inputs: 
+inputs:
   directory:
     type: string
     inputBinding:

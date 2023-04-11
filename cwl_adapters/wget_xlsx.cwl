@@ -13,7 +13,7 @@ baseCommand: wget
 requirements:
   InlineJavascriptRequirement: {}
 
-inputs: 
+inputs:
   url:
     label: url
     doc: |-

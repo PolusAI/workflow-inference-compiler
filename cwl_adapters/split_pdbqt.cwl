@@ -9,7 +9,7 @@ doc: |-
   Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
 
 baseCommand: obabel
-#Usage: 
+#Usage:
 #obabel[-i<input-type>] <infilename> [-o<output-type>] -O<outfilename> [Options]
 #...
 #Options, other than -i -o -O -m, must come after the input files.
