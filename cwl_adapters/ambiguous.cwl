@@ -11,7 +11,7 @@ baseCommand: "true"
 # Each output simply returns the corresponding input.
 # Since both outputs are of type string, inference (by default) cannot
 # distinguish between the two outputs, and will always choose uniquename2
-# since the outputs are considered ordered and matched from botton to top.
+# since the outputs are considered ordered and matched from bottom to top.
 
 inputs:
   uniquename1:
