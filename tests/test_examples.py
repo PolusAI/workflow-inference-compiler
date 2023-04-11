@@ -82,7 +82,8 @@ run_blacklist: List[str] = [
 
 
 yml_paths_tuples_not_blacklist = [(s, p) for (s, p) in yml_paths_tuples if s not in run_blacklist]
-# currently [vs_demo_2, vs_demo_3, vs_demo_4, elm, nmr, multistep1, multistep2, multistep3, helloworld]
+# currently [vs_demo_2, vs_demo_3, vs_demo_4, elm, nmr,
+#            multistep1, multistep2, multistep3, helloworld, scattering_scaling]
 
 
 def is_isomorphic_with_timeout(g_m: isomorphism.GraphMatcher, yml_path_str: str) -> None:
