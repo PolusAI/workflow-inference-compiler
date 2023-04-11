@@ -72,12 +72,8 @@ jobs:
         # "SC1017 (error): Literal carriage return. Run script through tr -d '\r' ."
         run: shellcheck -e SC1017 $(find . -name "*.sh" -not -path "./biobb/*" -and -not -path "./3/*")
 
-      - name: Install Workflow Inference Compiler (linux, macos)
-        if: runner.os != 'Windows'
-        run: pip install ".[all]"
-
-      - name: Install Workflow Inference Compiler (windows)
-        if: runner.os == 'Windows'
+      - name: Install Workflow Inference Compiler
+        if: always()
         run: pip install ".[all]"
 
       - name: Build Documentation
@@ -120,6 +116,10 @@ jobs:
         # NOTE: This test MUST be run in serial! See is_isomorphic_with_timeout()
         timeout-minutes: 5 # backup timeout for windows
 
-      - name: PyTest Fuzzy Compile Test
+      - name: PyTest Fuzzy Compile
         if: always()
         run: pytest -k test_fuzzy_compile
+
+      - name: PyTest Scattering Scaling
+        if: runner.os != 'Windows'  # Cannot run on Windows (natively) yet
+        run: pytest -k test_scattering_scaling
