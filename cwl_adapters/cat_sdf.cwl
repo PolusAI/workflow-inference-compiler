@@ -10,7 +10,7 @@ doc: |
 
 baseCommand: cat
 
-inputs: 
+inputs:
   input_sdfs_path:
     label: Input sdf files
     doc: |-

@@ -13,7 +13,7 @@ baseCommand: 'true'
 requirements:
   InlineJavascriptRequirement: {}
 
-inputs: 
+inputs:
   minval:
     type: int
     default: 1

@@ -14,7 +14,7 @@ hints:
   DockerRequirement:
     dockerPull: jakefennick/scripts
 
-inputs: 
+inputs:
   script:
     type: string
     inputBinding:

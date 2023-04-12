@@ -9,7 +9,7 @@ doc: |-
   Small molecule format conversion for structures or trajectories. Open Babel is a chemical toolbox designed to speak the many languages of chemical data. It's an open, collaborative project allowing anyone to search, convert, analyze, or store data from molecular modeling, chemistry, solid-state materials, biochemistry, or related areas. Visit the official page.
 
 baseCommand: obabel
-#Usage: 
+#Usage:
 #obabel[-i<input-type>] <infilename> [-o<output-type>] -O<outfilename> [Options]
 #...
 #Options, other than -i -o -O -m, must come after the input files.
@@ -53,7 +53,7 @@ arguments: [$(inputs.input_path), "-o", "sdf", "-O", $(inputs.output_sdf_path), 
 #       :ref:`copy format <Copy_raw_text>`.
 
 #Write Options, e.g. -x3
-# 3  output V3000 not V2000 (used for >999 atoms/bonds) 
+# 3  output V3000 not V2000 (used for >999 atoms/bonds)
 # a  write atomclass if available
 # m  write no properties
 # w  use wedge and hash bonds from input (2D only)

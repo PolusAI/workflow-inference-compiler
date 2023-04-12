@@ -38,7 +38,7 @@ repos:
     -   id: requirements-txt-fixer  # sorts entries in requirements.txt.
     # NOTE: requirements-txt-fixer modifies requirements.txt in-place!
     # -   id: sort-simple-yaml  # sorts simple yaml files which consist only of top-level keys, preserving comments and blocks.
-    # -   id: trailing-whitespace  # trims trailing whitespace.
+    -   id: trailing-whitespace  # trims trailing whitespace.
 -   repo: https://github.com/pre-commit/mirrors-autopep8
     rev: v2.0.2
     hooks:
