@@ -3,7 +3,7 @@ cwlVersion: v1.0
 
 class: CommandLineTool
 
-label: Calculate the Total Charge 
+label: Calculate the Total Charge
 
 doc: |-
   Calculate the total charge of a given ligand
@@ -41,8 +41,8 @@ inputs:
       prefix: --input_path
 
   addhydrogens:
-    label: adds hydrogens to the system 
-    doc: adds hydrogens to the system 
+    label: adds hydrogens to the system
+    doc: adds hydrogens to the system
     type: boolean?
     format:
     - edam:format_2330

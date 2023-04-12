@@ -19,7 +19,7 @@ hints:
 requirements:
   InlineJavascriptRequirement: {}
 
-inputs: 
+inputs:
   input_path:
     label: Path to the input file
     doc: |-

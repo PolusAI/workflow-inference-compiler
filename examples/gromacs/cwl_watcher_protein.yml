@@ -1,4 +1,4 @@
-steps:  
+steps:
   - cwl_watcher:
       in:
         #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)

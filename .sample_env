@@ -1,8 +1,8 @@
 # env variables for labshare auth
 # add a .env file in your local fork
-ISSUER = 
-API_AUDIENCE = 
+ISSUER =
+API_AUDIENCE =
 ALGORITHMS = RS256
-AUTH_BASE_URL = 
+AUTH_BASE_URL =
 ME_ENDPOINT=me
 JWKS_ENDPOINT=

@@ -62,5 +62,5 @@ wic:
                     input_crd_path: '*prod_complex.gro'
   graphviz:
     label: Real-time Analysis
-    #style: invis # Do NOT make this graph invisible, because 
+    #style: invis # Do NOT make this graph invisible, because
     # it will cause all subgraphs to be invisible (but not nodes!).

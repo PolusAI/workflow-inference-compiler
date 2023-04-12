@@ -8,7 +8,7 @@ See [overview](overview.md)
 
 ## Plugins
 
-Before we get started, we will need to configure the compiler with plugins. ('Plugins' are either CWL CommandLineTools or YAML workflow files.) By default, the compiler will search for plugins within the directories and subdirectories listed in `cwl_dirs.txt` and `yml_dirs.txt`. To enable additional plugins, simply download the plugins and add additional lines to these files. 
+Before we get started, we will need to configure the compiler with plugins. ('Plugins' are either CWL CommandLineTools or YAML workflow files.) By default, the compiler will search for plugins within the directories and subdirectories listed in `cwl_dirs.txt` and `yml_dirs.txt`. To enable additional plugins, simply download the plugins and add additional lines to these files.
 
 ```
 # Namespace Directory
@@ -169,7 +169,7 @@ When using `--run_compute` you will also need to use `--compute_access_token $AC
 
 * Go to https://compute.scb-ncats.io/explorer/
 * Click the green Authorize button. You will be taken to the NIH login page.
-* Enter your NIH username and password, then 
+* Enter your NIH username and password, then
 * Authenticate (using Microsoft Authenticator)
 * You will be returned to https://compute.scb-ncats.io/explorer/
 * Click Close (NOT Logout!)
