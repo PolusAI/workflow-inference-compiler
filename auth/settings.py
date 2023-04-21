@@ -6,7 +6,7 @@ from pydantic import BaseSettings
 
 # Setup logger
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("plots.settings")
+logger = logging.getLogger("wic.settings")
 
 
 # Load environment variables
