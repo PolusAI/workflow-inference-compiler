@@ -1,7 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: wic-api-deployment
+  name: {{ include "wic-api.fullname" . }}
+  labels:
+    {{- include "wic-api.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
@@ -25,7 +27,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.port }}
+              containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
           - name: AUTH_BASE_URL
