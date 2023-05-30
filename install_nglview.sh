@@ -23,8 +23,8 @@ $CONDA install -y pip
 
 pip install jupyterlab ipytree
 
-# Now that https://github.com/nglviewer/nglview/pull/1045 is merged
-# (but not yet released), we can install nglview via the upstream repo.
-pip install "git+https://github.com/jfennick/nglview.git" ipywidgets
+# See release notes about jupyterlab
+# https://github.com/nglviewer/nglview/releases/tag/v3.0.4
+pip install nglview
 
 jupyter-nbextension enable nglview --py --sys-prefix
