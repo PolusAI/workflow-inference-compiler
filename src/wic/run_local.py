@@ -5,9 +5,8 @@ import subprocess as sub
 import sys
 from pathlib import Path
 import shutil
-import signal
 import traceback
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 try:
     import cwltool.main
@@ -81,6 +80,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
     stage_input_files(yaml_inputs, Path(args.yaml).parent.absolute())
 
     retval = 1  # overwrite if successful
+    provenance: List[str] = []
 
     yaml_stem = yaml_stem + '_inline' if args.cwl_inline_subworkflows else yaml_stem
     if cwl_runner == 'cwltool':
@@ -91,8 +91,9 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         quiet = ['--quiet'] if args.quiet else []
         cachedir_ = ['--cachedir', cachedir] if cachedir else []
         net = ['--custom-net', args.custom_net] if args.custom_net else []
-        provenance = ['--provenance', 'provenance']
-        docker_cmd_ = ['--user-space-docker-cmd', docker_cmd]
+        # Disable provenance for now because it is giving an error with Directory types.
+        provenance = []  # ['--provenance', 'provenance']
+        docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
         write_summary = ['--write-summary', args.write_summary] if args.write_summary else []
         # NOTE: Using --leave-outputs to disable --outdir
         # See https://github.com/dnanexus/dx-cwl/issues/20
@@ -141,8 +142,9 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
     if cwl_runner == 'toil-cwl-runner':
         # NOTE: toil-cwl-runner always runs in parallel
         net = ['--custom-net', args.custom_net] if args.custom_net else []
-        provenance = ['--provenance', 'provenance']
-        docker_cmd_ = ['--user-space-docker-cmd', docker_cmd]
+        # Disable provenance for now because it is giving an error with Directory types.
+        provenance = []  # ['--provenance', 'provenance']
+        docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
         cmd = ['toil-cwl-runner'] + net + provenance + docker_cmd_
         cmd += ['--outdir', 'outdir_toil',
                 '--jobStore', f'file:./jobStore_{yaml_stem}',  # NOTE: This is the equivalent of --cachedir
