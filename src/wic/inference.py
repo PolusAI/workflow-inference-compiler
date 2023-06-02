@@ -131,8 +131,14 @@ def perform_edge_inference(args: argparse.Namespace,
             # print('out_key, out_format, rule', out_key, out_format, inference_rule)
             attempted_matches.append((out_key, out_format))
             # Great! We found an 'exact' type and format match.
-            if (out_dict['type'] == in_dict['type']) and (out_format in in_formats):  # or out_format == ''
-                format_matches.append((out_key, out_format))
+            if (out_dict['type'] == in_dict['type']):  # First we have to match the types.
+                if in_formats:
+                    # Then, if we have any input formats, the output format has to match.
+                    if out_format in in_formats:
+                        format_matches.append((out_key, out_format))
+                else:
+                    # Otherwise, formats are optional and we match only on type.
+                    format_matches.append((out_key, out_format))
 
             # Apply 'break' rule after iteration, to allow matching
             if inference_rule == 'break':
