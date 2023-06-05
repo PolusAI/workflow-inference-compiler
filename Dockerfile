@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM debian:stable-slim
 
 # Install conda / mamba
 RUN apt-get update && apt-get install -y wget
@@ -25,5 +25,9 @@ WORKDIR /workflow-inference-compiler
 # wic within a conda environment. Let's just install it globally!
 RUN mamba env update --name base --file system_deps.yml
 RUN pip install -e ".[all]"
+
+RUN mamba clean --all --yes
+RUN pip cache purge
+RUN apt-get clean
 
 ADD Dockerfile .
