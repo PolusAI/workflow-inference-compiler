@@ -116,7 +116,8 @@ async def compile_wf(request: Request) -> Json:
     yaml_inputs = sub_node_data.workflow_inputs_file
 
     steps = cwl_tree['steps']
-    steps_keys = utils.get_steps_keys(steps)
+    # steps_keys = utils.get_steps_keys([step for step in steps])
+    steps_keys = [step for step in steps]
 
     cwl_tree_no_dd = labshare.remove_dot_dollar(cwl_tree)
     yaml_inputs_no_dd = labshare.remove_dot_dollar(yaml_inputs)
@@ -129,7 +130,8 @@ async def compile_wf(request: Request) -> Json:
 
         # TODO: get version from ict plugin specs
         run_val = f'plugin:{stem}:{__version__}'
-        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        step_name_i = step_key
+        # step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
         cwl_tree_run['steps'][step_name_i]['run'] = run_val
 
