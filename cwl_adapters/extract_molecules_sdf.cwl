@@ -71,7 +71,7 @@ arguments: [$(inputs.input_path), "-o", "sdf", "-O", $(inputs.output_sdf_path), 
 hints:
   DockerRequirement:
     #dockerPull: jakefennick/scripts
-    dockerPull: quay.io/biocontainers/biobb_chemistry:3.7.0--pyhdfd78af_0
+    dockerPull: quay.io/biocontainers/biobb_chemistry:4.0.0--pyhdfd78af_1
 
 inputs:
   first_molecule:
