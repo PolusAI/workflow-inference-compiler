@@ -1,48 +1,51 @@
 FROM ubuntu:22.04
 
 # Install miniconda
-# Note that the version of conda (py38) needs to be compatible with pymol-bundle
-# See https://anaconda.org/schrodinger/pymol/files
 RUN apt-get update && apt-get install -y wget
-RUN MINICONDA="Miniconda3-py38_4.12.0-Linux-x86_64.sh" && \
-    wget --quiet https://repo.continuum.io/miniconda/$MINICONDA && \
-    bash $MINICONDA -b -p /miniconda && \
-    rm -f $MINICONDA
-ENV PATH /miniconda/bin:$PATH
+RUN CONDA="Mambaforge-Linux-x86_64.sh" && \
+    wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \
+    chmod +x $CONDA && \
+    ./$CONDA -b -p /mambaforge && \
+    rm -f $CONDA
+ENV PATH /mambaforge/bin:$PATH
+
+# Note that the version of python needs to be compatible with pymol-bundle
+# See https://anaconda.org/schrodinger/pymol/files
+RUN mamba install "python<3.10"
 
 # NOTE: gromacs tends to use bleeding edge dependencies and pymol tends to lag behind.
 # They currently cannot be installed simultaneously due to dependency conflicts.
 # However, we really only need the gromacs topology files, which are not
 # deleted when you uninstall gromacs. Thus, the workaround is to simply install
 # gromacs and then immediately uninstall it.
-RUN conda install -c conda-forge gromacs
-RUN conda remove gromacs
+RUN mamba install -c conda-forge gromacs
+RUN mamba remove gromacs
 # Let's make a version-independent symlink.
 # (This is unnecessary if you leave gromacs installed.)
-RUN mkdir -p /miniconda/share/gromacs/
-RUN ln -s /miniconda/pkgs/gromacs-2022.2-nompi_hca75aac_100/share/gromacs/top/ /miniconda/share/gromacs/
+RUN mkdir -p /mambaforge/share/gromacs/
+RUN ln -s /mambaforge/pkgs/mambaforge/pkgs/gromacs-2023.1-nompi_h76c6bb2_102/share/gromacs/top/ /mambaforge/share/gromacs/
 
-RUN conda install -c conda-forge -c schrodinger pymol-bundle
+RUN mamba install -c conda-forge -c schrodinger pymol-bundle
 # If you want to use the GUI, also install
 # pip install PyQt5
 
-RUN conda install -c conda-forge wget libarchive
+RUN mamba install -c conda-forge wget libarchive
 # bsdtar is installed with libarchive; see download_data.sh
 
-RUN conda install -c conda-forge openbabel
-RUN conda install -c conda-forge mdanalysis
+RUN mamba install -c conda-forge openbabel
+RUN mamba install -c conda-forge mdanalysis
 
 # Solely for atomselect_demo
-RUN conda install -c conda-forge mdtraj
+RUN mamba install -c conda-forge mdtraj
 
 # Solely to generate conformers from SMACC database
-RUN conda install -c conda-forge pandas rdkit openpyxl xorg-libxrender
+RUN mamba install -c conda-forge pandas rdkit openpyxl xorg-libxrender
 
 # Solely to generate scatter plots
-RUN conda install -c conda-forge matplotlib
+RUN mamba install -c conda-forge matplotlib
 
 # Solely to generate nmr4md plots
-RUN conda install -c conda-forge pip
+RUN mamba install -c conda-forge pip
 RUN pip install nmrformd
 
 
