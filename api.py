@@ -125,7 +125,6 @@ async def compile_wf(request: Request) -> Json:
     # Replace 'run' with plugin:id
     cwl_tree_run = copy.deepcopy(cwl_tree_no_dd)
     for i, step_key in enumerate(steps_keys):
-        stem = Path(step_key).stem
         version = '{__version__}'
         step_name_i = step_key
         # step_name_i = utils.step_name_str(yaml_stem, i, step_key)
@@ -133,7 +132,9 @@ async def compile_wf(request: Request) -> Json:
         step_name_stripped = step_name_i.split("__")[-1]
         version_key = f"({i+1}, {step_name_stripped})"
         if version_key in wic_obj["wic"]["steps"]:
+            # Override the default version, get the plugin's version defined in wic_obj 
             version = wic_obj["wic"]["steps"][version_key]["version"]
+        stem = Path(step_name_stripped).stem
         run_val = f'plugin:{stem}:{version}'
         cwl_tree_run['steps'][step_name_i]['run'] = run_val
 
@@ -141,7 +142,7 @@ async def compile_wf(request: Request) -> Json:
         "name": yaml_stem,
         "driver": "argo",
         "cwlJobInputs": yaml_inputs_no_dd,
-        "cwlScript": { **cwl_tree_run }
+        **cwl_tree_run 
     }
     return compute_workflow
 
