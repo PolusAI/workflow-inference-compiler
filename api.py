@@ -116,28 +116,32 @@ async def compile_wf(request: Request) -> Json:
     yaml_inputs = sub_node_data.workflow_inputs_file
 
     steps = cwl_tree['steps']
-    steps_keys = utils.get_steps_keys(steps)
+    # steps_keys = utils.get_steps_keys([step for step in steps])
+    steps_keys = [step for step in steps]
 
     cwl_tree_no_dd = labshare.remove_dot_dollar(cwl_tree)
     yaml_inputs_no_dd = labshare.remove_dot_dollar(yaml_inputs)
 
-    # Convert the compiled yaml file to json for labshare Compute.
     # Replace 'run' with plugin:id
     cwl_tree_run = copy.deepcopy(cwl_tree_no_dd)
     for i, step_key in enumerate(steps_keys):
         stem = Path(step_key).stem
-
-        # TODO: get version from ict plugin specs
-        run_val = f'plugin:{stem}:{__version__}'
-        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        version = '{__version__}'
+        step_name_i = step_key
+        # step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
+        step_name_stripped = step_name_i.split("__")[-1]
+        version_key = f"({i+1}, {step_name_stripped})"
+        if version_key in wic_obj["wic"]["steps"]:
+            version = wic_obj["wic"]["steps"][version_key]["version"]
+        run_val = f'plugin:{stem}:{version}'
         cwl_tree_run['steps'][step_name_i]['run'] = run_val
 
     compute_workflow = {
         "name": yaml_stem,
         "driver": "argo",
         "cwlJobInputs": yaml_inputs_no_dd,
-        **cwl_tree_run
+        "cwlScript": { **cwl_tree_run }
     }
     return compute_workflow
 
