@@ -43,7 +43,7 @@ arguments: [$(inputs.input_path), "-o", "pdbqt", "-O", $(inputs.output_pdb_path)
 # See https://github.com/openbabel/openbabel/issues/2435
 hints:
   DockerRequirement:
-    dockerPull: quay.io/biocontainers/biobb_chemistry:3.7.0--pyhdfd78af_0
+    dockerPull: quay.io/biocontainers/biobb_chemistry:4.0.0--pyhdfd78af_1
 
 requirements:
   InlineJavascriptRequirement: {}
