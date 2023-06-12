@@ -1,8 +1,7 @@
 # pylint: disable=import-outside-toplevel,no-member
 from collections import defaultdict
-import distutils.util
 import math
-from typing import List
+from typing import List, Dict, Any
 import os.path as osp
 import re
 import subprocess
@@ -66,7 +65,7 @@ def read_index_file(index_file_path: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: The Kd data
     """
-    data = defaultdict(list)
+    data: Dict[str, Any] = defaultdict(list)
     # The file format
     # PDB code, resolution, release year, -logKd/Ki, Kd/Ki, reference, ligand name
     unit_conv = {'uM': 1,
@@ -87,7 +86,7 @@ def read_index_file(index_file_path: str) -> pd.DataFrame:
             standard_type = re.split(r"=[-+]?(?:\d*\.\d+|\d+)", words[4])[0]
             kd = float(re.findall(r"[-+]?(?:\d*\.\d+|\d+)", words[4])[0])
             data['Kd_Ki'].append(standard_type)
-            data['value'].append(str(kd * unit_conv[unit]))
+            data['value'].append(kd * unit_conv[unit])
             data['ligand_name'].append(re.findall(r'\((.*?)\)', words[7])[0])
 
     return pd.DataFrame.from_dict(data)
