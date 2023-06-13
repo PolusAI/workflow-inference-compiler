@@ -140,9 +140,9 @@ async def compile_wf(request: Request) -> Json:
 
     compute_workflow = {
         "name": yaml_stem,
-        "driver": "argo",
+        "driver": wic_obj["wic"]["driver"],
         "cwlJobInputs": yaml_inputs_no_dd,
-        **cwl_tree_run 
+        **cwl_tree_run
     }
     return compute_workflow
 
