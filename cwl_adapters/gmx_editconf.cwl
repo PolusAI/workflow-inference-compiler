@@ -52,23 +52,39 @@ inputs:
     default: system.g96
 
   distance_to_molecule:
-    type: float
+    type: float?
     inputBinding:
       position: 3
       prefix: -d
-    default: 1.0
 
   box_type:
-    type: string
+    type: string?
     inputBinding:
       position: 4
       prefix: -bt
-    default: cubic
+
+  box_vector_lengths:
+    type:
+      - "null"
+      - type: array
+        items: float
+    inputBinding:
+      position: 5
+      prefix: -box
+      
+  box_vector_angles:
+    type:
+      - "null"
+      - type: array
+        items: float
+    inputBinding:
+      position: 6
+      prefix: -angles  
 
   align_principal_axes:
     type: int? # Group number to align (0 == system)
     inputBinding:
-      position: 5
+      position: 7
       prefix: -princ
 
 outputs:

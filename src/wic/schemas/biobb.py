@@ -168,11 +168,33 @@ def biobb_editconf_schema() -> Json:
     octahedron (truncated octahedron)."""
     box_type = {'type': 'string', 'enum': box_vals, 'description': desc}
     center_molecule = {'type': 'boolean', 'description': '(True) Center molecule in the box.'}
+    box_vector_lengths = {'type': 'array', 'items': {'type': 'number'},
+                          'description': """(None) Array of floats defining the box vector lengths ie "0.5 0.5 0.5".
+                          If this option is used the distance_to_molecule property will be ignored."""}
+    box_vector_angles = {'type': 'array', 'items': {'type': 'number'},
+                         'description': """(None) Array of floats defining the box vector angles ie "90 90 90".
+                         This option is only meaningful with "box_vector_lengths" option and when is used.
+                         the distance_to_molecule property will be ignored."""}
 
     schema = default_schema()
+    # Note: The `box_vector_lengths` can't be used with `box_type`` but
+    # the mutually exclusive option for schema doesn't work for now.
+    # schema['oneOf'] = [{'properties': {'box_vector_lengths':
+    #                     box_vector_lengths, },
+    #                     'required': ['box_vector_lengths'], },
+    #                    {'properties': {'box_type':
+    #                     box_type, },
+    #                     'required': ['box_type'], }]
+
     schema['properties'] = {'distance_to_molecule': distance_to_molecule,
-                            'box_type': box_type, 'center_molecule': center_molecule,
+                            'box_type': box_type,
+                            'center_molecule': center_molecule,
+                            'box_vector_lengths': box_vector_lengths,
+                            'box_vector_angles': box_vector_angles,
                             **biobb_container_schema()}
+
+    # schema['dependentRequired'] = {'box_vector_angles': ['box_vector_lengths'],
+    #                                'distance_to_molecule': ['box_type']}
     return schema
 
 
