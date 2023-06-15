@@ -331,8 +331,13 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     schema['title'] = 'Metadata annotations'
     schema['description'] = 'Use steps: to recursively overload / pass parameters.\nUse graphviz: to modify the DAGs.'
 
+    pat_semver = "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    version = {'type': 'string', 'pattern': pat_semver}
+    driver = {'type': 'string', 'enum': ['slurm', 'argo']}
+
     schema_props = {'graphviz': graphviz_schema, 'steps': steps, 'backend': backend,
                     'default_backend': default_backend,
+                    'version': str_nonempty, 'driver': driver,
                     'namespace': namespace, 'inlineable': inlineable, 'environment': environment}
     if not hypothesis:
         # {'additionalProperties': True} can cause problems with hypothesis.
