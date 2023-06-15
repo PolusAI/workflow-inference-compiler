@@ -393,7 +393,10 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         # print(list(in_tool.keys()))
         if tool_i.cwl['class'] == 'CommandLineTool':
             args_required = [arg for arg in in_tool if not (in_tool[arg].get('default') or
-                                                            (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?'))]
+                                                            # Check for optional arguments using both the '?' syntactic sugar, as well as the
+                                                            # canonical null representation. See canonicalize_type in cwl_utils.py
+                                                            (isinstance(in_tool[arg]['type'], str) and in_tool[arg]['type'][-1] == '?') or
+                                                            (isinstance(in_tool[arg]['type'], List) and 'null' in in_tool[arg]['type']))]
         elif tool_i.cwl['class'] == 'Workflow':
             args_required = list(in_tool)
 
