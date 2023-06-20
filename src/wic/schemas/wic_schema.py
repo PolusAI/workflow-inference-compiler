@@ -206,12 +206,25 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     inputs = default_schema()
     inputs['properties'] = inputs_props
 
-    scatter_props = {'type': 'array', 'items': {'anyOf': [{**val, 'const': key} for key, val in inputs_props.items()]}}
-    scattermethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
+    scatter = {}
+    if inputs_props:
+        # NOTE: The CWL specification defines what happens when a scattered input array is empty at runtime.
+        # https://www.commonwl.org/v1.2/Workflow.html#Scatter/gather
+        # However, it does not define, in the case that there are no input parameters, if it is
+        # permissible to specify the scatter tag with an empty list of parameters.
+        # In anticipation of different CWL implementations interpreting this ambiguity differently,
+        # let's just banish it here, i.e. only allow the scatter tag when there are inputs.
+        consts = [{**val, 'const': key} for key, val in inputs_props.items()]
+        scatter_props = {'type': 'array', 'items': {'anyOf': consts}}
+        scattermethods = ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']
+        scattermethod_props: Json = {'type': 'string', 'enum': scattermethods}
+        scatter = {'scatter': scatter_props,
+                   'scatterMethod': scattermethod_props}  # NOTE: capital M
 
     outputs_props: Json = {}
     for key, val in cwl['outputs'].items():
         metadata = {'title': val.get('label', ''), 'description': val.get('doc', '')}
+        str_nonempty = {'type': 'string', 'minLength': 1, **metadata}
 
         # Add type information, with exceptions
         cwltype = utils_cwl.canonicalize_type(val.get('type', ''))
@@ -234,8 +247,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     step_props['description'] = cwl.get('doc', '')
     step_props['properties'] = {'in': inputs,
                                 'out': out,  # NOT outputs! See comment above!
-                                'scatter': scatter_props,
-                                'scatterMethod': scattermethod_props}  # NOTE: capital M
+                                **scatter}
 
     schema = default_schema(url=True)
     # NOTE: See comment in get_validator(). Nonetheless, the vscode YAML extension
