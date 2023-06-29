@@ -1,0 +1,44 @@
+# Default values for wic-api.
+
+replicaCount: 1
+
+image:
+  repository: polusai/wic-api
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: 0.1.0
+
+auth: 
+  authBaseUrl: AUTH_BASE_URL
+  meEndpoint: ME_ENDPOINT
+  jwksEndpoint: JWKS_ENDPOINT
+
+imagePullSecrets:
+  - name: PULL_SECRET_NAME
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+  hosts:
+    - host: WIC_API_URL
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
