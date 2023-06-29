@@ -8,6 +8,7 @@ dependencies:
 # pypy is ~2X faster than the regular python interpreter.
 # We need to install it first so the dependency solver installs it bundled with python 3.9
 # (pypy is not yet compatible with 3.10 and 3.11)
+# pypy should be removed when building wic api docker image
   - pypy
   - "python<3.10"
 # NOTE: cwltool needs nodejs for InlineJavascriptRequirement
