@@ -94,6 +94,10 @@ jobs:
         run: pylint src/ tests/ api.py auth/
         # NOTE: See fail-under threshold in .pylintrc
 
+      - name: Helm Lint Check Code Quality
+        if: always()
+        run: helm lint deploy/helm/wic-api
+
       - name: PEP8 Code Formatting
         if: always()
         id: autopep8
