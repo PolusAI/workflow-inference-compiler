@@ -40,3 +40,5 @@ dependencies:
   - ruamel.yaml.clib
 # Simiarly, cryptography needs to build binary wheels
   - cryptography
+# Needs binary PyQt5 dependencies.
+  - kubernetes-helm
