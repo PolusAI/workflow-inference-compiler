@@ -10,6 +10,6 @@
 		"me-dutour-mathieu.vscode-github-actions",
 		"jpwerner.autodocstring",
 		"arianjamasb.protein-viewer",
-        "ms-kubernetes-tools.vscode-kubernetes-tools"
+		"ms-kubernetes-tools.vscode-kubernetes-tools"
 	]
 }
