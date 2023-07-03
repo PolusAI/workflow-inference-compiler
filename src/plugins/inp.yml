@@ -1,8 +1,0 @@
-outDir: # type "Directory"
-    class: Directory
-    path: /Users/camilovelezr/axle/workflow/phase/out
-inpDir: # type "Directory"
-    class: Directory
-    path: /Users/camilovelezr/axle/workflow/phase/image-tiles
-filePattern: "img_r{rrr}_c{ccc}.tif" # type "string"
-fileExtension: ".ome.zarr" # type "string"
