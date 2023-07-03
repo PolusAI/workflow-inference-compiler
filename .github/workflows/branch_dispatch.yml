@@ -1,0 +1,95 @@
+name: Branch Dispatch
+
+on:
+  push:
+  pull_request:
+  repository_dispatch:
+
+jobs:
+  branch_dispatch:
+    # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
+    # This will prevent DOS attacks from people blasting the CI with rapid fire commits.
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.os }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Install JQ for parsing JSON
+        run: |
+          sudo apt-get install jq
+
+      - name: Create environment variables
+        run: |
+          if [[ ! -z "${{ github.event.client_payload.ref_name }}" ]];
+          then
+            echo "sender_repo=${{ github.event.client_payload.repository }}" >> $GITHUB_ENV && \
+            echo "sender_repo_owner=${{ github.event.client_payload.owner }}" >> $GITHUB_ENV && \
+            echo "sender_repo_ref=${{ github.event.client_payload.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "sender_repo=''" >> $GITHUB_ENV && \
+            echo "sender_repo_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
+            echo "sender_repo_ref=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Check existance of forks and branches of workflow-inference-compiler
+        run: |
+          if curl -L \
+             -H "Accept: application/vnd.github+json" \
+             -H "X-GitHub-Api-Version: 2022-11-28" \
+             -u ${{ secrets.ACCESS_TOKEN }} \
+             https://api.github.com/repos/${{ env.sender_repo_owner }}/workflow-inference-compiler/branches | jq '.[].name' | grep "${{ env.sender_repo_ref }}";
+          then
+            echo "wic_owner=${{ env.sender_repo_owner }}" >> $GITHUB_ENV && \
+            echo "wic_ref=${{ env.sender_repo_ref }}" >> $GITHUB_ENV
+          else
+            echo "wic_owner=PolusAI" >> $GITHUB_ENV && \
+            echo "wic_ref=master" >> $GITHUB_ENV
+          fi
+
+      # For other repositories, the entire step below should be copied and edited to make new steps.
+      - name: Check existance of forks and branches of mm-workflows
+        run: |
+          if curl -L \
+             -H "Accept: application/vnd.github+json" \
+             -H "X-GitHub-Api-Version: 2022-11-28" \
+             -u ${{ secrets.ACCESS_TOKEN }} \
+             https://api.github.com/repos/${{ env.sender_repo_owner }}/mm-workflows/branches | jq '.[].name' | grep "${{ env.sender_repo_ref }}";
+          then
+            echo "mm-workflows_owner=${{ env.sender_repo_owner }}" >> $GITHUB_ENV && \
+            echo "mm-workflows_ref=${{ env.sender_repo_ref }}" >> $GITHUB_ENV
+          else
+            echo "mm-workflows_owner=PolusAI" >> $GITHUB_ENV && \
+            echo "mm-workflows_ref=main" >> $GITHUB_ENV
+          fi
+
+      - name: Branch dispatch
+        # 1. Not possible to call non-default branch through repository_dispatch action. Instead,
+        # we relay the repository_dispatch using this workflow_dispatch to trigger CI of the
+        # branches that we want.
+        # https://github.com/orgs/community/discussions/24657#discussioncomment-3244904
+        # https://docs.github.com/en/rest/actions/workflows?apiVersion=2022-11-28#create-a-workflow-dispatch-event
+        # 2. NOTE: Rather than using "$GITHUB_*", use equivalent "${{ github.* }}".
+        # https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables
+        # https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+        run: |
+          curl -X POST https://api.github.com/repos/${{ github.repository }}/actions/workflows/build_and_test.yml/dispatches \
+          -H 'Accept: application/vnd.github+json' \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          -u ${{ secrets.ACCESS_TOKEN }} \
+          --data '{"ref": "'"${{ env.wic_ref }}"'", "inputs": { "event_type": "${{ github.event_name }}", "sender_repo": "'"${{ env.sender_repo }}"'", "mm-workflows_owner": "'"${{ env.mm-workflows_owner }}"'", "mm-workflows_ref": "'"${{ env.mm-workflows_ref }}"'" }}'
+        # 1. To make secrets.ACCESS_TOKEN work, "read" permissions for "metadata" and
+        # "read & write" permission for "contents" should be granted to the personal access token
+        # used in secrets.ACCESS_TOKEN. Otherwise, the authentication argument of the option '-u' of curl
+        # would attempt to parse the '--data' option and curl would throw an error:
+        #  curl: (3) nested brace in URL position 42: ...
+        # See: https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#create-a-repository-dispatch-event
+        # 2. Each type of webhook events has its own set of body parameters. 'repository_disptach'
+        # requires 'event_type' and use 'client_payload' to pass input values, whereas 'workflow_dispatch'
+        # use 'inputs' to pass variables.
+        # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#repository_dispatch
+        # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_dispatch
