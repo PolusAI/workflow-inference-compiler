@@ -1,0 +1,36 @@
+steps:
+  - omeconverter:
+      in:
+        inpDir: /home/camilovelezr/axle/workflow/41744
+        filePattern: ".*.tif"
+        fileExtension: .ome.tif
+        outDir: "&converted"
+
+  - filerenaming:
+      in:
+        inpDir: "*converted"
+        filePattern: ".*_{row:c}{col:dd}_s{s:d}_w{channel:d}.*.ome.tif"
+        outFilePattern: "x{row:dd}_y{col:dd}_p{s:dd}_c{channel:d}.ome.tif"
+        outDir: "&renamed"
+  - montage:
+      in:
+        inpDir: "*renamed"
+        filePattern: "x{x:d+}_y{y:d+}_p{p:d+}_c{c:d}.ome.tif"
+        layout: p,yx
+        imageSpacing: "1"
+        gridSpacing: "20"
+        outDir: "&montage"
+  - assemble:
+      in:
+        stitchPath: "*montage"
+        imgPath: "*renamed"
+        # filePattern: "x{x:d+}_y{y:d+}_p{p:d+}_c{c:d}.ome.tif"
+        timesliceNaming: false
+        outDir: "&assembled"
+  - precomputeslide:
+      in:
+        inpDir: "*assembled"
+        pyramidType: "Zarr"
+        imageType: "image"
+        filePattern: "x(00-15)_y(01-24)_p01_c{c}.ome.tif"
+        outDir: "&final"
