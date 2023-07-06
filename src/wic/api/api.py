@@ -1,5 +1,4 @@
 """CLT utilities."""
-import logging
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -22,14 +21,6 @@ from pydantic import (  # pylint: disable=E0611
 from pydantic.error_wrappers import ErrorWrapper  # pylint: disable=E0611
 
 from wic.api._types import CWL_TYPES_DICT
-
-p = Path(__file__).absolute().with_name("ome.cwl")
-cfg = Path(__file__).absolute().with_name("inp.yml")
-p2 = Path(__file__).absolute().with_name("montage.cwl")
-p3 = Path(__file__).absolute().with_name("filerenaming.cwl")
-
-
-logger = logging.getLogger("WIC")
 
 
 class InvalidInputValue(Exception):
@@ -97,6 +88,7 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     name: str
     value: Any  # validation happens at assignment
     required: bool = True
+    linked: bool = False
 
     def __init__(self, cwl_inp: CWLInputParameter) -> None:
         inp_type = cwl_inp.type
@@ -120,7 +112,9 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
             inp = inp[1]
         return CWL_TYPES_DICT[inp]
 
-    def _set_value(self, __value: Any, check: bool = True) -> None:
+    def _set_value(
+        self, __value: Any, check: bool = True, linked: bool = False
+    ) -> None:
         """Set input value."""
         if check:
             if not isinstance(__value, self.inp_type):  # type: ignore
@@ -130,6 +124,8 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
             self.value = __value
             return
         self.value = __value  # to be used for linking inputs */&
+        if linked:
+            self.linked = True
 
 
 def _default_dict() -> dict:
@@ -224,17 +220,33 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         if __name in self._input_names:
             index = self._input_names.index(__name)
             if isinstance(__value, CLTInput):
-                try:
-                    local_input = self.inputs[index]
-                    if not local_input.inp_type == __value.inp_type:
-                        raise InvalidLink(
-                            f"links must have the same input type. cannot link {local_input.name} to {__value.name}"
+                if not __value.linked:
+                    try:
+                        local_input = self.inputs[index]
+                        if not local_input.inp_type == __value.inp_type:
+                            raise InvalidLink(
+                                f"links must have the same input type. cannot link {local_input.name} to {__value.name}"
+                            )
+                        tmp = f"{__name}{self.cwl_name}"
+                        local_input._set_value(f"*{tmp}", check=False, linked=True)
+                        __value._set_value(f"&{tmp}", check=False, linked=True)
+                    except BaseException as exc:
+                        raise exc
+                else:  # value is already linked to another inp
+                    try:
+                        local_input = self.inputs[index]
+                        if not local_input.inp_type == __value.inp_type:
+                            raise InvalidLink(
+                                f"links must have the same input type. cannot link {local_input.name} to {__value.name}"
+                            )
+                        # tmp = f"{__name}{self.cwl_name}"
+                        current_value = __value.value
+                        local_input._set_value(
+                            current_value.replace("&", "*"), check=False, linked=True
                         )
-                    tmp = f"{__name}{self.cwl_name}"
-                    local_input._set_value(f"*{tmp}", check=False)
-                    __value.value = f"&{tmp}"
-                except BaseException as exc:
-                    raise exc
+                    except BaseException as exc:
+                        raise exc
+
             else:
                 if isinstance(__value, str) and _is_link(__value):
                     self.inputs[index]._set_value(__value, check=False)
@@ -274,33 +286,9 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
             file.write(yaml.dump(self.yaml))
 
 
-IAPATH = Path("/Users/camilovelezr/iahamdah.cwl")
-IOPATH = Path("/Users/camilovelezr/iahamdah.yml")
-
-# TODO check stitchPath, booleans
-
-# step = Step(IAPATH)
-step = Step(IAPATH, IOPATH)
-
-step1 = Step(p)
-step2 = Step(p3)
-
-step1.inpDir = Path("/Users/camilovelezr/axle/workflow")
-# step1.inpDir = 23
-step1.filePattern = ".*tif"
-step1.fileExtension = ".ome.tif"
-
-step2.inpDir = step1.outDir
-# step2.inpDir = step1.filePattern
-step2.outDir = Path("/Users/camilovelezr/axle")
-step2.filePattern = ".*_{row:c}{col:dd}_s{s:d}_w{channel:d}.*.ome.tif"
-step2.outFilePattern = "x{row:dd}_y{col:dd}_p{s:dd}_c{channel:d}.ome.tif"
-
-
 @dataclass
 class Workflow:
     steps: list
-    # cwl_dir: Optional[StrPath] = None
     name: str
     wic_dir: Optional[StrPath] = None  # type: ignore
     yml_path: Path = field(init=False)
@@ -349,13 +337,10 @@ class Workflow:
 
         self._save_all_cwl(wic_dir)
         self._save_yaml(wic_dir)
-        # logger.info(f"Compiling {self.yml_path.stem}")
         print(f"Compiling {self.name}")
         proc = subprocess.run(
             args=["wic", "--yaml", self.yml_path],
             capture_output=True,
-            # stdout=subprocess.PIPE,
-            # stderr=subprocess.STDOUT,
             cwd=wic_dir,
             check=True,
             text=True,
@@ -369,13 +354,3 @@ class Workflow:
             output = _path(out_dir).joinpath(f"{self.name}.cwl")
             shutil.copy(autogenerated_path, output)
             print(f"Successfully compiled to {str(output)}")
-
-
-w1 = Workflow(
-    [step1, step2],
-    "wf1",
-    wic_dir=Path("/Users/camilovelezr/workflow-inference-compiler"),
-)
-w1.compile(out_dir=Path("/Users/camilovelezr/axle"))
-
-2
