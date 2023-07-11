@@ -25,18 +25,39 @@ jobs:
 
       - name: Create environment variables
         run: |
-          if [[ ! -z "${{ github.event.client_payload.ref_name }}" ]];
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]];
           then
             echo "sender_repo=${{ github.event.client_payload.repository }}" >> $GITHUB_ENV && \
             echo "sender_repo_owner=${{ github.event.client_payload.owner }}" >> $GITHUB_ENV && \
             echo "sender_repo_ref=${{ github.event.client_payload.ref_name }}" >> $GITHUB_ENV && \
             echo "commit_message=${{ github.event.client_payload.commit_message }}" >> $GITHUB_ENV
-          else
+          elif [[ "${{ github.event_name }}" == "push" ]];
+          then
             echo "sender_repo=${{ github.repository }}" >> $GITHUB_ENV && \
             echo "sender_repo_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
             echo "sender_repo_ref=${{ github.ref_name }}" >> $GITHUB_ENV && \
             echo "commit_message=${{ github.event.head_commit.message }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "pull_request" ]];
+          then
+            echo "sender_repo=${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}" >> $GITHUB_ENV && \
+            echo "sender_repo_owner=${{ github.event.pull_request.head.repo.owner.login }}" >> $GITHUB_ENV && \
+            echo "sender_repo_ref=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV && \
+            echo "commit_message=''" >> $GITHUB_ENV
           fi
+
+      # Unbelievably, for pull requests only, there is apparently no way to get
+      # the commit message directly via the github API.
+      # See https://github.com/orgs/community/discussions/28474
+      - name: Checkout commit sha (Pull Request only)
+        if: ${{ github.event_name }} == "pull_request"
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Get commit mesage (Pull Request only)
+        if: ${{ github.event_name }} == "pull_request"
+        run: |
+          echo "commit_message=$(git show -s --format=%s)" >> $GITHUB_ENV
 
       - name: Check existance of forks and branches of workflow-inference-compiler
         run: |
@@ -49,7 +70,7 @@ jobs:
             echo "wic_owner=${{ env.sender_repo_owner }}" >> $GITHUB_ENV && \
             echo "wic_ref=${{ env.sender_repo_ref }}" >> $GITHUB_ENV
           else
-            echo "wic_owner=PolusAI" >> $GITHUB_ENV && \
+            echo "wic_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
             echo "wic_ref=master" >> $GITHUB_ENV
           fi
 
@@ -65,7 +86,7 @@ jobs:
             echo "mm-workflows_owner=${{ env.sender_repo_owner }}" >> $GITHUB_ENV && \
             echo "mm-workflows_ref=${{ env.sender_repo_ref }}" >> $GITHUB_ENV
           else
-            echo "mm-workflows_owner=PolusAI" >> $GITHUB_ENV && \
+            echo "mm-workflows_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
             echo "mm-workflows_ref=main" >> $GITHUB_ENV
           fi
 
