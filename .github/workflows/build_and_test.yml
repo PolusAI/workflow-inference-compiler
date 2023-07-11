@@ -10,6 +10,10 @@ on:
         description: An arbitrary string used to dispatch steps
         required: true
         type: string
+      commit_message:
+        description: The commit message
+        required: true
+        type: string
       sender_repo:
         description: The repository which initiated an repository_dispatch
         required: true
@@ -22,6 +26,10 @@ on:
         description: The branch name within the mm-workflows repository
         required: true
         type: string
+
+# See https://github.com/orgs/community/discussions/15690
+# For workflow_dispatch, the commit message, repo, and branch name are not displayed by default.
+run-name: "${{ inputs.commit_message}} - ${{ inputs.sender_repo }} - ${{ inputs.mm-workflows_ref}}"
 
 env:
   BUILD_TYPE: Release
@@ -193,7 +201,7 @@ jobs:
             curl -X POST https://api.github.com/repos/${{ inputs.sender_repo }}/dispatches \
             -H 'Accept: application/vnd.github.everest-preview+json' \
             -u ${{ secrets.ACCESS_TOKEN }} \
-            --data '{"event_type": "ci_status", "client_payload": { "repository": "'"${{ github.repository }}"'", "success": "'"${{ env.workflow_success }}"'" }}'
+            --data '{"event_type": "ci_status", "client_payload": { "repository": "'"${{ github.repository }}"'", "success": "'"${{ env.workflow_success }}"'", "run_name": "'"${{ inputs.commit_message }} - ${{ inputs.mm-workflows_ref }} - ${{ matrix.os }}"'" }}'
           fi
         # To make secrets.ACCESS_TOKEN work, "read" permissions for "metadata" and
         # "read & write" permission for "contents" should be granted to the personal access token
