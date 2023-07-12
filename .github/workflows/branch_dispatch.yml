@@ -1,17 +1,70 @@
 name: Branch Dispatch
 
+# A commit within a single repository is an atomic transaction of changes.
+# To define an atomic "transaction" of commits across repositories,
+# we can simply create branches in all of the repos with the exact same name.
+# Then, on push or pull request to any individual repo, we query all of the
+# repos for a branch with that exact same name, and run all of the individual CIs
+# using those particular branches. If a branch isn't found in a given repo,
+# we fallback to the default branch on the upstream repo (i.e. PolusAI & master/main)
+# (So you should always use unique branch names; do not use 'testing', etc across repos.)
+
+# We are linking the CIs using asynchronous API calls, so they will show up in
+# your actions histories (plural!) as separate runs. Moreover, actions initiated
+# by repository_dispatch or workflow_dispatch are NOT affiliated with any branch
+# (How could they be? Anyone or anything can call the API...)
+# so the github website will NOT display the dispatching branch name in blue.
+# In particular, for PRs,
+
+# A GREEN CHECK MARK FOR THE INITIAL DISPATCH WORKFLOW DOES NOT MEAN ANY OF THE OTHER ACTIONS PASSED!
+# YOU MUST MANUALLY EXAMINE THE ACTIONS HISTORIES OF *ALL* LINKED REPOS!
+
+# We have very carefully passed along the commit message, repository, and branch
+# names so users can easily see which actions correspond to a given
+# "transaction" / coordinated set of branches across repositories.
+# Note that since the API calls are asynchronous, there are unavoidable race conditions.
+# In particular, when merging PRs in different repos as part of a "transaction",
+# you have about 10 seconds to simultaneously merge all PRs into master.
+# Otherwise, you may simply need to manually re-run the actions.
+
+# Another very important point about PRs is that the authentication currently uses
+# Personal Access Tokens (see below), so the API calls will all fail on PRs.
+# However, if all of the branches are up-to-date with all of the upstream master
+# branches, then if the CIs all pass on all of the forks, then we don't necessarily
+# need to see a green check mark on the PRs. This approach will require
+# frequent rebasing, but that's a good thing.
+
 on:
   push:
   pull_request:
   repository_dispatch:
 
+# The purpose of this file is to contain (almost) all of the logic necessary
+# for linking CIs across repos. Once the appropriate forks and branches are
+# determined here, you can just pass them as inputs into your existing github
+# actions workflows, and then add a few steps at the end to return the result.
+
+# First note that we can only call the default branch (master/main) through repository_dispatch.
+# Note that is is not sufficient to checkout master/main and then `git switch`
+# to another branch; the actions workflow files themselves may be different
+# between branches! So after we find the forks and branches here, we can use
+# workflow_dispatch to directly checkout the correct code and run the CIs on
+# the correct forks/branches.
+# https://github.com/orgs/community/discussions/24657#discussioncomment-3244904
+# https://docs.github.com/en/rest/actions/workflows?apiVersion=2022-11-28#create-a-workflow-dispatch-event
+
+# Each type of webhook events has its own set of body parameters.
+# 'repository_dispatch' requires 'event_type' and uses 'client_payload' to pass user data
+# https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#repository_dispatch
+# 'workflow_dispatch' requires 'ref' and uses 'inputs' to pass user data.
+# https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_dispatch
+
+# Finally, in general rather than using "$GITHUB_*", prefer the equivalent "${{ github.* }}".
+# https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables
+# https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+
 jobs:
   branch_dispatch:
-    # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
-    # This will prevent DOS attacks from people blasting the CI with rapid fire commits.
-    concurrency:
-      group: ${{ github.workflow }}-${{ matrix.os }}-${{ github.ref }}
-      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
@@ -25,16 +78,39 @@ jobs:
 
       - name: Create environment variables
         run: |
-          if [[ ! -z "${{ github.event.client_payload.ref_name }}" ]];
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]];
           then
             echo "sender_repo=${{ github.event.client_payload.repository }}" >> $GITHUB_ENV && \
             echo "sender_repo_owner=${{ github.event.client_payload.owner }}" >> $GITHUB_ENV && \
-            echo "sender_repo_ref=${{ github.event.client_payload.ref_name }}" >> $GITHUB_ENV
-          else
-            echo "sender_repo=''" >> $GITHUB_ENV && \
+            echo "sender_repo_ref=${{ github.event.client_payload.ref_name }}" >> $GITHUB_ENV && \
+            echo "commit_message=${{ github.event.client_payload.commit_message }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "push" ]];
+          then
+            echo "sender_repo=${{ github.repository }}" >> $GITHUB_ENV && \
             echo "sender_repo_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
-            echo "sender_repo_ref=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "sender_repo_ref=${{ github.ref_name }}" >> $GITHUB_ENV && \
+            echo "commit_message=${{ github.event.head_commit.message }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "pull_request" ]];
+          then
+            echo "sender_repo=${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}" >> $GITHUB_ENV && \
+            echo "sender_repo_owner=${{ github.event.pull_request.head.repo.owner.login }}" >> $GITHUB_ENV && \
+            echo "sender_repo_ref=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV && \
+            echo "commit_message=''" >> $GITHUB_ENV
           fi
+
+      # Unbelievably, for pull requests only, there is apparently no way to get
+      # the commit message directly via the github API.
+      # See https://github.com/orgs/community/discussions/28474
+      - name: Checkout commit sha (Pull Request only)
+        if: ${{ github.event_name }} == "pull_request"
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Get commit mesage (Pull Request only)
+        if: ${{ github.event_name }} == "pull_request"
+        run: |
+          echo "commit_message=$(git show -s --format=%s)" >> $GITHUB_ENV
 
       - name: Check existance of forks and branches of workflow-inference-compiler
         run: |
@@ -47,7 +123,7 @@ jobs:
             echo "wic_owner=${{ env.sender_repo_owner }}" >> $GITHUB_ENV && \
             echo "wic_ref=${{ env.sender_repo_ref }}" >> $GITHUB_ENV
           else
-            echo "wic_owner=PolusAI" >> $GITHUB_ENV && \
+            echo "wic_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
             echo "wic_ref=master" >> $GITHUB_ENV
           fi
 
@@ -63,33 +139,52 @@ jobs:
             echo "mm-workflows_owner=${{ env.sender_repo_owner }}" >> $GITHUB_ENV && \
             echo "mm-workflows_ref=${{ env.sender_repo_ref }}" >> $GITHUB_ENV
           else
-            echo "mm-workflows_owner=PolusAI" >> $GITHUB_ENV && \
+            echo "mm-workflows_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
             echo "mm-workflows_ref=main" >> $GITHUB_ENV
           fi
 
-      - name: Branch dispatch
-        # 1. Not possible to call non-default branch through repository_dispatch action. Instead,
-        # we relay the repository_dispatch using this workflow_dispatch to trigger CI of the
-        # branches that we want.
-        # https://github.com/orgs/community/discussions/24657#discussioncomment-3244904
-        # https://docs.github.com/en/rest/actions/workflows?apiVersion=2022-11-28#create-a-workflow-dispatch-event
-        # 2. NOTE: Rather than using "$GITHUB_*", use equivalent "${{ github.* }}".
-        # https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables
-        # https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+      - name: Branch dispatch build_and_test.yml
         run: |
-          curl -X POST https://api.github.com/repos/${{ github.repository }}/actions/workflows/build_and_test.yml/dispatches \
-          -H 'Accept: application/vnd.github+json' \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          -u ${{ secrets.ACCESS_TOKEN }} \
-          --data '{"ref": "'"${{ env.wic_ref }}"'", "inputs": { "event_type": "${{ github.event_name }}", "sender_repo": "'"${{ env.sender_repo }}"'", "mm-workflows_owner": "'"${{ env.mm-workflows_owner }}"'", "mm-workflows_ref": "'"${{ env.mm-workflows_ref }}"'" }}'
-        # 1. To make secrets.ACCESS_TOKEN work, "read" permissions for "metadata" and
-        # "read & write" permission for "contents" should be granted to the personal access token
-        # used in secrets.ACCESS_TOKEN. Otherwise, the authentication argument of the option '-u' of curl
-        # would attempt to parse the '--data' option and curl would throw an error:
-        #  curl: (3) nested brace in URL position 42: ...
-        # See: https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#create-a-repository-dispatch-event
-        # 2. Each type of webhook events has its own set of body parameters. 'repository_disptach'
-        # requires 'event_type' and use 'client_payload' to pass input values, whereas 'workflow_dispatch'
-        # use 'inputs' to pass variables.
-        # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#repository_dispatch
-        # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_dispatch
+          if [[ "${{ secrets.ACCESS_TOKEN }}" != '' ]];
+          then
+            curl -X POST https://api.github.com/repos/${{ github.repository }}/actions/workflows/build_and_test.yml/dispatches \
+            -H 'Accept: application/vnd.github+json' \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -u ${{ secrets.ACCESS_TOKEN }} \
+            --data '{"ref": "'"${{ env.wic_ref }}"'", "inputs": { "event_type": "${{ github.event_name }}", "commit_message": "'"${{ env.commit_message }}"'", "sender_repo": "'"${{ env.sender_repo }}"'", "mm-workflows_owner": "'"${{ env.mm-workflows_owner }}"'", "mm-workflows_ref": "'"${{ env.mm-workflows_ref }}"'" }}'
+          else
+            echo "Error! secrets.ACCESS_TOKEN is not defined! (or expired)" && \
+            echo "You need a Fine-grained Personal Access Token. See" && \
+            echo "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token" && \
+            echo "In step 11, choose 'Only select repositories' and then add ALL of the repositories that this CI (transitively!) needs to access." && \
+            echo "In step 13, choose 'read and write' for 'actions', 'read and write' for 'contents', and 'read' for 'metadata'" && \
+            echo "In step 14, click 'Generate Token' and then copy the access token string." && \
+            echo "Next, for each repository selected in step 11, go to the repository settings." && \
+            echo "Under 'Secrets and variables', click 'Actions' and then click 'New repository secret'." && \
+            echo "Finally, enter ACCESS_TOKEN into the Name box, paste the access token string into the large Secret box, and click 'Add secret'" && \
+            false
+          fi
+        # NOTE: We probably only need this secrets.ACCESS_TOKEN check for this first github API call.
+        # i.e. If this API call fails, probably all the others will fail as well.
+
+      - name: Branch dispatch build_and_run_workflows.yml
+        run: |
+          if [[ "${{ secrets.ACCESS_TOKEN }}" != '' ]];
+          then
+            curl -X POST https://api.github.com/repos/${{ github.repository }}/actions/workflows/build_and_run_workflows.yml/dispatches \
+            -H 'Accept: application/vnd.github+json' \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -u ${{ secrets.ACCESS_TOKEN }} \
+            --data '{"ref": "'"${{ env.wic_ref }}"'", "inputs": { "event_type": "${{ github.event_name }}", "commit_message": "'"${{ env.commit_message }}"'", "sender_repo": "'"${{ env.sender_repo }}"'", "mm-workflows_owner": "'"${{ env.mm-workflows_owner }}"'", "mm-workflows_ref": "'"${{ env.mm-workflows_ref }}"'" }}'
+          else
+            echo "Error! secrets.ACCESS_TOKEN is not defined! (or expired)" && \
+            echo "You need a Fine-grained Personal Access Token. See" && \
+            echo "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token" && \
+            echo "In step 11, choose 'Only select repositories' and then add ALL of the repositories that this CI (transitively!) needs to access." && \
+            echo "In step 13, choose 'read and write' for 'actions', 'read and write' for 'contents', and 'read' for 'metadata'" && \
+            echo "In step 14, click 'Generate Token' and then copy the access token string." && \
+            echo "Next, for each repository selected in step 11, go to the repository settings." && \
+            echo "Under 'Secrets and variables', click 'Actions' and then click 'New repository secret'." && \
+            echo "Finally, enter ACCESS_TOKEN into the Name box, paste the access token string into the large Secret box, and click 'Add secret'" && \
+            false
+          fi
