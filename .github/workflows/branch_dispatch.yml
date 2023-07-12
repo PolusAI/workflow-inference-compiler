@@ -65,11 +65,6 @@ on:
 
 jobs:
   branch_dispatch:
-    # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
-    # This will prevent DOS attacks from people blasting the CI with rapid fire commits.
-    concurrency:
-      group: ${{ github.workflow }}-${{ matrix.os }}-${{ github.ref }}
-      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
