@@ -148,7 +148,7 @@ jobs:
             echo "mm-workflows_ref=main" >> $GITHUB_ENV
           fi
 
-      - name: Branch dispatch
+      - name: Branch dispatch build_and_test.yml
         run: |
           if [[ "${{ secrets.ACCESS_TOKEN }}" != '' ]];
           then
@@ -171,3 +171,25 @@ jobs:
           fi
         # NOTE: We probably only need this secrets.ACCESS_TOKEN check for this first github API call.
         # i.e. If this API call fails, probably all the others will fail as well.
+
+      - name: Branch dispatch build_and_run_workflows.yml
+        run: |
+          if [[ "${{ secrets.ACCESS_TOKEN }}" != '' ]];
+          then
+            curl -X POST https://api.github.com/repos/${{ github.repository }}/actions/workflows/build_and_run_workflows.yml/dispatches \
+            -H 'Accept: application/vnd.github+json' \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -u ${{ secrets.ACCESS_TOKEN }} \
+            --data '{"ref": "'"${{ env.wic_ref }}"'", "inputs": { "event_type": "${{ github.event_name }}", "commit_message": "'"${{ env.commit_message }}"'", "sender_repo": "'"${{ env.sender_repo }}"'", "mm-workflows_owner": "'"${{ env.mm-workflows_owner }}"'", "mm-workflows_ref": "'"${{ env.mm-workflows_ref }}"'" }}'
+          else
+            echo "Error! secrets.ACCESS_TOKEN is not defined! (or expired)" && \
+            echo "You need a Fine-grained Personal Access Token. See" && \
+            echo "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token" && \
+            echo "In step 11, choose 'Only select repositories' and then add ALL of the repositories that this CI (transitively!) needs to access." && \
+            echo "In step 13, choose 'read and write' for 'actions', 'read and write' for 'contents', and 'read' for 'metadata'" && \
+            echo "In step 14, click 'Generate Token' and then copy the access token string." && \
+            echo "Next, for each repository selected in step 11, go to the repository settings." && \
+            echo "Under 'Secrets and variables', click 'Actions' and then click 'New repository secret'." && \
+            echo "Finally, enter ACCESS_TOKEN into the Name box, paste the access token string into the large Secret box, and click 'Add secret'" && \
+            false
+          fi

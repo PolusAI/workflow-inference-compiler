@@ -203,9 +203,4 @@ jobs:
             -u ${{ secrets.ACCESS_TOKEN }} \
             --data '{"event_type": "ci_status", "client_payload": { "repository": "'"${{ github.repository }}"'", "success": "'"${{ env.workflow_success }}"'", "run_name": "'"${{ inputs.commit_message }} - ${{ inputs.mm-workflows_ref }} - ${{ matrix.os }}"'" }}'
           fi
-        # To make secrets.ACCESS_TOKEN work, "read" permissions for "metadata" and
-        # "read & write" permission for "contents" should be granted to the personal access token
-        # used in secrets.ACCESS_TOKEN. Otherwise, the authentication argument of the option '-u' of curl
-        # would attempt to parse the '--data' option and curl would throw an error:
-        #  curl: (3) nested brace in URL position 42: ...
-        # See: https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#create-a-repository-dispatch-event
+
