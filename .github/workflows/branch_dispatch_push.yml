@@ -1,0 +1,72 @@
+name: Branch Dispatch
+
+on:
+  push:
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  branch_dispatch:
+    runs-on: ubuntu-latest
+
+    steps:
+      # To use this repository's private action,
+      # you must check out the repository
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Check existence of wic
+        uses: ./.github/my_actions/check_existence/ # Must start with ./
+        id: ce_wic
+        with:
+          repository: workflow-inference-compiler
+          sender_repo_owner: ${{ github.repository_owner }}
+          sender_repo_ref: ${{ github.ref_name }}
+          default_owner: PolusAI
+          default_branch: master
+          access_token: ${{ secrets.ACCESS_TOKEN }}
+
+      # For other repositories, the entire step below should be copied and edited to make new steps.
+      - name: Check existence of mm-workflows
+        uses: ./.github/my_actions/check_existence/ # Must start with ./
+        id: ce_mm-workflows
+        with:
+          repository: mm-workflows
+          sender_repo_owner: ${{ github.repository_owner }}
+          sender_repo_ref: ${{ github.ref_name }}
+          default_owner: PolusAI
+          default_branch: main
+          access_token: ${{ secrets.ACCESS_TOKEN }}
+
+      - name: Branch dispatch build_and_test.yml
+        uses: ./.github/my_actions/branch_dispatch/ # Must start with ./
+        id: bd_build_and_test
+        with:
+          repository: workflow-inference-compiler
+          workflow_yml: build_and_test.yml
+          sender_repo: ${{ github.repository }}
+          sender_repo_owner: ${{ steps.ce_wic.outputs.owner }}
+          sender_repo_ref: ${{ steps.ce_wic.outputs.ref }}
+          event_type: ${{ github.event_name }}
+          commit_message: ${{ github.event.head_commit.message }}
+          mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
+          mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
+          access_token: ${{ secrets.ACCESS_TOKEN }}
+
+      - name: Branch dispatch build_and_run_workflows.yml
+        uses: ./.github/my_actions/branch_dispatch/ # Must start with ./
+        id: bd_build_and_run_workflows
+        with:
+          repository: workflow-inference-compiler
+          workflow_yml: build_and_run_workflows.yml
+          sender_repo: ${{ github.repository }}
+          sender_repo_owner: ${{ steps.ce_wic.outputs.owner }}
+          sender_repo_ref: ${{ steps.ce_wic.outputs.ref }}
+          event_type: ${{ github.event_name }}
+          commit_message: ${{ github.event.head_commit.message }}
+          mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
+          mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
+          access_token: ${{ secrets.ACCESS_TOKEN }}

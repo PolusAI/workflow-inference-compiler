@@ -36,6 +36,11 @@ defaults:
     # This will cause bash to look for the startup file ~/.bash_profile, NOT ~/.bashrc
     # This is important since conda init writes to ~/.bashrc
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
 jobs:
   build_and_run:
     # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
@@ -118,11 +123,13 @@ jobs:
       # Use inputs.sender_repo to reply the original sender.
       # NOTE: The curl command exists on Windows, but not any other linux commands! (e.g. echo)
       if: always()
-      run: |
-        if ${{ inputs.event_type == 'repository_dispatch' }}
-        then
-          curl -X POST https://api.github.com/repos/${{ inputs.sender_repo }}/dispatches \
-          -H 'Accept: application/vnd.github+json' \
-          -u ${{ secrets.ACCESS_TOKEN }} \
-          --data '{"event_type": "ci_status", "client_payload": { "repository": "'"${{ github.repository }}"'", "success": "'"${{ env.workflow_success }}"'", "run_name": "'"${{ inputs.commit_message }} - ${{ inputs.mm-workflows_ref }} - ${{ matrix.os }}"'" }}'
-        fi
+      uses: ./wic/.github/my_actions/reply_sender/ # Must start with ./
+      with:
+        github_repository: ${{ github.repository }}
+        event_type: ${{ inputs.event_type }}
+        sender_repo: ${{ inputs.sender_repo }}
+        operating_system: ${{ matrix.os }}
+        commit_message: ${{ inputs.commit_message }}
+        mm_workflows_ref: ${{ inputs.mm-workflows_ref }}
+        workflow_success: ${{ env.workflow_success }}
+        access_token: ${{ secrets.ACCESS_TOKEN }}

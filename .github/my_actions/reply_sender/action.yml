@@ -1,0 +1,42 @@
+# See https://docs.github.com/en/actions/creating-actions/creating-a-javascript-action
+name: 'Reply sender'
+description: 'Return the CI status results to the initiating sender repository'
+inputs:
+  github_repository:
+    description: 'The name of the current repository (with owner)'
+    type: string
+    required: true
+  event_type:
+    description: 'The name of the event type'
+    type: string
+    required: true
+  sender_repo:
+    description: 'The name of the initiating repository'
+    type: string
+    required: true
+  operating_system:
+    description: 'The name of the operating system'
+    type: string
+    required: true
+  commit_message:
+    description: 'The commit message'
+    type: string
+    required: true
+  mm_workflows_ref:
+    description: 'The name of the mm-workflows branch / ref'
+    type: string
+    required: true
+  workflow_success:
+    description: 'The result of the workflow run / CI status'
+    type: string
+    required: true
+  access_token:
+    description: 'The token used for authentication'
+    type: string
+    required: true
+outputs:
+  response:
+    description: 'The response text'
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
