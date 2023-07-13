@@ -76,39 +76,57 @@ jobs:
         run: |
           sudo apt-get install jq
 
-      - name: Create environment variables
+# See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+# NOTE: Be very careful with if: statements! You probably do NOT need to use ${{ ... }}, and string literals should be in single quotes ''
+# See https://github.com/actions/runner/issues/1173#issuecomment-931503023
+      - name: Create environment variables repository_dispatch
+        if: github.event_name == 'repository_dispatch'
+        env:
+          SENDER_REPO: ${{ github.event.client_payload.repository }}
+          SENDER_REPO_OWNER: ${{ github.event.client_payload.owner }}
+          SENDER_REPO_REF: ${{ github.event.client_payload.ref_name }}
+          COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
         run: |
-          if [[ "${{ github.event_name }}" == "repository_dispatch" ]];
-          then
-            echo "sender_repo=${{ github.event.client_payload.repository }}" >> $GITHUB_ENV && \
-            echo "sender_repo_owner=${{ github.event.client_payload.owner }}" >> $GITHUB_ENV && \
-            echo "sender_repo_ref=${{ github.event.client_payload.ref_name }}" >> $GITHUB_ENV && \
-            echo "commit_message=${{ github.event.client_payload.commit_message }}" >> $GITHUB_ENV
-          elif [[ "${{ github.event_name }}" == "push" ]];
-          then
-            echo "sender_repo=${{ github.repository }}" >> $GITHUB_ENV && \
-            echo "sender_repo_owner=${{ github.repository_owner }}" >> $GITHUB_ENV && \
-            echo "sender_repo_ref=${{ github.ref_name }}" >> $GITHUB_ENV && \
-            echo "commit_message=${{ github.event.head_commit.message }}" >> $GITHUB_ENV
-          elif [[ "${{ github.event_name }}" == "pull_request" ]];
-          then
-            echo "sender_repo=${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}" >> $GITHUB_ENV && \
-            echo "sender_repo_owner=${{ github.event.pull_request.head.repo.owner.login }}" >> $GITHUB_ENV && \
-            echo "sender_repo_ref=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV && \
-            echo "commit_message=''" >> $GITHUB_ENV
-          fi
+          echo "sender_repo=$SENDER_REPO" >> $GITHUB_ENV && \
+          echo "sender_repo_owner=$SENDER_REPO_OWNER" >> $GITHUB_ENV && \
+          echo "sender_repo_ref=$SENDER_REPO_REF" >> $GITHUB_ENV && \
+          echo "commit_message=$COMMIT_MESSAGE" >> $GITHUB_ENV
+      - name: Create environment variables push
+        if: github.event_name == 'push'
+        env:
+          SENDER_REPO: ${{ github.repository }}
+          SENDER_REPO_OWNER: ${{ github.repository_owner }}
+          SENDER_REPO_REF: ${{ github.ref_name }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          echo "sender_repo=$SENDER_REPO" >> $GITHUB_ENV && \
+          echo "sender_repo_owner=$SENDER_REPO_OWNER" >> $GITHUB_ENV && \
+          echo "sender_repo_ref=$SENDER_REPO_REF" >> $GITHUB_ENV && \
+          echo "commit_message=$COMMIT_MESSAGE" >> $GITHUB_ENV
+      - name: Create environment variables pull_request
+        if: github.event_name == 'pull_request'
+        env:
+          SENDER_REPO_NAME: ${{ github.event.pull_request.head.repo.name }}
+          SENDER_REPO_OWNER: ${{ github.event.pull_request.head.repo.owner.login }}
+          SENDER_REPO_REF: ${{ github.event.pull_request.head.ref }}
+          COMMIT_MESSAGE: ''
+        run: |
+          echo "sender_repo=$SENDER_REPO_OWNER/$SENDER_REPO_NAME" >> $GITHUB_ENV && \
+          echo "sender_repo_owner=$SENDER_REPO_OWNER" >> $GITHUB_ENV && \
+          echo "sender_repo_ref=$SENDER_REPO_REF" >> $GITHUB_ENV && \
+          echo "commit_message=$COMMIT_MESSAGE" >> $GITHUB_ENV
 
       # Unbelievably, for pull requests only, there is apparently no way to get
       # the commit message directly via the github API.
       # See https://github.com/orgs/community/discussions/28474
       - name: Checkout commit sha (Pull Request only)
-        if: ${{ github.event_name }} == "pull_request"
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Get commit mesage (Pull Request only)
-        if: ${{ github.event_name }} == "pull_request"
+        if: github.event_name == 'pull_request'
         run: |
           echo "commit_message=$(git show -s --format=%s)" >> $GITHUB_ENV
 
