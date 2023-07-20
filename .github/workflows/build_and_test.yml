@@ -179,7 +179,7 @@ jobs:
       # Otherwise: "The workflow is not valid. ... Unrecognized function: 'success'."
       # https://github.com/actions/runner/issues/834#issuecomment-889484016
       - name: The workflow has succeeded
-        if: ${{ success() }}
+        if: success()
         run: |
           echo 'workflow_success=true' >> "$GITHUB_ENV"
 
@@ -188,7 +188,7 @@ jobs:
       # affect the 'failure()' function here.
       # https://docs.github.com/en/actions/learn-github-actions/expressions#status-check-function
       - name: The workflow has failed
-        if: ${{ failure() }}
+        if: failure()
         run: |
           echo 'workflow_success=false' >> "$GITHUB_ENV"
 
