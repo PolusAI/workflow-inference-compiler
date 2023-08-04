@@ -22,7 +22,8 @@ try {
   const workflow_yml = core.getInput('workflow_yml');
   const sender_repo = core.getInput('sender_repo');
   const sender_repo_owner = core.getInput('sender_repo_owner');
-  const sender_repo_ref = core.getInput('sender_repo_ref');
+  const wic_owner = core.getInput('wic_owner');
+  const wic_ref = core.getInput('wic_ref');
   const event_type = core.getInput('event_type');
   const commit_message = core.getInput('commit_message');
   const mm_workflows_owner = core.getInput('mm_workflows_owner');
@@ -33,18 +34,22 @@ try {
     console.log("Error! secrets.ACCESS_TOKEN is not defined! (or expired)");
   }
 
-  const url_dispatches = "https://api.github.com/repos/" + sender_repo_owner + "/" + repository + "/actions/workflows/" + workflow_yml + "/dispatches";
+  // Use base repository owner, otherwise permission errors: Resource not accessible by integration.
+  const repo_owner = event_type == "pull_request_target" ? github.context.payload.repository.owner.login : sender_repo_owner;
+  const url_dispatches = "https://api.github.com/repos/" + repo_owner + "/" + repository + "/actions/workflows/" + workflow_yml + "/dispatches";
   console.log(`url_branches: ${url_dispatches}`);
   console.log(`access_token: ${access_token}`);
 
   const response = await (0,node_fetch__WEBPACK_IMPORTED_MODULE_0__/* ["default"] */ .ZP)(url_dispatches, {
     method: "POST",
     body: JSON.stringify({
-      ref: sender_repo_ref,
+      ref: wic_ref,
       inputs: {
         event_type: event_type,
         commit_message: commit_message,
         sender_repo: sender_repo,
+        "wic_owner": wic_owner,
+        "wic_ref": wic_ref,
         "mm-workflows_owner": mm_workflows_owner,
         "mm-workflows_ref": mm_workflows_ref,
       },

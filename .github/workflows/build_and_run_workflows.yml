@@ -18,6 +18,14 @@ on:
         description: The repository which initiated an repository_dispatch
         required: true
         type: string
+      wic_owner:
+        description: The account name of the wic repository
+        required: true
+        type: string
+      wic_ref:
+        description: The branch name within the wic repository
+        required: true
+        type: string
       mm-workflows_owner:
         description: The account name of the mm-workflows repository
         required: true
@@ -58,9 +66,8 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v3
       with:
-        # 'repository' and 'ref' are not explicitly supplied here, but implicitly set by the Github API.
-        # For 'workflow_dispatch' event, the Github API will set the 'ref' to the receiving
-        # branch automatically. See 'branch_dispatch.yml'.
+        repository: ${{ inputs.wic_owner }}/workflow-inference-compiler
+        ref: ${{ inputs.wic_ref }}
         submodules: recursive
         path: wic
 

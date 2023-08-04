@@ -87,8 +87,9 @@ jobs:
           repository: workflow-inference-compiler
           workflow_yml: build_and_test.yml
           sender_repo: ${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}
-          sender_repo_owner: ${{ steps.ce_wic.outputs.owner }}
-          sender_repo_ref: ${{ steps.ce_wic.outputs.ref }}
+          sender_repo_owner: ${{ github.event.pull_request.head.repo.owner.login }}
+          wic_owner: ${{ steps.ce_wic.outputs.owner }}
+          wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
           commit_message: ${{ env.commit_message }}  # NOTE: This may still be susceptible to script injection attacks.
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
@@ -102,8 +103,9 @@ jobs:
           repository: workflow-inference-compiler
           workflow_yml: build_and_run_workflows.yml
           sender_repo: ${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}
-          sender_repo_owner: ${{ steps.ce_wic.outputs.owner }}
-          sender_repo_ref: ${{ steps.ce_wic.outputs.ref }}
+          sender_repo_owner: ${{ github.event.pull_request.head.repo.owner.login }}
+          wic_owner: ${{ steps.ce_wic.outputs.owner }}
+          wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
           commit_message: ${{ env.commit_message }}  # NOTE: This may still be susceptible to script injection attacks.
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
