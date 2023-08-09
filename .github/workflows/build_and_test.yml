@@ -205,7 +205,6 @@ jobs:
         # to only run this step only if the repository_dispatch sends the signal.
         # https://github.com/actions/runner/issues/834#issuecomment-907096707
         # Use inputs.sender_repo to reply the original sender.
-        # NOTE: The curl command exists on Windows, but not any other linux commands! (e.g. echo)
         if: always()
         uses: ./wic/.github/my_actions/reply_sender/ # Must start with ./
         with:

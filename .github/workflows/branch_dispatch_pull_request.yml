@@ -91,7 +91,7 @@ jobs:
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
-          commit_message: ${{ env.commit_message }}  # NOTE: This may still be susceptible to script injection attacks.
+          commit_message: ${{ env.commit_message }}
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
           access_token: ${{ steps.generate_token.outputs.token }}
@@ -107,7 +107,7 @@ jobs:
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
-          commit_message: ${{ env.commit_message }}  # NOTE: This may still be susceptible to script injection attacks.
+          commit_message: ${{ env.commit_message }}
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
           access_token: ${{ steps.generate_token.outputs.token }}

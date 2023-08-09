@@ -26,22 +26,15 @@ In particular, when merging PRs in different repos as part of a "transaction",
 you have about 10 seconds to simultaneously merge all PRs into master.
 Otherwise, you may simply need to manually re-run the actions.
 
-Another very important point about PRs is that the authentication currently uses
-Personal Access Tokens (see below), so the API calls will all fail on PRs.
-However, if all of the branches are up-to-date with all of the upstream master
-branches, then if the CIs all pass on all of the forks, then we don't necessarily
-need to see a green check mark on the PRs. This approach will require
-frequent rebasing, but that's a good thing.
-
-The purpose of this file is to contain (almost) all of the logic necessary
+The purpose of the branch_dispatch_*.yml files is to contain (almost) all of the logic necessary
 for linking CIs across repos. Once the appropriate forks and branches are
-determined here, you can just pass them as inputs into your existing github
+determined, you can just pass them as inputs into your existing github
 actions workflows, and then add a few steps at the end to return the result.
 
 First note that we can only call the default branch (master/main) through repository_dispatch.
 Note that is is not sufficient to checkout master/main and then `git switch`
 to another branch; the actions workflow files themselves may be different
-between branches! So after we find the forks and branches here, we can use
+between branches! So after we find the forks and branches, we can use
 workflow_dispatch to directly checkout the correct code and run the CIs on
 the correct forks/branches.
 https://github.com/orgs/community/discussions/24657#discussioncomment-3244904
@@ -53,6 +46,6 @@ https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-paylo
 'workflow_dispatch' requires 'ref' and uses 'inputs' to pass user data.
 https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_dispatch
 
-Finally, in general rather than using "$GITHUB_*", prefer the equivalent "${{ github.* }}".
+Finally, in general rather than using "\$GITHUB_\*", prefer the equivalent "\${{ github.\* }}".
 https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables
 https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
