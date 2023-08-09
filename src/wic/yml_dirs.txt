@@ -7,7 +7,7 @@
 # By default, each directory is associated with the namespace 'global', as shown.
 
 # Namespace Directory
-global      examples/
 global      docs/tutorials/
+global      ../mm-workflows/examples/
 # foo       a/relative/path/
 # bar       /an/absolute/path/

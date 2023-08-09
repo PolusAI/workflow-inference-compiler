@@ -1,9 +1,39 @@
 name: Run Examples
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+    # Have to declare parameters here for those that will be sent through 'workflow-dispatch'
+    # event in branch_dispatch.yml. Otherwise, there'll be github API errors:
+    # '"message": "Unexpected inputs provided: ...",'
+    inputs:
+      event_type:
+        description: An arbitrary string used to dispatch steps
+        required: true
+        type: string
+      commit_message:
+        description: The commit message
+        required: true
+        type: string
+      sender_repo:
+        description: The repository which initiated an repository_dispatch
+        required: true
+        type: string
+      wic_owner:
+        description: The account name of the wic repository
+        required: true
+        type: string
+      wic_ref:
+        description: The branch name within the wic repository
+        required: true
+        type: string
+      mm-workflows_owner:
+        description: The account name of the mm-workflows repository
+        required: true
+        type: string
+      mm-workflows_ref:
+        description: The branch name within the mm-workflows repository
+        required: true
+        type: string
 
 env:
   BUILD_TYPE: Release
@@ -14,12 +44,17 @@ defaults:
     # This will cause bash to look for the startup file ~/.bash_profile, NOT ~/.bashrc
     # This is important since conda init writes to ~/.bashrc
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
 jobs:
   build_and_run:
     # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
     # This will prevent DOS attacks from people blasting the CI with rapid fire commits.
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.cwl_runner }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ matrix.cwl_runner }}-${{ github.ref }}-${{ inputs.sender_repo }}-${{ inputs.mm-workflows_ref}}
       cancel-in-progress: true
     strategy:
       fail-fast: false
@@ -31,26 +66,76 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v3
       with:
+        repository: ${{ inputs.wic_owner }}/workflow-inference-compiler
+        ref: ${{ inputs.wic_ref }}
         submodules: recursive
+        path: wic
+
+    - name: Checkout mm-workflows
+      if: always()
+      uses: actions/checkout@v3
+      with:
+        repository: ${{ inputs.mm-workflows_owner }}/mm-workflows
+        ref: ${{ inputs.mm-workflows_ref }}
+        submodules: recursive
+        path: mm-workflows
 
     - name: Setup mamba (linux, macos)
       uses: conda-incubator/setup-miniconda@v2.2.0
       with:
         miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest
-        environment-file: system_deps.yml
+        environment-file: wic/system_deps.yml
         activate-environment: wic
         use-mamba: true
         channels: conda-forge
         python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
 
     - name: Docker pull
-      run: ./dockerPull.sh
+      run: cd wic/ && ./dockerPull.sh
       # For self-hosted runners, make sure the docker cache is up-to-date.
 
     - name: Install Workflow Inference Compiler
-      run: pip install ".[all]"
+      run: cd wic/ && pip install ".[all]"
 
     - name: PyTest Run Example Workflows
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-      run: pytest -k test_run_examples --workers 4 --cwl_runner ${{ matrix.cwl_runner }} # --cov
+      run: cd wic/ && pytest -k test_run_examples --workers 4 --cwl_runner ${{ matrix.cwl_runner }} # --cov
+
+    # NOTE: The steps below are for repository_dispatch only. For all other steps, please insert above
+    # this comment.
+
+    # Need to store success value in environment variable, rather than using 'success()' in-line inside a run tag.
+    # Otherwise: "The workflow is not valid. ... Unrecognized function: 'success'."
+    # https://github.com/actions/runner/issues/834#issuecomment-889484016
+    - name: The workflow has succeeded
+      if: ${{ success() }}
+      run: |
+        echo 'workflow_success=true' >> "$GITHUB_ENV"
+
+    # It is not clear from the documentation, but the 'success()' and 'failure()' functions
+    # do not consider skipped steps. Specifically, the above 'success()' function will not
+    # affect the 'failure()' function here.
+    # https://docs.github.com/en/actions/learn-github-actions/expressions#status-check-function
+    - name: The workflow has failed
+      if: ${{ failure() }}
+      run: |
+        echo 'workflow_success=false' >> "$GITHUB_ENV"
+
+    - name: Reply CI results to sender
+      # In case of failure, we still need to return the failure status to the original repository.
+      # Use 'always()' so this step runs even if there's a failure and use the bash if-statement
+      # to only run this step only if the repository_dispatch sends the signal.
+      # https://github.com/actions/runner/issues/834#issuecomment-907096707
+      # Use inputs.sender_repo to reply the original sender.
+      if: always()
+      uses: ./wic/.github/my_actions/reply_sender/ # Must start with ./
+      with:
+        github_repository: ${{ github.repository }}
+        event_type: ${{ inputs.event_type }}
+        sender_repo: ${{ inputs.sender_repo }}
+        operating_system: ${{ matrix.os }}
+        commit_message: ${{ inputs.commit_message }}
+        mm_workflows_ref: ${{ inputs.mm-workflows_ref }}
+        workflow_success: ${{ env.workflow_success }}
+        access_token: ${{ secrets.ACCESS_TOKEN }}
