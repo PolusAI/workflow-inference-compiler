@@ -1,0 +1,100 @@
+name: Branch Dispatch
+
+on:
+  repository_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  branch_dispatch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install JQ for parsing JSON
+        run: |
+          sudo apt-get install jq
+
+      # See comments in token.md
+      - name: Generate a token
+        id: generate_token
+        uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Check actor's identity
+        env:
+          APP_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          if ! curl -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  -H "Authorization: Bearer $APP_TOKEN" \
+                  https://api.github.com/repos/${{ github.repository }}/collaborators \
+                  | jq '.[].login' | grep "${{ github.event.sender.login }}";
+          then
+            echo "Account ${{ github.event.sender.login }} doesn't have the permission to run ${{ github.event.action }}!" \
+              && false;
+          fi
+
+      # To use this repository's private action,
+      # you must check out the repository
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Check existence of wic
+        uses: ./.github/my_actions/check_existence/ # Must start with ./
+        id: ce_wic
+        with:
+          repository: workflow-inference-compiler
+          sender_repo_owner: ${{ github.event.client_payload.owner }}
+          sender_repo_ref: ${{ github.event.client_payload.ref_name }}
+          default_owner: PolusAI
+          default_branch: master
+          access_token: ${{ steps.generate_token.outputs.token }}
+
+      # For other repositories, the entire step below should be copied and edited to make new steps.
+      - name: Check existence of mm-workflows
+        uses: ./.github/my_actions/check_existence/ # Must start with ./
+        id: ce_mm-workflows
+        with:
+          repository: mm-workflows
+          sender_repo_owner: ${{ github.event.client_payload.owner }}
+          sender_repo_ref: ${{ github.event.client_payload.ref_name }}
+          default_owner: PolusAI
+          default_branch: main
+          access_token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Branch dispatch build_and_test.yml
+        uses: ./.github/my_actions/branch_dispatch/ # Must start with ./
+        id: bd_build_and_test
+        with:
+          repository: workflow-inference-compiler
+          workflow_yml: build_and_test.yml
+          sender_repo: ${{ github.event.client_payload.repository }}
+          sender_repo_owner: ${{ github.event.client_payload.owner }}
+          wic_owner: ${{ steps.ce_wic.outputs.owner }}
+          wic_ref: ${{ steps.ce_wic.outputs.ref }}
+          event_type: ${{ github.event_name }}
+          commit_message: ${{ github.event.client_payload.commit_message }}
+          mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
+          mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
+          access_token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Branch dispatch build_and_run_workflows.yml
+        uses: ./.github/my_actions/branch_dispatch/ # Must start with ./
+        id: bd_build_and_run_workflows
+        with:
+          repository: workflow-inference-compiler
+          workflow_yml: build_and_run_workflows.yml
+          sender_repo: ${{ github.event.client_payload.repository }}
+          sender_repo_owner: ${{ github.event.client_payload.owner }}
+          wic_owner: ${{ steps.ce_wic.outputs.owner }}
+          wic_ref: ${{ steps.ce_wic.outputs.ref }}
+          event_type: ${{ github.event_name }}
+          commit_message: ${{ github.event.client_payload.commit_message }}
+          mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
+          mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
+          access_token: ${{ steps.generate_token.outputs.token }}
