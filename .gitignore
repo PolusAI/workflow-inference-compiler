@@ -24,3 +24,4 @@ inference_rules.txt
 renaming_conventions.txt
 .hypothesis/
 .env
+node_modules/
