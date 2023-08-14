@@ -1,8 +1,0 @@
-steps:
-  - topology.yml:
-  - min.yml: # Minimize in vacuum first, then in solvent.
-  - solv_ion.yml:
-
-wic:
-  graphviz:
-    label: System Setup

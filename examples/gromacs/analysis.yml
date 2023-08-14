@@ -1,9 +1,0 @@
-# We previously used &filename to create references to outputs. Now we can
-# use *filename to dereference filename and create an explicit edge to the inputs.
-steps:
-  - analysis_realtime.yml:
-  - analysis_final.yml:
-
-wic:
-  graphviz:
-    label: Stability Analysis
