@@ -49,14 +49,6 @@ wic.run_local
 ------------------------------------
 .. automodule:: wic.run_local
 
-wic.schemas.biobb
-------------------------------------
-.. automodule:: wic.schemas.biobb
-
-wic.schemas.gromacs_mdp
-------------------------------------
-.. automodule:: wic.schemas.gromacs_mdp
-
 wic.schemas.wic_schema
 ------------------------------------
 .. automodule:: wic.schemas.wic_schema
