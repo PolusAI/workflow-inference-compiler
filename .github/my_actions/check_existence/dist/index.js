@@ -26,7 +26,7 @@ try {
   const access_token = core.getInput('access_token');
 
   if (!access_token) {
-    console.log("Error! secrets.ACCESS_TOKEN is not defined! (or expired)");
+    console.log("Error! access_token is not defined! (or expired)");
   }
 
   const url_branches = "https://api.github.com/repos/" + sender_repo_owner + "/" + repository + "/branches";

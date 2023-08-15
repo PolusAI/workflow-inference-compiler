@@ -21,7 +21,7 @@ try {
   const access_token = core.getInput('access_token');
 
   if (!access_token) {
-    console.log("Error! secrets.ACCESS_TOKEN is not defined! (or expired)");
+    console.log("Error! access_token is not defined! (or expired)");
   }
 
   // Use base repository owner, otherwise permission errors: Resource not accessible by integration.
@@ -35,9 +35,10 @@ try {
     body: JSON.stringify({
       ref: wic_ref,
       inputs: {
-        event_type: event_type,
-        commit_message: commit_message,
-        sender_repo: sender_repo,
+        "event_type": event_type,
+        "commit_message": commit_message,
+        "sender_repo": sender_repo,
+        "sender_repo_owner": sender_repo_owner,
         "wic_owner": wic_owner,
         "wic_ref": wic_ref,
         "mm-workflows_owner": mm_workflows_owner,
