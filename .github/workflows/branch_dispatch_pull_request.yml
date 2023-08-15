@@ -17,7 +17,7 @@ jobs:
         run: |
           sudo apt-get install jq
 
-      # See comments in token.md
+      # See token.md
       - name: Generate a token
         id: generate_token
         uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
@@ -35,7 +35,7 @@ jobs:
                   https://api.github.com/repos/${{ github.repository }}/collaborators \
                   | jq '.[].login' | grep "${{ github.event.sender.login }}";
           then
-            echo "Account ${{ github.event.sender.login }} doesn't have the permission to run ${{ github.event.action }}!" \
+            echo "Account doesn't have enough permissions!" \
               && false;
           fi
 
