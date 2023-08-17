@@ -13,10 +13,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install JQ for parsing JSON
-        run: |
-          sudo apt-get install jq
-
       # See token.md
       - name: Generate a token
         id: generate_token
@@ -24,20 +20,6 @@ jobs:
         with:
           app_id: ${{ secrets.APP_ID }}
           private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Check actor's identity
-        env:
-          APP_TOKEN: ${{ steps.generate_token.outputs.token }}
-        run: |
-          if ! curl -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  -H "Authorization: Bearer $APP_TOKEN" \
-                  https://api.github.com/repos/${{ github.repository }}/collaborators \
-                  | jq '.[].login' | grep "${{ github.event.sender.login }}";
-          then
-            echo "Account doesn't have enough permissions!" \
-              && false;
-          fi
 
       # To use this repository's private action,
       # you must check out the repository
