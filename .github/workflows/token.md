@@ -8,7 +8,7 @@ though they have write permissions of the fork. The secrets are accessible for u
 "maint"
 3. This third-party Github Action repo is used in the above example of the official Github
 doc. To prevent future updates of the Action repo to change behaviors and posing security
-risks, explicity use the commit hash of the most recent stable release (v1.8.0) to freeze
+risks, explicitly use the commit hash of the most recent stable release (v1.8.0) to freeze
 the used code.
 * v1.8.0 of the third-party Action repo:
   https://github.com/tibdex/github-app-token/tree/releases/v1.8.0
