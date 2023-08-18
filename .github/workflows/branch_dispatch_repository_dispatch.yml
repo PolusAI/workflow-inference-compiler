@@ -35,7 +35,7 @@ jobs:
         with:
           repository: workflow-inference-compiler
           sender_repo_owner: ${{ github.event.client_payload.owner }}
-          sender_repo_ref: ${{ github.event.client_payload.ref_name }}
+          sender_repo_ref: ${{ github.event.client_payload.ref }}
           default_owner: PolusAI
           default_branch: master
           access_token: ${{ steps.generate_token.outputs.token }}
@@ -47,7 +47,7 @@ jobs:
         with:
           repository: mm-workflows
           sender_repo_owner: ${{ github.event.client_payload.owner }}
-          sender_repo_ref: ${{ github.event.client_payload.ref_name }}
+          sender_repo_ref: ${{ github.event.client_payload.ref }}
           default_owner: PolusAI
           default_branch: main
           access_token: ${{ steps.generate_token.outputs.token }}
