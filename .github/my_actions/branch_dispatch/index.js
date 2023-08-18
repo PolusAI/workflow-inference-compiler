@@ -53,7 +53,7 @@ try {
   });
   const response_str = await response.text();
   console.log(`response: ${response_str}`);
-  core.setOutput("respose", response_str);
+  core.setOutput("response", response_str);
 
   // Get the JSON webhook payload for the event that triggered the workflow
   const payload = JSON.stringify(github.context.payload, undefined, 2)

@@ -3,7 +3,7 @@ name: Build And Test
 on:
   workflow_dispatch:
     # Have to declare parameters here for those that will be sent through 'workflow-dispatch'
-    # event in branch_dispatch.yml. Otherwise, there'll be github API errors: 
+    # event in branch_dispatch.yml. Otherwise, there'll be github API errors:
     # '"message": "Unexpected inputs provided: ...",'
     inputs:
       event_type:
