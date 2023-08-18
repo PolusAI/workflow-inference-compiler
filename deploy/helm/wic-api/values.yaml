@@ -8,7 +8,7 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: 0.1.0
 
-auth: 
+auth:
   authBaseUrl: AUTH_BASE_URL
   meEndpoint: ME_ENDPOINT
   jwksEndpoint: JWKS_ENDPOINT
