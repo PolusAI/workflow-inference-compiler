@@ -25,8 +25,7 @@ try {
   }
 
   // Use base repository owner, otherwise permission errors: Resource not accessible by integration.
-  const repo_owner = event_type == "pull_request_target" ? github.context.payload.repository.owner.login : sender_repo_owner;
-  const url_dispatches = "https://api.github.com/repos/" + repo_owner + "/" + repository + "/actions/workflows/" + workflow_yml + "/dispatches";
+  const url_dispatches = "https://api.github.com/repos/" + github.context.repo.owner + "/" + repository + "/actions/workflows/" + workflow_yml + "/dispatches";
   console.log(`url_branches: ${url_dispatches}`);
   console.log(`access_token: ${access_token}`);
 
