@@ -12,6 +12,7 @@ try {
   const workflow_yml = core.getInput('workflow_yml');
   const sender_repo = core.getInput('sender_repo');
   const sender_repo_owner = core.getInput('sender_repo_owner');
+  const dispatch_ref = core.getInput('dispatch_ref');
   const wic_owner = core.getInput('wic_owner');
   const wic_ref = core.getInput('wic_ref');
   const event_type = core.getInput('event_type');
@@ -29,10 +30,16 @@ try {
   console.log(`url_branches: ${url_dispatches}`);
   console.log(`access_token: ${access_token}`);
 
+  // Note: In PRs, the branch to which the dispatch is sent to is not necessarily the same
+  // as the branch to be checked out. Especially for the case of upstream being PolusAI, the
+  // dispatch should be sent to the 'master' branch while the code to be checked out should be
+  // the feature branch of the user's fork. When seeing error message: "message":"No ref found for: ..."
+  // the problem is in fact that (with the second form of authentication) the username is wrong
+  // (i.e. username in dispatch URL being the upstream).
   const response = await fetch(url_dispatches, {
     method: "POST",
     body: JSON.stringify({
-      ref: wic_ref,
+      ref: dispatch_ref,
       inputs: {
         "event_type": event_type,
         "commit_message": commit_message,
