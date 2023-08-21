@@ -34,8 +34,9 @@ try {
   // as the branch to be checked out. Especially for the case of upstream being PolusAI, the
   // dispatch should be sent to the 'master' branch while the code to be checked out should be
   // the feature branch of the user's fork. When seeing error message: "message":"No ref found for: ..."
-  // the problem is in fact that (with the second form of authentication) the username is wrong
-  // (i.e. username in dispatch URL being the upstream).
+  // the problem is in fact that (with everyone using their own GitHub App for authentication),
+  // the username is wrong (i.e. username in dispatch URL being the upstream, and different from the
+  // sender).
   const response = await fetch(url_dispatches, {
     method: "POST",
     body: JSON.stringify({

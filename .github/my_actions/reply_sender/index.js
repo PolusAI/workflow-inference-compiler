@@ -21,7 +21,7 @@ try {
     console.log("Error! access_token is not defined! (or expired)");
   }
 
-  const url_dispatches = "https://api.github.com/repos/" + sender_repo + "/dispatches";
+  const url_dispatches = "https://api.github.com/repos/" + github.context.repo.owner + "/" + sender_repo.split("/")[1] + "/dispatches";
   console.log(`url_branches: ${url_dispatches}`);
   console.log(`access_token: ${access_token}`);
 
