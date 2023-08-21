@@ -51,6 +51,17 @@ jobs:
           default_branch: master
           access_token: ${{ steps.generate_token.outputs.token }}
 
+      - name: Check existence of dispatch ref in wic
+        uses: ./.github/my_actions/check_existence/ # Must start with ./
+        id: ce_wic_dispatch
+        with:
+          repository: workflow-inference-compiler
+          sender_repo_owner: ${{ github.repository_owner }}
+          sender_repo_ref: ${{ github.event.pull_request.head.ref }}
+          default_owner: PolusAI
+          default_branch: master
+          access_token: ${{ steps.generate_token.outputs.token }}
+
       # For other repositories, the entire step below should be copied and edited to make new steps.
       - name: Check existence of mm-workflows
         uses: ./.github/my_actions/check_existence/ # Must start with ./
@@ -71,6 +82,7 @@ jobs:
           workflow_yml: build_and_test.yml
           sender_repo: ${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}
           sender_repo_owner: ${{ github.event.pull_request.head.repo.owner.login }}
+          dispatch_ref: ${{ steps.ce_wic_dispatch.outputs.ref }}
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
@@ -87,6 +99,7 @@ jobs:
           workflow_yml: build_and_run_workflows.yml
           sender_repo: ${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}
           sender_repo_owner: ${{ github.event.pull_request.head.repo.owner.login }}
+          dispatch_ref: ${{ steps.ce_wic_dispatch.outputs.ref }}
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
