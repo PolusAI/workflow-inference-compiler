@@ -58,6 +58,7 @@ jobs:
           workflow_yml: build_and_test.yml
           sender_repo: ${{ github.repository }}
           sender_repo_owner: ${{ github.repository_owner }}
+          dispatch_ref: ${{ steps.ce_wic.outputs.ref }}
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
@@ -74,6 +75,7 @@ jobs:
           workflow_yml: build_and_run_workflows.yml
           sender_repo: ${{ github.repository }}
           sender_repo_owner: ${{ github.repository_owner }}
+          dispatch_ref: ${{ steps.ce_wic.outputs.ref }}
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}

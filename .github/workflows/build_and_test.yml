@@ -41,7 +41,7 @@ on:
 
 # See https://github.com/orgs/community/discussions/15690
 # For workflow_dispatch, the commit message, repo, and branch name are not displayed by default.
-run-name: "${{ inputs.commit_message}} - ${{ inputs.sender_repo }} - ${{ inputs.mm-workflows_ref}}"
+run-name: "${{ inputs.commit_message}} - ${{ inputs.sender_repo }} - ${{ inputs.wic_ref }}"
 
 env:
   BUILD_TYPE: Release
