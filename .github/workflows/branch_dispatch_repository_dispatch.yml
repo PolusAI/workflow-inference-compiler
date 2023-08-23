@@ -24,10 +24,29 @@ jobs:
           app_id: ${{ secrets.APP_ID }}
           private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # To use this repository's private action,
-      # you must check out the repository
+      # !!!!!! CRITICAL: PLEASE READ !!!!!!
+      # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions- settings-for-a-repository#controlling-changes-from-forks-to-workflows-in-public-repositories
+      # "Note: Workflows triggered by pull_request_target events are run in the context of the base
+      # branch. Since the base branch is considered trusted, workflows triggered by these events will always run,
+      # REGARDLESS OF APPROVAL SETTINGS."
+      #
+      # Note: 1. To use this repository's private action, you must check out the repository
+      # 2. Although repository-dispatch is run in the context of the default branch (master/main)
+      # and the checked out actions in this workflow run should be trustworthy, it does not
+      # guarantee the subsequent workflows after workflow dispatch don't checkout altered actions.
+      # Therefore, membership must be checked to authorize the repository dispatch to run workflows.
       - name: Checkout
         uses: actions/checkout@v3
+
+      # Note: It is the initial sender of the series of cross-repo CI who needs to verified, not the
+      # sender of the current event. For example, the repository_dispatch event could be triggered by a
+      # PR opened on mm-workflows from an external account. In such case, the 'github.event.sender.login'
+      # would be the owner of the upstream repo, not the external actor.
+      - name: Check Membership
+        uses: ./.github/my_actions/check_membership/ # Must start with ./
+        with:
+          account_name: ${{ github.event.client_payload.owner }}
+          access_token: ${{ steps.generate_token.outputs.token }}
 
       - name: Check existence of wic
         uses: ./.github/my_actions/check_existence/ # Must start with ./
