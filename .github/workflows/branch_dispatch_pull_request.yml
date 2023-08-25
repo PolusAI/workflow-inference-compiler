@@ -22,6 +22,29 @@ jobs:
           app_id: ${{ secrets.APP_ID }}
           private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
+      # !!!!!! CRITICAL: PLEASE READ !!!!!!
+      # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions- settings-for-a-repository#controlling-changes-from-forks-to-workflows-in-public-repositories
+      # "Note: Workflows triggered by pull_request_target events are run in the context of the base
+      # branch. Since the base branch is considered trusted, workflows triggered by these events will always run,
+      # REGARDLESS OF APPROVAL SETTINGS."
+      # Therefore, membership must be checked to authorize PRs to run workflows.
+      #
+      # Note: 1. To use this repository's private action, you must check out the repository
+      # 2. PRs from external accounts could alter behaviors of the custom actions and execute
+      # the altered actions if the head of PR is checked out to use custom actions. Therefore,
+      # always checkout the base branch of the PR to use trustful actions before the identity
+      # could be verified.
+      - name: Checkout commit sha (Pull Request only)
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.base.sha }} # Check out the base to use trustworthy actions
+
+      - name: Check Membership
+        uses: ./.github/my_actions/check_membership/ # Must start with ./
+        with:
+            account_name: ${{ github.event.pull_request.head.repo.owner.login }}
+            access_token: ${{ steps.generate_token.outputs.token }}
+
       - name: Create environment variables
         env:
           COMMIT_MESSAGE: ''

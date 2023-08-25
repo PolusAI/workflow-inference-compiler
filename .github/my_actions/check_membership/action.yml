@@ -1,0 +1,18 @@
+# See https://docs.github.com/en/actions/creating-actions/creating-a-javascript-action
+name: 'Check membership'
+description: 'Verify the identity of an account'
+inputs:
+  account_name:
+    description: 'The name of the GitHub account to verify'
+    type: string
+    required: true
+  access_token:
+    description: 'The token used for authentication'
+    type: string
+    required: true
+outputs:
+  verified:
+    description: 'Whether the account is a verified member or trusted account'
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
