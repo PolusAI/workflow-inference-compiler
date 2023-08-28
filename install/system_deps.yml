@@ -25,6 +25,9 @@ dependencies:
 # "Fatal Python error: Illegal instruction"
 # So we need to explicitly install numpy using conda.
   - numpy
+# pandas has a build dependency on oldest-supported-numpy, so
+# we have to install both numpy and pandas with conda.
+  - pandas
 # The psutil install guide claims that precompiled binary wheels are available,
 # and that it isn't necessary to install compilers. This does not appear to be
 # correct, so install psutil with conda/mamba so we don't have to install compilers.
