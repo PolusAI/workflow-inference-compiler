@@ -5,6 +5,7 @@ import subprocess as sub
 import sys
 from pathlib import Path
 import shutil
+import platform
 import traceback
 from typing import Dict, List, Optional
 
@@ -118,7 +119,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
 
         print('Running ' + ' '.join(cmd))
         if use_subprocess:
-            # To run in parallel (i.e. pytest ... --workers 4 ...), we need to
+            # To run in parallel (i.e. pytest ... --workers 8 ...), we need to
             # use separate processes. Otherwise:
             # "signal only works in main thread or with __pypy__.thread.enable_signals()"
             proc = sub.run(cmd, check=False)
@@ -151,6 +152,11 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
                     print(e)
 
     if cwl_runner == 'toil-cwl-runner':
+        if platform.python_implementation().lower() == 'pypy':
+            print('Error! Toil is not compatible with pypy!')
+            print('Please use the standard cpython interpreter with Toil.')
+            sys.exit(1)
+
         # NOTE: toil-cwl-runner always runs in parallel
         net = ['--custom-net', args.custom_net] if args.custom_net else []
         provenance = ['--provenance', 'provenance']
