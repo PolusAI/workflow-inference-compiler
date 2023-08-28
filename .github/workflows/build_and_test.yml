@@ -43,9 +43,6 @@ on:
 # For workflow_dispatch, the commit message, repo, and branch name are not displayed by default.
 run-name: "${{ inputs.commit_message}} - ${{ inputs.sender_repo }} - ${{ inputs.wic_ref }}"
 
-env:
-  BUILD_TYPE: Release
-
 defaults:
   run:
     shell: bash -l {0} # Invoke bash in login mode, NOT interactive mode.
@@ -88,7 +85,6 @@ jobs:
         with:
           repository: ${{ inputs.wic_owner }}/workflow-inference-compiler
           ref: ${{ inputs.wic_ref }}
-          submodules: recursive
           path: wic
 
       - name: Checkout mm-workflows
@@ -106,7 +102,7 @@ jobs:
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest
-          environment-file: wic/system_deps.yml
+          environment-file: wic/install/system_deps.yml
           activate-environment: wic
           use-mamba: true
           channels: conda-forge
@@ -117,7 +113,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-version: latest
-          environment-file: wic/system_deps_windows.yml
+          environment-file: wic/install/system_deps_windows.yml
           activate-environment: wic
           channels: conda-forge
           python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
@@ -125,7 +121,7 @@ jobs:
       - name: ShellCheck Script Quality
         if: always()
         # "SC1017 (error): Literal carriage return. Run script through tr -d '\r' ."
-        run: shellcheck -e SC1017 $(find wic/ -name "*.sh" -not -path "./biobb/*" -and -not -path "./3/*")
+        run: shellcheck -e SC1017 $(find wic/ -name "*.sh" -and -not -path "./3/*")
 
       - name: Install Workflow Inference Compiler
         if: always()
@@ -143,16 +139,13 @@ jobs:
 
       - name: MyPy Check Type Annotations
         if: always()
-        run: cd wic/ && mypy --no-incremental src/ tests/ api.py auth/
+        run: cd wic/ && mypy src/ examples/ tests/ api.py auth/
         # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
         # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
-        # NOTE: We need to use --no-incremental because there is a bug in mypy.
-        # This bug most often occurs when using ruamel library.
-        # See https://github.com/python/mypy/issues/12664
 
       - name: PyLint Check Code Quality
         if: always()
-        run: cd wic/ && pylint src/ tests/ api.py auth/
+        run: cd wic/ && pylint src/ examples/**/*.py tests/ api.py auth/
         # NOTE: See fail-under threshold in .pylintrc
 
       - name: Helm Lint Check Code Quality

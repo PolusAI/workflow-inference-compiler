@@ -1,11 +1,12 @@
+# IMPORTANT: Use .. for the Build Context https://docs.docker.com/build/building/context/
+# i.e. `sudo docker build ... -f Dockerfile ..`
 FROM debian:stable-slim
 
 # Install conda / mamba
 RUN apt-get update && apt-get install -y wget
 
 # NOTE: Use regular Mambaforge, NOT Mambaforge-pypy3 because uvicorn is incompatible with pypy.
-# See https://github.com/encode/uvicorn/blob/master/pyproject.toml#L43
-# and https://github.com/encode/uvicorn/blob/master/setup.cfg#L45
+# See https://github.com/encode/uvicorn/blob/28fc4bdb77d1bd2f541ca7e0b3bd6fe1155e162f/pyproject.toml#L42
 # (This is NOT the same thing as using Mambaforge-pypy3 and simply not installing pypy!)
 RUN CONDA="Mambaforge-Linux-x86_64.sh" && \
     wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \
@@ -20,8 +21,8 @@ ENV PATH /mambaforge/bin:$PATH
 # ALL of the files, directories, etc. we ONLY want to copy
 # system_deps.yml now. Then, we can copy everything else.
 # See https://stackoverflow.com/questions/48551953/
-COPY system_deps.yml /workflow-inference-compiler/system_deps.yml
-RUN mamba env update --name base --file /workflow-inference-compiler/system_deps.yml
+COPY install/system_deps.yml /workflow-inference-compiler/install/system_deps.yml
+RUN mamba env update --name base --file /workflow-inference-compiler/install/system_deps.yml
 
 # NOW we can copy everything else.
 COPY . /workflow-inference-compiler
@@ -45,3 +46,5 @@ RUN apt-get clean
 EXPOSE 3000
 
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "3000"]
+
+ADD docker/Dockerfile_debian_REST_API .

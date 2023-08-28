@@ -1,0 +1,34 @@
+name: Docker Build
+
+# build_and_test.yml already tests the install process, but only for one
+# version of each operating system. That should catch most problems,
+# but docker allows us to test more OS combinations.
+
+on:
+  # push:  # Do NOT run on every push!
+  # pull_request: (either on origin or on upstream pull request)
+  schedule:
+  # Run it every Tuesday at midnight.
+    - cron: '0 0 * * 2'
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  docker_build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # NOTE: Use a matrix (instead of dockerBuild.sh) for parallelism
+        dockerfile: [amazon, debian, debian_rest_api, fedora, redhat,
+                     amazon_pypy, debian_pypy, fedora_pypy, redhat_pypy]
+    runs-on: [ubuntu-latest]
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+
+    - name: Docker Build
+      run: cd docker/ && docker build --no-cache --pull -f Dockerfile_${{ matrix.dockerfile }} -t polusai/wic_${{ matrix.dockerfile }} ..

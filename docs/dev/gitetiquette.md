@@ -18,7 +18,7 @@ Like commits, PRs should try to be self-contained and small and most importantly
 
 ## Testing and CI/CD
 
-Before pushing, please run `pytest -m serial` or preferably the full `pytest -m serial && pytest -m "not serial" --workers 4`.
+Before pushing, please run `pytest -m serial` or preferably the full `pytest -m serial && pytest -m "not serial" --workers 8`.
 
 ## .gitignore
 
