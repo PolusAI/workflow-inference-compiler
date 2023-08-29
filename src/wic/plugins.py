@@ -97,14 +97,14 @@ def get_tools_cwl(cwl_dirs_file: Path, validate_plugins: bool = False, skip_sche
             print(f'Warning! No cwl files found in {cwl_dir_rel}.\nCheck {cwl_dirs_file.absolute()}')
             print('This almost certainly means you are not in the correct directory.')
         # These two cwl files throw a yaml.scanner.ScannerError, but they are both legacy, so ignore.
-        exceptions = ['biobb/biobb_adapters/cwl/biobb_md/gromacs_extra/ndx2resttop.cwl',
-                      'biobb/biobb_adapters/cwl/biobb_md/gromacs/genrestr.cwl',
+        exceptions = ['biobb_adapters/biobb_adapters/cwl/biobb_md/gromacs_extra/ndx2resttop.cwl',
+                      'biobb_adapters/biobb_adapters/cwl/biobb_md/gromacs/genrestr.cwl',
                       # No outputs (messes up the schema). Use pdb4amber_run
-                      'biobb/biobb_adapters/cwl/biobb_amber/pdb4amber/pdb4amber.cwl',
-                      'biobb/biobb_adapters/cwl/biobb_amber/pdb4amber.cwl',
+                      'biobb_adapters/biobb_adapters/cwl/biobb_amber/pdb4amber/pdb4amber.cwl',
+                      'biobb_adapters/biobb_adapters/cwl/biobb_amber/pdb4amber.cwl',
                       # Empty dockerPull: '' Use autodock_vina_run
-                      'biobb/biobb_adapters/cwl/biobb_vs/vina/autodock_vina.cwl',
-                      'biobb/biobb_adapters/cwl/biobb_vs/autodock_vina.cwl']
+                      'biobb_adapters/biobb_adapters/cwl/biobb_vs/vina/autodock_vina.cwl',
+                      'biobb_adapters/biobb_adapters/cwl/biobb_vs/autodock_vina.cwl']
         for cwl_path_str in cwl_paths_sorted:
             if any(e.replace('/', os.sep) in cwl_path_str for e in exceptions):
                 continue

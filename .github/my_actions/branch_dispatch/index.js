@@ -1,6 +1,7 @@
 // See https://docs.github.com/en/actions/creating-actions/creating-a-javascript-action
 // NOTE: Every time you modify this file, you need to run
 // `ncc build index.js && git add -f dist/index.js index.js package.json package-lock.json`
+// Install ncc using `npm install -g @vercel/ncc`
 // You do NOT need to git add node_modules/*
 
 const core = require('@actions/core');
@@ -19,6 +20,8 @@ try {
   const commit_message = core.getInput('commit_message');
   const mm_workflows_owner = core.getInput('mm_workflows_owner');
   const mm_workflows_ref = core.getInput('mm_workflows_ref');
+  const biobb_adapters_owner = core.getInput('biobb_adapters_owner');
+  const biobb_adapters_ref = core.getInput('biobb_adapters_ref');
   const access_token = core.getInput('access_token');
 
   if (!access_token) {
@@ -50,6 +53,8 @@ try {
         "wic_ref": wic_ref,
         "mm-workflows_owner": mm_workflows_owner,
         "mm-workflows_ref": mm_workflows_ref,
+        "biobb_adapters_owner": biobb_adapters_owner,
+        "biobb_adapters_ref": biobb_adapters_ref,
       },
     }),
     headers: {

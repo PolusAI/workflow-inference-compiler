@@ -38,6 +38,14 @@ on:
         description: The branch name within the mm-workflows repository
         required: true
         type: string
+      biobb_adapters_owner:
+        description: The account name of the biobb_adapters repository
+        required: true
+        type: string
+      biobb_adapters_ref:
+        description: The branch name within the biobb_adapters repository
+        required: true
+        type: string
 
 # See https://github.com/orgs/community/discussions/15690
 # For workflow_dispatch, the commit message, repo, and branch name are not displayed by default.
@@ -79,7 +87,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout source code
+      - name: Checkout workflow-inference-compiler
         if: always()
         uses: actions/checkout@v3
         with:
@@ -87,13 +95,20 @@ jobs:
           ref: ${{ inputs.wic_ref }}
           path: wic
 
+      - name: Checkout biobb_adapters
+        if: always()
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.biobb_adapters_owner }}/biobb_adapters
+          ref: ${{ inputs.biobb_adapters_ref }}
+          path: biobb_adapters
+
       - name: Checkout mm-workflows
         if: always()
         uses: actions/checkout@v3
         with:
           repository: ${{ inputs.mm-workflows_owner }}/mm-workflows
           ref: ${{ inputs.mm-workflows_ref }}
-          submodules: recursive
           path: mm-workflows
 
       - name: Setup mamba (linux, macos)

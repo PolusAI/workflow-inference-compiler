@@ -9,8 +9,8 @@ then
 else
     git clone https://github.com/jfennick/timeseriesplots.git
     cd timeseriesplots
-    ./conda_devtools.sh
+    cd install
+    ./install_system_deps.sh
+    cd ..
     pip install -e ".[all]"
 fi
-
-cd ../workflow-inference-compiler/install/
