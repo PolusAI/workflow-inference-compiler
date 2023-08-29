@@ -1,6 +1,7 @@
 import argparse
 import sys
 import time
+from pathlib import Path
 from typing import Dict
 from unittest.mock import patch
 
@@ -29,8 +30,8 @@ def get_args(yaml_path: str = '') -> argparse.Namespace:
     return args
 
 
-tools_cwl = wic.plugins.get_tools_cwl(get_args().cwl_dirs_file)
-yml_paths = wic.plugins.get_yml_paths(get_args().yml_dirs_file)
+tools_cwl = wic.plugins.get_tools_cwl(Path(get_args().cwl_dirs_file))
+yml_paths = wic.plugins.get_yml_paths(Path(get_args().yml_dirs_file))
 yaml_stems = wic.utils.flatten([list(p) for p in yml_paths.values()])
 schema_store: Dict[str, Json] = {}
 validator = wic.schemas.wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)
