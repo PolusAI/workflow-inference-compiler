@@ -28,7 +28,10 @@ cd ..
 pip install -e ".[all]"
 pre-commit install  # Required for developers
 
-cd install && ./install_mm-workflows.sh && cd ..
+cd install
+./install_biobb_adapters.sh
+./install_mm-workflows.sh
+cd ..
 ```
 ```
 wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --run_local --quiet

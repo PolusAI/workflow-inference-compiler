@@ -8,8 +8,8 @@
 
 # Namespace Directory
 global      cwl_adapters/
+global      ../biobb_adapters/biobb_adapters/
 global      ../mm-workflows/cwl_adapters/
-global      ../mm-workflows/biobb/
 gpu         ../mm-workflows/gpu/
 # foo       a/relative/path/
 # bar       /an/absolute/path/

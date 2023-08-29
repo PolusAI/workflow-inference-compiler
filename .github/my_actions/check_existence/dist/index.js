@@ -11,6 +11,7 @@ __nccwpck_require__.r(__webpack_exports__);
 // See https://docs.github.com/en/actions/creating-actions/creating-a-javascript-action
 // NOTE: Every time you modify this file, you need to run
 // `ncc build index.js && git add -f dist/index.js index.js package.json package-lock.json`
+// Install ncc using `npm install -g @vercel/ncc`
 // You do NOT need to git add node_modules/*
 
 const core = __nccwpck_require__(291);
@@ -1496,6 +1497,19 @@ class HttpClientResponse {
             }));
         });
     }
+    readBodyBuffer() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve) => __awaiter(this, void 0, void 0, function* () {
+                const chunks = [];
+                this.message.on('data', (chunk) => {
+                    chunks.push(chunk);
+                });
+                this.message.on('end', () => {
+                    resolve(Buffer.concat(chunks));
+                });
+            }));
+        });
+    }
 }
 exports.HttpClientResponse = HttpClientResponse;
 function isHttps(requestUrl) {
@@ -2000,7 +2014,13 @@ function getProxyUrl(reqUrl) {
         }
     })();
     if (proxyVar) {
-        return new URL(proxyVar);
+        try {
+            return new URL(proxyVar);
+        }
+        catch (_a) {
+            if (!proxyVar.startsWith('http://') && !proxyVar.startsWith('https://'))
+                return new URL(`http://${proxyVar}`);
+        }
     }
     else {
         return undefined;
@@ -5799,10 +5819,6 @@ function getNodeRequestOptions(request) {
 		agent = agent(parsedURL);
 	}
 
-	if (!headers.has('Connection') && !agent) {
-		headers.set('Connection', 'close');
-	}
-
 	// HTTP-network fetch step 4.2
 	// chunked encoding is handled by Node.js
 
@@ -6222,6 +6238,7 @@ exports.Headers = Headers;
 exports.Request = Request;
 exports.Response = Response;
 exports.FetchError = FetchError;
+exports.AbortError = AbortError;
 
 
 /***/ }),
@@ -16356,10 +16373,6 @@ const getNodeRequestOptions = request => {
 	let {agent} = request;
 	if (typeof agent === 'function') {
 		agent = agent(parsedURL);
-	}
-
-	if (!headers.has('Connection') && !agent) {
-		headers.set('Connection', 'close');
 	}
 
 	// HTTP-network fetch step 4.2

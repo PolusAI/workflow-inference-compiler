@@ -1,6 +1,7 @@
 // See https://docs.github.com/en/actions/creating-actions/creating-a-javascript-action
 // NOTE: Every time you modify this file, you need to run
 // `ncc build index.js && git add -f dist/index.js index.js package.json package-lock.json`
+// Install ncc using `npm install -g @vercel/ncc`
 // You do NOT need to git add node_modules/*
 
 const core = require('@actions/core');

@@ -46,6 +46,14 @@ inputs:
     description: 'The name of the mm-workflows branch / ref'
     type: string
     required: true
+  biobb_adapters_owner:
+    description: 'The name of the biobb_adapters owner'
+    type: string
+    required: true
+  biobb_adapters_ref:
+    description: 'The name of the biobb_adapters branch / ref'
+    type: string
+    required: true
   access_token:
     description: 'The token used for authentication'
     type: string
