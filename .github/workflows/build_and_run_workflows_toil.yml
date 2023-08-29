@@ -37,12 +37,16 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v3
       with:
+        repository: ${{ github.repository_owner }}/workflow-inference-compiler
+        ref: master
         path: wic
 
     - name: Checkout mm-workflows
       if: always()
       uses: actions/checkout@v3
       with:
+        repository: ${{ github.repository_owner }}/mm-workflows
+        ref: main
         submodules: recursive
         path: mm-workflows
 
