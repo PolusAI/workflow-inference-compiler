@@ -34,12 +34,20 @@ jobs:
     runs-on: [self-hosted, linux]
 
     steps:
-    - name: Checkout source code
+    - name: Checkout workflow-inference-compiler
       uses: actions/checkout@v3
       with:
         repository: ${{ github.repository_owner }}/workflow-inference-compiler
         ref: master
         path: wic
+
+    - name: Checkout biobb_adapters
+      if: always()
+      uses: actions/checkout@v3
+      with:
+        repository: jfennick/biobb_adapters
+        ref: master
+        path: biobb_adapters
 
     - name: Checkout mm-workflows
       if: always()
@@ -47,7 +55,6 @@ jobs:
       with:
         repository: ${{ github.repository_owner }}/mm-workflows
         ref: main
-        submodules: recursive
         path: mm-workflows
 
     - name: Setup mamba (linux, macos)

@@ -29,8 +29,8 @@ repos:
     # -   id: file-contents-sorter  # sorts the lines in specified files (defaults to alphabetical). you must provide list of target files as input in your .pre-commit-config.yaml file.
     # -   id: fix-byte-order-marker  # removes utf-8 byte order marker.
     # -   id: fix-encoding-pragma  # adds # -*- coding: utf-8 -*- to the top of python files.
-    # -   id: forbid-new-submodules  # prevents addition of new git submodules.
-    # -   id: forbid-submodules  # forbids any submodules in the repository
+    -   id: forbid-new-submodules  # prevents addition of new git submodules.
+    -   id: forbid-submodules  # forbids any submodules in the repository
     # -   id: mixed-line-ending  # replaces or checks mixed line ending.
     # -   id: name-tests-test  # verifies that test files are named correctly.
     # NOTE: (In the pytest documentation both test_*.py and *_test.py are valid, but in this hook only the latter is valid.)
