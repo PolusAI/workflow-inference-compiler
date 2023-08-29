@@ -12,8 +12,10 @@ Before we get started, we will need to configure the compiler with plugins. ('Pl
 
 ```
 # Namespace Directory
-global      biobb/
 global      cwl_adapters/
+global      ../biobb_adapters/biobb_adapters/
+global      ../mm-workflows/cwl_adapters/
+gpu         ../mm-workflows/gpu/
 # foo       a/relative/path/
 # bar       /an/absolute/path/
 ```
