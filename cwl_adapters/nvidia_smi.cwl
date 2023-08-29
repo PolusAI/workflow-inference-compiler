@@ -7,10 +7,11 @@ baseCommand: nvidia-smi
 hints:
   cwltool:CUDARequirement:
     cudaVersionMin: "11.4"
-    cudaComputeCapabilityMin: "3.0"
-    cudaDeviceCount: 0
+    cudaComputeCapability: "3.0"
+    cudaDeviceCountMin: 1
+    cudaDeviceCountMax: 1
   DockerRequirement:
-    dockerPull: nvidia/cuda:11.4.0-base-ubuntu20.04
+    dockerPull: nvidia/cuda:11.4.3-base-ubuntu20.04
 
 requirements:
   InlineJavascriptRequirement: {}
