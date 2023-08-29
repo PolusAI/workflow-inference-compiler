@@ -175,11 +175,16 @@ jobs:
         timeout-minutes: 5 # backup timeout for windows
 
       - name: PyTest Fuzzy Compile
-        if: always()
+        if: runner.os == 'Linux'
+        # Avoid Windows and macOS due to 2X and 10X minute multipliers.
+        # https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions#minute-multipliers
         run: cd wic/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Scattering Scaling
-        if: runner.os != 'Windows'  # Cannot run on Windows (natively) yet
+        if: runner.os == 'Linux'
+        # Avoid Windows and macOS due to 2X and 10X minute multipliers.
+        # https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions#minute-multipliers
+        # Also, cannot run on Windows (natively) yet
         run: cd wic/ && pytest -k test_scattering_scaling
 
       # NOTE: The steps below are for repository_dispatch only. For all other steps, please insert above
