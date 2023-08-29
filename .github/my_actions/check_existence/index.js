@@ -37,11 +37,20 @@ try {
           }
   });
   const branches = await response.json();
-  const branches_str = JSON.stringify(branches, undefined, 2)
-  console.log(`response.json(): ${branches_str}`);
 
-  const equals_name = (branch) => branch.name === sender_repo_ref;
-  const exists = branches.some(equals_name);
+  var exists = false;
+  if (branches.message == "Not Found") {
+    console.log(`${url_branches} not found.`);
+    const url_default = "https://github.com/" + default_owner + "/" + repository;
+    console.log(`This probably means you did not fork the repo: ${url_default}`);
+    console.log(`Falling back to ${url_default}`);
+  } else {
+    const branches_str = JSON.stringify(branches, undefined, 2)
+    console.log(`response.json(): ${branches_str}`);
+
+    const equals_name = (branch) => branch.name === sender_repo_ref;
+    exists = branches.some(equals_name);
+  }
   const owner = exists ? sender_repo_owner : default_owner;
   const ref = exists ? sender_repo_ref : default_branch;
 
