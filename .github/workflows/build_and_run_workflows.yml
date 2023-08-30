@@ -91,6 +91,11 @@ jobs:
         ref: ${{ inputs.mm-workflows_ref }}
         path: mm-workflows
 
+    - name: Remove old mamba environment
+      if: always()
+      run: rm -rf "/home/$(whoami)/actions-runner/_work/workflow-inference-compiler/workflow-inference-compiler/3/envs/wic_github_actions/"
+      # For self-hosted runners, make sure we install into a new mamba environment
+
     - name: Setup mamba (linux, macos)
       if: always()
       uses: conda-incubator/setup-miniconda@v2.2.0
@@ -98,7 +103,7 @@ jobs:
         miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest
         environment-file: wic/install/system_deps.yml
-        activate-environment: wic
+        activate-environment: wic_github_actions
         use-mamba: true
         channels: conda-forge
         python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
