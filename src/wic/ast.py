@@ -19,13 +19,15 @@ from .wic_types import Namespaces, Yaml, Tools, YamlTree, YamlForest, StepId, No
 # That way, we should be able to serialize back to disk without duplication.
 
 
-def read_ast_from_disk(yaml_tree_tuple: YamlTree,
+def read_ast_from_disk(homedir: str,
+                       yaml_tree_tuple: YamlTree,
                        yml_paths: Dict[str, Dict[str, Path]],
                        tools: Tools,
                        validator: Draft202012Validator) -> YamlTree:
     """Reads the yml workflow definition files from disk (recursively) and inlines them into an AST
 
     Args:
+        homedir (str): The users home directory
         yaml_tree_tuple (YamlTree): A tuple of a filepath and its Yaml file contents.
         yml_paths (Dict[str, Dict[str, Path]]): The yml workflow definitions found using get_yml_paths()
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
@@ -47,7 +49,7 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
         for back_name, back in wic['wic']['backends'].items():
             plugin_ns = wic['wic'].get('namespace', 'global')
             stepid = StepId(back_name, plugin_ns)
-            backends_tree = read_ast_from_disk(YamlTree(stepid, back), yml_paths, tools, validator)
+            backends_tree = read_ast_from_disk(homedir, YamlTree(stepid, back), yml_paths, tools, validator)
             backends_trees.append(backends_tree)
         yaml_tree['wic']['backends'] = dict(backends_trees)
         return YamlTree(step_id, yaml_tree)
@@ -74,7 +76,9 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
 
             paths_ns_i = yml_paths.get(plugin_ns, {})
             if paths_ns_i == {}:
-                raise Exception(f'Error! namespace {plugin_ns} not found in yaml paths. Check yml_dirs.txt')
+                wicdir = Path(homedir) / 'wic'
+                raise Exception(
+                    f'Error! namespace {plugin_ns} not found in yaml paths. Check {wicdir / "yml_dirs.txt"}')
             if stem not in paths_ns_i:
                 msg = f'Error! {stem} not found in namespace {plugin_ns} when attempting to read {step_id.stem}.yml'
                 if stem == 'in':
@@ -100,7 +104,7 @@ def read_ast_from_disk(yaml_tree_tuple: YamlTree,
                 sys.exit(1)
 
             y_t = YamlTree(StepId(step_key, plugin_ns), sub_yaml_tree_raw)
-            (step_id_, sub_yml_tree) = read_ast_from_disk(y_t, yml_paths, tools, validator)
+            (step_id_, sub_yml_tree) = read_ast_from_disk(homedir, y_t, yml_paths, tools, validator)
 
             step_i_dict = {} if steps[i][step_key] is None else steps[i][step_key]
             # Do not merge these two dicts; use subtree and parentargs so we can
