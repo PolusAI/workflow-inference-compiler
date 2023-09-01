@@ -1,16 +1,15 @@
 name: Run Examples
 
-# NOTE: For some reason, running the workflows with toil-cwl-runner takes
-# almost exactly twice as much time as cwltool. Since we do not want to triple
+# NOTE: toil-cwl-runner is slightly slower than cwltool. Since we do not want to double
 # our CI time on every push, for now let's just run toil-cwl-runner separately
-# every weekday at midnight.
+# every Tuesday at midnight.
 
 on:
   # push:  # Do NOT run toil-cwl-runner on every push!
   # pull_request: (either on origin or on upstream pull request)
   schedule:
-  # Instead, run it every weekday at midnight.
-    - cron: '0 0 * * 1-5'
+  # Instead, run it every Tuesday at midnight.
+    - cron: '0 0 * * 2'
   workflow_dispatch:
 
 defaults:
@@ -57,14 +56,28 @@ jobs:
         ref: main
         path: mm-workflows
 
+    - name: Remove old global config
+      if: always()
+      run: rm -rf "/home/$(whoami)/wic/"
+      # For self-hosted runners, make sure we use new global config settings
+
+    - name: Remove old mamba environment
+      if: always()
+      run: rm -rf "/home/$(whoami)/actions-runner/_work/workflow-inference-compiler/workflow-inference-compiler/3/envs/wic_github_actions/"
+      # For self-hosted runners, make sure we install into a new mamba environment
+
     - name: Setup mamba (linux, macos)
       if: always()
       uses: conda-incubator/setup-miniconda@v2.2.0
       with:
-        miniforge-variant: Mambaforge-pypy3
+        miniforge-variant: Mambaforge  # NOT Mambaforge-pypy3
+        # Toil is (currently) incompatible with pypy. Mambaforge-pypy3
+        # installs pypy in the base environment (only). Although we are using
+        # another environment, better to avoid the problem altogether by
+        # not using Mambaforge-pypy3
         miniforge-version: latest
         environment-file: wic/install/system_deps.yml
-        activate-environment: wic
+        activate-environment: wic_github_actions
         use-mamba: true
         channels: conda-forge
         python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
