@@ -8,7 +8,7 @@ See [overview](overview.md)
 
 ## Plugins
 
-Before we get started, we will need to configure the compiler with plugins. ('Plugins' are either CWL CommandLineTools or YAML workflow files.) By default, the compiler will search for plugins within the directories and subdirectories listed in `cwl_dirs.txt` and `yml_dirs.txt`. To enable additional plugins, simply download the plugins and add additional lines to these files.
+Before we get started, we will need to configure the compiler with plugins. ('Plugins' are either CWL CommandLineTools or YAML workflow files.) By default, the compiler will search for plugins within the directories and subdirectories listed in `~/wic/cwl_dirs.txt` and `~/wic/yml_dirs.txt`. To enable additional plugins, simply download the plugins and add additional lines to these files.
 
 ```
 # Namespace Directory

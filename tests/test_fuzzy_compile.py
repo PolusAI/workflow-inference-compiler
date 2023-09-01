@@ -48,8 +48,10 @@ class TestFuzzyCompile(unittest.TestCase):
             yml_path_stem = Path(subkeys[0]).stem
             yml_path = yml_paths[plugin_ns][yml_path_stem]
 
+        args = get_args(str(yml_path))
+
         y_t = YamlTree(StepId('random_stepid', plugin_ns), yml)
-        yaml_tree_raw = wic.ast.read_ast_from_disk(y_t, yml_paths, tools_cwl, validator)
+        yaml_tree_raw = wic.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator)
         yaml_tree = wic.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
 
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
@@ -58,7 +60,7 @@ class TestFuzzyCompile(unittest.TestCase):
         graphdata = GraphData(str(yml_path))
         graph = GraphReps(graph_gv, graph_nx, graphdata)
         try:
-            compiler_info = wic.compiler.compile_workflow(yaml_tree, get_args(str(yml_path)), [], [graph], {}, {}, {},
+            compiler_info = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {},
                                                           {}, tools_cwl, True, relative_run_path=True, testing=True)
         except Exception as e:
             multi_def_str = 'Error! Multiple definitions of &'
