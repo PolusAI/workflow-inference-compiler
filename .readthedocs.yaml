@@ -31,4 +31,5 @@ python:
       path: .
 #      extra_requirements:
 #        - docs
-  system_packages: true
+# "system_packages" are now deprecated: https://blog.readthedocs.com/drop-support-system-packages/
+# All dependencies have to be explicitly listed in docs/requirements.txt.
