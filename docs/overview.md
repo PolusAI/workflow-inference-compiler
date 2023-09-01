@@ -4,7 +4,7 @@
 
 If we want to achieve the vision outlined in the introduction, it is critical that the steps of a workflow can be arbitrarily partitioned into logically related building blocks. Conversely, we must allow subworkflows to be arbitrarily composed together to make more complex workflows. Moreover, this must be done recursively, so that users can work at ever-higher levels of abstraction.
 
-For example, a basic molecular dynamics workflow is composed of minimization, equilibration, and production steps, the equilibration step is composed of constant volume (NVT) and constant pressure (NPT) steps, and each of those are composed of primitive backend-specific steps. If we then want to do a stability analysis, we should be able to incorporate the molecular dynamics workflow as a black box, and we should only have to append the stability analysis subworkflow. See ../mm-workflows/examples/gromacs/tutorial.yml!
+For example, a basic molecular dynamics workflow is composed of minimization, equilibration, and production steps, the equilibration step is composed of constant volume (NVT) and constant pressure (NPT) steps, and each of those are composed of primitive backend-specific steps. If we then want to do a stability analysis, we should be able to incorporate the molecular dynamics workflow as a black box, and we should only have to append the stability analysis subworkflow. See [here](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/tutorial.yml)!
 
 * Reproducibility
 
