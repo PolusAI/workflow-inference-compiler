@@ -13,7 +13,7 @@ arguments: ["/scatter_plot.py"]
 
 hints:
   DockerRequirement:
-    dockerPull: jakefennick/scripts
+    dockerPull: jakefennick/scatter_plot
 
 inputs:
 #  script:
