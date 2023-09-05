@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import dataclass, field
 from functools import singledispatch
 from pathlib import Path
-from typing import Any, List, Optional, TypeVar, Union
+from typing import Any, List, Optional, Union
 
 import cwl_utils.parser as cu_parser
 import typeguard
@@ -46,7 +46,6 @@ class InvalidCLT(Exception):
     pass
 
 
-StrPath = TypeVar("StrPath", str, Path)
 CWLInputParameter = Union[
     cu_parser.cwl_v1_0.CommandInputParameter,
     cu_parser.cwl_v1_1.CommandInputParameter,
@@ -149,21 +148,6 @@ def _get_value_from_cfg(value: Any) -> Any:  # validation happens in Step
         return value
 
 
-@singledispatch
-def _path(path: Any) -> Path:
-    raise TypeError
-
-
-@_path.register
-def _(path: str) -> Path:
-    return Path(path)
-
-
-@_path.register
-def _(path: Path) -> Path:
-    return path
-
-
 def _is_link(s: str) -> bool:
     """Return True if s starts with & or *."""
     if s.startswith("&") or s.startswith("*"):
@@ -191,7 +175,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
     cfg_yaml: dict = Field(default_factory=_default_dict)
     _input_names: list
 
-    def __init__(self, cwl_path: StrPath, config_path: Optional[StrPath] = None):
+    def __init__(self, cwl_path: Path, config_path: Optional[Path] = None):
         # validate using cwl.utils
         try:
             cwl = load_document_by_uri(cwl_path)
@@ -206,7 +190,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
                 cfg_yaml = yaml.safe_load(file)
         else:
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
-        cwl_name = _path(cwl_path).stem
+        cwl_name = cwl_path.stem
         input_names = [inp.id.split("#")[-1] for inp in cwl.inputs]
         super().__init__(
             cwl_path=cwl_path,
@@ -348,10 +332,6 @@ class Workflow:
 
     def compile(self) -> None:
         """Compile Workflow using WIC."""
-        # if not cwl_dir:
-        #     if not self.cwl_dir:
-        #         raise RuntimeError("a CWL directory must be specified")
-        #     cwl_dir = self.cwl_dir
 
         self._save_all_cwl()
         self._save_yaml()
