@@ -63,7 +63,12 @@ run_blacklist: List[str] = [
     'setup',
     'steep',
     'modeling',  # called in tutorial
-    'tutorial',  # called in nmr
+    'nmr',  # Do NOT run nmr, because it makes the CI go from ~30 mins to >6 hours due to:
+    # "MDAnalysis/coordinates/XDR.py:202: UserWarning:
+    # Cannot write lock/offset file in same location as
+    # .../prod.trr. Using slow offset calculation."
+    # So let's un-blacklist tutorial
+    # 'tutorial',  # called in nmr
     'prod',
     'flc',
     'dsb',

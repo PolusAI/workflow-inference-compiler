@@ -112,12 +112,14 @@ def check_args_match_inputs(module_: ModuleType, args: Dict[str, Any], check: bo
         sys.exit(1)
 
 
-def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: Dict[str, Any]) -> Dict[str, Any]:
+def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: Dict[str, Any],
+                                 python_script_docker_pull: str = '') -> Dict[str, Any]:
     """Generates a CWL CommandLineTool for an arbitrary (annotated) python script.
 
     Args:
         module_inputs (Dict[str, Any]): The top-level inputs attribute of the python module.
         module_outputs (Dict[str, Any]): The top-level inputs attribute of the python module.
+        python_script_docker_pull (str): The username/image to use with docker pull ...
 
     Returns:
         Dict[str, Any]: A CWL CommandLineTool with the given inputs and outputs.
@@ -132,9 +134,11 @@ def generate_CWL_CommandLineTool(module_inputs: Dict[str, Any], module_outputs: 
     types_entry = '$(inputs.workflow_types)'
     driver_entry = '$(inputs.driver_script)'
     script_entry = '$(inputs.script)'
-    requirements = {'DockerRequirement': {'dockerPull': 'jakefennick/scripts'},  # without docker
-                    # 'InitialWorkDirRequirement': {'listing': [script_entry]}, #[types_entry,driver_entry,script_entry]
-                    'InlineJavascriptRequirement': {}}
+    requirements: Dict[str, Any] = {}
+    requirements = {  # 'InitialWorkDirRequirement': {'listing': [script_entry]}, #[types_entry,driver_entry,script_entry]
+        'InlineJavascriptRequirement': {}}
+    if python_script_docker_pull:
+        requirements['DockerRequirement'] = {'dockerPull': python_script_docker_pull}
     yaml_tree['requirements'] = requirements
 
     def input_binding(position: int, prefix: str = '') -> Dict[str, Any]:
