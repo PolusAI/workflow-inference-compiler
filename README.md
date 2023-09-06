@@ -58,7 +58,7 @@ steps:
           terms: [Potential]
         output_xvg_path: energy_min_cg.xvg
 ```
-The subworkflow [../mm-workflows/examples/gromacs/cg.yml](../mm-workflows/examples/gromacs/cg.yml) is shown above, and the GraphViz diagram of the root workflow [../mm-workflows/examples/gromacs/tutorial.yml](../mm-workflows/examples/gromacs/tutorial.yml) is shown below.
+The subworkflow [`examples/gromacs/cg.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/cg.yml) in `mm-workflows` is shown above, and the GraphViz diagram of the root workflow [`examples/gromacs/tutorial.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/tutorial.yml) in `mm-workflows` is shown below.
 
 ![Workflow](examples/gromacs/tutorial.yml.gv.png)
 

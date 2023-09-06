@@ -119,7 +119,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
                     tools: Tools) -> YamlTree:
     """Implements 'parameter passing' by recursively merging wic: yml tags.
     Values from the parent workflow will overwrite / override subworkflows.
-    See ../mm-workflows/examples/gromacs/basic.yml for details
+    See https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/basic.yml for details
 
     Args:
         yaml_tree_tuple (YamlTree): A tuple of a name and a yml AST
