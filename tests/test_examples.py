@@ -83,6 +83,8 @@ run_blacklist: List[str] = [
     'cwl_watcher_complex',
     'cwl_watcher_ligand',
     'cwl_watcher_protein',
+    'run_diffdock',
+    'diffdock_workflow'
 ]
 
 
