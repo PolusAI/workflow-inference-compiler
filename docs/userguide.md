@@ -61,7 +61,7 @@ The next rule to be added will be `continue`, which will simply skip over the cu
 
 ## Explicit Edges
 
-If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See ../mm-workflows/examples/gromacs for a concrete example. Due to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!), these variables will need to be in quotes. (The notation is intended to be nearly identical, but instead of using `'*var'` to refer to the *contents* of `'&var'` it refers to the *path* to `'&var'`.)
+If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See [`examples/gromacs`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs) in `mm-workflows` repository for a concrete example. Due to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!), these variables will need to be in quotes. (The notation is intended to be nearly identical, but instead of using `'*var'` to refer to the *contents* of `'&var'` it refers to the *path* to `'&var'`.)
 
 ## Backend Independence
 
@@ -114,7 +114,7 @@ Note however that while conversion_*.cwl files can come from pre-compiled yml su
 
 Ordinarily the runtime system will wait until the previous step(s) are all complete before executing the next step. However, for real-time analysis we want to speculatively execute an arbitrary subworkflow (i.e. to parse log files, etc) before the the previous step(s) have finished. (Note that 'previous' is w.r.t. the DAG, i.e. it refers to all of the nodes which are dependencies of the current step.)
 
-Speculative execution is currently implemented by `cwl_watcher`, which invokes a second instance of the runtime system separately and asynchronously. A portion of `../mm-workflows/examples/gromacs/nvt.yml` is shown below. You can see that the `in:` tag of gmx_energy is identical to the `config:` tag of cwl_watcher. This currently needs to be manually copy & pasted (and indented), but it should be possible to automatically do this in the future.
+Speculative execution is currently implemented by `cwl_watcher`, which invokes a second instance of the runtime system separately and asynchronously. A portion of [`examples/gromacs/nvt.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/nvt.yml) in `mm-workflows` is shown below. You can see that the `in:` tag of gmx_energy is identical to the `config:` tag of cwl_watcher. This currently needs to be manually copy & pasted (and indented), but it should be possible to automatically do this in the future.
 
 ```yaml
 ...
@@ -206,7 +206,7 @@ YAML files can be annotated with metadata inside of a top-level `wic:` tag. Meta
 
 A simple use case is providing labeling and alignment metadata for generating the Graphviz DAGs. There is also a `style: invis` tag, which can be used to hide certain nodes. For now, these three tags are sufficient for generating visually appealing DAGs. We do not anticipate needing to support many additional graphviz features.
 
-A portion of `../mm-workflows/examples/gromacs/setup.yml` is shown below.
+A portion of [`examples/gromacs/setup.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup.yml) in `mm-workflows` is shown below.
 
 ```yaml
 ...
@@ -228,13 +228,13 @@ wic:
 
 This example shows how we can recursively pass in parameters / recursively overload metadata.
 
-Suppose we want to do a very careful minimization, first in vacuum and then in solvent (i.e. `../mm-workflows/examples/gromacs/setup_vac_min.yml`). We would like to re-use the abstract minimization protocol from `min.yml`. However, our stability analysis requires an explicit edge definition from the final minimized coordinates (i.e. in solvent). If we try to simply add `output_tpr_path: '&min.tpr'` directly to `min.yml`, there will be duplicate definitions! This is not allowed (it will generate an exception).
+Suppose we want to do a very careful minimization, first in vacuum and then in solvent (i.e. [`examples/gromacs/setup_vac_min.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup_vac_min.yml) in `mm-workflows`). We would like to re-use the abstract minimization protocol from `min.yml`. However, our stability analysis requires an explicit edge definition from the final minimized coordinates (i.e. in solvent). If we try to simply add `output_tpr_path: '&min.tpr'` directly to `min.yml`, there will be duplicate definitions! This is not allowed (it will generate an exception).
 
 The solution is to pass in this parameter to only the second instance of `min.yml`. Since every `*.yml` file may contain a `wic:` tag, this is implemented by simply recursively merging the dictionaries, where values from parent `*.yml` files overwrite values in the child `*.yml` files. Note that we do not need to modify `min.yml`!
 
 Thus we retain edge inference, explicit edges, composability, reusability, and have even gained customizability!
 
-A portion of `../mm-workflows/examples/gromacs/basic.yml` is shown below.
+A portion of [`examples/gromacs/basic.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/basic.yml) is shown below.
 
 ```yaml
 ...
