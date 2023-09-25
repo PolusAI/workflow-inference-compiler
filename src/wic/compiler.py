@@ -165,7 +165,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     # Add headers
     # Use 1.0 because cromwell only supports 1.0 and we are not using 1.1 / 1.2 features.
     # Eventually we will want to use 1.2 to support conditional workflows and 1.3 to support loops.
-    yaml_tree['cwlVersion'] = 'v1.0'
+    yaml_tree['cwlVersion'] = 'v1.2'
     yaml_tree['class'] = 'Workflow'
     yaml_tree['$namespaces'] = {'edam': 'https://edamontology.org/'}
     yaml_tree['$schemas'] = ['https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl']
