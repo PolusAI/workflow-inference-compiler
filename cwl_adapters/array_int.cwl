@@ -3,10 +3,10 @@ cwlVersion: v1.0
 
 class: CommandLineTool
 
-label: Generates an array of integers, cast to strings.
+label: Generates an array of integers
 
 doc: |
-   Generates an array of integers, cast to strings.
+   Generates an array of integers
 
 baseCommand: 'true'
 
@@ -25,18 +25,18 @@ inputs:
     type: int
     default: 1
 
-  ints_array:
+  array:
     type: string?
 
 outputs:
-  ints_array:
-    type: string[]
+  array:
+    type: int[]
     outputBinding:
       outputEval: |
         ${
           var ints = [];
           for (var i = inputs.minval; i <= inputs.maxval; i += inputs.step) {
-            ints.push(i.toString());
+            ints.push(i);
           }
           return ints;
         }

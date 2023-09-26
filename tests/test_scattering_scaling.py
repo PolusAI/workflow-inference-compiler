@@ -22,7 +22,7 @@ def test_scattering_scaling(minval: int = 100, maxval: int = 500, step: int = 10
         with open(inputs_yml, mode='r', encoding='utf-8') as f:
             d = yaml.safe_load(f.read())
 
-        d['scattering_scaling__step__1__ints_array___maxval'] = i
+        d['scattering_scaling__step__1__array_int___maxval'] = i
 
         with open(inputs_yml, mode='w', encoding='utf-8') as f:
             f.write(yaml.dump(d))
