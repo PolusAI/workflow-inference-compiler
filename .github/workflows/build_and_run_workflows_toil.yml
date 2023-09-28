@@ -66,6 +66,11 @@ jobs:
       run: rm -rf "/home/$(whoami)/actions-runner/_work/workflow-inference-compiler/workflow-inference-compiler/3/envs/wic_github_actions/"
       # For self-hosted runners, make sure we install into a new mamba environment
 
+    # Toil is currently incompatible with pypy
+    # - name: Append pypy to conda environment files
+    #   if: runner.os != 'Windows'
+    #   run: cd wic/install/ && echo "  - pypy" >> system_deps.yml
+
     - name: Setup mamba (linux, macos)
       if: always()
       uses: conda-incubator/setup-miniconda@v2.2.0
