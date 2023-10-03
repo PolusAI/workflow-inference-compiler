@@ -96,10 +96,10 @@ jobs:
         channels: conda-forge
         python-version: "3.9.*" # pypy is not yet compatible with 3.10 and 3.11
 
-    - name: Docker pull
-      if: always()
-      run: cd mm-workflows/ && ./dockerPull.sh
-      # For self-hosted runners, make sure the docker cache is up-to-date.
+    # - name: Docker pull
+    #   if: always()
+    #   run: cd mm-workflows/ && ./dockerPull.sh
+    #   # For self-hosted runners, make sure the docker cache is up-to-date.
 
     - name: Install Workflow Inference Compiler
       if: always()
@@ -129,6 +129,11 @@ jobs:
       if: always()
       run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
 
+    - name: cwl-docker-extract (i.e. recursively docker pull)
+      if: always()
+      run: cd workflow-inference-compiler/ && pytest -k test_cwl_docker_extract
+      # For self-hosted runners, make sure the docker cache is up-to-date.
+
       # Please read docker_remove_entrypoints.sh
       # Note that this requires --no_force_docker_pull (so that we don't immediately un-remove them).
     - name: docker remove entrypoints
@@ -140,7 +145,7 @@ jobs:
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
       run: cd workflow-inference-compiler/ && pytest -k test_run_workflows_on_push --workers 8 --cwl_runner toil-cwl-runner # --cov
 
-    - name: PyTest Run Inlined Workflows
+    - name: PyTest Run Inlined Workflows (On Push)
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
       run: cd workflow-inference-compiler/ && pytest -k test_run_inlined_workflows_on_push --workers 8 --cwl_runner toil-cwl-runner # --cov
