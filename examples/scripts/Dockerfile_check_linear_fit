@@ -1,0 +1,6 @@
+FROM condaforge/mambaforge-pypy3
+
+RUN mamba install -c conda-forge numpy scipy
+
+ADD check_linear_fit.py .
+ADD Dockerfile_check_linear_fit .
