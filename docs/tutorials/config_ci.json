@@ -1,0 +1,15 @@
+// NOTE: This file should be in one of the directories listed in yml_dirs.txt
+// (Technically comments are not allowed in JSON, but we are manually
+// stripping out all lines that start with // before parsing.)
+{
+    // Due to the computational complexity of the graph isomorphism problem, we
+    // need to manually exclude large workflows.
+    // See https://en.wikipedia.org/wiki/Graph_isomorphism_problem
+    "large_workflows": [
+    ],
+    // NOTE: Most of the workflows in this list have free variables because they are subworkflows
+    // i.e. if you try to run them, you will get "Missing required input parameter"
+    "run_blacklist": [
+        "fix_protein"
+    ]
+}
