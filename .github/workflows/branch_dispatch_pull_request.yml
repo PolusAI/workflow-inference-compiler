@@ -79,8 +79,8 @@ jobs:
         id: ce_biobb_adapters
         with:
           repository: biobb_adapters
-          sender_repo_owner: ${{ github.repository_owner }}
-          sender_repo_ref: ${{ github.ref_name }}
+          sender_repo_owner: ${{ github.event.pull_request.head.repo.owner.login }}
+          sender_repo_ref: ${{ github.event.pull_request.head.ref }}
           default_owner: jfennick  # NOTE: NOT PolusAI (does not exist)
           default_branch: master
           access_token: ${{ steps.generate_token.outputs.token }}
@@ -108,12 +108,12 @@ jobs:
           default_branch: main
           access_token: ${{ steps.generate_token.outputs.token }}
 
-      - name: Branch dispatch build_and_test.yml
+      - name: Branch dispatch lint_and_test.yml
         uses: ./.github/my_actions/branch_dispatch/ # Must start with ./
-        id: bd_build_and_test
+        id: bd_lint_and_test
         with:
           repository: workflow-inference-compiler
-          workflow_yml: build_and_test.yml
+          workflow_yml: lint_and_test.yml
           sender_repo: ${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}
           sender_repo_owner: ${{ github.event.pull_request.head.repo.owner.login }}
           dispatch_ref: ${{ steps.ce_wic_dispatch.outputs.ref }}
@@ -127,12 +127,12 @@ jobs:
           biobb_adapters_ref: ${{ steps.ce_biobb_adapters.outputs.ref }}
           access_token: ${{ steps.generate_token.outputs.token }}
 
-      - name: Branch dispatch build_and_run_workflows.yml
+      - name: Branch dispatch run_workflows.yml
         uses: ./.github/my_actions/branch_dispatch/ # Must start with ./
-        id: bd_build_and_run_workflows
+        id: bd_run_workflows
         with:
           repository: workflow-inference-compiler
-          workflow_yml: build_and_run_workflows.yml
+          workflow_yml: run_workflows.yml
           sender_repo: ${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}
           sender_repo_owner: ${{ github.event.pull_request.head.repo.owner.login }}
           dispatch_ref: ${{ steps.ce_wic_dispatch.outputs.ref }}

@@ -47,8 +47,12 @@ yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in 
 # NOTE: Most of the workflows in this list have free variables because they are subworkflows
 # i.e. if you try to run them, you will get "Missing required input parameter"
 run_blacklist: List[str] = config_ci.get("run_blacklist", [])
+run_weekly: List[str] = config_ci.get("run_weekly", [])
 
-yml_paths_tuples_not_blacklist = [(s, p) for (s, p) in yml_paths_tuples if s not in run_blacklist]
+yml_paths_tuples_weekly = [(s, p) for (s, p) in yml_paths_tuples if s in run_weekly]
+
+yml_paths_tuples_not_blacklist_on_push = [(s, p) for (s, p) in yml_paths_tuples
+                                          if s not in run_blacklist and s not in run_weekly]
 # currently [vs_demo_2, vs_demo_3, vs_demo_4, elm, nmr,
 #            multistep1, multistep2, multistep3, helloworld, scattering_scaling]
 
@@ -98,11 +102,24 @@ def get_graph_reps(name: str) -> GraphReps:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist)
-def test_run_examples(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
-    """Runs all of the examples in the examples/ directory. Note that some of
-    the yml files lack inputs and cannot be run independently, and are excluded.
-    """
+@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist_on_push)
+def test_run_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+    """Runs all of the workflows auto-discovered from the various
+       directories in yml_dirs.txt, excluding all workflows which have been
+       blacklisted in the various config_ci.json files and excluding the weekly
+       workflows."""
+    run_workflows(yml_path_str, yml_path, cwl_runner)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_weekly)
+def test_run_workflows_weekly(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+    """Runs all of the run_weekly workflows whitelisted in the various config_ci.json files."""
+    run_workflows(yml_path_str, yml_path, cwl_runner)
+
+
+def run_workflows(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+    """Runs all of the given workflows."""
 
     args = get_args(str(yml_path))
 

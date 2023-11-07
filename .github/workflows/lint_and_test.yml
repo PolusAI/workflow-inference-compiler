@@ -1,4 +1,4 @@
-name: Build And Test
+name: Lint And Test
 
 on:
   workflow_dispatch:
@@ -74,7 +74,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  build_and_test:
+  lint_and_test:
     # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
     # This will prevent DOS attacks from people blasting the CI with rapid fire commits.
     concurrency:
@@ -111,7 +111,7 @@ jobs:
           ref: ${{ inputs.mm-workflows_ref }}
           path: mm-workflows
 
-      # NOTE: pypy actually decreases performance for build_and_test.yml (by a factor of ~2)
+      # NOTE: pypy actually decreases performance for lint_and_test.yml (by a factor of ~2)
       # - name: Append pypy to conda environment files
       #   if: runner.os != 'Windows'
       #   run: cd wic/install/ && echo "  - pypy" >> system_deps.yml
