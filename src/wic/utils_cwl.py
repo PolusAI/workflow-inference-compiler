@@ -50,7 +50,7 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
     if reqs:
         reqsdict: Dict[str, Dict] = {r: {} for r in reqs}
         if 'requirements' in yaml_tree:
-            new_reqs = dict(list(yaml_tree['requirements'].items()) + list(reqsdict))
+            new_reqs = dict(list(yaml_tree['requirements'].items()) + list(reqsdict.items()))
             yaml_tree['requirements'].update(new_reqs)
         else:
             yaml_tree['requirements'] = reqsdict

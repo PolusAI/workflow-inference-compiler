@@ -1,6 +1,6 @@
 name: Docker Build
 
-# build_and_test.yml already tests the install process, but only for one
+# lint_and_test.yml already tests the install process, but only for one
 # version of each operating system. That should catch most problems,
 # but docker allows us to test more OS combinations.
 

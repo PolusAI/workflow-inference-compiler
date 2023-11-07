@@ -67,10 +67,10 @@ in this folder for a detailed discussion.
    dispatch to and install on them the GitHub App for authentication.
    Otherwise, the CIs would fail since the repositories (i.e. forks) that
    dispatches are sent to don't exist and the new feature will not be properly tested.
-2. If a branch with a synchronas name doesn't exist on one of the forks in the cross-repo CIs,
+2. If a branch with the same name doesn't exist on one of the forks in the cross-repo CIs,
    the code of the default branch of the upstream repo (PolusAI master/main) will be checked out,
    but the workflow is still run on the fork, not the upstream PolusAI repo. (We explicitly
-   set the value of the reposiroty to checkout in `build_and_test.yml`).
+   set the value of the repository to checkout in `lint_and_test.yml`).
 3. Blog from the GitHub Security Lab on using `pull_request_target`:
 [Part 1](https://securitylab.github.com/research/github-actions-preventing-pwn-requests/),
 [Part 2](https://securitylab.github.com/research/github-actions-untrusted-input/),
