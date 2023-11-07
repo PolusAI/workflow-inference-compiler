@@ -11,5 +11,3 @@ global      docs/tutorials/
 global      ../mm-workflows/examples/
 # foo       a/relative/path/
 # bar       /an/absolute/path/
-diffdock_gpu         ../mm-workflows/diffdock_gpu/
-diffdock_cpu         ../mm-workflows/diffdock_cpu/
