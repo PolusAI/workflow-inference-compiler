@@ -93,7 +93,7 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     linked: bool = False
 
     def __init__(self, cwl_inp: CWLInputParameter) -> None:
-        inp_type = cwl_inp.type
+        inp_type = cwl_inp.type_
         if isinstance(inp_type, list) and "null" in inp_type:
             required = False
         else:
