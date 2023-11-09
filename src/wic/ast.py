@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import sys
 import traceback
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from mergedeep import merge, Strategy
 from jsonschema import Draft202012Validator
@@ -287,7 +287,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
     return namespaces
 
 
-def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> YamlTree:
+def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tuple[YamlTree, int]:
     """Inlines the given subworkflow into its immediate parent workflow.
 
     Args:
@@ -298,7 +298,7 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Yam
         YamlTree: The updated root workflow with the given subworkflow inlined into its immediate parent workflow.
     """
     if namespaces == []:
-        return yaml_tree_tuple
+        return yaml_tree_tuple, 0
 
     (step_id, yaml_tree) = copy.deepcopy(yaml_tree_tuple)
     yaml_name = step_id.stem
@@ -308,15 +308,16 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Yam
         if len(namespaces) == 1:  # and namespaces[0] == yaml_name ?
             (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, wic['wic'], Path(''))
             yaml_tree = {'steps': yaml_tree['steps']}  # Remove wic tag
-            return YamlTree(step_id, yaml_tree)  # TODO: check step_id
+            len_substeps = len(yaml_tree['steps'])
+            return YamlTree(step_id, yaml_tree), len_substeps  # TODO: check step_id
 
         # Pass namespaces through unmodified
         backends_trees = []
         for stepid, back in wic['wic']['backends'].items():
-            backend_tree = inline_subworkflow(YamlTree(stepid, back), namespaces)
+            backend_tree, len_substeps = inline_subworkflow(YamlTree(stepid, back), namespaces)
             backends_trees.append(backend_tree)
         yaml_tree['wic']['backends'] = dict(backends_trees)
-        return YamlTree(step_id, yaml_tree)
+        return YamlTree(step_id, yaml_tree), 0  # choose len_substeps from which backend?
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
@@ -335,6 +336,7 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Yam
     sub_yml_tree = steps[i][step_key]['subtree']
     sub_parentargs = steps[i][step_key]['parentargs']
 
+    len_substeps = 0
     if len(namespaces) == 1:
         steps_inits = steps[:i]  # Exclude step i
         steps_tails = steps[i+1:]  # Exclude step i
@@ -343,10 +345,11 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Yam
         yaml_tree['steps'] = steps_inits + sub_steps + steps_tails
         # Need to re-index both the sub-step numbers as well as the
         # subsequent steps in this workflow? No, except for wic: steps:
+        len_substeps = len(sub_steps)
     else:
         # Strip off one initial namespace
         y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
-        (step_key_, sub_yml_tree) = inline_subworkflow(y_t, namespaces[1:])
+        (step_key_, sub_yml_tree), len_substeps = inline_subworkflow(y_t, namespaces[1:])
         # TODO: re-index wic: steps: ? We probably should, although
         # inlineing after merging should not affect CWL args.
         # Re-indexing could be tricky w.r.t. overloading.
@@ -356,7 +359,47 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Yam
         # appear to be inlineing invariant! However, using ~ syntax helps.
         steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': sub_parentargs}
 
-    return YamlTree(step_id, yaml_tree)
+    yaml_tree['wic'] = inline_subworkflow_wic_tag(wic, namespaces, len_substeps)
+
+    return YamlTree(step_id, yaml_tree), len_substeps
+
+
+def inline_subworkflow_wic_tag(wic_tag: Yaml, namespaces: Namespaces, len_substeps: int) -> Yaml:
+    """Inlines the wic metadata tags associated with the given subworkflow into its immediate parent wic.
+
+    Args:
+        wic_tag (Yaml): The wicmetadata tag associated with the given workflow
+        namespaces (Namespaces): Specifies the path in the yml AST to the subworkflow to be inlined.
+        len_substeps (int): The number of steps in the subworkflow to be inlined.
+
+    Returns:
+        Yaml: The updated wic metadata tag with the wic metadata tag associated with the given subworkflow inlined.
+    """
+    tag_wic: Yaml = wic_tag['wic']
+
+    step_ints_names = [utils.parse_step_name_str(ns)[1:] for ns in namespaces]
+
+    sub_wic_parent = wic_tag  # initialize to the 'root' wic tag
+    # Traverse down to the parent node of the subworkflow to the inlined
+    for index, step_name in step_ints_names[:-1]:
+        sub_wic_parent = sub_wic_parent.get('wic', {}).get('steps', {}).get(f'({index}, {step_name})', {})
+        if sub_wic_parent == {}:
+            return tag_wic  # If path does not exist, do nothing and short circuit
+
+    # Then get the wic tag of the subworkflow
+    sub_index, sub_step_name = step_ints_names[-1]
+    sub_wic = sub_wic_parent.get('wic', {}).get('steps', {}).get(f'({sub_index}, {sub_step_name})', {})
+    if sub_wic_parent == {}:
+        return tag_wic  # If path does not exist, do nothing and short circuit
+
+    sub_wic_steps_reindexed = utils.reindex_wic_steps(sub_wic['wic']['steps'], 0, sub_index)  # Maybe sub_index-1
+    sub_wic_parent_steps_reindexed = utils.reindex_wic_steps(sub_wic_parent['wic']['steps'], sub_index, len_substeps)
+
+    # Merge the wic: steps: dicts and mutably update the parent
+    sub_wic_parent['wic']['steps'] = merge(sub_wic_parent_steps_reindexed, sub_wic_steps_reindexed,
+                                           strategy=Strategy.TYPESAFE_ADDITIVE)  # TYPESAFE_REPLACE ?
+
+    return tag_wic
 
 
 def move_slash_last(source_new: str) -> str:
