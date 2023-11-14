@@ -136,7 +136,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
 
     # Check for top-level yml dsl args
     wic_self = {'wic': yaml_tree.get('wic', {})}
-    wic = merge(wic_self, wic_parent, strategy=Strategy.TYPESAFE_REPLACE)  # TYPESAFE_ADDITIVE ?
+    wic = merge(wic_self, wic_parent, strategy=Strategy.TYPESAFE_REPLACE)
     # Here we want to ADD wic: as a top-level yaml tag.
     # In the compilation phase, we want to remove it.
     yaml_tree['wic'] = wic['wic']
@@ -346,6 +346,23 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
         # Need to re-index both the sub-step numbers as well as the
         # subsequent steps in this workflow? No, except for wic: steps:
         len_substeps = len(sub_steps)
+
+        parent_wic_tag = wic.get('wic', {}).get("steps", {}).get(
+            f'({i + 1}, {step_key})', {}).get('wic', {})
+        sub_wic_tag = sub_yml_tree.get('wic', {})
+
+        # TODO: need cleaner code to make arbitrary-depth dictionary.
+        if 'wic' not in wic:
+            wic['wic'] = {}
+        if 'steps' not in wic['wic']:
+            wic['wic']['steps'] = {}
+        if f'({i + 1}, {step_key})' not in wic['wic']['steps']:
+            wic['wic']['steps'][f'({i + 1}, {step_key})'] = {}
+
+        # Merge parent into child to support overloading.
+        # TODO: Need to sort the steps by index
+        wic['wic']['steps'][f'({i + 1}, {step_key})']['wic'] = \
+            merge(sub_wic_tag, parent_wic_tag, strategy=Strategy.TYPESAFE_REPLACE)
     else:
         # Strip off one initial namespace
         y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
@@ -377,27 +394,47 @@ def inline_subworkflow_wic_tag(wic_tag: Yaml, namespaces: Namespaces, len_subste
     """
     tag_wic: Yaml = wic_tag['wic']
 
+    # Note: the index after parsing is 0-based.
     step_ints_names = [utils.parse_step_name_str(ns)[1:] for ns in namespaces]
 
     sub_wic_parent = wic_tag  # initialize to the 'root' wic tag
     # Traverse down to the parent node of the subworkflow to the inlined
     for index, step_name in step_ints_names[:-1]:
-        sub_wic_parent = sub_wic_parent.get('wic', {}).get('steps', {}).get(f'({index}, {step_name})', {})
-        if sub_wic_parent == {}:
+        sub_wic_parent = sub_wic_parent.get('wic', {}).get('steps', {}).get(f'({index + 1}, {step_name})', {})
+        # Note: if any of the intermediate workflows in the path in the AST tree
+        # from the current workflow to the subworkflow being inlined is absent in the current
+        # wic metadata tag, the inlining won't have any effect on the wic tag of this workflow.
+        # Note: When there're other options like 'graphviz' but not 'steps', we can also short
+        # circuit and return.
+        if 'steps' not in sub_wic_parent.get('wic', {}):
             return tag_wic  # If path does not exist, do nothing and short circuit
 
     # Then get the wic tag of the subworkflow
+    # Note: sub_index is 0-based.
     sub_index, sub_step_name = step_ints_names[-1]
-    sub_wic = sub_wic_parent.get('wic', {}).get('steps', {}).get(f'({sub_index}, {sub_step_name})', {})
-    if sub_wic_parent == {}:
-        return tag_wic  # If path does not exist, do nothing and short circuit
+    sub_wic = sub_wic_parent.get('wic', {}).get('steps', {}).get(f'({sub_index + 1}, {sub_step_name})', {})
 
-    sub_wic_steps_reindexed = utils.reindex_wic_steps(sub_wic['wic']['steps'], 0, sub_index)  # Maybe sub_index-1
-    sub_wic_parent_steps_reindexed = utils.reindex_wic_steps(sub_wic_parent['wic']['steps'], sub_index, len_substeps)
+    # Note: we should not short circuit when the subworkflow being inlined is not used in the
+    # current wic tag, since inlining it will affect the indices of sibling steps following it.
+    sub_wic_steps_reindexed = utils.reindex_wic_steps(sub_wic.get('wic', {}).get('steps', {}), 1, sub_index)
+
+    # Delete the subworkflow from the parent workflow since it is replaced by its internal steps.
+    # This needs to be explicitly done since the key of this subworkflow in the dict is not
+    # the same as any of its inlined steps and therefore won't be overwritten by the deep merge.
+    if f'({sub_index + 1}, {sub_step_name})' in sub_wic_parent.get('wic', {}).get('steps', {}):
+        del sub_wic_parent['wic']['steps'][f'({sub_index + 1}, {sub_step_name})']
+
+    # The inlining is actually a replacement of the target subworkflows by its steps.
+    # Therefore, the incrementing count should be len_substeps - 1.
+    sub_wic_parent_steps_reindexed = utils.reindex_wic_steps(sub_wic_parent['wic']['steps'],
+                                                             sub_index + 1, len_substeps - 1)
 
     # Merge the wic: steps: dicts and mutably update the parent
-    sub_wic_parent['wic']['steps'] = merge(sub_wic_parent_steps_reindexed, sub_wic_steps_reindexed,
-                                           strategy=Strategy.TYPESAFE_ADDITIVE)  # TYPESAFE_REPLACE ?
+    # Merge parent into child to support overloading.
+    # TODO: The 'ranksame' in the wic tag of the inlined subworkflow is ignored
+    # and not merged for now.
+    sub_wic_parent['wic']['steps'] = merge(sub_wic_steps_reindexed, sub_wic_parent_steps_reindexed,
+                                           strategy=Strategy.TYPESAFE_REPLACE)
 
     return tag_wic
 
