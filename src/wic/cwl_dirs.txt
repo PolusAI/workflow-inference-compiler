@@ -13,5 +13,3 @@ global      ../mm-workflows/cwl_adapters/
 gpu         ../mm-workflows/gpu/
 # foo       a/relative/path/
 # bar       /an/absolute/path/
-diffdock_gpu         ../mm-workflows/diffdock_gpu/
-diffdock_cpu         ../mm-workflows/diffdock_cpu/
