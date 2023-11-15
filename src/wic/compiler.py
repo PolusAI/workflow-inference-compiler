@@ -921,7 +921,7 @@ def insert_step_into_workflow(yaml_tree_orig: Yaml, stepid: StepId, tools: Tools
 
     if 'wic' in yaml_tree_mod:
         if 'steps' in yaml_tree_mod['wic']:
-            yaml_tree_mod['wic']['steps'] = utils.reindex_wic_steps(yaml_tree_mod['wic']['steps'], i)
+            yaml_tree_mod['wic']['steps'] = utils.reindex_wic_steps(yaml_tree_mod['wic']['steps'], i+1)
             yaml_tree_mod['wic']['steps'][keystr] = inf_dict
         else:
             yaml_tree_mod['wic'].update({'steps': {keystr: inf_dict}})
