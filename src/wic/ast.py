@@ -309,7 +309,7 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
             (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, wic['wic'], Path(''))
             yaml_tree = {'steps': yaml_tree['steps']}  # Remove wic tag
             len_substeps = len(yaml_tree['steps'])
-            return YamlTree(step_id, yaml_tree), len_substeps  # TODO: check step_id
+            return YamlTree(StepId(back_name_, step_id.plugin_ns), yaml_tree), 0  # len_substeps  # TODO: check step_id
 
         # Pass namespaces through unmodified
         backends_trees = []
