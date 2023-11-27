@@ -26,23 +26,23 @@ from wic.api._types import CWL_TYPES_DICT
 logger = logging.getLogger("WIC Python API")
 
 
-class InvalidInputValue(Exception):
+class InvalidInputValueError(Exception):
     pass
 
 
-class MissingRequiredValue(Exception):
+class MissingRequiredValueError(Exception):
     pass
 
 
-class InvalidStep(Exception):
+class InvalidStepError(Exception):
     pass
 
 
-class InvalidLink(Exception):
+class InvalidLinkError(Exception):
     pass
 
 
-class InvalidCLT(Exception):
+class InvalidCLTError(Exception):
     pass
 
 
@@ -77,7 +77,7 @@ class Tool(BaseModel):  # pylint: disable=too-few-public-methods
     def validate_docker(cls, docker):  # pylint: disable=no-self-argument
         """Validate that there is one docker requirement specified."""
         if not len(docker) > 0:
-            raise InvalidCLT("no docker requirement specified")
+            raise InvalidCLTError("no docker requirement specified")
         # schema salad already checks that len(docker) < 2
         docker = docker[0].dockerPull
         return docker
@@ -121,7 +121,9 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
         if check:
             if not isinstance(__value, self.inp_type):  # type: ignore
                 raise TypeError(
-                    f"invalid attribute type for {self.name}: got {__value.__class__.__name__}, expected {self.inp_type.__name__}"  # type: ignore # noqa: E266
+                    f"invalid attribute type for {self.name}: "
+                    f"got {__value.__class__.__name__}, "
+                    f"expected {self.inp_type.__name__}"  # type: ignore # noqa: E266
                 )
             self.value = __value
             return
@@ -140,12 +142,12 @@ def _get_value_from_cfg(value: Any) -> Any:  # validation happens in Step
             try:
                 value_ = Path(value["location"])
             except BaseException as exc:
-                raise InvalidInputValue() from exc
+                raise InvalidInputValueError() from exc
             if not value_.is_dir():
-                raise InvalidInputValue(f"{str(value_)} is not a directory")
+                raise InvalidInputValueError(f"{str(value_)} is not a directory")
             return value_
-    else:
         return value
+    return value
 
 
 def _is_link(s: str) -> bool:
@@ -179,8 +181,8 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         # validate using cwl.utils
         try:
             cwl = load_document_by_uri(cwl_path)
-        except BaseException as s_e:
-            e_w = ErrorWrapper(s_e, "invalid cwl file")
+        except Exception as exc:
+            e_w = ErrorWrapper(exc, "invalid cwl file")
             raise ValidationError([e_w], Step)  # pylint: disable=raise-missing-from
         docker = [x for x in cwl.requirements if _is_docker_requirement(x)]
         with open(cwl_path, "r", encoding="utf-8") as file:
@@ -192,6 +194,9 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
         cwl_name = cwl_path.stem
         input_names = [inp.id.split("#")[-1] for inp in cwl.inputs]
+        # ignoring mypy checks because extending Pydantic
+        # model Tool and calling super().__init__ is problematic
+        # with mypy
         super().__init__(
             cwl_path=cwl_path,
             cwlVersion=cwl.cwlVersion,
@@ -222,8 +227,9 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
                     try:
                         local_input = self.inputs[index]
                         if not local_input.inp_type == __value.inp_type:
-                            raise InvalidLink(
-                                f"links must have the same input type. cannot link {local_input.name} to {__value.name}"
+                            raise InvalidLinkError(
+                                f"links must have the same input type. "
+                                f"cannot link {local_input.name} to {__value.name}"
                             )
                         tmp = f"{__name}{self.cwl_name}"
                         local_input._set_value(f"*{tmp}", check=False, linked=True)
@@ -234,10 +240,10 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
                     try:
                         local_input = self.inputs[index]
                         if not local_input.inp_type == __value.inp_type:
-                            raise InvalidLink(
-                                f"links must have the same input type. cannot link {local_input.name} to {__value.name}"
+                            raise InvalidLinkError(
+                                f"links must have the same input type. "
+                                f"cannot link {local_input.name} to {__value.name}"
                             )
-                        # tmp = f"{__name}{self.cwl_name}"
                         current_value = __value.value
                         local_input._set_value(
                             current_value.replace("&", "*"), check=False, linked=True
@@ -268,7 +274,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
     def _validate(self) -> None:
         for inp in self.inputs:
             if inp.required and inp.value is None:
-                raise MissingRequiredValue(f"{inp.name} is required")
+                raise MissingRequiredValueError(f"{inp.name} is required")
 
     @property
     def _yml(self) -> dict:
@@ -310,12 +316,14 @@ class Workflow:
             try:
                 s._validate()  # pylint: disable=W0212
             except BaseException as exc:
-                raise InvalidStep(f"{s.cwl_name} is missing required inputs") from exc
+                raise InvalidStepError(
+                    f"{s.cwl_name} is missing required inputs"
+                ) from exc
 
     @property
     def yaml(self) -> Any:
         """WIC YML representation."""
-        d = {"steps": [step._yml for step in self.steps]}
+        d = {"steps": [step._yml for step in self.steps]}  # pylint: disable=W0212
         return d
 
     def _save_yaml(self) -> None:
@@ -326,7 +334,7 @@ class Workflow:
     def _save_all_cwl(self) -> None:
         for s in self.steps:
             try:
-                s._save_cwl(self.path)
+                s._save_cwl(self.path)  # pylint: disable=W0212
             except BaseException as exc:
                 raise exc
 
