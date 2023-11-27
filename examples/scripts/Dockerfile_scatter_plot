@@ -1,0 +1,6 @@
+FROM condaforge/mambaforge-pypy3
+
+RUN mamba install -c conda-forge matplotlib
+
+ADD scatter_plot.py .
+ADD Dockerfile_scatter_plot .

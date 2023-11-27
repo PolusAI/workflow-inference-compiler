@@ -1,3 +1,4 @@
+import json
 import subprocess as sub
 from pathlib import Path
 import signal
@@ -9,79 +10,49 @@ import networkx as nx
 import pytest
 import yaml
 from networkx.algorithms import isomorphism
+from mergedeep import merge, Strategy
 
 import wic.cli
 import wic.compiler
 import wic.run_local
 import wic.utils
 from wic import auto_gen_header
-from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree
+from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree, Json
 
 from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tuples
 
 
+# Look in each directory in yml_dirs.txt for separate config_ci.json files and combine them.
+yml_dirs_file = Path(get_args().homedir) / 'wic' / 'yml_dirs.txt'
+yml_dirs = wic.utils.read_lines_pairs(yml_dirs_file)
+config_ci: Json = {}
+for _yml_namespace, yml_dir in yml_dirs:
+    config_ci_json = Path(yml_dir) / 'config_ci.json'
+    if config_ci_json.exists():
+        print(f'Reading {config_ci_json}')
+        with open(config_ci_json) as f:
+            contents = f.read().splitlines()
+            # Strip out comments. (Comments are not allowed in JSON)
+            contents = [line for line in contents if not line.strip().startswith('//')]
+            config_ci_tmp = json.loads('\n'.join(contents))
+        # Use the Additive Strategy to e.g. concatenate lists
+        config_ci = merge(config_ci, config_ci_tmp, strategy=Strategy.TYPESAFE_ADDITIVE)
+
 # Due to the computational complexity of the graph isomorphism problem, we
 # need to manually exclude large workflows.
 # See https://en.wikipedia.org/wiki/Graph_isomorphism_problem
-large_workflows = ['dsb', 'dsb1', 'elm', 'vs_demo_2', 'vs_demo_3', 'vs_demo_4']
+large_workflows: List[str] = config_ci.get("large_workflows", [])
 yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in large_workflows]
 
 # NOTE: Most of the workflows in this list have free variables because they are subworkflows
 # i.e. if you try to run them, you will get "Missing required input parameter"
-run_blacklist: List[str] = [
-    'assign_partial_charges_batch',
-    'convert_ligand_mol2_to_pdbqt_mdanalysis',
-    'download_smiles_ligand_db',
-    'convert_ligand_mol2_to_pdbqt_obabel',
-    'analysis_realtime_ligand',
-    'analysis_realtime_complex',
-    'analysis_realtime_protein',
-    'ligand_modeling_docking',
-    'align_protein_CA_pymol',
-    'assign_partial_charges',
-    'minimize_ligand_only',
-    'analysis_final_steps',
-    'autodock_vina_rescore',
-    'analysis_final',
-    'gen_topol_params',
-    'analysis_realtime',
-    'convert_pdbqt',
-    'download_pdb',
-    'setup_vac_min',
-    'npt_gromacs',
-    'setup_pdb',
-    'docking_stability',
-    'npt_amber',
-    'analysis',
-    'solv_ion',
-    'topology',
-    'stability',
-    'docking',
-    'l-bfgs',
-    'basic',
-    'equil',
-    'setup',
-    'steep',
-    'modeling',  # called in tutorial
-    'tutorial',  # called in nmr
-    'prod',
-    'flc',
-    'dsb',
-    'npt',
-    'nvt',
-    'min',
-    'cg',
-    'yank',
-    'fix_protein',
-    # These (currently) always return success, so no point in running them.
-    'cwl_watcher_analysis',
-    'cwl_watcher_complex',
-    'cwl_watcher_ligand',
-    'cwl_watcher_protein',
-]
+run_blacklist: List[str] = config_ci.get("run_blacklist", [])
+run_weekly: List[str] = config_ci.get("run_weekly", [])
 
+yml_paths_tuples_weekly = [(s, p) for (s, p) in yml_paths_tuples if s in run_weekly]
 
-yml_paths_tuples_not_blacklist = [(s, p) for (s, p) in yml_paths_tuples if s not in run_blacklist]
+yml_paths_tuples_not_blacklist_on_push = [(s, p) for (s, p) in yml_paths_tuples
+                                          if s not in run_blacklist and s not in run_weekly]
 # currently [vs_demo_2, vs_demo_3, vs_demo_4, elm, nmr,
 #            multistep1, multistep2, multistep3, helloworld, scattering_scaling]
 
@@ -131,13 +102,24 @@ def get_graph_reps(name: str) -> GraphReps:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist)
-def test_run_examples(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
-    """Runs all of the examples in the examples/ directory. Note that some of
-    the yml files lack inputs and cannot be run independently, and are excluded.
-    """
-    if yml_path_str == 'vs_demo_4':
-        return None  # Skip so we don't accidentally DOS pdbbind.org.cn
+@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist_on_push)
+def test_run_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+    """Runs all of the workflows auto-discovered from the various
+       directories in yml_dirs.txt, excluding all workflows which have been
+       blacklisted in the various config_ci.json files and excluding the weekly
+       workflows."""
+    run_workflows(yml_path_str, yml_path, cwl_runner)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_weekly)
+def test_run_workflows_weekly(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+    """Runs all of the run_weekly workflows whitelisted in the various config_ci.json files."""
+    run_workflows(yml_path_str, yml_path, cwl_runner)
+
+
+def run_workflows(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+    """Runs all of the given workflows."""
 
     args = get_args(str(yml_path))
 

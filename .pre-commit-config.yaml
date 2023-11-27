@@ -12,6 +12,7 @@ repos:
     -   id: check-docstring-first  # checks a common error of defining a docstring after code.
     -   id: check-executables-have-shebangs  # ensures that (non-binary) executables have a shebang.
     -   id: check-json  # checks json files for parseable syntax.
+        exclude: config_ci.json
     # -   id: check-shebang-scripts-are-executable  # ensures that (non-binary) files with a shebang are executable.
     # -   id: pretty-format-json  # sets a standard for formatting json files.
     -   id: check-merge-conflict  # checks for files that contain merge conflict strings.

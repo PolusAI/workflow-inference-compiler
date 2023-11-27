@@ -109,7 +109,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         # NOTE: Using --leave-outputs to disable --outdir
         # See https://github.com/dnanexus/dx-cwl/issues/20
         # --outdir has one or more bugs which will cause workflows to fail!!!
-        cmd = ['cwltool'] + parallel + quiet + cachedir_ + net + provenance + \
+        cmd = ['cwltool', '--force-docker-pull'] + parallel + quiet + cachedir_ + net + provenance + \
             docker_cmd_ + write_summary + skip_schemas + path_check
         cmd += ['--leave-outputs',
                 # '--js-console', # "Running with support for javascript console in expressions (DO NOT USE IN PRODUCTION)"
@@ -161,7 +161,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         net = ['--custom-net', args.custom_net] if args.custom_net else []
         provenance = ['--provenance', 'provenance']
         docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
-        cmd = ['toil-cwl-runner'] + net + provenance + docker_cmd_
+        cmd = ['toil-cwl-runner', '--force-docker-pull'] + net + provenance + docker_cmd_
         cmd += ['--outdir', 'outdir_toil',
                 '--jobStore', f'file:./jobStore_{yaml_stem}',  # NOTE: This is the equivalent of --cachedir
                 # TODO: Check --clean, --cleanWorkDir, --restart

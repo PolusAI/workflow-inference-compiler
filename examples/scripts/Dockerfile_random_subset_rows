@@ -1,0 +1,5 @@
+FROM python
+# No dependencies; only python std lib
+
+ADD random_subset_rows.py .
+ADD Dockerfile_random_subset_rows .
