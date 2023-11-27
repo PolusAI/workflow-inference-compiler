@@ -1,6 +1,6 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
-requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.22"]
+requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.29"]
 # NOTE: The above list mostly comes from https://github.com/nglviewer/nglview/pull/969/files
 # NOTE: Use upper bound of <68 for setuptools due to 2to3 error.
 # See https://stackoverflow.com/questions/72414481/error-in-anyjson-setup-command-use-2to3-is-invalid
@@ -30,6 +30,10 @@ dependencies = [
     "requests",
     "mergedeep",
     "networkx",
+    "beautifulsoup4", # Solely for parsing gromacs mdp options html
+    "cwl-utils>=0.31", # CommandInputParameter attr changed from `type_` to `type` https://github.com/common-workflow-language/cwl-utils/releases/tag/v0.31
+    "typeguard",
+    "pydantic>=1.10.11, <2.0" # Temporarily downgrade pydantic below version 2.0 to avoid breaking changes.
 ]
 
 [project.readme]
@@ -202,6 +206,7 @@ module = [
     "scipy.*",
     "ruamel.*",
     "toil.*",
+    "version.*",
 ]
 ignore_missing_imports = true
 
