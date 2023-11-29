@@ -82,15 +82,14 @@ def compile_workflow(yaml_tree_ast: YamlTree,
     # (Also note that you have to do this element-wise; you cannot simply write
     # subgraphs_ = subgraphs because that will only overwrite the local binding
     # and thus it will not affect the call site of compile_workflow!)
-    # TODO: overwrite the networkx subgraphs. For now this is okay because
-    # we are only using the networkx graphs to do an isomorphism check in the
-    # regression tests, in which case identical duplication will not matter.
     for i, subgraph_ in enumerate(subgraphs_):
         subgraph_.graphviz.body = subgraphs[i].graphviz.body
         subgraph_.graphdata.name = subgraphs[i].graphdata.name
         subgraph_.graphdata.nodes = subgraphs[i].graphdata.nodes
         subgraph_.graphdata.edges = subgraphs[i].graphdata.edges
         subgraph_.graphdata.subgraphs = subgraphs[i].graphdata.subgraphs
+        subgraph_.networkx.clear()
+        subgraph_.networkx.update(subgraphs[i].networkx.edges, subgraphs[i].networkx.nodes)
 
     if i == max_iters:
         print(yaml.dump(node_data.yml))
