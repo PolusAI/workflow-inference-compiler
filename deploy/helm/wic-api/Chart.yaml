@@ -1,6 +1,0 @@
-apiVersion: v2
-name: wic-api
-description: Helm chart for wic api
-type: application
-version: 0.1.0
-appVersion: "1.16.0"

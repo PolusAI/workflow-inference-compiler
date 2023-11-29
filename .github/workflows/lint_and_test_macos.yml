@@ -95,23 +95,19 @@ jobs:
 
       - name: MyPy Check Type Annotations
         if: always()
-        run: cd wic/ && mypy src/ examples/ tests/ api.py auth/
+        run: cd wic/ && mypy src/ examples/ tests/
         # NOTE: Do not use `mypy .` because then mypy will check both src/ and build/ causing:
         # src/wic/__init__.py: error: Duplicate module named "wic" (also at "./build/lib/wic/__init__.py")
 
       - name: PyLint Check Code Quality
         if: always()
-        run: cd wic/ && pylint src/ examples/**/*.py tests/ api.py auth/
+        run: cd wic/ && pylint src/ examples/**/*.py tests/
         # NOTE: See fail-under threshold in .pylintrc
-
-      - name: Helm Lint Check Code Quality
-        if: always()
-        run: cd wic/ && helm lint deploy/helm/wic-api
 
       - name: PEP8 Code Formatting
         if: always()
         id: autopep8
-        run: cd wic/ && autopep8 --exit-code --recursive --diff --max-line-length 120 examples/ src/ tests/ api.py auth/
+        run: cd wic/ && autopep8 --exit-code --recursive --diff --max-line-length 120 examples/ src/ tests/
       - name: Fail if autopep8 made changes
         if: steps.autopep8.outputs.exit-code == 2
         run: exit 1
