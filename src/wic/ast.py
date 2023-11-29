@@ -301,7 +301,7 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
     if namespaces == []:
         return yaml_tree_tuple
 
-    (step_id, yaml_tree) = yaml_tree_tuple
+    (step_id, yaml_tree) = copy.deepcopy(yaml_tree_tuple)
     yaml_name = step_id.stem
 
     wic = {'wic': yaml_tree.get('wic', {})}
