@@ -16,5 +16,3 @@ sudo docker build --no-cache --pull -f Dockerfile_redhat -t polusai/wic_redhat .
 sudo docker build --no-cache --pull -f Dockerfile_redhat_pypy -t polusai/wic_redhat_pypy ..
 sudo docker build --no-cache --pull -f Dockerfile_amazon -t polusai/wic_amazon ..
 sudo docker build --no-cache --pull -f Dockerfile_amazon_pypy -t polusai/wic_amazon_pypy ..
-
-sudo docker build --no-cache --pull -f Dockerfile_debian_rest_api -t polusai/wic_debian_rest_api ..
