@@ -450,13 +450,16 @@ def parse_int_string_tuple(string: str) -> Tuple[int, str]:
     return (int(str1.strip()), str2.strip())
 
 
-def reindex_wic_steps(wic_steps: Yaml, index: int) -> Yaml:
-    """After inserting a step into a workflow, we need to increment the steps in\n
-    the wic: metadata annotations tag whose original index is >= the given index.
+def reindex_wic_steps(wic_steps: Yaml, index: int, num_steps: int = 1) -> Yaml:
+    """ Increment 1-based step index starting from the step with the given index by num_steps.
+
+    This function can be used to reindex steps after inserting num_steps at the given index: in\n
+    the wic: metadata annotations tag whose index (before insertion) is >= the given index.
 
     Args:
         wic_steps (Yaml): The steps: subtag of the wic: metadata annotations tag.
-        index (int): The (zero-based) index of the inserted workflow step.
+        index (int): The (one-based) start index that needs to be reindexed.
+        num_steps (int): The number of steps inserted.
 
     Returns:
         Yaml: The updated wic: steps: tag, with the appropriate indices incremented.
@@ -464,7 +467,7 @@ def reindex_wic_steps(wic_steps: Yaml, index: int) -> Yaml:
     wic_steps_reindexed = {}
     for keystr, val in wic_steps.items():
         (i, s) = parse_int_string_tuple(keystr)
-        newstr = f'({i+1}, {s})' if i >= index else keystr
+        newstr = f'({i+num_steps}, {s})' if i >= index else keystr
         wic_steps_reindexed[newstr] = val
     return wic_steps_reindexed
 
