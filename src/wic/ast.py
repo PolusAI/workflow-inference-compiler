@@ -287,12 +287,11 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
     return namespaces
 
 
-def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Namespaces) -> YamlTree:
+def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> YamlTree:
     """Inlines the given subworkflow into its immediate parent workflow.
 
     Args:
         yaml_tree_tuple (YamlTree): A tuple of name and yml AST
-        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         namespaces (Namespaces): Specifies the path in the yml AST to the subworkflow to be inlined.
 
     Returns:
@@ -314,47 +313,48 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, tools: Tools, namespaces: Name
         # Pass namespaces through unmodified
         backends_trees = []
         for stepid, back in wic['wic']['backends'].items():
-            backend_tree = inline_subworkflow(YamlTree(stepid, back), tools, namespaces)
+            backend_tree = inline_subworkflow(YamlTree(stepid, back), namespaces)
             backends_trees.append(backend_tree)
         yaml_tree['wic']['backends'] = dict(backends_trees)
         return YamlTree(step_id, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    yaml_stem = Path(yaml_name).stem
+    step_names = [utils.step_name_str(yaml_stem, i, step_key)
+                  for i, step_key in enumerate(steps_keys)]
+
+    if namespaces[0] not in step_names:
+        # This should never happen (if namespaces comes from get_inlineable_subworkflows)
+        raise Exception(f'Error! {namespaces[0]} not in {step_names}')
 
     # TODO: We really need to inline the wic tags as well. This may be complicated
     # because due to overloading we may need to modify parent wic tags.
 
-    for i, step_key in enumerate(steps_keys):
-        yaml_stem = Path(yaml_name).stem
-        step_name_i = utils.step_name_str(yaml_stem, i, step_key)
-        if step_key in subkeys:
-            sub_yml_tree = steps[i][step_key]['subtree']
-            sub_parentargs = steps[i][step_key]['parentargs']
+    (yaml_stem, i, step_key) = utils.parse_step_name_str(namespaces[0])
+    sub_yml_tree = steps[i][step_key]['subtree']
+    sub_parentargs = steps[i][step_key]['parentargs']
 
-            if namespaces[0] == step_name_i:
-                if len(namespaces) == 1:
-                    steps_inits = steps[:i]  # Exclude step i
-                    steps_tails = steps[i+1:]  # Exclude step i
-                    # Inline sub-steps.
-                    sub_steps: List[Yaml] = sub_yml_tree['steps']
-                    yaml_tree['steps'] = steps_inits + sub_steps + steps_tails
-                    # Need to re-index both the sub-step numbers as well as the
-                    # subsequent steps in this workflow? No, except for wic: steps:
-                else:
-                    # Strip off one initial namespace
-                    y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
-                    (step_key_, sub_yml_tree) = inline_subworkflow(y_t, tools, namespaces[1:])
-                    # TODO: re-index wic: steps: ? We probably should, although
-                    # inlineing after merging should not affect CWL args.
-                    # Re-indexing could be tricky w.r.t. overloading.
-                    # TODO: maintain inference boundaries (once feature is added)
-                    # NOTE: Since parentargs are applied after compiling a subworkflow,
-                    # and since inlineing removes the subworkflow, parentargs does not
-                    # appear to be inlineing invariant! However, using ~ syntax helps.
-                    steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': sub_parentargs}
+    if len(namespaces) == 1:
+        steps_inits = steps[:i]  # Exclude step i
+        steps_tails = steps[i+1:]  # Exclude step i
+        # Inline sub-steps.
+        sub_steps: List[Yaml] = sub_yml_tree['steps']
+        yaml_tree['steps'] = steps_inits + sub_steps + steps_tails
+        # Need to re-index both the sub-step numbers as well as the
+        # subsequent steps in this workflow? No, except for wic: steps:
+    else:
+        # Strip off one initial namespace
+        y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
+        (step_key_, sub_yml_tree) = inline_subworkflow(y_t, namespaces[1:])
+        # TODO: re-index wic: steps: ? We probably should, although
+        # inlineing after merging should not affect CWL args.
+        # Re-indexing could be tricky w.r.t. overloading.
+        # TODO: maintain inference boundaries (once feature is added)
+        # NOTE: Since parentargs are applied after compiling a subworkflow,
+        # and since inlineing removes the subworkflow, parentargs does not
+        # appear to be inlineing invariant! However, using ~ syntax helps.
+        steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': sub_parentargs}
 
     return YamlTree(step_id, yaml_tree)
 

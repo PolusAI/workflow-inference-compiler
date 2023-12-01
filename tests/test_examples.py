@@ -294,7 +294,7 @@ def test_inline_subworkflows(yml_path_str: str, yml_path: Path) -> None:
 
     # Inline each subworkflow individually and check that the graphs are isomorphic.
     for namespaces in namespaces_list:
-        inline_yaml_tree = wic.ast.inline_subworkflow(yaml_tree, tools_cwl, namespaces)
+        inline_yaml_tree = wic.ast.inline_subworkflow(yaml_tree, namespaces)
 
         inline_graph = get_graph_reps(str(yml_path))
         inline_compiler_info = wic.compiler.compile_workflow(inline_yaml_tree, args,
