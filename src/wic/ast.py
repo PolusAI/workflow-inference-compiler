@@ -384,6 +384,8 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
 
 
 def apply_args(sub_yml_tree: Yaml, sub_parentargs: Yaml) -> Yaml:
+    # Do we need to deepcopy? We are already deepcopy'ing at the only call site,
+    # so looks like no.
     inputs_workflow = sub_yml_tree.get('inputs', {})
     if 'inputs' in sub_yml_tree:
         del sub_yml_tree['inputs']
@@ -397,21 +399,25 @@ def apply_args(sub_yml_tree: Yaml, sub_parentargs: Yaml) -> Yaml:
         # we cannot blindly inline the subworkflow and remove the ~'s in the subworkflow.
         # TODO: Consider adding wic metadata tags to cause inference to skip past the beginning of the subworkflow.
         if argkey not in sub_parentargs.get('in', {}):
-            print(f'Warning! Inlineing {argkey} with explicit inputs: in the subworkflow but edge inference in the parent workflow is not supported.')
+            print(f'Warning! Inlineing {argkey} with explicit inputs: in the subworkflow' +
+                  'but edge inference in the parent workflow is not supported.')
 
     for argkey, argval in sub_parentargs.get('in', {}).items():
-        print(f'argkey, argval', argkey, argval)
         # If we are attempting to apply a parameter given in the parent workflow,
         # that parameter had better exist in the subworkflow!
         if not argkey in inputs_workflow:
             raise Exception(f'Error while inlineing {argkey}\n{yaml.dump(sub_yml_tree)}\n{yaml.dump(sub_parentargs)}')
 
         for i, step_key in enumerate(steps_keys):
-            # args_provided = []
-            # if steps[i][step_key] and 'in' in steps[i][step_key]:
-            #     args_provided = list(steps[i][step_key]['in'])
+            # NOTE: We should probably be using
+            # sub_keys = utils.get_subkeys(steps_keys, tools)
+            # to check whether or not `step_key in sub_keys` and thus
+            # whether or not to use ['parentargs']
+            in_step = steps[i][step_key].get('in', {})  # CommandLineTools should have ['in'] (if any)
+            if not in_step:
+                # Subworkflows should have ['parentargs']['in'] (if any)
+                in_step = steps[i][step_key].get('parentargs', {}).get('in', {})
 
-            in_step = steps[i][step_key]['in']
             for inputkey, inputval in in_step.items():
                 if inputval == '~' + argkey:
                     # overwrite ~ syntax / apply argval
