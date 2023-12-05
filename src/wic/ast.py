@@ -340,6 +340,8 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
     if len(namespaces) == 1:
         steps_inits = steps[:i]  # Exclude step i
         steps_tails = steps[i+1:]  # Exclude step i
+        # ~ syntax, specifically apply sub_parentargs to all inputs: call sites in sub_yml_tree
+        sub_yml_tree = apply_args(sub_yml_tree, sub_parentargs)
         # Inline sub-steps.
         sub_steps: List[Yaml] = sub_yml_tree['steps']
         yaml_tree['steps'] = steps_inits + sub_steps + steps_tails
@@ -379,6 +381,49 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
     yaml_tree['wic'] = inline_subworkflow_wic_tag(wic, namespaces, len_substeps)
 
     return YamlTree(step_id, yaml_tree), len_substeps
+
+
+def apply_args(sub_yml_tree: Yaml, sub_parentargs: Yaml) -> Yaml:
+    # Do we need to deepcopy? We are already deepcopy'ing at the only call site,
+    # so looks like no.
+    inputs_workflow = sub_yml_tree.get('inputs', {})
+    if 'inputs' in sub_yml_tree:
+        del sub_yml_tree['inputs']
+
+    steps = sub_yml_tree['steps']
+    steps_keys = utils.get_steps_keys(steps)
+
+    for argkey in inputs_workflow:
+        # Ordinarily edge inference works across subworkflow boundaries (i.e. is inlineing invariant),
+        # but with ~ syntax in the subworkflow and no explicit arguments in the parent workflow,
+        # we cannot blindly inline the subworkflow and remove the ~'s in the subworkflow.
+        # TODO: Consider adding wic metadata tags to cause inference to skip past the beginning of the subworkflow.
+        if argkey not in sub_parentargs.get('in', {}):
+            print(f'Warning! Inlineing {argkey} with explicit inputs: in the subworkflow' +
+                  'but edge inference in the parent workflow is not supported.')
+
+    for argkey, argval in sub_parentargs.get('in', {}).items():
+        # If we are attempting to apply a parameter given in the parent workflow,
+        # that parameter had better exist in the subworkflow!
+        if not argkey in inputs_workflow:
+            raise Exception(f'Error while inlineing {argkey}\n{yaml.dump(sub_yml_tree)}\n{yaml.dump(sub_parentargs)}')
+
+        for i, step_key in enumerate(steps_keys):
+            # NOTE: We should probably be using
+            # sub_keys = utils.get_subkeys(steps_keys, tools)
+            # to check whether or not `step_key in sub_keys` and thus
+            # whether or not to use ['parentargs']
+            in_step = steps[i][step_key].get('in', {})  # CommandLineTools should have ['in'] (if any)
+            if not in_step:
+                # Subworkflows should have ['parentargs']['in'] (if any)
+                in_step = steps[i][step_key].get('parentargs', {}).get('in', {})
+
+            for inputkey, inputval in in_step.items():
+                if inputval == '~' + argkey:
+                    # overwrite ~ syntax / apply argval
+                    in_step[inputkey] = argval
+
+    return sub_yml_tree
 
 
 def inline_subworkflow_wic_tag(wic_tag: Yaml, namespaces: Namespaces, len_substeps: int) -> Yaml:
