@@ -194,23 +194,18 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
         cwl_name = cwl_path.stem
         input_names = [inp.id.split("#")[-1] for inp in cwl.inputs]
-        # this way of initializing is not ideal,
-        # but it is the only way to correctly initialize
-        # Step as a Pydantic model that passes validation
-        # need to ignore mypy error since it shows that
-        # Tool does not have some of the attributes initialized
-        # but they are actually initialized in the Step class
-        super().__init__(  # type: ignore
-            cwl_path=cwl_path,
-            cwlVersion=cwl.cwlVersion,
-            dockerContainer=docker,  # type: ignore # validation happens in Tool
-            cwl=cwl,
-            inputs=cwl.inputs,
-            yaml=yaml_file,
-            cfg_yaml=cfg_yaml,
-            cwl_name=cwl_name,
-            _input_names=input_names,
-        )
+        data = {
+            "cwl_path": cwl_path,
+            "cwlVersion": cwl.cwlVersion,
+            "dockerContainer": docker,
+            "cwl": cwl,
+            "inputs": cwl.inputs,
+            "yaml": yaml_file,
+            "cfg_yaml": cfg_yaml,
+            "cwl_name": cwl_name,
+            "_input_names": input_names,
+        }
+        super().__init__(**data)
         if config_path:
             self._set_from_io_cfg()
 
