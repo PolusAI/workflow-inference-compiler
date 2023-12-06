@@ -93,7 +93,9 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     linked: bool = False
 
     def __init__(self, cwl_inp: CWLInputParameter) -> None:
-        inp_type = cwl_inp.type
+        # temporary fix for different versions of cwl_utils
+        # where it changed from `type_` to `type`
+        inp_type = cwl_inp.type  # type: ignore
         if isinstance(inp_type, list) and "null" in inp_type:
             required = False
         else:
