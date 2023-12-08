@@ -1,9 +1,14 @@
 steps:
-- ints_array:
+- array_int:
     in:
-      ints_array: '&arr'
+      array: '&arr_int'
       maxval: 10
+- toString:
+    scatter: [input]
+    in:
+      input: '*arr_int'
+      output: '&arr_string'
 - echo:
     scatter: [message]
     in:
-      message: '*arr'
+      message: '*arr_string'
