@@ -18,13 +18,15 @@ import wic.utils
 from wic.wic_types import Json, Yaml
 
 
-def get_args(yaml_path: str = '') -> argparse.Namespace:
+def get_args(yaml_path: str = '', cwl_inline_subworkflows: bool = False) -> argparse.Namespace:
     """This is used to get mock command line arguments.
 
     Returns:
         argparse.Namespace: The mocked command line arguments
     """
     testargs = ['wic', '--yaml', yaml_path, '--cwl_output_intermediate_files', 'True']  # ignore --yaml
+    if cwl_inline_subworkflows:
+        testargs.append("--cwl_inline_subworkflows")
     # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
     with patch.object(sys, 'argv', testargs):
         args: argparse.Namespace = wic.cli.parser.parse_args()
