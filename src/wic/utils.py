@@ -336,7 +336,7 @@ class NoAliasDumper(yaml.SafeDumper):
         return True
 
 
-def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> None:
+def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool, inline: bool = False) -> None:
     """Writes the compiled CWL files and their associated yml inputs files to disk.
 
     NOTE: Only the yml input file associated with the root workflow is
@@ -347,6 +347,8 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
         rose_tree (RoseTree): The data associated with compiled subworkflows
         path (Path): The directory in which to write the files
         relative_run_path (bool): Controls whether to use subdirectories or just one directory.
+        inline (bool): Whether add _inline suffix to file name. Note only top level workflow will
+                       have the _inline suffix.
     """
     node_data: NodeData = rose_tree.data
     namespaces = node_data.namespaces
@@ -370,11 +372,11 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
 
     path.mkdir(parents=True, exist_ok=True)
     if relative_run_path:
-        filename_cwl = f'{yaml_stem}.cwl'
-        filename_yml = f'{yaml_stem}_inputs.yml'
+        filename_cwl = f'{yaml_stem}{"_inline" if inline else ""}.cwl'
+        filename_yml = f'{yaml_stem}{"_inline" if inline else ""}_inputs.yml'
     else:
-        filename_cwl = '___'.join(namespaces + [f'{yaml_stem}.cwl'])
-        filename_yml = '___'.join(namespaces + [f'{yaml_stem}_inputs.yml'])
+        filename_cwl = '___'.join(namespaces + [f'{yaml_stem}{"_inline" if inline else ""}.cwl'])
+        filename_yml = '___'.join(namespaces + [f'{yaml_stem}{"_inline" if inline else ""}_inputs.yml'])
 
     # Dump the compiled CWL file contents to disk.
     # Use sort_keys=False to preserve the order of the steps.
@@ -395,7 +397,9 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
             sub_node_data: NodeData = sub_rose_tree.data
             sub_step_name = sub_node_data.namespaces[-1]
             subpath = path / sub_step_name
-        write_to_disk(sub_rose_tree, subpath, relative_run_path)
+
+        # Only add "_inline" to the top-level workflow.
+        write_to_disk(sub_rose_tree, subpath, relative_run_path, inline=False)
 
 
 def recursively_delete_dict_key(key: str, obj: Any) -> Any:
