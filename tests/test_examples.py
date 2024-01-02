@@ -116,7 +116,7 @@ def test_run_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: st
 
 @pytest.mark.slow
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist_on_push)
-def test_run_inlined_workflows(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+def test_run_inlined_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Inlines and runs all of the workflows auto-discovered from the various
        directories in yml_dirs.txt, excluding all workflows which have been
        blacklisted in the various config_ci.json files and excluding the weekly
