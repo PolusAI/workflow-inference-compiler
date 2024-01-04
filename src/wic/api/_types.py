@@ -23,8 +23,6 @@ CWL_TYPES_DICT: dict[str, object] = {
     "float": float,
     "double": float,
     "string": str,
-    # "File": CWLFile,
-    # "Directory": CWLDir,
     "File": Path,
     "Directory": Path,
 }
