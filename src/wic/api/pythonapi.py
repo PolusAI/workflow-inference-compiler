@@ -73,7 +73,7 @@ class Tool(BaseModel):  # pylint: disable=too-few-public-methods
     cwl: CWLCommandLineTool
 
     @validator("dockerContainer", pre=True, check_fields=False)
-    # type: ignore
+    
     def validate_docker(cls, docker):  # pylint: disable=no-self-argument
         """Validate that there is one docker requirement specified."""
         if not len(docker) > 0:
