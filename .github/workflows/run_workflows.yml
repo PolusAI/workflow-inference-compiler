@@ -93,7 +93,7 @@ jobs:
 
     - name: Remove old global config
       if: always()
-      run: rm -rf "/home/$(whoami)/wic/"
+      run: rm -rf "/home/$(whoami)/wic/" && rm -rf "/home/$(whoami)/.toil/"
       # For self-hosted runners, make sure we use new global config settings
 
     # Using pypy increases performance / decreases cwltool runtime by about a minute.
