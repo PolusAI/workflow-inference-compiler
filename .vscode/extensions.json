@@ -2,6 +2,9 @@
     "recommendations": [
 		"redhat.vscode-yaml",
 		"ms-python.python",
+		"ms-python.autopep8",
+		"ms-python.pylint",
+		"ms-python.mypy-type-checker",
 		"matangover.mypy",
 		"ms-vscode-remote.vscode-remote-extensionpack",
 		"ms-azuretools.vscode-docker",

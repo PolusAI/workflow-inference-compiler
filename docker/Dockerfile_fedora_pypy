@@ -33,4 +33,4 @@ RUN mamba clean --all --yes
 RUN pip cache purge
 RUN yum clean all
 
-ADD docker/Dockerfile_fedora .
+ADD docker/Dockerfile_fedora_pypy .

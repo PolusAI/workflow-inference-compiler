@@ -1,9 +1,12 @@
 {
     "mypy.runUsingActiveInterpreter": true,
-    "python.linting.mypyEnabled": true,
-    "python.linting.pylintEnabled": true,
-    "python.formatting.provider": "autopep8",
-    "python.formatting.autopep8Args": [
+    "mypy.enabled": true,
+    "pylint.args": ["--max-line-length=120"],
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.autopep8",
+        "editor.formatOnSave": false
+    },
+    "autopep8.args": [
         "--max-line-length",
         "120"
     ],
