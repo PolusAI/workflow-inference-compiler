@@ -1,0 +1,29 @@
+name: Docker Build Plugins
+
+on:
+  # push:  # Do NOT run on every push!
+  # pull_request: (either on origin or on upstream pull request)
+  schedule:
+  # Run it every Tuesday at midnight.
+    - cron: '0 0 * * 2'
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  docker_build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # NOTE: Use a matrix (instead of dockerBuild.sh) for parallelism
+        dockerfile: [check_linear_fit, random_subset_rows, scatter_plot]
+    runs-on: [ubuntu-latest]
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+
+    - name: Docker Build
+      run: cd examples/scripts/ && docker build --no-cache --pull -f Dockerfile_${{ matrix.dockerfile }} -t polusai/wic_${{ matrix.dockerfile }} .

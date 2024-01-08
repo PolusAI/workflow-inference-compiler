@@ -131,7 +131,9 @@ def cwl_type_to_jsonschema_type(type_obj: Json) -> Json:
             items = cwl_type_to_jsonschema_type(type_obj['items'])
             if items is None:
                 return None  # Propagate any type failures
-            if isinstance(type_obj['items'], str):
+            if items == {}:  # Explicitly handle the `Any` type
+                return {**type_obj, 'items': items}
+            if isinstance(type_obj['items'], str) and items != {}:
                 # Wrap primitive strings in {'type': ...}
                 return {**type_obj, 'items': {'type': items}}
             return {**type_obj, 'items': items}
