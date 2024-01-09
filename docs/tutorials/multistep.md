@@ -16,20 +16,24 @@ steps:
       config:
         pdb_code: 1aki
       output_pdb_path: '&protein.pdb'
+      input_pdb_path: '*protein.pdb'
 - fix_amides:
     in:
       input_pdb_path: '*protein.pdb'
       output_pdb_path: '&protein_fix_amides.pdb'
+      input_pdb_path: '*protein.pdb'
 - fix_side_chain:
     in:
       input_pdb_path: '*protein_fix_amides.pdb'
       output_pdb_path: '&protein_fix_side_chain.pdb'
+      input_pdb_path: '*protein_fix_amides.pdb'
 - extract_model:
     in:
       config:
         models: [1]
       input_structure_path: '*protein_fix_side_chain.pdb'
       output_structure_path: '&protein_model_1.pdb'
+      input_structure_path: '*protein_fix_side_chain.pdb'
 ```
 
 </td>
@@ -43,6 +47,15 @@ docs/tutorials/multistep1.yml.gv.png
 </table>
 
 ## Explicit Edges
+
+When defining explicit edges between output and input files, the following rules should be followed:
+1. Use the `&` prefix for the output file and the `*` prefix for the input file in each step.
+2. The `&` prefix must come first and can only be defined once for any file.
+3. After defining the `&` prefix, you can use the `*` prefix multiple times in any subsequent steps.
+
+For example, when connecting the output of step A to the input of step B, use the following format:
+- Step A output: &fileA.ext
+- Step B input: *fileA.ext
 
 The first thing you might notice is that all of the filenames are prefixed with `&` and then `*` (and they are in quotes). This is the syntax for explicitly creating an edge between an output and a later input. Note that `&` must come first and can only be defined once, but then you can use `*` multiple times in any later step.
 
