@@ -184,10 +184,16 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
     cfg_yaml: dict = Field(default_factory=_default_dict)
     _input_names: list[str]
 
-    def __init__(self, cwl_path: Path, config_path: Optional[Path] = None):
+    def __init__(self, cwl_path: StrPath, config_path: Optional[Path] = None):
         # validate using cwl.utils
+        if not isinstance(cwl_path, (Path, str)):
+            raise TypeError("cwl_path must be a Path or str")
+        if isinstance(cwl_path, str):
+            cwl_path_ = Path(cwl_path)
+        else:
+            cwl_path_ = cwl_path
         try:
-            cwl = load_document_by_uri(cwl_path)
+            cwl = load_document_by_uri(cwl_path_)
         except Exception as exc:
             e_w = ErrorWrapper(exc, "invalid cwl file")
             raise ValidationError([e_w], Step)  # pylint: disable=raise-missing-from
@@ -199,10 +205,10 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
                 cfg_yaml = yaml.safe_load(file)
         else:
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
-        cwl_name = cwl_path.stem
+        cwl_name = cwl_path_.stem
         input_names = [inp.id.split("#")[-1] for inp in cwl.inputs]
         data = {
-            "cwl_path": cwl_path,
+            "cwl_path": cwl_path_,
             "cwlVersion": cwl.cwlVersion,
             "dockerContainer": docker,
             "cwl": cwl,
