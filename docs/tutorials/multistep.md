@@ -57,7 +57,7 @@ For example, when connecting the output of step A to the input of step B, use th
 - Step A output: &fileA.ext
 - Step B input: *fileA.ext
 
-The first thing you might notice is that all of the filenames are prefixed with `&` and then `*` (and they are in quotes). This is the syntax for explicitly creating an edge between an output and a later input. Note that `&` must come first and can only be defined once, but then you can use `*` multiple times in any later step.
+The `&` prefix is used to indicate an output file, while the `*` prefix is used to indicate an input file. This syntax explicitly creates an edge between an output and a later input. The `&` prefix must come first and can only be defined once, while the `*` prefix can be used multiple times in any later steps.
 
 Note that if you just use regular filenames, they are treated as inputs which are external to the workflow, and thus are assumed to already exist on your filesystem. For example, if we remove the `&` and `*` around `protein_fix_amides.pdb`, we will get the following error message:
 
@@ -118,7 +118,8 @@ steps:
 - extract_model:
     in:
       config:
-        models: [1]
+          models: [1]
+      input_structure_path: '*protein_fix_side_chain.pdb'
       output_structure_path: '&protein_model_1.pdb'
 ```
 
