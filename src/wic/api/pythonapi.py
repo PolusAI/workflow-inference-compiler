@@ -98,9 +98,11 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
         # temporary fix for different versions of cwl_utils
         # where it changed from `type_` to `type`
         if hasattr(cwl_inp, "type_"):
-            inp_type = cwl_inp.type_  # type: ignore
+            inp_type = cwl_inp.type_
+        elif hasattr(cwl_inp, "type"):
+            inp_type = cwl_inp.type
         else:
-            inp_type = cwl_inp.type  # type: ignore
+            raise AttributeError("CWLInputParameter has no attribute type or type_")
         if isinstance(inp_type, list) and "null" in inp_type:
             required = False
         else:
