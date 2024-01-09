@@ -92,7 +92,7 @@ See https://workflow-inference-compiler.readthedocs.io/en/latest/userguide.html#
 
 ## Visualizing the results
 
-This particular workflow creates files which represent 3D coordinates, so we can view them in the Jupyter notebook `src/vis/viewer.ipynb`. Make sure you are using the `vis` conda environment as mentioned in the installation guide.
+This particular workflow creates files which represent 3D coordinates, and they can be viewed using appropriate software for visualizing 3D coordinate files. Make sure to use the recommended software environment as mentioned in the installation guide.
 
 ![Multistep](protein.png)
 
