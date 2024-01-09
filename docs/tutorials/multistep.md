@@ -100,12 +100,12 @@ This particular workflow creates files which represent 3D coordinates, and they 
 
 Creating explicit edges can be a bit tedious and verbose, but in many cases the correct edges can be determined automatically. In this case, all of the steps take the previous pdb file as input and produce an output pdb file, so this is rather trivial. However, for more complex workflows edge inference can drastically simplify the yml files. Note that explicit edges are drawn in blue, and inferred edges are drawn in black/white.
 
-For technical reasons edge inference is not perfect, so ***`users should always check that edge inference actually produces the intended graph`***. For details on the algorithm, see the [user guide](../userguide.md/#edge-inference-algorithm).
+For technical reasons edge inference is not perfect, so ***`users should always check that edge inference actually produces the intended graph`***. For details on the algorithm, see the [user guide](../#userguide/#edge-inference-algorithm).
 
 <table>
 <tr>
 <td>
-docs/tutorials/multistep2.yml
+docs/a general example of a workflow with inferred edges
 
 ```yaml
 steps:
@@ -125,7 +125,7 @@ steps:
 
 </td>
 <td>
-docs/tutorials/multistep2.yml.gv.png
+docs/tutorials/an example of how inferred edges are visually represented
 
 ![Multistep](multistep2.yml.gv.png)
 
