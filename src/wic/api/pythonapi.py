@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import dataclass, field
 from functools import singledispatch
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser
 import typeguard
@@ -52,6 +52,8 @@ CWLInputParameter = Union[
     cu_parser.cwl_v1_2.CommandInputParameter,
 ]  # cwl_utils does not have CommandInputParameter union
 
+StrPath = TypeVar("StrPath", str, Path)
+
 
 def _is_docker_requirement(req: Any) -> bool:
     """Check if requirement is DockerRequirement."""
@@ -95,7 +97,12 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     def __init__(self, cwl_inp: CWLInputParameter) -> None:
         # temporary fix for different versions of cwl_utils
         # where it changed from `type_` to `type`
-        inp_type = cwl_inp.type  # type: ignore
+        if hasattr(cwl_inp, "type_"):
+            inp_type = cwl_inp.type_
+        elif hasattr(cwl_inp, "type"):
+            inp_type = cwl_inp.type
+        else:
+            raise AttributeError("CWLInputParameter has no attribute type or type_")
         if isinstance(inp_type, list) and "null" in inp_type:
             required = False
         else:
@@ -179,10 +186,16 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
     cfg_yaml: dict = Field(default_factory=_default_dict)
     _input_names: list[str]
 
-    def __init__(self, cwl_path: Path, config_path: Optional[Path] = None):
+    def __init__(self, cwl_path: StrPath, config_path: Optional[Path] = None):
         # validate using cwl.utils
+        if not isinstance(cwl_path, (Path, str)):
+            raise TypeError("cwl_path must be a Path or str")
+        if isinstance(cwl_path, str):
+            cwl_path_ = Path(cwl_path)
+        else:
+            cwl_path_ = cwl_path
         try:
-            cwl = load_document_by_uri(cwl_path)
+            cwl = load_document_by_uri(cwl_path_)
         except Exception as exc:
             e_w = ErrorWrapper(exc, "invalid cwl file")
             raise ValidationError([e_w], Step)  # pylint: disable=raise-missing-from
@@ -194,10 +207,10 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
                 cfg_yaml = yaml.safe_load(file)
         else:
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
-        cwl_name = cwl_path.stem
+        cwl_name = cwl_path_.stem
         input_names = [inp.id.split("#")[-1] for inp in cwl.inputs]
         data = {
-            "cwl_path": cwl_path,
+            "cwl_path": cwl_path_,
             "cwlVersion": cwl.cwlVersion,
             "dockerContainer": docker,
             "cwl": cwl,
@@ -293,7 +306,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
 
     def _save_cwl(self, path: Path) -> None:
         cwl_adapters = path.joinpath("cwl_adapters")
-        cwl_adapters.mkdir(exist_ok=True)
+        cwl_adapters.mkdir(exist_ok=True, parents=True)
         with open(
             cwl_adapters.joinpath(f"{self.cwl_name}.cwl"),
             "w",
@@ -304,14 +317,25 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
 
 @dataclass
 class Workflow:
-    steps: list
+    steps: list[Step]
     name: str
     path: Path
-    yml_path: Path = field(init=False)
+    yml_path: Path = field(init=False, repr=False)
 
-    def step(self, step_: Step) -> None:
-        """Append step to Workflow."""
-        self.steps.append(step_)
+    def __init__(self, steps: list[Step], name: str, path: StrPath) -> None:
+        if not all(isinstance(s, Step) for s in steps):
+            raise TypeError("steps must be a list of Steps")
+        if not isinstance(name, str):
+            raise TypeError("name must be a str")
+        if not isinstance(path, (Path, str)):
+            raise TypeError("path must be a Path or str")
+        if isinstance(path, str):
+            path_ = Path(path)
+        else:  # path is Path
+            path_ = path
+        self.steps = steps
+        self.name = name
+        self.path = path_
 
     def __post_init__(self) -> None:
         for s in self.steps:
@@ -321,6 +345,10 @@ class Workflow:
                 raise InvalidStepError(
                     f"{s.cwl_name} is missing required inputs"
                 ) from exc
+
+    def step(self, step_: Step) -> None:
+        """Append step to Workflow."""
+        self.steps.append(step_)
 
     @property
     def yaml(self) -> dict[str, Any]:
@@ -345,22 +373,26 @@ class Workflow:
 
         self._save_all_cwl()
         self._save_yaml()
-        print(f"Compiling {self.name}")
-        proc = subprocess.run(
-            args=["wic", "--yaml", self.yml_path],
-            capture_output=True,
-            cwd=self.path,
-            check=True,
-            text=True,
-            universal_newlines=True,
-        )
-        print(proc.stdout)
-        print(proc.stderr)
+        logger.info(f"Compiling {self.name}")
+        try:
+            proc = subprocess.run(
+                args=["wic", "--yaml", str(self.yml_path)],
+                capture_output=True,
+                cwd=self.path,
+                check=True,
+                text=True,
+                universal_newlines=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.error(exc.stderr)
+            logger.info(exc.stdout)
+            raise exc
+        logger.info(proc.stdout)
         return self.path.joinpath("autogenerated", f"{self.name}.cwl")
 
     def run(self, debug: bool = False) -> None:
         """Run compiled workflow."""
-        print(f"Running {self.name}")
+        logger.info(f"Running {self.name}")
         workflow_path = self.path.joinpath(
             "autogenerated", f"{self.name}.cwl"
         ).absolute()
