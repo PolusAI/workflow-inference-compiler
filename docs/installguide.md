@@ -90,7 +90,7 @@ You should now have the `wic` executable available in your terminal.
 
 ## Jupyter notebook visualization
 
-The visualization currently needs to be in its own conda environment.
+The visualization currently needs to be in its own conda environment. To set up the `vis` conda environment, execute the following commands:
 
 ```
 ./install_conda.sh
