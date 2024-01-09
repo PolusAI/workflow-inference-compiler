@@ -8,7 +8,7 @@ You will first need to install the [git](https://git-scm.com) version control sy
 git clone https://github.com/PolusAI/workflow-inference-compiler.git
 cd workflow-inference-compiler
 
-cd install/
+cd workflow-inference-compiler/install/
 ./install_conda.sh  # install_conda.bat on Windows
 source ~/.bashrc  # skip on Windows
 conda create --name wic
@@ -115,7 +115,7 @@ wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --run_local --quiet
 You can also run the automated test suite. This will run the full set of tests, which takes about an hour on a laptop with an Nvidia GPU.
 
 ```
-pytest -m serial && pytest -m "not serial" --workers 8
+pytest --cov -m serial && pytest -m "not serial" --workers 8
 ```
 
 If you're in a hurry, just run
