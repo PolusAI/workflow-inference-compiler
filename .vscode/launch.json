@@ -1,23 +1,83 @@
 {
-	"version": "0.0.1",
-	"configurations": [
-		{
-			"name": "Python: Current File",
-			"type": "python",
-			"request": "launch",
-			"program": "${file}",
-			"console": "integratedTerminal",
-			"justMyCode": true
-		},
-		{
-			"name": "wic",
-			"type": "python",
-			"request": "launch",
-			"args": [
-				"--yaml",
-				"${file}"
-			],
-			"module": "wic.main"
-		}
-	]
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "wic-debug-compile-only",
+            "type": "python",
+            "request": "launch",
+            "args": [
+                "--yaml",
+                "${file}"
+            ],
+            "module": "wic.main"
+        },
+        {
+            "name": "wic-debug-run-toil-cwl-runner",
+            "type": "python",
+            "request": "launch",
+            "args": [
+                "--yaml",
+                "${file}",
+                "--run_local",
+                "--cwl_runner",
+                "toil-cwl-runner"
+            ],
+            "module": "wic.main"
+        },
+        {
+            "name": "wic-debug-run-cwltool",
+            "type": "python",
+            "request": "launch",
+            "args": [
+                "--yaml",
+                "${file}",
+                "--run_local",
+                "--cwl_runner",
+                "cwltool"
+            ],
+            "module": "wic.main"
+        },
+        {
+            "name": "wic-profile-run-toil-cwl-runner",
+            "type": "python",
+            "request": "launch",
+            "module": "cProfile",
+            "args": [
+                "-o",
+                "wic-toil.prof",
+                "-m",
+                "wic.main",
+                "--yaml",
+                "${file}",
+                "--run_local",
+                "--cwl_runner",
+                "toil-cwl-runner"
+            ]
+        },
+        {
+            "name": "wic-profile-run-cwltool",
+            "type": "python",
+            "request": "launch",
+            "module": "cProfile",
+            "args": [
+                "-o",
+                "wic-cwltool.prof",
+                "-m",
+                "wic.main",
+                "--yaml",
+                "${file}",
+                "--run_local",
+                "--cwl_runner",
+                "cwltool"
+            ]
+        }
+    ]
 }
