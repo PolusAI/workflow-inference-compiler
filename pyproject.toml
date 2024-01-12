@@ -1,8 +1,263 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
-requires = ["jupyter_packaging~=0.7.9", "setuptools>=42,<68", "wheel", "versioneer-518"]
+requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.29"]
 # NOTE: The above list mostly comes from https://github.com/nglviewer/nglview/pull/969/files
 # NOTE: Use upper bound of <68 for setuptools due to 2to3 error.
 # See https://stackoverflow.com/questions/72414481/error-in-anyjson-setup-command-use-2to3-is-invalid
 
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "workflow-inference-compiler"
+dynamic = ["version"]
+authors = [{name = "Jake Fennick", email = "jake.fennick@axleinfo.com"}]
+description = "DSL for inferring the edges of a CWL workflow DAG, with examples in molecular dynamics"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.8"
+dependencies = [
+    # NOTE: This 'graphviz' refers to the python bindings to the underlying
+    # system binary graphviz package (i.e. the `dot` executable) which we need to
+    # install separately using either `conda install graphviz` or `sudo apt install graphviz`.
+    # This 'graphviz' is equivalent to `conda install python-graphviz` or
+    # `sudo apt install python3-graphviz` ONLY.
+    "graphviz",
+    "jsonschema<4.18", # temporarily downgrade due to severe performance regression
+    "pyyaml",
+    "requests",
+    "mergedeep",
+    "networkx",
+    "beautifulsoup4", # Solely for parsing gromacs mdp options html
+    "cwl-utils>=0.31", # CommandInputParameter attr changed from `type_` to `type` https://github.com/common-workflow-language/cwl-utils/releases/tag/v0.31
+    "typeguard",
+    "pydantic>=1.10.11, <2.0" # Temporarily downgrade pydantic below version 2.0 to avoid breaking changes.
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/PolusAI/workflow-inference-compiler"
+"Bug Tracker" = "https://github.com/PolusAI/workflow-inference-compiler/issues"
+
+[project.optional-dependencies]
+
+test = [
+    "pre-commit",
+    "py", # See https://github.com/kevlened/pytest-parallel/pull/119
+    "pytest",
+    "pytest-cov",
+    "pytest-parallel",
+    "coverage",
+    "mypy",
+    "pylint",
+    "autopep8",
+    "pre-commit",
+    "hypothesis",
+    "hypothesis-jsonschema",
+]
+# NOTE: The following list was generated using the command
+# mypy --install-types
+# When updating this list, also update .pre-commit-config.yaml
+# Alternatively, the --non-interactive flag can be used install these automatically.
+# See https://mypy.readthedocs.io/en/stable/command_line.html#miscellaneous
+mypy-types = [
+    "lxml-stubs",
+    "types-Pillow",
+    "types-PyYAML",
+    "types-Pygments",
+    "types-colorama",
+    "types-decorator",
+    "types-docutils",
+    "types-jsonschema",
+    "types-psutil",
+    "types-python-jose",
+    "types-pytz",
+    "types-redis",
+    "types-requests",
+    "types-setuptools",
+    "types-six",
+    "types-urllib3",
+]
+# NOTE: toil and cwltool have a somewhat continuous release model. However,
+# there can be updates and bugfixes in main that have not yet been released.
+# If you need to install from source, simply run `pip install .[runners-src]`
+# This will overwrite the existing release versions, so if you want to revert
+# to the release versions, `pip uninstall toil cwltool` and then `pip install .`
+# toml language has problem with underscore in array name
+runners = [
+    "toil[cwl]",
+    "cwl-utils",
+]
+runners-src = [
+    "toil[cwl] @ git+https://github.com/jfennick/toil.git",
+    "cwltool @ git+https://github.com/jfennick/cwltool.git",
+    "cwl-utils",
+]
+# See docs/requirements.txt
+doc = [
+    "sphinx",
+    "myst-parser",
+    "sphinx-autodoc-typehints",
+    "ipytree",
+]
+plots = ["matplotlib"]
+cyto = ["ipycytoscape"] # only for DAG visualization
+all = ["workflow-inference-compiler[test,doc,plots,cyto,runners-src,mypy-types]"]
+
+[project.scripts]
+wic = "wic.main:main"
+cwl_watcher = "wic.cwl_watcher:main"
+
+# Need the following defined in order to make versioneer work with git tags
+[tool.setuptools.dynamic]
+version = {attr = "wic.__version__"}
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"*" = ["*.txt"]
+
+[tool.aliases]
+test = "pytest --workers 8"
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440-pre"
+versionfile_source = "src/wic/_version.py"
+versionfile_build = "wic/_version.py"
+tag_prefix = "''"
+
+[tool.build_sphinx]
+source_dir = "docs"
+# Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
+
+[tool.mypy]
+# See https://mypy.readthedocs.io/en/stable/running_mypy.html#follow-imports
+follow_imports = "normal"
+
+# Specifies the paths to use, after trying the paths from MYPYPATH environment variable.
+# mypy_path = ''
+
+# NOTE: mypy requires __init__.py files and/or namespace_packages = True. Otherwise, you will get
+# "error: Cannot find implementation or library stub for module named 'module'"
+namespace_packages = true
+
+# Disallows defining functions without type annotations or with incomplete type annotations.
+disallow_untyped_defs = true
+# Disallows defining functions with incomplete type annotations.
+disallow_incomplete_defs = true
+# Type-checks the interior of functions without type annotations.
+check_untyped_defs = true
+
+# Warns about casting an expression to its inferred type.
+warn_redundant_casts = true
+# Warns about unneeded `# type: ignore` comments.
+warn_unused_ignores = true
+# Shows a warning when returning a value with type Any from a function declared with a non-Any return type.
+warn_return_any = true
+
+# A regular expression that matches file names, directory names and paths which
+# mypy should ignore while recursively discovering files to check.
+# Note that if you want to exclude multiple regexes, you have to concatenate
+# them with |, and sometimes it doesn't even work. It is much easier to
+# just use the [mypy-*] notation below with ignore_errors = True
+# exclude =
+
+# Allows disabling one or multiple error codes globally.
+# disable_error_code = ["ignore-missing-imports"] # comma-separated list of strings
+
+# Disallows usage of generic types that do not specify explicit type parameters.
+# disallow_any_generics = False # NOTE: This one tends to generate a medium number of warnings, so enable with caution.
+
+# Disallows all expressions in the module that have type Any.
+# disallow_any_expr = False # NOTE: This one tends to generate a MASSIVE number of warnings, so enable with caution.
+
+# Ignores all non-fatal errors.
+ignore_errors = false
+
+# Probably because it is in the root directory, I was unable to add
+# versioneer to the exclude=regex above, but this works.
+
+[[tool.mypy.overrides]]
+module = ["wic._version", "versioneer"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "graphviz.*",
+    "mergedeep.*",
+    "networkx.*",
+    "mdtraj.*",
+    "nglview.*",
+    "matplotlib.*",
+    "ipytree.*",
+    "ipywidgets.*",
+    "scipy.*",
+    "ruamel.*",
+    "toil.*",
+    "version.*",
+]
+ignore_missing_imports = true
+
+
+[tool.pytest.ini_options]
+markers = [
+    "fast: (i.e. for maximum speed, use 'pytest -m fast')",
+    "slow: (i.e. for medium speed, use 'pytest -m \"not slow\"')",
+    "serial: (These tests CANNOT be run in parallel with --workers n > 1)",
+]
+addopts = "--maxfail=2"
+# Exit after first num failures or errors
+
+
+[tool.codespell]
+skip = "*.svg,*.html"
+ignore-words = "codespellwords.txt"
+
+# See https://pylint.pycqa.org/en/latest/user_guide/configuration/all-options.html
+
+[tool.pylint.main]
+
+# TODO: Add class and module docstrings.
+disable=[
+        "missing-class-docstring",
+        "missing-module-docstring",
+        "dangerous-default-value",
+        "pointless-string-statement",
+        "unused-variable",
+        "fixme",
+        "invalid-name",
+    ]
+
+# Specify a score threshold to be exceeded before program exits with error.
+# Try to keep the threshold near the default of a perfect 10/10.
+# However, for some reason, on github actions CI/CD the scores are slightly
+# lower and fails, so let's use 9.25 instead of 9.50 for now.
+fail-under=9.25
+
+[tool.pylint.format]
+
+# Regexp for a line that is allowed to be longer than the limit.
+ignore-long-lines='^\s*(# )?(See )?(and )?<?https?://\S+>?$'
+
+# Maximum number of characters on a single line.
+max-line-length=120
+
+# Maximum number of lines in a module.
+max-module-lines=750
+
+[tool.pylint.miscellaneous]
+
+# List of note tags to take in consideration, separated by a comma.
+notes="FIXME,XXX,TODO"
