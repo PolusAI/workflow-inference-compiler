@@ -3,10 +3,10 @@ cwlVersion: v1.0
 
 class: CommandLineTool
 
-label: Filter array of Files bases on input boolean array
+label: Filter array based on input boolean array
 
 doc: |-
-  Filter array of Files bases on input boolean array
+  Filter array of Files based on input boolean array
 
 baseCommand: 'true'
 
@@ -16,7 +16,7 @@ requirements:
 inputs:
 
   input_array:
-    type: File[]
+    type: Any[]
 
   input_bool_array:
     type: boolean[]
@@ -27,7 +27,7 @@ inputs:
 outputs:
 
   output_array:
-    type: File[]
+    type: Any[]
     # now we need to filter the input array based on the input bool array containing true, false
     outputBinding:
       glob:
