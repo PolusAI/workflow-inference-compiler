@@ -8,10 +8,9 @@ from pathlib import Path
 from typing import Any, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser
-import typeguard
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
-from cwl_utils.parser import DockerRequirement, load_document_by_uri
+from cwl_utils.parser import load_document_by_uri
 from pydantic import (  # pylint: disable=E0611
     BaseModel,
     Extra,
@@ -55,15 +54,6 @@ CWLInputParameter = Union[
 StrPath = TypeVar("StrPath", str, Path)
 
 
-def _is_docker_requirement(req: Any) -> bool:
-    """Check if requirement is DockerRequirement."""
-    try:
-        typeguard.check_type(req, DockerRequirement)  # pylint: disable=E1120
-    except BaseException:  # pylint: disable=broad-exception-caught
-        return False
-    return True
-
-
 class Tool(BaseModel):  # pylint: disable=too-few-public-methods
     class Config:  # pylint: disable=too-few-public-methods:
         arbitrary_types_allowed = True
@@ -71,18 +61,7 @@ class Tool(BaseModel):  # pylint: disable=too-few-public-methods
 
     cwl_path: Path
     cwlVersion: str
-    dockerContainer: str
     cwl: CWLCommandLineTool
-
-    @validator("dockerContainer", pre=True, check_fields=False)
-    # type: ignore
-    def validate_docker(cls, docker):  # pylint: disable=no-self-argument
-        """Validate that there is one docker requirement specified."""
-        if not len(docker) > 0:
-            raise InvalidCLTError("no docker requirement specified")
-        # schema salad already checks that len(docker) < 2
-        docker = docker[0].dockerPull
-        return docker
 
 
 class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
@@ -199,7 +178,6 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         except Exception as exc:
             e_w = ErrorWrapper(exc, "invalid cwl file")
             raise ValidationError([e_w], Step)  # pylint: disable=raise-missing-from
-        docker = [x for x in cwl.requirements if _is_docker_requirement(x)]
         with open(cwl_path, "r", encoding="utf-8") as file:
             yaml_file = yaml.safe_load(file)
         if config_path:
@@ -212,7 +190,6 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         data = {
             "cwl_path": cwl_path_,
             "cwlVersion": cwl.cwlVersion,
-            "dockerContainer": docker,
             "cwl": cwl,
             "inputs": cwl.inputs,
             "yaml": yaml_file,
