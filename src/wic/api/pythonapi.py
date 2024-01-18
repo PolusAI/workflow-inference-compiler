@@ -4,22 +4,21 @@ import subprocess
 from dataclasses import dataclass, field
 from functools import singledispatch
 from pathlib import Path
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, ClassVar, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri
-from pydantic import (  # pylint: disable=E0611
-    BaseModel,
-    Extra,
-    Field,
-    ValidationError,
-    validator,
-)
-from pydantic.error_wrappers import ErrorWrapper  # pylint: disable=E0611
+from pydantic import BaseModel, Field, PrivateAttr  # pylint: disable=E0611
 
+from wic.api._compat import PYDANTIC_V2
 from wic.api._types import CWL_TYPES_DICT
+
+if PYDANTIC_V2:
+    from pydantic import ConfigDict, field_validator
+else:
+    from pydantic import validator
 
 logger = logging.getLogger("WIC Python API")
 
@@ -40,7 +39,7 @@ class InvalidLinkError(Exception):
     pass
 
 
-class InvalidCLTError(Exception):
+class InvalidCLTError(ValueError):
     pass
 
 
@@ -53,22 +52,12 @@ CWLInputParameter = Union[
 StrPath = TypeVar("StrPath", str, Path)
 
 
-class Tool(BaseModel):  # pylint: disable=too-few-public-methods
-    class Config:  # pylint: disable=too-few-public-methods:
-        arbitrary_types_allowed = True
-        extra = Extra.allow
-
-    cwl_path: Path
-    cwlVersion: str
-    cwl: CWLCommandLineTool
-
-
 class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     """Input of CLT."""
 
     inp_type: object
     name: str
-    value: Any  # validation happens at assignment
+    value: Any = Field(default=None)  # validation happens at assignment
     required: bool = True
     linked: bool = False
 
@@ -87,19 +76,38 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
             required = True
         super().__init__(inp_type=inp_type, name=cwl_inp.id, required=required)
 
-    @validator("name")
-    # type: ignore
-    def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
-        """Return name of input from InputParameter.id."""
-        return cwl_id.split("#")[-1]
+    if PYDANTIC_V2:
+        @field_validator("name", mode="before")
+        # type: ignore
+        @classmethod
+        def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
+            """Return name of input from InputParameter.id."""
+            return cwl_id.split("#")[-1]
 
-    @validator("inp_type")
-    # type: ignore
-    def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
-        """Return inp_type."""
-        if isinstance(inp, list):  # optional inps
-            inp = inp[1]
-        return CWL_TYPES_DICT[inp]
+        @field_validator("inp_type", mode="before")
+        # type: ignore
+        @classmethod
+        def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
+            """Return inp_type."""
+            if isinstance(inp, list):  # optional inps
+                inp = inp[1]
+            return CWL_TYPES_DICT[inp]
+    else:
+        @validator("name")
+        # type: ignore
+        @classmethod
+        def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
+            """Return name of input from InputParameter.id."""
+            return cwl_id.split("#")[-1]
+
+        @validator("inp_type")
+        # type: ignore
+        @classmethod
+        def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
+            """Return inp_type."""
+            if isinstance(inp, list):  # optional inps
+                inp = inp[1]
+            return CWL_TYPES_DICT[inp]
 
     def _set_value(
         self, __value: Any, check: bool = True, linked: bool = False
@@ -155,61 +163,82 @@ def _(val: bool) -> bool:
     return val
 
 
-class Step(Tool):  # pylint: disable=too-few-public-methods
-    """Base class for configured CLTs."""
+class Step(BaseModel):  # pylint: disable=too-few-public-methods
+    """Base class for Step of Workflow."""
+    if PYDANTIC_V2:
+        model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
+    else:
+        class Config:  # pylint: disable=too-few-public-methods
+            arbitrary_types_allowed = True
 
-    cwl_name: str
+    clt: CWLCommandLineTool
+    clt_path: Path
+    clt_name: str
+    cwl_version: str
     inputs: list[CLTInput]
     yaml: dict[str, Any]
     cfg_yaml: dict = Field(default_factory=_default_dict)
-    _input_names: list[str]
+    _input_names: list[str] = PrivateAttr(default_factory=list)
 
-    def __init__(self, cwl_path: StrPath, config_path: Optional[Path] = None):
+    def __init__(self, clt_path: StrPath, config_path: Optional[StrPath] = None):
         # validate using cwl.utils
-        if not isinstance(cwl_path, (Path, str)):
+        if not isinstance(clt_path, (Path, str)):
             raise TypeError("cwl_path must be a Path or str")
-        if isinstance(cwl_path, str):
-            cwl_path_ = Path(cwl_path)
+        if isinstance(clt_path, str):
+            clt_path_ = Path(clt_path)
         else:
-            cwl_path_ = cwl_path
+            clt_path_ = clt_path
         try:
-            cwl = load_document_by_uri(cwl_path_)
+            clt = load_document_by_uri(clt_path_)
         except Exception as exc:
-            e_w = ErrorWrapper(exc, "invalid cwl file")
-            raise ValidationError([e_w], Step)  # pylint: disable=raise-missing-from
-        with open(cwl_path, "r", encoding="utf-8") as file:
+            raise InvalidCLTError(f"invalid cwl file: {clt_path_}") from exc
+        with open(clt_path, "r", encoding="utf-8") as file:
             yaml_file = yaml.safe_load(file)
         if config_path:
             with open(config_path, "r", encoding="utf-8") as file:
                 cfg_yaml = yaml.safe_load(file)
         else:
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
-        cwl_name = cwl_path_.stem
-        input_names = [inp.id.split("#")[-1] for inp in cwl.inputs]
+        clt_name = clt_path_.stem
         data = {
-            "cwl_path": cwl_path_,
-            "cwlVersion": cwl.cwlVersion,
-            "cwl": cwl,
-            "inputs": cwl.inputs,
+            "clt": clt,
+            "clt_path": clt_path_,
+            "cwl_version": clt.cwlVersion,
+            "clt_name": clt_name,
+            "inputs": clt.inputs,
             "yaml": yaml_file,
             "cfg_yaml": cfg_yaml,
-            "cwl_name": cwl_name,
-            "_input_names": input_names,
         }
         super().__init__(**data)
+        self._input_names = [inp.id.split("#")[-1] for inp in clt.inputs]
         if config_path:
             self._set_from_io_cfg()
 
-    @validator("inputs", pre=True)
-    # type: ignore
-    def cast_to_clt_input_model(
-        cls, cwl_inps: list[CWLInputParameter]
-    ):  # pylint: disable=no-self-argument
-        """Populate inputs from cwl.inputs."""
-        return [CLTInput(x) for x in cwl_inps]
+    if PYDANTIC_V2:
+        @field_validator("inputs", mode="before")
+        @classmethod
+        def cast_to_clt_input_model(
+            cls, cwl_inps: list[CWLInputParameter]
+        ) -> list[CLTInput]:  # pylint: disable=no-self-argument
+            """Populate inputs from cwl.inputs."""
+            return [CLTInput(x) for x in cwl_inps]
+    else:
+        @validator("inputs", pre=True)
+        # type: ignore
+        @classmethod
+        def cast_to_clt_input_model(
+            cls, cwl_inps: list[CWLInputParameter]
+        ):  # pylint: disable=no-self-argument
+            """Populate inputs from cwl.inputs."""
+            return [CLTInput(x) for x in cwl_inps]
+
+    def __repr__(self) -> str:
+        repr_ = f"Step(clt_path={self.clt_path.__repr__()})"
+        return repr_
 
     def __setattr__(self, __name: str, __value: Any) -> Any:  # pylint: disable=R1710
-        if __name in ["inputs", "yaml", "cfg_yaml", "cwl_name", "_input_names"]:
+        if __name in ["inputs", "yaml", "cfg_yaml", "cwl_name", "_input_names",
+                      "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
         if hasattr(self, "_input_names") and __name in self._input_names:
             index = self._input_names.index(__name)
@@ -252,12 +281,37 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         else:
             return super().__setattr__(__name, __value)
 
-    def __getattribute__(self, __name: str) -> Any:
-        if __name != "_input_names" and hasattr(self, "_input_names"):
-            if __name in self._input_names:
+    if PYDANTIC_V2:
+        def __getattr__(self, __name: str) -> Any:
+            # hacky way to access private attributes
+            # taken directly from pydantic source code
+            # __pydantic_private and __private_attributes__
+            # are not correctly set otherwise
+            private_attributes = object.__getattribute__(self, '__private_attributes__')
+            if __name in private_attributes:
+                attribute = private_attributes[__name]
+                if hasattr(attribute, '__get__'):
+                    return attribute.__get__(self, type(self))
+
+                try:
+                    # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                    return self.__pydantic_private__[__name]
+                except KeyError as exc:
+                    raise AttributeError(f"{type(self).__name__!r} object has no attribute {__name!r}") from exc
+            if __name in ["__private_attributes__", "__class__",
+                          "_input_names", "cwl_name", "yaml", "cfg_yaml", "inputs"]:
+                return super().__getattribute__(__name)
+            if __name != "_input_names" and hasattr(self, "_input_names") and __name in self._input_names:
                 index = self._input_names.index(__name)
                 return self.inputs[index]
-        return super().__getattribute__(__name)
+            return super().__getattribute__(__name)
+    else:
+        def __getattribute__(self, __name: str) -> Any:
+            if __name != "_input_names" and hasattr(self, "_input_names"):
+                if __name in self._input_names:
+                    index = self._input_names.index(__name)
+                    return self.inputs[index]
+            return super().__getattribute__(__name)
 
     def _set_from_io_cfg(self) -> None:
         for name, value in self.cfg_yaml.items():
@@ -272,7 +326,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
     @property
     def _yml(self) -> dict:
         d = {
-            self.cwl_name: {
+            self.clt_name: {
                 "in": {
                     inp.name: _value_str(inp.value)
                     for inp in self.inputs
@@ -286,7 +340,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         cwl_adapters = path.joinpath("cwl_adapters")
         cwl_adapters.mkdir(exist_ok=True, parents=True)
         with open(
-            cwl_adapters.joinpath(f"{self.cwl_name}.cwl"),
+            cwl_adapters.joinpath(f"{self.clt_name}.cwl"),
             "w",
             encoding="utf-8",
         ) as file:
