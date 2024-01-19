@@ -225,11 +225,9 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
                             )
                         # Use the current value so we can exactly reproduce hand-crafted yml files.
                         # (Very useful for regression testing!)
-                        current_value = __value.value
-                        if current_value is None:
-                            raise InvalidLinkError(f'Error! {__value.name} is None but it is required.')
-                        local_input._set_value(f"*{current_value}", check=False, linked=True)
-                        __value._set_value(f"&{current_value}", check=False, linked=True)
+                        tmp = __value.value if __value.value else f"{__name}{self.cwl_name}"
+                        local_input._set_value(f"*{tmp}", check=False, linked=True)
+                        __value._set_value(f"&{tmp}", check=False, linked=True)
                     except BaseException as exc:
                         raise exc
                 else:  # value is already linked to another inp
