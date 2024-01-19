@@ -39,7 +39,7 @@ jobs:
       with:
         repository: ${{ github.repository_owner }}/workflow-inference-compiler
         ref: master
-        path: wic
+        path: workflow-inference-compiler
 
     - name: Checkout biobb_adapters
       if: always()
@@ -70,7 +70,7 @@ jobs:
     # Toil is currently incompatible with pypy
     # - name: Append pypy to conda environment files
     #   if: runner.os != 'Windows'
-    #   run: cd wic/install/ && echo "  - pypy" >> system_deps.yml
+    #   run: cd workflow-inference-compiler/install/ && echo "  - pypy" >> system_deps.yml
 
     - name: Setup mamba (linux, macos)
       if: always()
@@ -82,7 +82,7 @@ jobs:
         # another environment, better to avoid the problem altogether by
         # not using Mambaforge-pypy3
         miniforge-version: latest
-        environment-file: wic/install/system_deps.yml
+        environment-file: workflow-inference-compiler/install/system_deps.yml
         activate-environment: wic_github_actions
         use-mamba: true
         channels: conda-forge
@@ -95,7 +95,7 @@ jobs:
 
     - name: Install Workflow Inference Compiler
       if: always()
-      run: cd wic/ && pip install ".[all]"
+      run: cd workflow-inference-compiler/ && pip install ".[all]"
 
     - name: Install Molecular Modeling Workflows
       if: always()
@@ -106,19 +106,19 @@ jobs:
     - name: PyTest Run Workflows (On Push)
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-      run: cd wic/ && pytest -k test_run_workflows_on_push --workers 8 --cwl_runner toil-cwl-runner # --cov
+      run: cd workflow-inference-compiler/ && pytest -k test_run_workflows_on_push --workers 8 --cwl_runner toil-cwl-runner # --cov
 
     - name: PyTest Run Inlined Workflows
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-      run: cd wic/ && pytest -k test_run_inlined_workflows_on_push --workers 8 --cwl_runner toil-cwl-runner # --cov
+      run: cd workflow-inference-compiler/ && pytest -k test_run_inlined_workflows_on_push --workers 8 --cwl_runner toil-cwl-runner # --cov
 
     - name: PyTest Run Workflows (Weekly)
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-      run: cd wic/ && pytest -k test_run_workflows_weekly --workers 8 --cwl_runner toil-cwl-runner # --cov
+      run: cd workflow-inference-compiler/ && pytest -k test_run_workflows_weekly --workers 8 --cwl_runner toil-cwl-runner # --cov
 
     - name: PyTest Run Inlined Workflows (Weekly)
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
-      run: cd wic/ && pytest -k test_run_inlined_workflows_weekly --workers 8 --cwl_runner toil-cwl-runner # --cov
+      run: cd workflow-inference-compiler/ && pytest -k test_run_inlined_workflows_weekly --workers 8 --cwl_runner toil-cwl-runner # --cov
