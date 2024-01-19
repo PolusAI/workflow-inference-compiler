@@ -41,7 +41,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/workflow-inference-compiler
           ref: master
-          path: wic
+          path: workflow-inference-compiler
 
       - name: Checkout biobb_adapters
         if: always()
@@ -65,7 +65,7 @@ jobs:
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest
-          environment-file: wic/install/system_deps.yml
+          environment-file: workflow-inference-compiler/install/system_deps.yml
           activate-environment: wic
           use-mamba: true
           channels: conda-forge
@@ -73,7 +73,7 @@ jobs:
 
       - name: Install Workflow Inference Compiler
         if: always()
-        run: cd wic/ && pip install ".[all]"
+        run: cd workflow-inference-compiler/ && pip install ".[all]"
 
       - name: Install Molecular Modeling Workflows
         if: always()
@@ -87,31 +87,31 @@ jobs:
 # Since a randomly chosen subschema is used every time, repeat 10X for more coverage.
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
 
       - name: PyTest Fuzzy Compile
-        run: cd wic/ && pytest -k test_fuzzy_compile
+        run: cd workflow-inference-compiler/ && pytest -k test_fuzzy_compile
