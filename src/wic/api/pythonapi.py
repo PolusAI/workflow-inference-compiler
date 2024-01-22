@@ -1,7 +1,7 @@
 """CLT utilities."""
 import logging
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import singledispatch
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar, Union
@@ -11,6 +11,7 @@ import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri
 from pydantic import BaseModel, Field, PrivateAttr  # pylint: disable=E0611
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from wic.api._compat import PYDANTIC_V2
 from wic.api._types import CWL_TYPES_DICT
@@ -184,18 +185,16 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         # validate using cwl.utils
         if not isinstance(clt_path, (Path, str)):
             raise TypeError("cwl_path must be a Path or str")
-        if isinstance(clt_path, str):
-            clt_path_ = Path(clt_path)
-        else:
-            clt_path_ = clt_path
+        clt_path_ = Path(clt_path) if isinstance(clt_path, str) else clt_path
         try:
             clt = load_document_by_uri(clt_path_)
         except Exception as exc:
             raise InvalidCLTError(f"invalid cwl file: {clt_path_}") from exc
-        with open(clt_path, "r", encoding="utf-8") as file:
+        with clt_path_.open("r", encoding="utf-8") as file:
             yaml_file = yaml.safe_load(file)
         if config_path:
-            with open(config_path, "r", encoding="utf-8") as file:
+            cfg_path_ = Path(config_path) if isinstance(config_path, str) else config_path
+            with cfg_path_.open("r", encoding="utf-8") as file:
                 cfg_yaml = yaml.safe_load(file)
         else:
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
@@ -237,7 +236,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         return repr_
 
     def __setattr__(self, __name: str, __value: Any) -> Any:  # pylint: disable=R1710
-        if __name in ["inputs", "yaml", "cfg_yaml", "cwl_name", "_input_names",
+        if __name in ["inputs", "yaml", "cfg_yaml", "clt_name", "_input_names",
                       "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
         if hasattr(self, "_input_names") and __name in self._input_names:
@@ -253,7 +252,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                             )
                         # Use the current value so we can exactly reproduce hand-crafted yml files.
                         # (Very useful for regression testing!)
-                        tmp = __value.value if __value.value else f"{__name}{self.cwl_name}"
+                        tmp = __value.value if __value.value else f"{__name}{self.clt_name}"
                         local_input._set_value(f"*{tmp}", check=False, linked=True)
                         __value._set_value(f"&{tmp}", check=False, linked=True)
                     except BaseException as exc:
@@ -283,34 +282,18 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
 
     if PYDANTIC_V2:
         def __getattr__(self, __name: str) -> Any:
-            # hacky way to access private attributes
-            # taken directly from pydantic source code
-            # __pydantic_private and __private_attributes__
-            # are not correctly set otherwise
-            private_attributes = object.__getattribute__(self, '__private_attributes__')
-            if __name in private_attributes:
-                attribute = private_attributes[__name]
-                if hasattr(attribute, '__get__'):
-                    return attribute.__get__(self, type(self))
-
-                try:
-                    # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
-                    return self.__pydantic_private__[__name]
-                except KeyError as exc:
-                    raise AttributeError(f"{type(self).__name__!r} object has no attribute {__name!r}") from exc
-            if __name in ["__private_attributes__", "__class__",
-                          "_input_names", "cwl_name", "yaml", "cfg_yaml", "inputs"]:
+            if __name in ["__pydantic_private__", "__class__", "__private_attributes__"]:
                 return super().__getattribute__(__name)
-            if __name != "_input_names" and hasattr(self, "_input_names") and __name in self._input_names:
-                index = self._input_names.index(__name)
-                return self.inputs[index]
-            return super().__getattribute__(__name)
+            if __name != "_input_names" and __name in self._input_names:
+                return self.inputs[self._input_names.index(__name)]
+            # pydantic has BaseModel.__getattr__ in a
+            # non-TYPE_CHECKING block so mypy doesn't see it
+            return super().__getattr__(__name) # type: ignore
     else:
         def __getattribute__(self, __name: str) -> Any:
             if __name != "_input_names" and hasattr(self, "_input_names"):
                 if __name in self._input_names:
-                    index = self._input_names.index(__name)
-                    return self.inputs[index]
+                    return self.inputs[self._input_names.index(__name)]
             return super().__getattribute__(__name)
 
     def _set_from_io_cfg(self) -> None:
@@ -347,27 +330,17 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
             file.write(yaml.dump(self.yaml))
 
 
-@dataclass
+@pydantic_dataclass
 class Workflow:
     steps: list[Step]
     name: str
     path: Path
-    yml_path: Path = field(init=False, repr=False)
+    if PYDANTIC_V2:
+        yml_path: Path = field(init=False, repr=False) # pylint: disable=E3701
+    else:
+        # mypy incorrectly marks this as redef
+        yml_path: Optional[Path] = field(init=False, default=None, repr=False) # type: ignore # pylint: disable=E3701
 
-    def __init__(self, steps: list[Step], name: str, path: StrPath) -> None:
-        if not all(isinstance(s, Step) for s in steps):
-            raise TypeError("steps must be a list of Steps")
-        if not isinstance(name, str):
-            raise TypeError("name must be a str")
-        if not isinstance(path, (Path, str)):
-            raise TypeError("path must be a Path or str")
-        if isinstance(path, str):
-            path_ = Path(path)
-        else:  # path is Path
-            path_ = path
-        self.steps = steps
-        self.name = name
-        self.path = path_
 
     def __post_init__(self) -> None:
         for s in self.steps:
@@ -375,7 +348,7 @@ class Workflow:
                 s._validate()  # pylint: disable=W0212
             except BaseException as exc:
                 raise InvalidStepError(
-                    f"{s.cwl_name} is missing required inputs"
+                    f"{s.clt_name} is missing required inputs"
                 ) from exc
 
     def step(self, step_: Step) -> None:
@@ -389,13 +362,17 @@ class Workflow:
         return d
 
     def _save_yaml(self) -> None:
-        Path(self.path).mkdir(parents=True, exist_ok=True)
+        self.path.mkdir(parents=True, exist_ok=True)
         self.yml_path = self.path.joinpath(f"{self.name}.yml")
         with open(self.yml_path, "w", encoding="utf-8") as file:
             file.write(yaml.dump(self.yaml))
 
     def _save_all_cwl(self) -> None:
-        Path(self.path).mkdir(parents=True, exist_ok=True)
+        """Save CWL files to cwl_adapters.
+
+        This is necessary for WIC to compile the workflow.
+        """
+        self.path.mkdir(parents=True, exist_ok=True)
         for s in self.steps:
             try:
                 s._save_cwl(self.path)  # pylint: disable=W0212
@@ -404,9 +381,7 @@ class Workflow:
 
     def compile(self, run_local: bool = False) -> Path:
         """Compile Workflow using WIC."""
-        # The CommandLineTools should already be on disk, and moreover when
-        # self.path = '.' this will overwrite them!
-        # self._save_all_cwl()
+        self._save_all_cwl()
         self._save_yaml()
         logger.info(f"Compiling {self.name}")
         args = ["wic", "--yaml", f"{self.name}.yml"]
@@ -428,7 +403,7 @@ class Workflow:
         logger.info(proc.stdout)
         return self.path.joinpath("autogenerated", f"{self.name}.cwl")
 
-    def run(self, debug: bool = False) -> None:
+    def run(self) -> None:
         """Run compiled workflow."""
         logger.info(f"Running {self.name}")
         self.compile(run_local=True)
