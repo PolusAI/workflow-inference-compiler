@@ -288,7 +288,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                 return self.inputs[self._input_names.index(__name)]
             # pydantic has BaseModel.__getattr__ in a
             # non-TYPE_CHECKING block so mypy doesn't see it
-            return super().__getattr__(__name) # type: ignore
+            return super().__getattr__(__name)  # type: ignore
     else:
         def __getattribute__(self, __name: str) -> Any:
             if __name != "_input_names" and hasattr(self, "_input_names"):
@@ -336,11 +336,10 @@ class Workflow:
     name: str
     path: Path
     if PYDANTIC_V2:
-        yml_path: Path = field(init=False, repr=False) # pylint: disable=E3701
+        yml_path: Path = field(init=False, repr=False)  # pylint: disable=E3701
     else:
         # mypy incorrectly marks this as redef
-        yml_path: Optional[Path] = field(init=False, default=None, repr=False) # type: ignore # pylint: disable=E3701
-
+        yml_path: Optional[Path] = field(init=False, default=None, repr=False)  # type: ignore # pylint: disable=E3701
 
     def __post_init__(self) -> None:
         for s in self.steps:
