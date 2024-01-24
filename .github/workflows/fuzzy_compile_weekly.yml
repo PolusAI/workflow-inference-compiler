@@ -75,6 +75,10 @@ jobs:
         if: always()
         run: cd workflow-inference-compiler/ && pip install ".[all]"
 
+      - name: Generate WIC Validation Jsonschema
+        if: always()
+        run: cd workflow-inference-compiler/ && wic --generate_schemas_only
+
       - name: Install Molecular Modeling Workflows
         if: always()
         # Also run mm-workflows command to generate
