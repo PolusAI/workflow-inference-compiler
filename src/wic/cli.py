@@ -33,6 +33,9 @@ parser.add_argument('--ignore_docker_processes', default=False, action="store_tr
                     help='Do not check whether there are too many running docker processes before running workflows.')
 parser.add_argument('--user_space_docker_cmd', default='docker',
                     help='Specify which command to use to run OCI containers.')
+parser.add_argument('--no_force_docker_pull', default=False, action="store_true",
+                    help='''Do not force docker pull before running workflows.
+                    \n(i.e. allow overwriting images in your local docker cache)''')
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--run_local', default=False, action="store_true",
