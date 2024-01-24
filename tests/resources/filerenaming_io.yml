@@ -1,0 +1,3 @@
+filePattern: .*_{row:c}{col:dd}_s{s:d}_w{channel:d}.*.ome.tif
+mapDirectory: raw
+outFilePattern: x{row:dd}_y{col:dd}_p{s:dd}_c{channel:d}.ome.tif
