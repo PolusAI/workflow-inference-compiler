@@ -359,12 +359,11 @@ def test_validate2(assembler_step: Step, tmp_path: Path) -> None:
 def test_wf1(basic_step: Step,
              assembler_step: Step,
              renaming_step: Step,
-             tmp_path: Path) -> None:
+             ) -> None:
     """Test WF1"""
-    wf_path = tmp_path.joinpath("wf")
     with pytest.raises(InvalidStepError):
         Workflow([basic_step, assembler_step, renaming_step],
-                 name="wf1", _path=wf_path)
+                 name="wf1")
 
 
 def test_wf2(basic_step: Step,
@@ -372,7 +371,6 @@ def test_wf2(basic_step: Step,
              renaming_step: Step,
              tmp_path: Path) -> None:
     """Test WF2"""
-    wf_path = tmp_path.joinpath("wf")
     basic_step.inpDir = tmp_path / "in"
     basic_step.filePattern = ".*_{row:c}{col:dd}_s{s:d}_w{channel:d}.*.ome.tif"
     basic_step.getDarkfield = False
@@ -381,7 +379,7 @@ def test_wf2(basic_step: Step,
     renaming_step.inpDir = assembler_step.outDir
     with pytest.raises(InvalidStepError):
         Workflow([basic_step, assembler_step, renaming_step],
-                 name="wf1", _path=wf_path)
+                 name="wf1")
 
 
 def test_wf3(basic_step: Step,
@@ -389,7 +387,6 @@ def test_wf3(basic_step: Step,
              renaming_step: Step,
              tmp_path: Path) -> None:
     """Test WF3"""
-    wf_path = tmp_path.joinpath("wf")
     basic_step.inpDir = tmp_path / "in"
     basic_step.filePattern = ".*_{row:c}{col:dd}_s{s:d}_w{channel:d}.*.ome.tif"
     basic_step.getDarkfield = False
@@ -400,9 +397,8 @@ def test_wf3(basic_step: Step,
     renaming_step.outFilePattern = "x{row:dd}_y{col:dd}_p{s:dd}_c{channel:d}.ome.tif"
     renaming_step.outDir = tmp_path / "out"
     wf = Workflow([basic_step, assembler_step, renaming_step],
-                  name="wf1", _path=wf_path)
+                  name="wf1")
     assert wf.name == "wf1"
-    # assert wf._path == wf_path
 
 
 def test_wf4(basic_step: Step,
@@ -410,7 +406,6 @@ def test_wf4(basic_step: Step,
              renaming_step: Step,
              tmp_path: Path) -> None:
     """Test WF4"""
-    wf_path = tmp_path.joinpath("wf")
     basic_step.inpDir = tmp_path / "in"
     basic_step.filePattern = ".*_{row:c}{col:dd}_s{s:d}_w{channel:d}.*.ome.tif"
     basic_step.getDarkfield = False
@@ -422,7 +417,7 @@ def test_wf4(basic_step: Step,
     renaming_step.outDir = tmp_path / "out"
     with pytest.raises(InvalidStepError):
         Workflow([basic_step, assembler_step, renaming_step],
-                 name="wf1", _path=wf_path)
+                 name="wf1")
 
 
 def test_compile_1(basic_step: Step,
