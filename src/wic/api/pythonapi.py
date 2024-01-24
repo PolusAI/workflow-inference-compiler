@@ -18,10 +18,7 @@ from wic.api._compat import PYDANTIC_V2
 from wic.api._types import CWL_TYPES_DICT
 
 if PYDANTIC_V2:
-    from pydantic import (  # type: ignore # pylint: disable=E0611, C0412
-        ConfigDict,
-        field_validator,
-    )
+    from pydantic import ConfigDict, field_validator  # pylint: disable=E0611, C0412
 else:
     from pydantic import validator
 
