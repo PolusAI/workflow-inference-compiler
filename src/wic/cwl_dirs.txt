@@ -7,7 +7,8 @@
 # By default, each directory is associated with the namespace 'global', as shown.
 
 # Namespace Directory
-global      cwl_adapters/
+global      ../workflow-inference-compiler/cwl_adapters/
+global      ../image-workflows/cwl_adapters/
 global      ../biobb_adapters/biobb_adapters/
 global      ../mm-workflows/cwl_adapters/
 gpu         ../mm-workflows/gpu/
