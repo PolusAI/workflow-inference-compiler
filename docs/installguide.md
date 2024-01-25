@@ -18,6 +18,7 @@ conda activate wic
 cd ..
 
 pip install -e ".[all]"
+wic --generate_schemas_only
 pre-commit install  # Required for developers
 
 cd install && ./install_mm-workflows.sh && cd ..

@@ -41,6 +41,21 @@ def read_ast_from_disk(homedir: str,
     """
     (step_id, yaml_tree) = yaml_tree_tuple
 
+    try:
+        validator.validate(yaml_tree)
+    except Exception as e:
+        yaml_path = Path(step_id.stem)
+        print('Failed to validate', yaml_path)
+        print(f'See validation_{yaml_path.stem}.txt for detailed technical information.')
+        # Do not display a nasty stack trace to the user; hide it in a file.
+        with open(f'validation_{yaml_path.stem}.txt', mode='w', encoding='utf-8') as f:
+            # https://mypy.readthedocs.io/en/stable/common_issues.html#python-version-and-system-platform-checks
+            if sys.version_info >= (3, 10):
+                traceback.print_exception(type(e), value=e, tb=None, file=f)
+            else:
+                traceback.print_exception(etype=type(e), value=e, tb=None, file=f)
+        sys.exit(1)
+
     wic = {'wic': yaml_tree.get('wic', {})}
     if 'backends' in wic['wic']:
         # Recursively expand each backend, but do NOT choose a specific backend.
@@ -92,20 +107,6 @@ def read_ast_from_disk(homedir: str,
             # Load the high-level yaml sub workflow file.
             with open(yaml_path, mode='r', encoding='utf-8') as y:
                 sub_yaml_tree_raw: Yaml = yaml.safe_load(y.read())
-
-            try:
-                validator.validate(sub_yaml_tree_raw)
-            except Exception as e:
-                print('Failed to validate', yaml_path)
-                print(f'See validation_{yaml_path.stem}.txt for detailed technical information.')
-                # Do not display a nasty stack trace to the user; hide it in a file.
-                with open(f'validation_{yaml_path.stem}.txt', mode='w', encoding='utf-8') as f:
-                    # https://mypy.readthedocs.io/en/stable/common_issues.html#python-version-and-system-platform-checks
-                    if sys.version_info >= (3, 10):
-                        traceback.print_exception(type(e), value=e, tb=None, file=f)
-                    else:
-                        traceback.print_exception(etype=type(e), value=e, tb=None, file=f)
-                sys.exit(1)
 
             y_t = YamlTree(StepId(step_key, plugin_ns), sub_yaml_tree_raw)
             (step_id_, sub_yml_tree) = read_ast_from_disk(homedir, y_t, yml_paths, tools, validator)

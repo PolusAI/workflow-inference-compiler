@@ -31,7 +31,7 @@ def main() -> None:
     # Generate schemas for validation and vscode IntelliSense code completion
     yaml_stems = utils.flatten([list(p) for p in yml_paths.values()])
     schema_store: Dict[str, Json] = {}
-    validator = wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)
+    validator = wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=False)
 
     # Generating yml schemas every time takes ~20 seconds and guarantees the
     # subworkflow schemas are always up to date. However, since it compiles all
