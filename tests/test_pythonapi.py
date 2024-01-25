@@ -174,7 +174,8 @@ def test_cfg_yml1(renaming_step: Step) -> None:
 def test_cfg_yml1_str(renaming_step: Step) -> None:
     """Test IO cfg yaml 1 with str."""
     st1 = renaming_step
-    st2 = Step(RSRC_DIR.joinpath("filerenaming.cwl"), str(RSRC_DIR / "filerenaming_io.yml"))
+    # mypy incorrectly complains about the type of the args
+    st2 = Step(RSRC_DIR.joinpath("filerenaming.cwl"), str(RSRC_DIR / "filerenaming_io.yml"))  # type: ignore
     with RSRC_DIR.joinpath("filerenaming_io.yml").open("r", encoding="utf-8") as file:
         assert st2.cfg_yaml == yaml.safe_load(file)
     assert st1.clt_name == st2.clt_name
