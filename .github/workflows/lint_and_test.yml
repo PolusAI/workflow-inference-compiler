@@ -125,7 +125,7 @@ jobs:
 
       - name: Setup mamba (linux, macos)
         if: runner.os != 'Windows'
-        uses: conda-incubator/setup-miniconda@v2.2.0
+        uses: conda-incubator/setup-miniconda@v3.0.1
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest
@@ -136,7 +136,7 @@ jobs:
 
       - name: Setup mamba (windows)
         if: runner.os == 'Windows'
-        uses: conda-incubator/setup-miniconda@v2.2.0
+        uses: conda-incubator/setup-miniconda@v3.0.1
         with:
           miniforge-variant: Mambaforge-pypy3
           miniforge-version: latest

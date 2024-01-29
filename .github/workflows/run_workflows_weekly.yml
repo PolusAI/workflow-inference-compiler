@@ -74,7 +74,7 @@ jobs:
 
     - name: Setup mamba (linux, macos)
       if: always()
-      uses: conda-incubator/setup-miniconda@v2.2.0
+      uses: conda-incubator/setup-miniconda@v3.0.1
       with:
         miniforge-variant: Mambaforge  # NOT Mambaforge-pypy3
         # Toil is (currently) incompatible with pypy. Mambaforge-pypy3
