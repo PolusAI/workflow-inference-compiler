@@ -1,11 +1,15 @@
 import argparse
 import sys
 from pathlib import Path
+from . import _version
+__version__ = _version.get_versions()['version']
 
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
 parser.add_argument('--yaml', type=str, required=('--generate_schemas_only' not in sys.argv),
                     help='Yaml workflow file')
-
+# version action exits the parser Ref : https://github.com/python/cpython/blob/1f515e8a109204f7399d85b7fd806135166422d9/Lib/argparse.py#L1167
+parser.add_argument('--version', action='version', version=__version__,
+                    default='==SUPPRESS==', help='Current version of the Workflow Inference Compiler')
 parser.add_argument('--generate_schemas_only', default=False, action="store_true",
                     help='Generate schemas for the files in ~/wic/cwl_dirs.txt and ~/wic/yml_dirs.txt')
 parser.add_argument('--homedir', type=str, required=False, default=str(Path().home()),
