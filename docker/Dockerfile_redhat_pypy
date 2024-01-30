@@ -4,7 +4,7 @@ FROM redhat/ubi9-minimal
 # NOTE: the package manager is microdnf, not dnf
 
 # Install conda / mamba
-RUN microdnf update && microdnf install -y wget
+RUN microdnf update -y && microdnf install -y wget
 
 RUN CONDA="Mambaforge-pypy3-Linux-x86_64.sh" && \
     wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \

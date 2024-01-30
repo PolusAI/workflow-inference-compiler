@@ -3,7 +3,7 @@
 FROM ubuntu
 
 # Install conda / mamba
-RUN apt-get update && apt-get install -y wget
+RUN apt-get update -y && apt-get install -y wget
 
 RUN CONDA="Mambaforge-Linux-x86_64.sh" && \
     wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \

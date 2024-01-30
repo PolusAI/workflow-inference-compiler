@@ -3,7 +3,7 @@
 FROM amazonlinux
 
 # Install conda / mamba
-RUN yum update && yum install -y wget
+RUN yum update -y && yum install -y wget
 
 RUN CONDA="Mambaforge-Linux-x86_64.sh" && \
     wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \
