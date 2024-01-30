@@ -94,7 +94,7 @@ def rerun_cwltool(homedir: str, _directory_realtime: Path, cachedir_path: Path, 
             plugin_ns = 'global'  # wic['wic'].get('namespace', 'global')
             step_id = StepId(yaml_path, plugin_ns)
             y_t = YamlTree(step_id, root_yaml_tree)
-            yaml_tree_raw = ast.read_ast_from_disk(homedir, y_t, yml_paths, tools_cwl, validator)
+            yaml_tree_raw = ast.read_ast_from_disk(homedir, y_t, yml_paths, tools_cwl, validator, True)
             yaml_tree = ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
             yml = yaml_tree.yml
         else:

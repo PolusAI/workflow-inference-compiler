@@ -46,7 +46,8 @@ yml_paths_tuples = [(yml_path_str, yml_path)
 
 for yml_path_str, yml_path in yml_paths_tuples:
     schema = wic.schemas.wic_schema.compile_workflow_generate_schema(args.homedir, yml_path_str, yml_path,
-                                                                     tools_cwl, yml_paths, validator)
+                                                                     tools_cwl, yml_paths, validator,
+                                                                     args.ignore_validation_errors)
     # overwrite placeholders in schema_store. See comment in get_validator()
     schema_store[schema['$id']] = schema
 
