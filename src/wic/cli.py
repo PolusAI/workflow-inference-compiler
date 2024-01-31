@@ -61,6 +61,8 @@ parser.add_argument('--inference_use_naming_conventions', default=False, action=
                     help='Enables the use of naming conventions in the inference algorithm')
 parser.add_argument('--validate_plugins', default=False, action="store_true",
                     help='Validate all CWL CommandLineTools')
+parser.add_argument('--ignore_validation_errors', default=False, action="store_true",
+                    help='Temporarily ignore validation errors. Do not use this permanently!')
 parser.add_argument('--no_skip_dollar_schemas', default=False, action="store_true",
                     help='''Does not skip processing $schemas tags in CWL files for performance.
                     Skipping significantly improves initial validation performance, but is not always desired.

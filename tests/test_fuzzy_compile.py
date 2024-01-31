@@ -51,7 +51,8 @@ class TestFuzzyCompile(unittest.TestCase):
         args = get_args(str(yml_path))
 
         y_t = YamlTree(StepId('random_stepid', plugin_ns), yml)
-        yaml_tree_raw = wic.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator)
+        yaml_tree_raw = wic.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator,
+                                                   args.ignore_validation_errors)
         yaml_tree = wic.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
 
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
