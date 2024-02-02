@@ -1,6 +1,5 @@
 """CLT utilities."""
 import logging
-import os
 import subprocess
 from dataclasses import dataclass, field
 from functools import singledispatch
