@@ -27,8 +27,8 @@ def get_args(yaml_path: str = '', cwl_inline_subworkflows: bool = False) -> argp
         testargs.append("--cwl_inline_subworkflows")
     # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
     with patch.object(sys, 'argv', testargs):
-        largs: argparse.Namespace = wic.cli.parser.parse_args()
-    return largs
+        args: argparse.Namespace = wic.cli.parser.parse_args()
+    return args
 
 
 args = get_args()

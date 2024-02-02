@@ -354,7 +354,7 @@ class Workflow:
         # self.path = '.' this will overwrite them!
         # self._save_all_cwl()
         self._save_yaml()
-        logger.info("Compiling %s", self.name)
+        logger.info(f"Compiling {self.name}")
         args = ["wic", "--yaml", f"{self.name}.yml"]
         if run_local:
             args.append('--run_local')
@@ -376,5 +376,5 @@ class Workflow:
 
     def run(self, debug: bool = False) -> None:
         """Run compiled workflow."""
-        logger.info("Running %s", self.name)
+        logger.info(f"Running {self.name}")
         self.compile(run_local=True)
