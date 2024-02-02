@@ -1,6 +1,5 @@
 """CLT utilities."""
 import logging
-import os
 import subprocess
 from dataclasses import dataclass, field
 from functools import singledispatch
@@ -355,7 +354,7 @@ class Workflow:
         # self.path = '.' this will overwrite them!
         # self._save_all_cwl()
         self._save_yaml()
-        logger.info(f"Compiling {self.name}")
+        logger.info("Compiling %s", self.name)
         args = ["wic", "--yaml", f"{self.name}.yml"]
         if run_local:
             args.append('--run_local')
@@ -377,5 +376,5 @@ class Workflow:
 
     def run(self, debug: bool = False) -> None:
         """Run compiled workflow."""
-        logger.info(f"Running {self.name}")
+        logger.info("Running %s", self.name)
         self.compile(run_local=True)
