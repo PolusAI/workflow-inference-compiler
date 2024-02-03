@@ -70,17 +70,6 @@ jobs:
           default_branch: master
           access_token: ${{ steps.generate_token.outputs.token }}
 
-      - name: Check existence of biobb_adapters
-        uses: ./.github/my_actions/check_existence/ # Must start with ./
-        id: ce_biobb_adapters
-        with:
-          repository: biobb_adapters
-          sender_repo_owner: ${{ github.event.client_payload.owner }}
-          sender_repo_ref: ${{ github.event.client_payload.ref_name }}
-          default_owner: jfennick  # NOTE: NOT PolusAI (does not exist)
-          default_branch: master
-          access_token: ${{ steps.generate_token.outputs.token }}
-
       - name: Check existence of mm-workflows
         uses: ./.github/my_actions/check_existence/ # Must start with ./
         id: ce_mm-workflows
@@ -119,8 +108,6 @@ jobs:
           commit_message: ${{ github.event.client_payload.commit_message }}
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
-          biobb_adapters_owner: ${{ steps.ce_biobb_adapters.outputs.owner }}
-          biobb_adapters_ref: ${{ steps.ce_biobb_adapters.outputs.ref }}
           image_workflows_owner: ${{ steps.ce_image-workflows.outputs.owner }}
           image_workflows_ref: ${{ steps.ce_image-workflows.outputs.ref }}
           access_token: ${{ steps.generate_token.outputs.token }}
@@ -140,8 +127,6 @@ jobs:
           commit_message: ${{ github.event.client_payload.commit_message }}
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
-          biobb_adapters_owner: ${{ steps.ce_biobb_adapters.outputs.owner }}
-          biobb_adapters_ref: ${{ steps.ce_biobb_adapters.outputs.ref }}
           image_workflows_owner: ${{ steps.ce_image-workflows.outputs.owner }}
           image_workflows_ref: ${{ steps.ce_image-workflows.outputs.ref }}
           access_token: ${{ steps.generate_token.outputs.token }}

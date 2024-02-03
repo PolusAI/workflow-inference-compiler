@@ -38,14 +38,6 @@ on:
         description: The branch name within the mm-workflows repository
         required: true
         type: string
-      biobb_adapters_owner:
-        description: The account name of the biobb_adapters repository
-        required: true
-        type: string
-      biobb_adapters_ref:
-        description: The branch name within the biobb_adapters repository
-        required: true
-        type: string
       image-workflows_owner:
         description: The account name of the image-workflows repository
         required: true
@@ -110,8 +102,10 @@ jobs:
         if: always()
         uses: actions/checkout@v3
         with:
-          repository: ${{ inputs.biobb_adapters_owner }}/biobb_adapters
-          ref: ${{ inputs.biobb_adapters_ref }}
+          # NOTE: temporarily hardcode jfennick & master because we can only
+          # have up to 10 input parameters for workflow_dispatch...
+          repository: jfennick/biobb_adapters
+          ref: master
           path: biobb_adapters
 
       - name: Checkout mm-workflows
