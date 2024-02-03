@@ -59,6 +59,14 @@ jobs:
           ref: main
           path: mm-workflows
 
+      - name: Checkout image-workflows
+        if: always()
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository_owner }}/image-workflows
+          ref: main
+          path: image-workflows
+
       - name: Setup mamba (linux, macos)
         if: runner.os != 'Windows'
         uses: conda-incubator/setup-miniconda@v3.0.1
@@ -74,10 +82,6 @@ jobs:
         if: always()
         run: cd workflow-inference-compiler/ && pip install ".[all]"
 
-      - name: Generate WIC Validation Jsonschema
-        if: always()
-        run: cd workflow-inference-compiler/ && wic --generate_schemas_only
-
       - name: Install Molecular Modeling Workflows
         if: always()
         # Also run mm-workflows command to generate
@@ -86,6 +90,21 @@ jobs:
         # We do not want or need to install the workflow_deps extra.
         # (Many of the packages conflict with pypy.)
         run: cd mm-workflows/ && pip install ".[test]" && mm-workflows
+
+      - name: Generate WIC Python API Workflows (*.py -> *.yml)
+        if: always()
+        run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
+
+      - name: Generate WIC Validation Jsonschema
+        if: always()
+        run: cd workflow-inference-compiler/ && wic --generate_schemas_only
+
+        # Please read docs/validation.md#Property-Based-Testing
+        # This is essentially an integration test for all of the
+        # WIC Python API workflows as well as the WIC Python API itself.
+      - name: Validate WIC Python API Workflows (*.py -> *.yml)
+        if: always()
+        run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
 
 # Since a randomly chosen subschema is used every time, repeat 10X for more coverage.
 

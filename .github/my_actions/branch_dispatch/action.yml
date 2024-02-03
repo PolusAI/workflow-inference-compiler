@@ -54,6 +54,14 @@ inputs:
     description: 'The name of the biobb_adapters branch / ref'
     type: string
     required: true
+  image_workflows_owner:
+    description: 'The name of the image-workflows owner'
+    type: string
+    required: true
+  image_workflows_ref:
+    description: 'The name of the image-workflows branch / ref'
+    type: string
+    required: true
   access_token:
     description: 'The token used for authentication'
     type: string

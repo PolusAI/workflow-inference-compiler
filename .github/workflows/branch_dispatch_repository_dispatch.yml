@@ -81,12 +81,23 @@ jobs:
           default_branch: master
           access_token: ${{ steps.generate_token.outputs.token }}
 
-      # For other repositories, the entire step below should be copied and edited to make new steps.
       - name: Check existence of mm-workflows
         uses: ./.github/my_actions/check_existence/ # Must start with ./
         id: ce_mm-workflows
         with:
           repository: mm-workflows
+          sender_repo_owner: ${{ github.event.client_payload.owner }}
+          sender_repo_ref: ${{ github.event.client_payload.ref_name }}
+          default_owner: PolusAI
+          default_branch: main
+          access_token: ${{ steps.generate_token.outputs.token }}
+
+      # For other repositories, the entire step below should be copied and edited to make new steps.
+      - name: Check existence of image-workflows
+        uses: ./.github/my_actions/check_existence/ # Must start with ./
+        id: ce_image-workflows
+        with:
+          repository: image-workflows
           sender_repo_owner: ${{ github.event.client_payload.owner }}
           sender_repo_ref: ${{ github.event.client_payload.ref_name }}
           default_owner: PolusAI
@@ -110,6 +121,8 @@ jobs:
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
           biobb_adapters_owner: ${{ steps.ce_biobb_adapters.outputs.owner }}
           biobb_adapters_ref: ${{ steps.ce_biobb_adapters.outputs.ref }}
+          image_workflows_owner: ${{ steps.ce_image-workflows.outputs.owner }}
+          image_workflows_ref: ${{ steps.ce_image-workflows.outputs.ref }}
           access_token: ${{ steps.generate_token.outputs.token }}
 
       - name: Branch dispatch run_workflows.yml
@@ -129,4 +142,6 @@ jobs:
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
           biobb_adapters_owner: ${{ steps.ce_biobb_adapters.outputs.owner }}
           biobb_adapters_ref: ${{ steps.ce_biobb_adapters.outputs.ref }}
+          image_workflows_owner: ${{ steps.ce_image-workflows.outputs.owner }}
+          image_workflows_ref: ${{ steps.ce_image-workflows.outputs.ref }}
           access_token: ${{ steps.generate_token.outputs.token }}

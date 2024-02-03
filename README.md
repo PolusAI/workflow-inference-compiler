@@ -31,6 +31,7 @@ pre-commit install  # Required for developers
 cd install
 ./install_biobb_adapters.sh
 ./install_mm-workflows.sh
+./install_image-workflows.sh
 cd ..
 ```
 ```

@@ -46,6 +46,14 @@ on:
         description: The branch name within the biobb_adapters repository
         required: true
         type: string
+      image-workflows_owner:
+        description: The account name of the image-workflows repository
+        required: true
+        type: string
+      image-workflows_ref:
+        description: The branch name within the image-workflows repository
+        required: true
+        type: string
 
 # See https://github.com/orgs/community/discussions/15690
 # For workflow_dispatch, the commit message, repo, and branch name are not displayed by default.
@@ -114,6 +122,14 @@ jobs:
           ref: ${{ inputs.mm-workflows_ref }}
           path: mm-workflows
 
+      - name: Checkout image-workflows
+        if: always()
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.image-workflows_owner }}/image-workflows
+          ref: ${{ inputs.image-workflows_ref }}
+          path: image-workflows
+
       # NOTE: pypy actually decreases performance for lint_and_test.yml (by a factor of ~2)
       # - name: Append pypy to conda environment files
       #   if: runner.os != 'Windows'
@@ -154,10 +170,6 @@ jobs:
         if: always()
         run: cd workflow-inference-compiler/ && pip install ".[all]"
 
-      - name: Generate WIC Validation Jsonschema
-        if: always()
-        run: cd workflow-inference-compiler/ && wic --generate_schemas_only
-
       - name: Install Molecular Modeling Workflows
         if: always()
         # Also run mm-workflows command to generate
@@ -166,6 +178,21 @@ jobs:
         # We do not want or need to install the workflow_deps extra.
         # (Many of the packages conflict with pypy.)
         run: cd mm-workflows/ && pip install ".[test]" && mm-workflows
+
+      - name: Generate WIC Python API Workflows (*.py -> *.yml)
+        if: always()
+        run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
+
+      - name: Generate WIC Validation Jsonschema
+        if: always()
+        run: cd workflow-inference-compiler/ && wic --generate_schemas_only
+
+        # Please read docs/validation.md#Property-Based-Testing
+        # This is essentially an integration test for all of the
+        # WIC Python API workflows as well as the WIC Python API itself.
+      - name: Validate WIC Python API Workflows (*.py -> *.yml)
+        if: always()
+        run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
 
       - name: Build Documentation
         if: always()
