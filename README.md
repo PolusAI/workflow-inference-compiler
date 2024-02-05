@@ -1,6 +1,6 @@
 # Workflow Inference Compiler
 
-Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but users still need to explicitly specify how to connect the steps. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between steps, and it compiles to CWL for execution.
+Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but like many other workflow languages users still need to explicitly specify how to connect inputs & outputs. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between inputs & outputs, and it compiles to CWL for execution.
 
 ![BPS Poster](BPS_poster.svg)
 
@@ -26,7 +26,6 @@ conda activate wic
 cd ..
 
 pip install -e ".[all]"
-wic --generate_schemas_only
 pre-commit install  # Required for developers
 
 cd install
@@ -35,6 +34,7 @@ cd install
 cd ..
 ```
 ```
+wic --generate_schemas_only
 wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --run_local --quiet
 ```
 That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the root workflow, and run it locally.
@@ -92,10 +92,7 @@ The key feature is that in most cases, you do not need to specify any of the edg
 
 ## Subworkflows
 
-Subworkflows are very useful for creating reusable, composable building blocks. As shown above, recursive subworkflows are fully supported, and the edge inference algorithm has been very carefully constructed to work across subworkflow boundaries. If there are subworkflows, the linear order in the parent workflow is determined by inlineing the subworkflows. (If you are unsure, simply enable `--cwl_inline_subworkflows`) Note that since CWL files for subworkflows are also automatically generated, any subworkflow can be treated as a black box if desired.
-
-### Embedding Independence
-Moreover, in addition to ignoring irrelevant details inside a subworkflow, users should also be able to ignore the details of the parent workflow in which a subworkflow is embedded. In other words, subworkflows should be context-free and have 'embedding independence'. Again, the edge inference algorithm has been carefully constructed such that the edges inferred within a subworkflow do not depend on its embedding within a parent workflow. (This requirement is guaranteed by the regression tests!)
+Subworkflows are very useful for creating reusable, composable building blocks. As shown above, recursive subworkflows are fully supported, and the edge inference algorithm has been very carefully constructed to work across subworkflow boundaries.
 
 ## Explicit CWL
 

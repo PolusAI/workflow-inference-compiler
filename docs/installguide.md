@@ -18,10 +18,10 @@ conda activate wic
 cd ..
 
 pip install -e ".[all]"
-wic --generate_schemas_only
 pre-commit install  # Required for developers
 
 cd install && ./install_mm-workflows.sh && cd ..
+wic --generate_schemas_only
 ```
 
 Developers should fork the upstream repository and clone their fork using the git@ url, then run the command
