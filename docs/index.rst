@@ -10,6 +10,7 @@ Workflow Inference Compiler documentation
    tutorials/tutorials.rst
    userguide.md
    advanced.md
+   validation.md
    dev/devguide.md
    dev/algorithms.md
    dev/codingstandards.md

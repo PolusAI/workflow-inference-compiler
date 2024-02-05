@@ -155,7 +155,7 @@ def main() -> None:
     # sub.run(cmd, shell=True, check=False)
     # rootgraph.view() # viewing does not work on headless machines (and requires xdg-utils)
 
-    if args.run_local:
+    if args.run_local or args.generate_run_script:
         run_local.run_local(args, rose_tree, args.cachedir, args.cwl_runner, False)
 
 

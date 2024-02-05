@@ -25,3 +25,4 @@ renaming_conventions.txt
 .hypothesis/
 .env
 node_modules/
+run.sh
