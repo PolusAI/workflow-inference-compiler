@@ -11,14 +11,14 @@ import cwl_utils.parser as cu_parser
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri
-from pydantic import BaseModel, Field, PrivateAttr  # pylint: disable=E0611
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr  # pylint: disable=E0611
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from wic.api._compat import PYDANTIC_V2
 from wic.api._types import CWL_TYPES_DICT
 
 if PYDANTIC_V2:
-    from pydantic import ConfigDict, field_validator  # pylint: disable=E0611, C0412
+    from pydantic import field_validator  # pylint: disable=E0611, C0412
 else:
     from pydantic import validator
 
