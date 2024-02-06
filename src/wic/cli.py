@@ -32,7 +32,8 @@ parser.add_argument('--quiet', default=False, action="store_true",
 parser.add_argument('--cwl_runner', type=str, required=False, default='cwltool', choices=['cwltool', 'toil-cwl-runner'],
                     help='The CWL runner to use for running workflows locally.')
 parser.add_argument('--ignore_docker_install', default=False, action="store_true",
-                    help='Do not check whether docker is installed before running workflows.')
+                    help='''Do not check whether docker is installed before running workflows.
+                    \n--ignore_docker_install does NOT change whether or not any step in your workflow uses docker!''')
 parser.add_argument('--ignore_docker_processes', default=False, action="store_true",
                     help='Do not check whether there are too many running docker processes before running workflows.')
 parser.add_argument('--user_space_docker_cmd', default='docker',
@@ -42,6 +43,8 @@ parser.add_argument('--no_force_docker_pull', default=False, action="store_true"
                     \n(i.e. allow overwriting images in your local docker cache)''')
 
 group_run = parser.add_mutually_exclusive_group()
+group_run.add_argument('--generate_run_script', default=False, action="store_true",
+                       help='Just generates run.sh and exits. Does not actually invoke ./run.sh')
 group_run.add_argument('--run_local', default=False, action="store_true",
                        help='After generating the cwl file(s), run it on your local machine.')
 group_run.add_argument('--run_compute', default=False, action="store_true",
