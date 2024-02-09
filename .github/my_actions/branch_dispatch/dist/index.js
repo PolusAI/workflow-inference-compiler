@@ -30,8 +30,8 @@ try {
   const commit_message = core.getInput('commit_message');
   const mm_workflows_owner = core.getInput('mm_workflows_owner');
   const mm_workflows_ref = core.getInput('mm_workflows_ref');
-  const biobb_adapters_owner = core.getInput('biobb_adapters_owner');
-  const biobb_adapters_ref = core.getInput('biobb_adapters_ref');
+  const image_workflows_owner = core.getInput('image_workflows_owner');
+  const image_workflows_ref = core.getInput('image_workflows_ref');
   const access_token = core.getInput('access_token');
 
   if (!access_token) {
@@ -63,8 +63,8 @@ try {
         "wic_ref": wic_ref,
         "mm-workflows_owner": mm_workflows_owner,
         "mm-workflows_ref": mm_workflows_ref,
-        "biobb_adapters_owner": biobb_adapters_owner,
-        "biobb_adapters_ref": biobb_adapters_ref,
+        "image-workflows_owner": image_workflows_owner,
+        "image-workflows_ref": image_workflows_ref,
       },
     }),
     headers: {
