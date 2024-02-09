@@ -1,27 +1,30 @@
+# pylint: disable=W1203
 """CLT utilities."""
 import logging
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import singledispatch
 from pathlib import Path
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, ClassVar, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri
-from pydantic import (  # pylint: disable=E0611
-    BaseModel,
-    Extra,
-    Field,
-    ValidationError,
-    validator,
-)
-from pydantic.error_wrappers import ErrorWrapper  # pylint: disable=E0611
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr  # pylint: disable=E0611
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
+from wic.api._compat import PYDANTIC_V2
 from wic.api._types import CWL_TYPES_DICT
 
+if PYDANTIC_V2:
+    from pydantic import field_validator  # pylint: disable=E0611, C0412
+else:
+    from pydantic import validator
+
 logger = logging.getLogger("WIC Python API")
+
+_WIC_PATH = Path(__file__).parent.parent.parent.parent  # WIC dir
 
 
 class InvalidInputValueError(Exception):
@@ -40,7 +43,7 @@ class InvalidLinkError(Exception):
     pass
 
 
-class InvalidCLTError(Exception):
+class InvalidCLTError(ValueError):
     pass
 
 
@@ -53,22 +56,12 @@ CWLInputParameter = Union[
 StrPath = TypeVar("StrPath", str, Path)
 
 
-class Tool(BaseModel):  # pylint: disable=too-few-public-methods
-    class Config:  # pylint: disable=too-few-public-methods:
-        arbitrary_types_allowed = True
-        extra = Extra.allow
-
-    cwl_path: Path
-    cwlVersion: str
-    cwl: CWLCommandLineTool
-
-
 class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     """Input of CLT."""
 
     inp_type: object
     name: str
-    value: Any  # validation happens at assignment
+    value: Any = Field(default=None)  # validation happens at assignment
     required: bool = True
     linked: bool = False
 
@@ -87,19 +80,38 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
             required = True
         super().__init__(inp_type=inp_type, name=cwl_inp.id, required=required)
 
-    @validator("name")
-    # type: ignore
-    def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
-        """Return name of input from InputParameter.id."""
-        return cwl_id.split("#")[-1]
+    if PYDANTIC_V2:
+        @field_validator("name", mode="before")
+        # type: ignore
+        @classmethod
+        def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
+            """Return name of input from InputParameter.id."""
+            return cwl_id.split("#")[-1]
 
-    @validator("inp_type")
-    # type: ignore
-    def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
-        """Return inp_type."""
-        if isinstance(inp, list):  # optional inps
-            inp = inp[1]
-        return CWL_TYPES_DICT[inp]
+        @field_validator("inp_type", mode="before")
+        # type: ignore
+        @classmethod
+        def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
+            """Return inp_type."""
+            if isinstance(inp, list):  # optional inps
+                inp = inp[1]
+            return CWL_TYPES_DICT[inp]
+    else:
+        @validator("name")
+        # type: ignore
+        @classmethod
+        def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
+            """Return name of input from InputParameter.id."""
+            return cwl_id.split("#")[-1]
+
+        @validator("inp_type")
+        # type: ignore
+        @classmethod
+        def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
+            """Return inp_type."""
+            if isinstance(inp, list):  # optional inps
+                inp = inp[1]
+            return CWL_TYPES_DICT[inp]
 
     def _set_value(
         self, __value: Any, check: bool = True, linked: bool = False
@@ -155,61 +167,80 @@ def _(val: bool) -> bool:
     return val
 
 
-class Step(Tool):  # pylint: disable=too-few-public-methods
-    """Base class for configured CLTs."""
+class Step(BaseModel):  # pylint: disable=too-few-public-methods
+    """Base class for Step of Workflow."""
+    if PYDANTIC_V2:
+        model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
+    else:
+        class Config:  # pylint: disable=too-few-public-methods
+            arbitrary_types_allowed = True
 
-    cwl_name: str
+    clt: CWLCommandLineTool
+    clt_path: Path
+    clt_name: str
+    cwl_version: str
     inputs: list[CLTInput]
     yaml: dict[str, Any]
     cfg_yaml: dict = Field(default_factory=_default_dict)
-    _input_names: list[str]
+    _input_names: list[str] = PrivateAttr(default_factory=list)
 
-    def __init__(self, cwl_path: StrPath, config_path: Optional[Path] = None):
+    def __init__(self, clt_path: StrPath, config_path: Optional[StrPath] = None):
         # validate using cwl.utils
-        if not isinstance(cwl_path, (Path, str)):
+        if not isinstance(clt_path, (Path, str)):
             raise TypeError("cwl_path must be a Path or str")
-        if isinstance(cwl_path, str):
-            cwl_path_ = Path(cwl_path)
-        else:
-            cwl_path_ = cwl_path
+        clt_path_ = Path(clt_path) if isinstance(clt_path, str) else clt_path
         try:
-            cwl = load_document_by_uri(cwl_path_)
+            clt = load_document_by_uri(clt_path_)
         except Exception as exc:
-            e_w = ErrorWrapper(exc, "invalid cwl file")
-            raise ValidationError([e_w], Step)  # pylint: disable=raise-missing-from
-        with open(cwl_path, "r", encoding="utf-8") as file:
+            raise InvalidCLTError(f"invalid cwl file: {clt_path_}") from exc
+        with clt_path_.open("r", encoding="utf-8") as file:
             yaml_file = yaml.safe_load(file)
         if config_path:
-            with open(config_path, "r", encoding="utf-8") as file:
+            cfg_path_ = Path(config_path) if isinstance(config_path, str) else config_path
+            with cfg_path_.open("r", encoding="utf-8") as file:
                 cfg_yaml = yaml.safe_load(file)
         else:
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
-        cwl_name = cwl_path_.stem
-        input_names = [inp.id.split("#")[-1] for inp in cwl.inputs]
+        clt_name = clt_path_.stem
         data = {
-            "cwl_path": cwl_path_,
-            "cwlVersion": cwl.cwlVersion,
-            "cwl": cwl,
-            "inputs": cwl.inputs,
+            "clt": clt,
+            "clt_path": clt_path_,
+            "cwl_version": clt.cwlVersion,
+            "clt_name": clt_name,
+            "inputs": clt.inputs,
             "yaml": yaml_file,
             "cfg_yaml": cfg_yaml,
-            "cwl_name": cwl_name,
-            "_input_names": input_names,
         }
         super().__init__(**data)
+        self._input_names = [inp.id.split("#")[-1] for inp in clt.inputs]
         if config_path:
             self._set_from_io_cfg()
 
-    @validator("inputs", pre=True)
-    # type: ignore
-    def cast_to_clt_input_model(
-        cls, cwl_inps: list[CWLInputParameter]
-    ):  # pylint: disable=no-self-argument
-        """Populate inputs from cwl.inputs."""
-        return [CLTInput(x) for x in cwl_inps]
+    if PYDANTIC_V2:
+        @field_validator("inputs", mode="before")
+        @classmethod
+        def cast_to_clt_input_model(
+            cls, cwl_inps: list[CWLInputParameter]
+        ) -> list[CLTInput]:  # pylint: disable=no-self-argument
+            """Populate inputs from cwl.inputs."""
+            return [CLTInput(x) for x in cwl_inps]
+    else:
+        @validator("inputs", pre=True)
+        # type: ignore
+        @classmethod
+        def cast_to_clt_input_model(
+            cls, cwl_inps: list[CWLInputParameter]
+        ):  # pylint: disable=no-self-argument
+            """Populate inputs from cwl.inputs."""
+            return [CLTInput(x) for x in cwl_inps]
+
+    def __repr__(self) -> str:
+        repr_ = f"Step(clt_path={self.clt_path.__repr__()})"
+        return repr_
 
     def __setattr__(self, __name: str, __value: Any) -> Any:  # pylint: disable=R1710
-        if __name in ["inputs", "yaml", "cfg_yaml", "cwl_name", "_input_names"]:
+        if __name in ["inputs", "yaml", "cfg_yaml", "clt_name", "_input_names",
+                      "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
         if hasattr(self, "_input_names") and __name in self._input_names:
             index = self._input_names.index(__name)
@@ -224,7 +255,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
                             )
                         # Use the current value so we can exactly reproduce hand-crafted yml files.
                         # (Very useful for regression testing!)
-                        tmp = __value.value if __value.value else f"{__name}{self.cwl_name}"
+                        tmp = __value.value if __value.value else f"{__name}{self.clt_name}"
                         local_input._set_value(f"*{tmp}", check=False, linked=True)
                         __value._set_value(f"&{tmp}", check=False, linked=True)
                     except BaseException as exc:
@@ -252,12 +283,21 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         else:
             return super().__setattr__(__name, __value)
 
-    def __getattribute__(self, __name: str) -> Any:
-        if __name != "_input_names" and hasattr(self, "_input_names"):
-            if __name in self._input_names:
-                index = self._input_names.index(__name)
-                return self.inputs[index]
-        return super().__getattribute__(__name)
+    if PYDANTIC_V2:
+        def __getattr__(self, __name: str) -> Any:
+            if __name in ["__pydantic_private__", "__class__", "__private_attributes__"]:
+                return super().__getattribute__(__name)
+            if __name != "_input_names" and __name in self._input_names:
+                return self.inputs[self._input_names.index(__name)]
+            # pydantic has BaseModel.__getattr__ in a
+            # non-TYPE_CHECKING block so mypy doesn't see it
+            return super().__getattr__(__name)  # type: ignore
+    else:
+        def __getattribute__(self, __name: str) -> Any:
+            if __name != "_input_names" and hasattr(self, "_input_names"):
+                if __name in self._input_names:
+                    return self.inputs[self._input_names.index(__name)]
+            return super().__getattribute__(__name)
 
     def _set_from_io_cfg(self) -> None:
         for name, value in self.cfg_yaml.items():
@@ -272,7 +312,7 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
     @property
     def _yml(self) -> dict:
         d = {
-            self.cwl_name: {
+            self.clt_name: {
                 "in": {
                     inp.name: _value_str(inp.value)
                     for inp in self.inputs
@@ -286,34 +326,25 @@ class Step(Tool):  # pylint: disable=too-few-public-methods
         cwl_adapters = path.joinpath("cwl_adapters")
         cwl_adapters.mkdir(exist_ok=True, parents=True)
         with open(
-            cwl_adapters.joinpath(f"{self.cwl_name}.cwl"),
+            cwl_adapters.joinpath(f"{self.clt_name}.cwl"),
             "w",
             encoding="utf-8",
         ) as file:
             file.write(yaml.dump(self.yaml))
 
 
-@dataclass
+if PYDANTIC_V2:
+    DATACLASS_CONFIG = ConfigDict(validate_assignment=True)
+else:
+    # mypy marks this incorrect if Pydantic V2
+    DATACLASS_CONFIG = ConfigDict(validate_on_init=True, validate_assignment=True)  # type: ignore
+
+
+@pydantic_dataclass(config=DATACLASS_CONFIG)
 class Workflow:
     steps: list[Step]
     name: str
-    path: Path
-    yml_path: Path = field(init=False, repr=False)
-
-    def __init__(self, steps: list[Step], name: str, path: StrPath) -> None:
-        if not all(isinstance(s, Step) for s in steps):
-            raise TypeError("steps must be a list of Steps")
-        if not isinstance(name, str):
-            raise TypeError("name must be a str")
-        if not isinstance(path, (Path, str)):
-            raise TypeError("path must be a Path or str")
-        if isinstance(path, str):
-            path_ = Path(path)
-        else:  # path is Path
-            path_ = path
-        self.steps = steps
-        self.name = name
-        self.path = path_
+    yml_path: Optional[Path] = field(default=None, init=False, repr=False)  # pylint: disable=E3701
 
     def __post_init__(self) -> None:
         for s in self.steps:
@@ -321,11 +352,13 @@ class Workflow:
                 s._validate()  # pylint: disable=W0212
             except BaseException as exc:
                 raise InvalidStepError(
-                    f"{s.cwl_name} is missing required inputs"
+                    f"{s.clt_name} is missing required inputs"
                 ) from exc
 
-    def step(self, step_: Step) -> None:
+    def append(self, step_: Step) -> None:
         """Append step to Workflow."""
+        if not isinstance(step_, Step):
+            raise TypeError("step must be a Step")
         self.steps.append(step_)
 
     @property
@@ -335,24 +368,30 @@ class Workflow:
         return d
 
     def _save_yaml(self) -> None:
-        Path(self.path).mkdir(parents=True, exist_ok=True)
-        self.yml_path = self.path.joinpath(f"{self.name}.yml")
+        _WIC_PATH.mkdir(parents=True, exist_ok=True)
+        self.yml_path = _WIC_PATH.joinpath(f"{self.name}.yml")
         with open(self.yml_path, "w", encoding="utf-8") as file:
             file.write(yaml.dump(self.yaml))
 
     def _save_all_cwl(self) -> None:
-        Path(self.path).mkdir(parents=True, exist_ok=True)
+        """Save CWL files to cwl_adapters.
+
+        This is necessary for WIC to compile the workflow.
+        """
+        _WIC_PATH.mkdir(parents=True, exist_ok=True)
         for s in self.steps:
             try:
-                s._save_cwl(self.path)  # pylint: disable=W0212
+                s._save_cwl(_WIC_PATH)  # pylint: disable=W0212
             except BaseException as exc:
                 raise exc
 
     def compile(self, run_local: bool = False) -> Path:
-        """Compile Workflow using WIC."""
-        # The CommandLineTools should already be on disk, and moreover when
-        # self.path = '.' this will overwrite them!
-        # self._save_all_cwl()
+        """Compile Workflow using WIC.
+
+        Returns path to compiled CWL Workflow.
+        """
+
+        self._save_all_cwl()
         self._save_yaml()
         logger.info(f"Compiling {self.name}")
         args = ["wic", "--yaml", f"{self.name}.yml"]
@@ -362,7 +401,7 @@ class Workflow:
             proc = subprocess.run(
                 args=args,
                 capture_output=True,
-                cwd=self.path,
+                cwd=_WIC_PATH,
                 check=True,
                 text=True,
                 universal_newlines=True,
@@ -372,9 +411,9 @@ class Workflow:
             logger.info(exc.stdout)
             raise exc
         logger.info(proc.stdout)
-        return self.path.joinpath("autogenerated", f"{self.name}.cwl")
+        return _WIC_PATH.joinpath("autogenerated", f"{self.name}.cwl")
 
-    def run(self, debug: bool = False) -> None:
+    def run(self) -> None:
         """Run compiled workflow."""
         logger.info(f"Running {self.name}")
         self.compile(run_local=True)
