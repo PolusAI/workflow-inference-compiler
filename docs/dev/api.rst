@@ -29,6 +29,14 @@ wic.inference
 ------------------------------------
 .. automodule:: wic.inference
 
+wic.inlineing
+------------------------------------
+.. automodule:: wic.inlineing
+
+wic.input_output
+------------------------------------
+.. automodule:: wic.input_output
+
 wic.labshare
 ------------------------------------
 .. automodule:: wic.labshare
