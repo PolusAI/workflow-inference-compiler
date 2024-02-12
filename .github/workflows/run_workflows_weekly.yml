@@ -133,7 +133,7 @@ jobs:
       # Note that this requires --no_force_docker_pull (so that we don't immediately un-remove them).
     - name: docker remove entrypoints
       if: always()
-      run: cd image-workflows/ && cwl_adapters/docker_remove_entrypoints.sh
+      run: cd workflow-inference-compiler/ && python docker_remove_entrypoints.py
 
     - name: PyTest Run Workflows (On Push)
       if: always()
