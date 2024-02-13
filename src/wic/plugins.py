@@ -8,7 +8,7 @@ from typing import Dict
 import cwltool.load_tool
 import yaml
 
-from . import utils
+from . import input_output as io
 from .python_cwl_adapter import import_python_file
 from .wic_types import Cwl, StepId, Tool, Tools
 
@@ -74,11 +74,11 @@ def get_tools_cwl(homedir: str, validate_plugins: bool = False, skip_schemas: bo
     Returns:
         Tools: The CWL CommandLineTool definitions found using glob()
     """
-    utils.copy_config_files(homedir)
+    io.copy_config_files(homedir)
     # Load ALL of the tools.
     tools_cwl: Tools = {}
     cwl_dirs_file = Path(homedir) / 'wic' / 'cwl_dirs.txt'
-    cwl_dirs = utils.read_lines_pairs(cwl_dirs_file)
+    cwl_dirs = io.read_lines_pairs(cwl_dirs_file)
     for plugin_ns, cwl_dir in cwl_dirs:
         # "PurePath.relative_to() requires self to be the subpath of the argument, but os.path.relpath() does not."
         # See https://docs.python.org/3/library/pathlib.html#id4 and
@@ -127,9 +127,9 @@ def get_workflow_paths(homedir: str, extension: str) -> Dict[str, Dict[str, Path
     Returns:
         Dict[str, Dict[str, Path]]: A dict containing the filepath stem and filepath of each yml file
     """
-    utils.copy_config_files(homedir)
+    io.copy_config_files(homedir)
     yml_dirs_file = Path(homedir) / 'wic' / 'yml_dirs.txt'
-    yml_dirs = utils.read_lines_pairs(yml_dirs_file)
+    yml_dirs = io.read_lines_pairs(yml_dirs_file)
     # Glob all of the yml files too, so we don't have to deal with relative paths.
     yml_paths_all: Dict[str, Dict[str, Path]] = {}
     for yml_namespace, yml_dir in yml_dirs:
