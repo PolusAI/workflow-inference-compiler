@@ -21,7 +21,8 @@ def main() -> None:
 
     tools_cwl = plugins.get_tools_cwl(args.homedir,
                                       args.validate_plugins,
-                                      not args.no_skip_dollar_schemas)
+                                      not args.no_skip_dollar_schemas,
+                                      args.quiet)
     # This takes ~1 second but it is not really necessary.
     # utils_graphs.make_plugins_dag(tools_cwl, args.graph_dark_theme)
     yml_paths = plugins.get_yml_paths(args.homedir)

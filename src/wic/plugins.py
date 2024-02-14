@@ -61,7 +61,8 @@ def validate_cwl(cwl_path_str: str, skip_schemas: bool) -> None:
     # return process_ # ignore process_ for now
 
 
-def get_tools_cwl(homedir: str, validate_plugins: bool = False, skip_schemas: bool = False) -> Tools:
+def get_tools_cwl(homedir: str, validate_plugins: bool = False,
+                  skip_schemas: bool = False, quiet: bool = False) -> Tools:
     """Uses glob() to find all of the CWL CommandLineTool definition files within any subdirectory of cwl_dir
 
     Args:
@@ -69,6 +70,7 @@ def get_tools_cwl(homedir: str, validate_plugins: bool = False, skip_schemas: bo
         cwl_dirs_file (Path): The subdirectories in which to search for CWL CommandLineTools
         validate_plugins (bool, optional): Performs validation on all CWL CommandLiineTools. Defaults to False.
         skip_schemas (bool, optional): Skips processing $schemas tags. Defaults to False.
+        quiet (bool, optional): Determines whether it captures stdout or stderr. Defaults to False.
 
     Returns:
         Tools: The CWL CommandLineTool definitions found using glob()
@@ -101,10 +103,12 @@ def get_tools_cwl(homedir: str, validate_plugins: bool = False, skip_schemas: bo
 
             if validate_plugins:
                 validate_cwl(cwl_path_str, skip_schemas)
-
-            # Add / overwrite stdout and stderr
-            tool.update({'stdout': f'{stem}.out'})
-            tool.update({'stderr': f'{stem}.err'})
+            if quiet:
+                # Capture stdout and stderr
+                if not 'stdout' in tool:
+                    tool.update({'stdout': f'{stem}.out'})
+                if not 'stderr' in tool:
+                    tool.update({'stderr': f'{stem}.err'})
             cwl_path_abs = os.path.abspath(cwl_path_str)
             tools_cwl[StepId(stem, plugin_ns)] = Tool(cwl_path_abs, tool)
             # print(tool)
