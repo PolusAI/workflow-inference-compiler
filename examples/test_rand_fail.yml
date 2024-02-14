@@ -1,0 +1,17 @@
+steps:
+- array_float:
+    in:
+      array: '&arr_float'
+      minval: 0.9
+      maxval: 1
+      step: 0.01
+      decimal_places: 2
+- fail:
+    scatter: [with_probability]
+    in:
+      with_probability: '*arr_float'
+      failout: '&out_thing'
+- echo:
+    scatter: [message]
+    in:
+      message: '*out_thing'
