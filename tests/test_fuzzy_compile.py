@@ -11,6 +11,7 @@ import wic
 import wic.ast
 import wic.cli
 import wic.main
+import wic.plugins
 import wic.schemas
 import wic.schemas.wic_schema
 import wic.utils
@@ -81,4 +82,5 @@ class TestFuzzyCompile(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    wic.plugins.logging_filters()
     unittest.main()

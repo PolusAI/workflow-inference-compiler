@@ -112,6 +112,7 @@ all = ["workflow-inference-compiler[test,doc,plots,cyto,runners-src,mypy-types]"
 [project.scripts]
 wic = "wic.main:main"
 cwl_watcher = "wic.cwl_watcher:main"
+cwltool_filterlog = "wic.run_local:cwltool_main"
 
 # Need the following defined in order to make versioneer work with git tags
 [tool.setuptools.dynamic]

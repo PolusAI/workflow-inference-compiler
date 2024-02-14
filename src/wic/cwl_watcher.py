@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 from . import input_output as io
 from . import ast, cli, compiler, inference, utils
 from .run_local import stage_input_files
-from .plugins import get_tools_cwl, get_yml_paths
+from .plugins import get_tools_cwl, get_yml_paths, logging_filters
 from .schemas import wic_schema
 from .wic_types import GraphData, GraphReps, Json, StepId, Tools, YamlTree
 
@@ -243,6 +243,7 @@ def main() -> None:
     """See docs/userguide.md#real-time-analysis--speculative-execution"""
     print('cwl_watcher sys.argv', sys.argv)
     args = cli_watcher()
+    logging_filters()
 
     cachedir_path = Path(args.cachedir_path)
     file_pattern = args.file_pattern
