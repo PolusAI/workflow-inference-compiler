@@ -159,8 +159,7 @@ def get_subkeys(steps_keys: List[str], tools_stems: List[str]) -> List[str]:
     Returns:
         List[str]: The list of step keys associated with subworkflows of the current workflow.
     """
-    exceptions = ['python_script']  # special case
-    return [key for key in steps_keys if (key not in tools_stems) and (key not in exceptions)]
+    return [key for key in steps_keys if (key not in tools_stems) and (not key.startswith('python_script'))]
 
 
 def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:

@@ -55,6 +55,8 @@ class TestFuzzyCompile(unittest.TestCase):
         yaml_tree_raw = wic.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator,
                                                    args.ignore_validation_errors)
         yaml_tree = wic.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
+        root_yml_dir_abs = yml_path.parent.absolute()
+        yaml_tree = wic.ast.python_script_generate_cwl(yaml_tree, root_yml_dir_abs, tools_cwl)
 
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
         graph_gv.attr(newrank='True')
