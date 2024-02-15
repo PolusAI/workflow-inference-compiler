@@ -157,10 +157,17 @@ def _is_link(s: str) -> bool:
 
 
 @singledispatch
-def _value_str(val: Any) -> Union[str, bool]:
+def _value_str(val: Any) -> Union[str, bool, int, float]:
     """Return value of input as str."""
     return str(val)
 
+@_value_str.register
+def _(val: int) -> int:
+    return val
+
+@_value_str.register
+def _(val: float) -> int:
+    return val
 
 @_value_str.register
 def _(val: bool) -> bool:
