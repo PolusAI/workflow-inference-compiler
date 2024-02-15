@@ -166,7 +166,7 @@ def _(val: int) -> int:
     return val
 
 @_value_str.register
-def _(val: float) -> int:
+def _(val: float) -> float:
     return val
 
 @_value_str.register
