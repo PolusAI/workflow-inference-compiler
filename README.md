@@ -1,12 +1,12 @@
 # Workflow Inference Compiler
 
+![buid-status](https://readthedocs.org/projects/workflow-inference-compiler/badge/?version=latest&style=svg)
+
 Scientific computing can be difficult in practice due to various complex software issues. In particular, chaining together software packages into a computational pipeline can be very error prone. Using the [Common Workflow Language](https://www.commonwl.org) (CWL) greatly helps, but like many other workflow languages users still need to explicitly specify how to connect inputs & outputs. The Workflow Inference Compiler allows users to specify computational protocols at a very high level of abstraction, it automatically infers almost all connections between inputs & outputs, and it compiles to CWL for execution.
 
 ![BPS Poster](BPS_poster.svg)
 
 ## Documentation
-![buid-status](https://readthedocs.org/projects/workflow-inference-compiler/badge/?version=latest&style=svg)
-
 The documentation is available on [readthedocs](https://workflow-inference-compiler.readthedocs.io/en/latest/).
 ## Example Workflows
 The main examples are chosen from classical molecular dynamics but like CWL, the compiler is general purpose and is not limited to any specific domain.
