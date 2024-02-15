@@ -22,10 +22,6 @@ class NoPreviouslyDefinedFilter(logging.Filter):
         return not record.getMessage().endswith('previously defined')
 
 
-logger_salad = logging.getLogger("salad")
-logger_salad.addFilter(NoPreviouslyDefinedFilter())
-
-
 class NoResolvedFilter(logging.Filter):
     # pylint:disable=too-few-public-methods
     def filter(self, record: logging.LogRecord) -> bool:
@@ -33,8 +29,11 @@ class NoResolvedFilter(logging.Filter):
         return not bool(m)  # (True if m else False)
 
 
-logger_cwltool = logging.getLogger("cwltool")
-logger_cwltool.addFilter(NoResolvedFilter())
+def logging_filters() -> None:
+    logger_salad = logging.getLogger("salad")
+    logger_salad.addFilter(NoPreviouslyDefinedFilter())
+    logger_cwltool = logging.getLogger("cwltool")
+    logger_cwltool.addFilter(NoResolvedFilter())
 
 
 def validate_cwl(cwl_path_str: str, skip_schemas: bool) -> None:

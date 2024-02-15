@@ -16,6 +16,7 @@ from .wic_types import GraphData, GraphReps, Json, StepId, Yaml, YamlTree
 def main() -> None:
     """See docs/userguide.md"""
     args = cli.parser.parse_args()
+    plugins.logging_filters()
 
     tools_cwl = plugins.get_tools_cwl(args.homedir,
                                       args.validate_plugins,

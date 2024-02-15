@@ -29,6 +29,7 @@ except ImportError as exc:
 from . import auto_gen_header
 from . import utils  # , utils_graphs
 from .wic_types import Yaml, RoseTree
+from .plugins import logging_filters
 
 
 def generate_run_script(cmdline: str) -> None:
@@ -131,7 +132,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         # See https://github.com/dnanexus/dx-cwl/issues/20
         # --outdir has one or more bugs which will cause workflows to fail!!!
         force_docker_pull = [] if args.no_force_docker_pull else ['--force-docker-pull']
-        cmd = ['cwltool'] + force_docker_pull + parallel + quiet + cachedir_ + net + provenance + \
+        cmd = ['cwltool_filterlog'] + force_docker_pull + parallel + quiet + cachedir_ + net + provenance + \
             docker_cmd_ + write_summary + skip_schemas + path_check
         cmd += ['--leave-outputs',
                 # '--js-console', # "Running with support for javascript console in expressions (DO NOT USE IN PRODUCTION)"
@@ -321,3 +322,11 @@ def stage_input_files(yml_inputs: Yaml, root_yml_dir_abs: Path,
             if path != pathauto:
                 cmd = ['cp', str(path), str(pathauto)]
                 proc = sub.run(cmd, check=False)
+
+
+def cwltool_main() -> int:
+    """Another entrypoint for filtering logged output"""
+    logging_filters()
+    cmd = sys.argv
+    retval: int = cwltool.main.main(cmd[1:])
+    return retval
