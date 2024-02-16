@@ -113,7 +113,7 @@ jobs:
 
     - name: Remove old mamba environment
       if: always()
-      run: rm -rf "/home/$(whoami)/actions-runner/_work/workflow-inference-compiler/workflow-inference-compiler/3/envs/wic_github_actions/"
+      run: rm -rf "/home/$(whoami)/miniconda3/envs/wic_github_actions/"
       # For self-hosted runners, make sure we install into a new mamba environment
       # NOTE: Every time the github self-hosted runner executes, it sets "set -e" in ~/.bash_profile
       # So if we rm -rf the old mamba environment without also removing the mamba init code in ~/.bash_profile
