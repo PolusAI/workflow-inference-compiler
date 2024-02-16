@@ -157,22 +157,22 @@ def _is_link(s: str) -> bool:
 
 
 @singledispatch
-def _value_str(val: Any) -> Union[str, bool, int, float]:
-    """Return value of input as str."""
+def _yaml_value(val: Any) -> Union[str, bool, int, float]:
+    """Convert value to YAML compatible value."""
     return str(val)
 
 
-@_value_str.register
+@_yaml_value.register
 def _(val: int) -> int:
     return val
 
 
-@_value_str.register
+@_yaml_value.register
 def _(val: float) -> float:
     return val
 
 
-@_value_str.register
+@_yaml_value.register
 def _(val: bool) -> bool:
     return val
 
@@ -324,7 +324,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         d = {
             self.clt_name: {
                 "in": {
-                    inp.name: _value_str(inp.value)
+                    inp.name: _yaml_value(inp.value)
                     for inp in self.inputs
                     if inp.value is not None
                 }
