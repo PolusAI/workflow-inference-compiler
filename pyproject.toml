@@ -218,8 +218,7 @@ markers = [
     "slow: (i.e. for medium speed, use 'pytest -m \"not slow\"')",
     "serial: (These tests CANNOT be run in parallel with --workers n > 1)",
 ]
-addopts = "--maxfail=2"
-# Exit after first num failures or errors
+addopts = ""
 
 
 [tool.codespell]
