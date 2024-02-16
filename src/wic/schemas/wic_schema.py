@@ -336,14 +336,6 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     default_backend = str_nonempty
     inlineable = {'type': 'boolean'}
 
-    environment_props: Json = {}
-    environment_props['action'] = {'type': 'string', 'enum': ['checkpoint', 'restore']}
-    environment_props['save_defs'] = {'type': 'array'}
-    environment_props['save_defs']['items'] = str_nonempty
-
-    environment = default_schema()
-    environment['properties'] = environment_props
-
     schema = default_schema(url=True)
     schema['$id'] = 'wic_tag'
     # Create recursive anchor
@@ -358,7 +350,7 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     schema_props = {'graphviz': graphviz_schema, 'steps': steps, 'backend': backend,
                     'default_backend': default_backend,
                     'version': str_nonempty, 'driver': driver,
-                    'namespace': namespace, 'inlineable': inlineable, 'environment': environment}
+                    'namespace': namespace, 'inlineable': inlineable}
     if not hypothesis:
         # {'additionalProperties': True} can cause problems with hypothesis.
         schema_props['backends'] = backends
