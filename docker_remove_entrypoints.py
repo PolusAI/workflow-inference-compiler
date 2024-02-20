@@ -5,7 +5,8 @@ import subprocess as sub
 # "Here is what the CWL standards have to say about software container entrypoints"
 # "I recommend changing your docker container to not use ENTRYPOINT."
 
-# This script will remove / overwrite the entrypoints in ALL of the polusai/ docker images on your local machine.
+# This script will remove / overwrite the entrypoints in ALL of the docker images on your local machine.
+# (It will append -noentrypoint to the version tag.)
 
 # The reason is that we want to simultaneously allow
 # 1. release environments, where users will simply run code in a docker image and
@@ -29,14 +30,14 @@ for json_str in lines:
     # print('json_str', json_str)
     image_json = json.loads(json_str)
     # print(image_json)
-    repo = image_json['Repository']
-    tag = image_json['Tag']
-    if repo != '<none>' and tag != '<none>' and repo.startswith('polusai/'):
+    repo: str = image_json['Repository']
+    tag: str = image_json['Tag']
+    if repo != '<none>' and tag != '<none>' and not tag.endswith('-noentrypoint'):
         print(f'{repo}:{tag}')
         with open('Dockerfile_tmp', mode='w', encoding='utf-8') as f:
             f.write(f'FROM {repo}:{tag}')
             f.write('\n')
             f.write('ENTRYPOINT []')
-        docker_build_cmd = ['sudo', 'docker', 'build', '-f', 'Dockerfile_tmp', '-t', f'{repo}:{tag}', '.']
+        docker_build_cmd = ['sudo', 'docker', 'build', '-f', 'Dockerfile_tmp', '-t', f'{repo}:{tag}-noentrypoint', '.']
         sub.run(docker_build_cmd, check=True)
         sub.run(['rm', 'Dockerfile_tmp'], check=True)
