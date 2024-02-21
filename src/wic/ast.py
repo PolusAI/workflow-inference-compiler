@@ -1,4 +1,4 @@
-import base64
+import uuid
 import copy
 from pathlib import Path
 import sys
@@ -296,12 +296,9 @@ def python_script_generate_cwl(yaml_tree_tuple: YamlTree,
                 module = python_cwl_adapter.get_module(python_script_mod, python_script_path, yml_args)
                 generated_cwl = python_cwl_adapter.generate_CWL_CommandLineTool(
                     module.inputs, module.outputs, python_script_docker_pull)
-                # import uuid
-                # # https://docs.python.org/3/library/uuid.html#uuid.uuid4
-                # # "If all you want is a unique ID, you should probably call uuid1() or uuid4()"
-                # unique_id = str(uuid.uuid4())
-                # Use base 64 encoding so we have the option of decoding (for debugging purposes)
-                unique_id = 'python_script_' + str(base64.b64encode(bytes(python_script_path)))
+                # See https://docs.python.org/3/library/uuid.html#uuid.uuid4
+                # "If all you want is a unique ID, you should probably call uuid1() or uuid4()"
+                unique_id = 'python_script_' + str(uuid.uuid4())
                 # TODO: use the trick from the copy_cwl_tools branch to keep
                 # programmatically modified (and in this case, generated from scratch)
                 # CWL CommandLineTools in-memory so we can defer writing to disk
