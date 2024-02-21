@@ -171,8 +171,9 @@ jobs:
       run: cd workflow-inference-compiler/ && pytest -k test_cwl_docker_extract
       # For self-hosted runners, make sure the docker cache is up-to-date.
 
-      # Please read docker_remove_entrypoints.sh
-      # Note that this requires --no_force_docker_pull (so that we don't immediately un-remove them).
+      # Please read docker_remove_entrypoints.py
+      # NOTE: Entrypoints are automatically removed in test_cwl_docker_extract
+      # so this step is actually redundant, but keep it for emphasis.
     - name: docker remove entrypoints
       if: always()
       run: cd workflow-inference-compiler/ && python docker_remove_entrypoints.py

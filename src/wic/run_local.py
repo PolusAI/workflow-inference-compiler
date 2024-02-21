@@ -131,8 +131,8 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         # NOTE: Using --leave-outputs to disable --outdir
         # See https://github.com/dnanexus/dx-cwl/issues/20
         # --outdir has one or more bugs which will cause workflows to fail!!!
-        force_docker_pull = [] if args.no_force_docker_pull else ['--force-docker-pull']
-        cmd = ['cwltool_filterlog'] + force_docker_pull + parallel + quiet + cachedir_ + net + provenance + \
+        docker_pull = ['--disable-pull']  # Use cwl-docker-extract to pull images
+        cmd = ['cwltool_filterlog'] + docker_pull + parallel + quiet + cachedir_ + net + provenance + \
             docker_cmd_ + write_summary + skip_schemas + path_check
         cmd += ['--leave-outputs',
                 # '--js-console', # "Running with support for javascript console in expressions (DO NOT USE IN PRODUCTION)"
@@ -193,8 +193,9 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         net = ['--custom-net', args.custom_net] if args.custom_net else []
         provenance = ['--provenance', 'provenance']
         docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
-        force_docker_pull = [] if args.no_force_docker_pull else ['--force-docker-pull']
-        cmd = ['toil-cwl-runner'] + force_docker_pull + net + provenance + docker_cmd_
+        # https://github.com/DataBiosphere/toil/blob/6558c7f97fb37c6ef6f469c7ae614109050322f4/src/toil/options/cwl.py#L152
+        docker_pull = []  # toil supports --force-docker-pull, but not --disable-pull
+        cmd = ['toil-cwl-runner'] + docker_pull + net + provenance + docker_cmd_
         cmd += ['--outdir', 'outdir_toil',
                 '--jobStore', f'file:./jobStore_{yaml_stem}',  # NOTE: This is the equivalent of --cachedir
                 # TODO: Check --clean, --cleanWorkDir, --restart
