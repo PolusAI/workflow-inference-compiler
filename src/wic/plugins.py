@@ -1,3 +1,4 @@
+import copy
 import logging
 import glob
 import os
@@ -10,7 +11,7 @@ import yaml
 
 from . import input_output as io
 from .python_cwl_adapter import import_python_file
-from .wic_types import Cwl, StepId, Tool, Tools
+from .wic_types import Cwl, NodeData, RoseTree, StepId, Tool, Tools
 
 
 # Filter out the "... previously defined" id uniqueness validation warnings
@@ -114,6 +115,66 @@ def get_tools_cwl(homedir: str, validate_plugins: bool = False,
             # print(tool)
             # utils_graphs.make_tool_dag(stem, (cwl_path_str, tool))
     return tools_cwl
+
+
+def dockerPull_append_noentrypoint(cwl: Cwl) -> Cwl:
+    """Appends -noentrypoint to the dockerPull version tag (if any)
+
+    Args:
+        cwl (Cwl): A CWL CommandLineTool
+
+    Returns:
+        Cwl: A CWL CommandLineTool, with -noentrypoint appended to the dockerPull version tag (if any)
+    """
+    docker_image: str = cwl.get('requirements', {}).get('DockerRequirement', {}).get('dockerPull', '')
+    if docker_image:
+        print('docker_image', docker_image)
+    if ':' in docker_image:
+        repo, tag = docker_image.split(':')
+    else:
+        repo, tag = docker_image, 'latest'
+    if repo and tag and not tag.endswith('-noentrypoint'):
+        print('repo, tag', repo, tag)
+        image_noentrypoint = repo + ':' + tag + '-noentrypoint'
+        cwl_noentrypoint = copy.deepcopy(cwl)
+        cwl_noentrypoint['requirements']['DockerRequirement']['dockerPull'] = image_noentrypoint
+        return cwl_noentrypoint
+    else:
+        return cwl
+
+
+def dockerPull_append_noentrypoint_tools(tools: Tools) -> Tools:
+    """Appends -noentrypoint to the dockerPull version tag for every tool in tools.
+
+    Args:
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
+
+    Returns:
+        Tools: tools with -noentrypoint appended to all of the dockerPull version tags.
+    """
+    return {stepid: Tool(tool.run_path, dockerPull_append_noentrypoint(tool.cwl))
+            for stepid, tool in tools.items()}
+
+
+def dockerPull_append_noentrypoint_rosetree(rose_tree: RoseTree) -> RoseTree:
+    """Appends -noentrypoint to the dockerPull version tag for every CWL CommandLineTool
+
+    Args:
+        rose_tree (RoseTree): The RoseTree returned from compile_workflow(...).rose_tree
+
+    Returns:
+        RoseTree: rose_tree with -noentrypoint appended to the dockerPull version tag for every CWL CommandLineTool
+    """
+    n_d: NodeData = rose_tree.data
+    # NOTE: Since only class: CommandLineTool should have dockerPull tags,
+    # this should be the identity function on class: Workflow.
+    compiled_cwl_noent = dockerPull_append_noentrypoint(n_d.compiled_cwl)
+
+    sub_trees_noent = [dockerPull_append_noentrypoint_rosetree(sub_rose_tree) for sub_rose_tree in rose_tree.sub_trees]
+    node_data_noent = NodeData(n_d.namespaces, n_d.name, n_d.yml, compiled_cwl_noent, n_d.workflow_inputs_file,
+                               n_d.explicit_edge_defs, n_d.explicit_edge_calls, n_d.graph, n_d.inputs_workflow,
+                               n_d.step_name_1)
+    return RoseTree(node_data_noent, sub_trees_noent)
 
 
 def get_workflow_paths(homedir: str, extension: str) -> Dict[str, Dict[str, Path]]:
