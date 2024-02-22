@@ -32,7 +32,7 @@ def get_args(yaml_path: str = '', cwl_inline_subworkflows: bool = False) -> argp
 
 
 args = get_args()
-tools_cwl = wic.plugins.get_tools_cwl(args.homedir)
+tools_cwl = wic.plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
 yml_paths = wic.plugins.get_yml_paths(args.homedir)
 yaml_stems = wic.utils.flatten([list(p) for p in yml_paths.values()])
 schema_store: Dict[str, Json] = {}

@@ -259,7 +259,7 @@ def main() -> None:
 
     args_vals = json.loads(args.config)
 
-    tools_cwl = get_tools_cwl(args.homedir)
+    tools_cwl = get_tools_cwl(args.homedir, quiet=args.quiet)
     yml_paths = get_yml_paths(args.homedir)
 
     # Perform initialization via mutating global variables (This is not ideal)
