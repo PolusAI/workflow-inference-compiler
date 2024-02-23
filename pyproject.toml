@@ -33,7 +33,7 @@ dependencies = [
     "beautifulsoup4", # Solely for parsing gromacs mdp options html
     "cwl-utils>=0.31", # CommandInputParameter attr changed from `type_` to `type` https://github.com/common-workflow-language/cwl-utils/releases/tag/v0.31
     "typeguard",
-    "pydantic>=1.10.11"
+    "pydantic>=2.6"
 ]
 
 [project.readme]
@@ -73,6 +73,7 @@ mypy-types = [
     "types-colorama",
     "types-decorator",
     "types-docutils",
+    "types-html5lib",
     "types-jsonschema",
     "types-psutil",
     "types-python-jose",
@@ -144,6 +145,9 @@ source_dir = "docs"
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 
 [tool.mypy]
+# See https://docs.pydantic.dev/latest/integrations/mypy/#enabling-the-plugin
+plugins = ["pydantic.mypy"]
+
 # See https://mypy.readthedocs.io/en/stable/running_mypy.html#follow-imports
 follow_imports = "normal"
 
