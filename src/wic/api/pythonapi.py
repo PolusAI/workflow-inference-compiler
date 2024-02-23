@@ -1,7 +1,6 @@
 # pylint: disable=W1203
 """CLT utilities."""
 import logging
-from functools import singledispatch
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
@@ -145,26 +144,6 @@ def _is_link(s: str) -> bool:
         return True
     return False
 
-
-@singledispatch
-def _yaml_value(val: Any) -> Union[str, bool, int, float]:
-    """Convert value to YAML compatible value."""
-    return str(val)
-
-
-@_yaml_value.register
-def _(val: int) -> int:
-    return val
-
-
-@_yaml_value.register
-def _(val: float) -> float:
-    return val
-
-
-@_yaml_value.register
-def _(val: bool) -> bool:
-    return val
 
 # Process = Union[Step, Workflow]
 
@@ -347,7 +326,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         d = {
             self.process_name: {
                 "in": {
-                    inp.name: _yaml_value(inp.value)
+                    inp.name: inp.value
                     for inp in self.inputs
                     if inp.value is not None
                 }
@@ -440,7 +419,7 @@ class Workflow(BaseModel):
                 steps.append(s._yml)
             elif isinstance(s, Workflow):
                 ins = {
-                    inp.name: _yaml_value(inp.value)
+                    inp.name: inp.value
                     for inp in s.inputs
                     if inp.value is not None  # Subworkflow args are not required
                 }
