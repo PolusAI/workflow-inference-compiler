@@ -59,21 +59,14 @@ StrPath = TypeVar("StrPath", str, Path)
 class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     """Input of CLT."""
 
-    inp_type: object
+    inp_type: Any
     name: str
     value: Any = Field(default=None)  # validation happens at assignment
     required: bool = True
     linked: bool = False
 
     def __init__(self, cwl_inp: CWLInputParameter) -> None:
-        # temporary fix for different versions of cwl_utils
-        # where it changed from `type_` to `type`
-        if hasattr(cwl_inp, "type_"):
-            inp_type = cwl_inp.type_
-        elif hasattr(cwl_inp, "type"):
-            inp_type = cwl_inp.type
-        else:
-            raise AttributeError("CWLInputParameter has no attribute type or type_")
+        inp_type = cwl_inp.type_  # NOTE: .type in version 0.31 only!
         if isinstance(inp_type, list) and "null" in inp_type:
             required = False
         else:
@@ -118,11 +111,11 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     ) -> None:
         """Set input value."""
         if check:
-            if not isinstance(__value, self.inp_type):  # type: ignore
+            if not isinstance(__value, self.inp_type):
                 raise TypeError(
                     f"invalid attribute type for {self.name}: "
                     f"got {__value.__class__.__name__}, "
-                    f"expected {self.inp_type.__name__}"  # type: ignore # noqa: E266
+                    f"expected {self.inp_type.__name__}"
                 )
             self.value = __value
             return

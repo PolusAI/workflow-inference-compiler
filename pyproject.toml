@@ -31,7 +31,10 @@ dependencies = [
     "mergedeep",
     "networkx",
     "beautifulsoup4", # Solely for parsing gromacs mdp options html
-    "cwl-utils>=0.31", # CommandInputParameter attr changed from `type_` to `type` https://github.com/common-workflow-language/cwl-utils/releases/tag/v0.31
+    "cwl-utils>=0.32",
+    # CommandInputParameter attr changed from `type_` to `type` and back to `type_`
+    # between versions 0.30, 0.31, 0.32
+    # See https://github.com/common-workflow-language/cwl-utils/releases/
     "typeguard",
     "pydantic>=1.10.11"
 ]
