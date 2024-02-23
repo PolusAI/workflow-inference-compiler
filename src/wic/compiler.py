@@ -302,7 +302,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # Programmatically modify tool_i here
             graph_dummy = graph  # Just use anything here to satisfy mypy
             name_stem = Path(tool_i.run_path).stem
-            node_data_base_case = NodeData([step_name_i], name_stem, {}, tool_i.cwl, {}, {}, {}, graph_dummy, {}, '')
+            node_data_base_case = NodeData([step_name_i], name_stem, {}, tool_i.cwl,
+                                           tool_i, {}, {}, {}, graph_dummy, {}, '')
             rose_tree_base_case = RoseTree(node_data_base_case, [])
             rose_tree_list.append(rose_tree_base_case)
         tools_lst.append(tool_i)
@@ -741,7 +742,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
                     yaml_tree_mod = insert_step_into_workflow(yaml_tree_orig, conversion, tools, i)
 
-                    node_data = NodeData(namespaces, yaml_stem, yaml_tree_mod, yaml_tree, {},
+                    node_data = NodeData(namespaces, yaml_stem, yaml_tree_mod, yaml_tree, tool_i, {},
                                          explicit_edge_defs_copy2, explicit_edge_calls_copy2,
                                          graph, inputs_workflow, '')
                     rose_tree = RoseTree(node_data, rose_tree_list)
@@ -848,7 +849,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         print('finishing', ('  ' * len(namespaces)) + yaml_path)
     # Note: We do not necessarily need to return inputs_workflow.
     # 'Internal' inputs are encoded in yaml_tree. See Comment above.
-    node_data = NodeData(namespaces, yaml_stem, yaml_tree_orig, yaml_tree, yaml_inputs,
+    node_data = NodeData(namespaces, yaml_stem, yaml_tree_orig, yaml_tree, tool_i, yaml_inputs,
                          explicit_edge_defs_copy2, explicit_edge_calls_copy2,
                          graph, inputs_workflow, step_name_1)
     rose_tree = RoseTree(node_data, rose_tree_list)

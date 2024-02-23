@@ -104,6 +104,7 @@ class NodeData(NamedTuple):
     # If this is not the AST that was passed in, then the compiler introduced
     # some modifications (i.e. file format conversions) and you need to recompile
     compiled_cwl: Cwl
+    tool: Tool
     workflow_inputs_file: WorkflowInputsFile
     explicit_edge_defs: ExplicitEdgeDefs
     explicit_edge_calls: ExplicitEdgeCalls
