@@ -1,5 +1,6 @@
 import json
 import subprocess as sub
+import tempfile
 
 # https://cwl.discourse.group/t/override-docker-entrypoint-in-command-line-tool/695/2
 # "Here is what the CWL standards have to say about software container entrypoints"
@@ -34,10 +35,12 @@ for json_str in lines:
     tag: str = image_json['Tag']
     if repo != '<none>' and tag != '<none>' and not tag.endswith('-noentrypoint'):
         print(f'{repo}:{tag}')
-        with open('Dockerfile_tmp', mode='w', encoding='utf-8') as f:
-            f.write(f'FROM {repo}:{tag}')
-            f.write('\n')
-            f.write('ENTRYPOINT []')
-        docker_build_cmd = ['sudo', 'docker', 'build', '-f', 'Dockerfile_tmp', '-t', f'{repo}:{tag}-noentrypoint', '.']
-        sub.run(docker_build_cmd, check=True)
-        sub.run(['rm', 'Dockerfile_tmp'], check=True)
+        # NOTE: Use unique tempdir so that this script can be run in parallel.
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(tempdir + '/Dockerfile_tmp', mode='w', encoding='utf-8') as f:
+                f.write(f'FROM {repo}:{tag}')
+                f.write('\n')
+                f.write('ENTRYPOINT []')
+            docker_build_cmd = ['sudo', 'docker', 'build', '-f', tempdir +
+                                '/Dockerfile_tmp', '-t', f'{repo}:{tag}-noentrypoint', '.']
+            sub.run(docker_build_cmd, check=True, cwd=tempdir)
