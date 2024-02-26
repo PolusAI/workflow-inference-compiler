@@ -64,7 +64,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
 
     docker_cmd: str = args.user_space_docker_cmd
     # Check that docker is installed, so users don't get a nasty runtime error.
-    cmd = [docker_cmd, 'run', 'hello-world']
+    cmd = [docker_cmd, 'run', '--rm', 'hello-world']
     try:
         docker_cmd_exists = True
         proc = sub.run(cmd, check=False, stdout=sub.PIPE, stderr=sub.STDOUT)
@@ -73,7 +73,14 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         docker_cmd_exists = False
     out_d = "Hello from Docker!"
     out_p = "Hello Podman World"
+    permission_denied = 'permission denied while trying to connect to the Docker daemon socket at'
     if (not docker_cmd_exists or not (proc.returncode == 0 and out_d in output or out_p in output)) and not args.ignore_docker_install:
+        if permission_denied in output:
+            print('Warning! docker appears to be installed, but not configured as a non-root user.')
+            print('See https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user')
+            print('TL;DR you probably just need to run the following command (and then restart your machine)')
+            print('sudo usermod -aG docker $USER')
+            sys.exit(1)
         print(f'Warning! The {docker_cmd} command does not appear to be installed.')
         print(f'Most workflows require docker containers and will fail at runtime if {docker_cmd} is not installed.')
         print('If you want to try running the workflow anyway, use --ignore_docker_install')
