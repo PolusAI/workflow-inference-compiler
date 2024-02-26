@@ -171,10 +171,52 @@ def dockerPull_append_noentrypoint_rosetree(rose_tree: RoseTree) -> RoseTree:
     compiled_cwl_noent = dockerPull_append_noentrypoint(n_d.compiled_cwl)
 
     sub_trees_noent = [dockerPull_append_noentrypoint_rosetree(sub_rose_tree) for sub_rose_tree in rose_tree.sub_trees]
-    node_data_noent = NodeData(n_d.namespaces, n_d.name, n_d.yml, compiled_cwl_noent, n_d.workflow_inputs_file,
+    node_data_noent = NodeData(n_d.namespaces, n_d.name, n_d.yml, compiled_cwl_noent, n_d.tool, n_d.workflow_inputs_file,
                                n_d.explicit_edge_defs, n_d.explicit_edge_calls, n_d.graph, n_d.inputs_workflow,
                                n_d.step_name_1)
     return RoseTree(node_data_noent, sub_trees_noent)
+
+
+def cwl_prepend_dockerFile_include_path(cwl: Cwl, cwl_path: str) -> Cwl:
+    """Prepends (original) cwl_path to the dockerFile $include path
+
+    Args:
+        cwl (Cwl): A CWL CommandLineTool
+        cwl_path : Specifies the absolute path of .cwl file
+    Returns:
+        Cwl: A CWL CommandLineTool, with correct filepath prepended
+    """
+    cwl_mod = copy.deepcopy(cwl)
+    inc_path: str = cwl.get('hints', {}).get('DockerRequirement', {}).get('dockerFile', {}).get('$include', '')
+    if inc_path:
+        # cwl_path is an absolute path including (original) filename .cwl
+        # we just need to prepend the dir of cwl_path to the inc_path
+        cwl_dir: str = str(Path(cwl_path).parent)
+        cwl_mod['hints']['DockerRequirement']['dockerFile']['$include'] = cwl_dir + '/' + inc_path
+    return cwl_mod
+
+
+def cwl_prepend_dockerFile_include_path_rosetree(rose_tree: RoseTree) -> RoseTree:
+    """Prepends (original) cwl_path to the dockerFile $include path to every CWL CommandLineTool
+
+    Args:
+        rose_tree (RoseTree): The RoseTree returned from compile_workflow(...).rose_tree
+
+    Returns:
+        RoseTree: rose_tree with (original) cwl_path to the dockerFile to the dockerFile $include path
+        to every CWL CommandLineTool
+    """
+    n_d: NodeData = rose_tree.data
+    # NOTE: Since only class: CommandLineTool should have dockerPull tags,
+    # this should be the identity function on class: Workflow.
+    prepended_cwl = cwl_prepend_dockerFile_include_path(n_d.compiled_cwl, n_d.tool.run_path)
+
+    sub_trees_path = [cwl_prepend_dockerFile_include_path_rosetree(sub_rose_tree) for
+                      sub_rose_tree in rose_tree.sub_trees]
+    node_data_path = NodeData(n_d.namespaces, n_d.name, n_d.yml, prepended_cwl, n_d.tool, n_d.workflow_inputs_file,
+                              n_d.explicit_edge_defs, n_d.explicit_edge_calls, n_d.graph, n_d.inputs_workflow,
+                              n_d.step_name_1)
+    return RoseTree(node_data_path, sub_trees_path)
 
 
 def get_workflow_paths(homedir: str, extension: str) -> Dict[str, Dict[str, Path]]:

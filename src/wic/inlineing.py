@@ -424,7 +424,7 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
     cwl_tree['outputs'] = outputs_new
 
     data = NodeData(node_data.namespaces, node_data.name, node_data.yml, cwl_tree,  # NOTE: Only updating cwl_tree
-                    node_data.workflow_inputs_file, node_data.explicit_edge_defs,
+                    node_data.tool, node_data.workflow_inputs_file, node_data.explicit_edge_defs,
                     node_data.explicit_edge_calls, node_data.graph,
                     node_data.inputs_workflow, node_data.step_name_1)
 
