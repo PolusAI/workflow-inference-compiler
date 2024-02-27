@@ -25,7 +25,7 @@ from wic import auto_gen_header
 from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree, Json
 
 from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tuples
-from .test_setup import get_appended_args, yml_paths_partial_failure
+from .test_setup import yml_paths_partial_failure
 
 # Look in each directory in yml_dirs.txt for separate config_ci.json files and combine them.
 yml_dirs_file = Path(get_args().homedir) / 'wic' / 'yml_dirs.txt'
@@ -124,25 +124,23 @@ def test_run_inlined_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_ru
        directories in yml_dirs.txt, excluding all workflows which have been
        blacklisted in the various config_ci.json files and excluding the weekly
        workflows."""
-    args = get_args(str(yml_path), cwl_inline_subworkflows=True)
+    args = get_args(str(yml_path), ['--cwl_inline_subworkflows'])
     run_workflows(yml_path_str, yml_path, cwl_runner, args)
 
 
 # partial failure tests
-@pytest.mark.slow
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_partial_failure)
-def test_run_partial_failures(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+def test_run_partial_failures_pass(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Run workflows allowing partial failures. yml files of workflows which are known to have failure steps"""
-    args = get_appended_args(str(yml_path), ['--allow_partial_failures'])
+    args = get_args(str(yml_path), ['--allow_partial_failures'])
     run_workflows(yml_path_str, yml_path, cwl_runner, args)
 
 
 @pytest.mark.xfail()
-@pytest.mark.slow
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_partial_failure)
-def test_run_partial_failures_fail(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
+def test_run_partial_failures_xfail(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Run workflows with known failures but without partial failure cli flag. It is expected to fail"""
-    args = get_appended_args(str(yml_path), [])
+    args = get_args(str(yml_path), [])
     run_workflows(yml_path_str, yml_path, cwl_runner, args)
 
 
@@ -158,7 +156,7 @@ def test_run_workflows_weekly(yml_path_str: str, yml_path: Path, cwl_runner: str
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_weekly)
 def test_run_inlined_workflows_weekly(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Inlines and runs all of the run_weekly workflows whitelisted in the various config_ci.json files."""
-    args = get_args(str(yml_path), cwl_inline_subworkflows=True)
+    args = get_args(str(yml_path), ['--cwl_inline_subworkflows'])
     run_workflows(yml_path_str, yml_path, cwl_runner, args)
 
 

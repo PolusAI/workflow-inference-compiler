@@ -137,10 +137,6 @@ def cwl_update_outputs_optional(cwl: Cwl) -> Cwl:
         Cwl: A CWL CommandLineTool with outputs optional (if any)
     """
     cwl_mod = copy.deepcopy(cwl)
-    # Update version
-    # when clauses require cwl v1.2
-    # See https://www.commonwl.org/v1.2/Workflow.html#Conditional_execution_(Optional)
-    cwl_mod['cwlVersion'] = 'v1.2'
     # Update success codes to allow simple failures
     cwl_mod['successCodes'] = [0, 1]
     # Update outputs optional
@@ -160,9 +156,10 @@ def cwl_update_outputs_optional_rosetree(rose_tree: RoseTree) -> RoseTree:
         RoseTree: rose_tree with output optional updates to every CWL CommandLineTool
     """
     n_d: NodeData = rose_tree.data
-    # NOTE: Since only class: CommandLineTool should have dockerPull tags,
-    # this should be the identity function on class: Workflow.
-    outputs_optional_cwl = cwl_update_outputs_optional(n_d.compiled_cwl)
+    if n_d.compiled_cwl['class'] == 'CommandLineTool':
+        outputs_optional_cwl = cwl_update_outputs_optional(n_d.compiled_cwl)
+    else:
+        outputs_optional_cwl = n_d.compiled_cwl
 
     sub_trees_path = [cwl_update_outputs_optional_rosetree(sub_rose_tree) for
                       sub_rose_tree in rose_tree.sub_trees]
