@@ -38,7 +38,7 @@ cd ..
 ```
 ```
 wic --generate_schemas_only
-wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --run_local --quiet
+wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --graphviz --run_local --quiet
 ```
 That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the root workflow, and run it locally.
 
