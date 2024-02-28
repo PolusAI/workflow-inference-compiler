@@ -81,6 +81,8 @@ parser.add_argument('--compute_access_token', type=str, required=('--run_compute
                     help="""The access_token used for authentication. Required for --run_compute
                     For now, get this manually from https://a-qa.labshare.org/""")
 
+parser.add_argument('--graphviz', default=False, action="store_true",
+                    help='Generate a DAG using graphviz.')
 parser.add_argument('--graph_label_edges', default=False, action="store_true",
                     help='Label the graph edges with the name of the intermediate input/output.')
 parser.add_argument('--graph_label_stepname', default=False, action="store_true",
