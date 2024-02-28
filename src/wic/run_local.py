@@ -201,9 +201,11 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         net = ['--custom-net', args.custom_net] if args.custom_net else []
         provenance = ['--provenance', 'provenance']
         docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
+        path_check = ['--relax-path-checks']
+        # See https://github.com/common-workflow-language/cwltool/blob/5a645dfd4b00e0a704b928cc0bae135b0591cc1a/cwltool/command_line_tool.py#L94
         # https://github.com/DataBiosphere/toil/blob/6558c7f97fb37c6ef6f469c7ae614109050322f4/src/toil/options/cwl.py#L152
         docker_pull = []  # toil supports --force-docker-pull, but not --disable-pull
-        cmd = ['toil-cwl-runner'] + docker_pull + net + provenance + docker_cmd_
+        cmd = ['toil-cwl-runner'] + docker_pull + net + provenance + docker_cmd_ + path_check
         cmd += ['--outdir', 'outdir_toil',
                 '--jobStore', f'file:./jobStore_{yaml_stem}',  # NOTE: This is the equivalent of --cachedir
                 # TODO: Check --clean, --cleanWorkDir, --restart
@@ -233,6 +235,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
                     print(f'Final output json blob is in {args.write_summary}')
 
             except Exception as e:
+                retval = 1
                 print('Failed to execute', yaml_path)
                 print(f'See error_{yaml_stem}.txt for detailed technical information.')
                 # Do not display a nasty stack trace to the user; hide it in a file.
@@ -243,9 +246,6 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
                         traceback.print_exception(etype=type(e), value=e, tb=None, file=f)
                 if not cachedir:  # if running on CI
                     print(e)
-
-        proc = sub.run(cmd, check=False)
-        retval = proc.returncode
 
     if retval == 0:
         print('Success! Output files should be in outdir/')
