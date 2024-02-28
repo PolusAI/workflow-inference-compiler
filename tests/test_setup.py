@@ -42,7 +42,6 @@ yml_paths_tuples = [(yml_path_str, yml_path)
                     for yml_namespace, yml_paths_dict in yml_paths.items()
                     for yml_path_str, yml_path in yml_paths_dict.items()]
 
-yml_paths_partial_failure = [('examples/test_rand_fail.yml', Path('examples/test_rand_fail.yml'))]
 
 for yml_path_str, yml_path in yml_paths_tuples:
     schema = wic.schemas.wic_schema.compile_workflow_generate_schema(args.homedir, yml_path_str, yml_path,

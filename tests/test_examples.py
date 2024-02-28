@@ -25,7 +25,6 @@ from wic import auto_gen_header
 from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree, Json
 
 from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tuples
-from .test_setup import yml_paths_partial_failure
 
 # Look in each directory in yml_dirs.txt for separate config_ci.json files and combine them.
 yml_dirs_file = Path(get_args().homedir) / 'wic' / 'yml_dirs.txt'
@@ -53,11 +52,16 @@ yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples if s not in 
 # i.e. if you try to run them, you will get "Missing required input parameter"
 run_blacklist: List[str] = config_ci.get("run_blacklist", [])
 run_weekly: List[str] = config_ci.get("run_weekly", [])
+run_partial_failures: List[str] = config_ci.get("run_partial_failures", [])
 
 yml_paths_tuples_weekly = [(s, p) for (s, p) in yml_paths_tuples if s in run_weekly]
 
 yml_paths_tuples_not_blacklist_on_push = [(s, p) for (s, p) in yml_paths_tuples
                                           if s not in run_blacklist and s not in run_weekly]
+
+yml_paths_partial_failure = [(s, p) for (s, p) in yml_paths_tuples
+                             if s in run_partial_failures]
+
 # currently [vs_demo_2, vs_demo_3, vs_demo_4, elm, nmr,
 #            multistep1, multistep2, multistep3, helloworld, scattering_scaling]
 

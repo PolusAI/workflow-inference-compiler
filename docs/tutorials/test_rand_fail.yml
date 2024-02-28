@@ -6,13 +6,8 @@ steps:
       maxval: 1
       step: 0.01
       decimal_places: 2
-# - fail.yml:
-#     scatter: [fail__step__1__fail___with_probability]
-- fail:
-    scatter: [with_probability]
-    in:
-      with_probability: '*arr_float'
-      failout: '&out_thing'
+- fail.yml:
+    scatter: [fail__step__1__fail___with_probability]
 - echo:
     scatter: [message]
     in:
