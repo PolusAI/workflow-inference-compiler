@@ -10,6 +10,7 @@ from mergedeep import merge, Strategy
 import networkx as nx
 import yaml
 
+
 from . import input_output as io
 from . import inference, utils, utils_cwl, utils_graphs
 from .wic_types import (CompilerInfo, EnvData, ExplicitEdgeCalls,
@@ -767,6 +768,15 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
         steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs'].keys()))
 
+        if args.allow_partial_failures:
+            when_null_clauses = []
+            for arg_in in args_required:
+                when_null_clauses.append(f'inputs.{arg_in} != null')
+            when_clause = ' && '.join(when_null_clauses)
+            if when_null_clauses:
+                if 'when' in steps[i][step_key]:
+                    print('Warning! overwriting an existing "when" clause')
+                steps[i][step_key]['when'] = f"$({when_clause})"
         # print()
 
     # NOTE: add_subgraphs currently mutates graph

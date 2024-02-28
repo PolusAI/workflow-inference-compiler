@@ -38,8 +38,13 @@ parser.add_argument('--ignore_docker_processes', default=False, action="store_tr
                     help='Do not check whether there are too many running docker processes before running workflows.')
 parser.add_argument('--user_space_docker_cmd', default='docker',
                     help='Specify which command to use to run OCI containers.')
+
 parser.add_argument('--no_docker_remove_entrypoints', default=False, action="store_true",
                     help='Do not remove entrypoints from docker images before running workflows.')
+
+parser.add_argument('--allow_partial_failures', default=False, action="store_true",
+                    help='''Let workflows to continue with partial failures
+                    \n(i.e. run next steps after failure step by guarding for possible no input)''')
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--generate_run_script', default=False, action="store_true",

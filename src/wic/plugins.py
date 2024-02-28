@@ -30,11 +30,21 @@ class NoResolvedFilter(logging.Filter):
         return not bool(m)  # (True if m else False)
 
 
-def logging_filters() -> None:
+class NoPartialFailureNullWarning(logging.Filter):
+    # pylint:disable=too-few-public-methods
+    def filter(self, record: logging.LogRecord) -> bool:
+        err_str = "Source is from conditional step and may produce `null`"
+        # this will indiscriminately filter this error string
+        return not err_str in record.getMessage()
+
+
+def logging_filters(allow_pf: bool = False) -> None:
     logger_salad = logging.getLogger("salad")
     logger_salad.addFilter(NoPreviouslyDefinedFilter())
     logger_cwltool = logging.getLogger("cwltool")
     logger_cwltool.addFilter(NoResolvedFilter())
+    if allow_pf:
+        logger_cwltool.addFilter(NoPartialFailureNullWarning())
 
 
 def validate_cwl(cwl_path_str: str, skip_schemas: bool) -> None:
@@ -115,6 +125,48 @@ def get_tools_cwl(homedir: str, validate_plugins: bool = False,
             # print(tool)
             # utils_graphs.make_tool_dag(stem, (cwl_path_str, tool))
     return tools_cwl
+
+
+def cwl_update_outputs_optional(cwl: Cwl) -> Cwl:
+    """Updates outputs as optional (if any)
+
+    Args:
+        cwl (Cwl): A CWL CommandLineTool
+
+    Returns:
+        Cwl: A CWL CommandLineTool with outputs optional (if any)
+    """
+    cwl_mod = copy.deepcopy(cwl)
+    # Update success codes to allow simple failures
+    cwl_mod['successCodes'] = [0, 1]
+    # Update outputs optional
+    for out_key, out_val_dict in cwl_mod['outputs'].items():
+        if isinstance(out_val_dict['type'], str) and out_val_dict['type'][-1] != '?':
+            out_val_dict['type'] += '?'
+    return cwl_mod
+
+
+def cwl_update_outputs_optional_rosetree(rose_tree: RoseTree) -> RoseTree:
+    """Updates outputs optional for every CWL CommandLineTool
+
+    Args:
+        rose_tree (RoseTree): The RoseTree returned from compile_workflow(...).rose_tree
+
+    Returns:
+        RoseTree: rose_tree with output optional updates to every CWL CommandLineTool
+    """
+    n_d: NodeData = rose_tree.data
+    if n_d.compiled_cwl['class'] == 'CommandLineTool':
+        outputs_optional_cwl = cwl_update_outputs_optional(n_d.compiled_cwl)
+    else:
+        outputs_optional_cwl = n_d.compiled_cwl
+
+    sub_trees_path = [cwl_update_outputs_optional_rosetree(sub_rose_tree) for
+                      sub_rose_tree in rose_tree.sub_trees]
+    node_data_path = NodeData(n_d.namespaces, n_d.name, n_d.yml, outputs_optional_cwl, n_d.tool,
+                              n_d.workflow_inputs_file, n_d.explicit_edge_defs, n_d.explicit_edge_calls,
+                              n_d.graph, n_d.inputs_workflow, n_d.step_name_1)
+    return RoseTree(node_data_path, sub_trees_path)
 
 
 def dockerPull_append_noentrypoint(cwl: Cwl) -> Cwl:

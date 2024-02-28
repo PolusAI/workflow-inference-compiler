@@ -23,6 +23,7 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
     subwork = []
     scatter = []
     stepinp = []
+    jsreq = []
     for i, step_key in enumerate(steps_keys):
         sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
 
@@ -34,6 +35,8 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
 
         if 'scatter' in yaml_tree['steps'][i][step_key]:
             scatter = ['ScatterFeatureRequirement']
+        if 'when' in yaml_tree['steps'][i][step_key]:
+            jsreq = ['InlineJavascriptRequirement']
 
         in_step = yaml_tree['steps'][i][step_key].get('in')
         sub_wic_copy = copy.deepcopy(sub_wic)
@@ -46,9 +49,9 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
     if (not subkeys == []) or any(bools):
         subwork = ['SubworkflowFeatureRequirement']
 
-    reqs = subwork + scatter + stepinp
+    reqs = subwork + scatter + stepinp + jsreq
     if reqs:
-        reqsdict: Dict[str, Dict] = {r: {} for r in reqs}
+        reqsdict: Dict[str, Dict] = {r: {} for r in set(reqs)}
         if 'requirements' in yaml_tree:
             new_reqs = dict(list(yaml_tree['requirements'].items()) + list(reqsdict.items()))
             yaml_tree['requirements'].update(new_reqs)

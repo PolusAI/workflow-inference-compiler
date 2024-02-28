@@ -1,8 +1,9 @@
 import argparse
 import sys
 import time
-from typing import Dict
+from typing import Dict, List
 from unittest.mock import patch
+from pathlib import Path
 
 from hypothesis.strategies import SearchStrategy
 import hypothesis_jsonschema as hj
@@ -16,15 +17,14 @@ import wic.utils
 from wic.wic_types import Json, Yaml
 
 
-def get_args(yaml_path: str = '', cwl_inline_subworkflows: bool = False) -> argparse.Namespace:
-    """This is used to get mock command line arguments.
+def get_args(yaml_path: str = '', suppliedargs: List[str] = []) -> argparse.Namespace:
+    """This is used to get mock command line arguments, default + suppled args
 
     Returns:
         argparse.Namespace: The mocked command line arguments
     """
-    testargs = ['wic', '--yaml', yaml_path, '--cwl_output_intermediate_files', 'True']  # ignore --yaml
-    if cwl_inline_subworkflows:
-        testargs.append("--cwl_inline_subworkflows")
+    defaultargs = ['wic', '--yaml', yaml_path, '--cwl_output_intermediate_files', 'True']  # ignore --yaml
+    testargs = defaultargs + suppliedargs
     # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
     with patch.object(sys, 'argv', testargs):
         args: argparse.Namespace = wic.cli.parser.parse_args()
@@ -41,6 +41,8 @@ validator = wic.schemas.wic_schema.get_validator(tools_cwl, yaml_stems, schema_s
 yml_paths_tuples = [(yml_path_str, yml_path)
                     for yml_namespace, yml_paths_dict in yml_paths.items()
                     for yml_path_str, yml_path in yml_paths_dict.items()]
+
+yml_paths_partial_failure = [('examples/test_rand_fail.yml', Path('examples/test_rand_fail.yml'))]
 
 for yml_path_str, yml_path in yml_paths_tuples:
     schema = wic.schemas.wic_schema.compile_workflow_generate_schema(args.homedir, yml_path_str, yml_path,

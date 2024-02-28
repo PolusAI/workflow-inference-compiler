@@ -28,11 +28,10 @@ inputs:
   with_probability:
     type: float
     default: 0.01  # i.e. 1%
-
+  failout:
+    type: string?
 outputs:
-  stdout:
-    type: File
+  failout:
+    type: string
     outputBinding:
-      glob: stdout
-
-stdout: stdout
+      outputEval: $("not fail")

@@ -139,7 +139,8 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         # See https://github.com/dnanexus/dx-cwl/issues/20
         # --outdir has one or more bugs which will cause workflows to fail!!!
         docker_pull = ['--disable-pull']  # Use cwl-docker-extract to pull images
-        cmd = ['cwltool_filterlog'] + docker_pull + parallel + quiet + cachedir_ + net + provenance + \
+        script = 'cwltool_filterlog_pf' if args.allow_partial_failures else 'cwltool_filterlog'
+        cmd = [script] + docker_pull + parallel + quiet + cachedir_ + net + provenance + \
             docker_cmd_ + write_summary + skip_schemas + path_check
         cmd += ['--leave-outputs',
                 # '--js-console', # "Running with support for javascript console in expressions (DO NOT USE IN PRODUCTION)"
@@ -333,8 +334,16 @@ def stage_input_files(yml_inputs: Yaml, root_yml_dir_abs: Path,
 
 
 def cwltool_main() -> int:
-    """Another entrypoint for filtering logged output"""
+    """Another entrypoint for filtering regular logged output"""
     logging_filters()
+    cmd = sys.argv
+    retval: int = cwltool.main.main(cmd[1:])
+    return retval
+
+
+def cwltool_main_pf() -> int:
+    """Another entrypoint for filtering partial failures logged output"""
+    logging_filters(True)
     cmd = sys.argv
     retval: int = cwltool.main.main(cmd[1:])
     return retval
