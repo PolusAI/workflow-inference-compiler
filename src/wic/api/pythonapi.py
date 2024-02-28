@@ -11,16 +11,11 @@ import cwl_utils.parser as cu_parser
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr  # pylint: disable=E0611
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from wic.api._compat import PYDANTIC_V2
 from wic.api._types import CWL_TYPES_DICT
 
-if PYDANTIC_V2:
-    from pydantic import field_validator  # pylint: disable=E0611, C0412
-else:
-    from pydantic import validator
 
 logger = logging.getLogger("WIC Python API")
 
@@ -80,38 +75,19 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
             required = True
         super().__init__(inp_type=inp_type, name=cwl_inp.id, required=required)
 
-    if PYDANTIC_V2:
-        @field_validator("name", mode="before")
-        # type: ignore
-        @classmethod
-        def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
-            """Return name of input from InputParameter.id."""
-            return cwl_id.split("#")[-1]
+    @field_validator("name", mode="before")
+    @classmethod
+    def get_name_from_id(cls, cwl_id: str) -> Any:
+        """Return name of input from InputParameter.id."""
+        return cwl_id.split("#")[-1]
 
-        @field_validator("inp_type", mode="before")
-        # type: ignore
-        @classmethod
-        def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
-            """Return inp_type."""
-            if isinstance(inp, list):  # optional inps
-                inp = inp[1]
-            return CWL_TYPES_DICT[inp]
-    else:
-        @validator("name")
-        # type: ignore
-        @classmethod
-        def get_name_from_id(cls, cwl_id) -> Any:  # pylint: disable=no-self-argument
-            """Return name of input from InputParameter.id."""
-            return cwl_id.split("#")[-1]
-
-        @validator("inp_type")
-        # type: ignore
-        @classmethod
-        def set_inp_type(cls, inp) -> object:  # pylint: disable=no-self-argument
-            """Return inp_type."""
-            if isinstance(inp, list):  # optional inps
-                inp = inp[1]
-            return CWL_TYPES_DICT[inp]
+    @field_validator("inp_type", mode="before")
+    @classmethod
+    def set_inp_type(cls, inp: Any) -> Any:
+        """Return inp_type."""
+        if isinstance(inp, list):  # optional inps
+            inp = inp[1]
+        return CWL_TYPES_DICT[inp]
 
     def _set_value(
         self, __value: Any, check: bool = True, linked: bool = False
@@ -179,11 +155,7 @@ def _(val: bool) -> bool:
 
 class Step(BaseModel):  # pylint: disable=too-few-public-methods
     """Base class for Step of Workflow."""
-    if PYDANTIC_V2:
-        model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
-    else:
-        class Config:  # pylint: disable=too-few-public-methods
-            arbitrary_types_allowed = True
+    model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
 
     clt: CWLCommandLineTool
     clt_path: Path
@@ -226,29 +198,19 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         if config_path:
             self._set_from_io_cfg()
 
-    if PYDANTIC_V2:
-        @field_validator("inputs", mode="before")
-        @classmethod
-        def cast_to_clt_input_model(
-            cls, cwl_inps: list[CWLInputParameter]
-        ) -> list[CLTInput]:  # pylint: disable=no-self-argument
-            """Populate inputs from cwl.inputs."""
-            return [CLTInput(x) for x in cwl_inps]
-    else:
-        @validator("inputs", pre=True)
-        # type: ignore
-        @classmethod
-        def cast_to_clt_input_model(
-            cls, cwl_inps: list[CWLInputParameter]
-        ):  # pylint: disable=no-self-argument
-            """Populate inputs from cwl.inputs."""
-            return [CLTInput(x) for x in cwl_inps]
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def cast_to_clt_input_model(
+        cls, cwl_inps: list[CWLInputParameter]
+    ) -> list[CLTInput]:
+        """Populate inputs from cwl.inputs."""
+        return [CLTInput(x) for x in cwl_inps]
 
     def __repr__(self) -> str:
         repr_ = f"Step(clt_path={self.clt_path.__repr__()})"
         return repr_
 
-    def __setattr__(self, __name: str, __value: Any) -> Any:  # pylint: disable=R1710
+    def __setattr__(self, __name: str, __value: Any) -> Any:
         if __name in ["inputs", "yaml", "cfg_yaml", "clt_name", "_input_names",
                       "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
@@ -293,21 +255,15 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         else:
             return super().__setattr__(__name, __value)
 
-    if PYDANTIC_V2:
-        def __getattr__(self, __name: str) -> Any:
-            if __name in ["__pydantic_private__", "__class__", "__private_attributes__"]:
-                return super().__getattribute__(__name)
-            if __name != "_input_names" and __name in self._input_names:
-                return self.inputs[self._input_names.index(__name)]
-            # pydantic has BaseModel.__getattr__ in a
-            # non-TYPE_CHECKING block so mypy doesn't see it
-            return super().__getattr__(__name)  # type: ignore
-    else:
-        def __getattribute__(self, __name: str) -> Any:
-            if __name != "_input_names" and hasattr(self, "_input_names"):
-                if __name in self._input_names:
-                    return self.inputs[self._input_names.index(__name)]
+    def __getattr__(self, __name: str) -> Any:
+        if __name in ["__pydantic_private__", "__class__", "__private_attributes__"]:
             return super().__getattribute__(__name)
+        if __name != "_input_names" and __name in self._input_names:  # and hasattr(self, "_input_names") ?
+            return self.inputs[self._input_names.index(__name)]
+        # https://github.com/pydantic/pydantic/blob/812516d71a8696d5e29c5bdab40336d82ccde412/pydantic/main.py#L743-744
+        # "We put `__getattr__` in a non-TYPE_CHECKING block because otherwise, mypy allows arbitrary attribute access
+        # The same goes for __setattr__ and __delattr__, see: https://github.com/pydantic/pydantic/issues/8643"
+        return super().__getattr__(__name)  # type: ignore
 
     def _set_from_io_cfg(self) -> None:
         for name, value in self.cfg_yaml.items():
@@ -343,18 +299,14 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
             file.write(yaml.dump(self.yaml))
 
 
-if PYDANTIC_V2:
-    DATACLASS_CONFIG = ConfigDict(validate_assignment=True)
-else:
-    # mypy marks this incorrect if Pydantic V2
-    DATACLASS_CONFIG = ConfigDict(validate_on_init=True, validate_assignment=True)  # type: ignore
+DATACLASS_CONFIG = ConfigDict(validate_assignment=True)
 
 
 @pydantic_dataclass(config=DATACLASS_CONFIG)
 class Workflow:
     steps: list[Step]
     name: str
-    yml_path: Optional[Path] = field(default=None, init=False, repr=False)  # pylint: disable=E3701
+    yml_path: Optional[Path] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         for s in self.steps:

@@ -50,7 +50,8 @@ repos:
     hooks:
     -   id: mypy
         args: [--no-strict-optional, --ignore-missing-imports]
-        additional_dependencies: # Copied from setup.cfg
+        additional_dependencies: # Copied from pyproject.toml
+        - pydantic  # so we can enable the pydantic.mypy plugin
         - lxml-stubs
         - types-Pillow
         - types-PyYAML
@@ -60,6 +61,7 @@ repos:
         - types-docutils
         - types-jsonschema
         - types-psutil
+        - types-html5lib
         - types-python-jose
         - types-pytz
         - types-redis
