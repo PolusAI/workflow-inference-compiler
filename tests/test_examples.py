@@ -6,8 +6,6 @@ import sys
 from typing import List
 import argparse
 
-import graphviz
-import networkx as nx
 import pytest
 import yaml
 from networkx.algorithms import isomorphism
@@ -22,7 +20,8 @@ import wic.utils
 import wic.ast
 import wic.plugins
 from wic import auto_gen_header
-from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree, Json
+from wic.wic_types import NodeData, StepId, Yaml, YamlTree, Json
+from wic.utils_graphs import get_graph_reps
 
 from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tuples
 from .test_setup import yml_paths_partial_failure
@@ -88,22 +87,6 @@ def is_isomorphic_with_timeout(g_m: isomorphism.GraphMatcher, yml_path_str: str)
         signal.alarm(10)  # timeout after 10 seconds
         assert g_m.is_isomorphic()  # See top-level comment above!
         signal.alarm(0)  # Disable the alarm
-
-
-def get_graph_reps(name: str) -> GraphReps:
-    """Initialize graph representations
-
-    Args:
-        name (str): The name of the graph
-
-    Returns:
-        GraphReps: A tuple of graph representations
-    """
-    graph_gv = graphviz.Digraph(name=f'cluster_{name}')
-    graph_gv.attr(newrank='True')
-    graph_nx = nx.DiGraph()
-    graphdata = GraphData(str(name))
-    return GraphReps(graph_gv, graph_nx, graphdata)
 
 
 @pytest.mark.slow
