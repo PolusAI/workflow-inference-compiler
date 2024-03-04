@@ -355,7 +355,7 @@ class Workflow:
             (in the Rose Tree) together with mutable cumulative environment\n
             information which needs to be passed through the recursion.
         """
-        args = get_args()  # Use mock CLI args
+        args = get_args(self.name)  # Use mock CLI args
 
         # We do NOT need to save anything to disk
         tools_cwl = plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
@@ -381,7 +381,7 @@ class Workflow:
         logger.info(f"Running {self.name}")
         compiler_info = self.compile(write_to_disk=True)
 
-        args = get_args()  # Use mock CLI args
+        args = get_args(self.name)  # Use mock CLI args
         rose_tree: RoseTree = compiler_info.rose
         # Do NOT capture stdout and/or stderr and pipe warnings and errors into a black hole.
         retval = run_local_module.run_local(args, rose_tree, None, 'cwltool', True)
