@@ -1,17 +1,16 @@
 # pylint: disable=W1203
 """CLT utilities."""
 import logging
-from dataclasses import field
 from functools import singledispatch
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser
 import yaml
+from mergedeep import merge, Strategy
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
-from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from wic.api._types import CWL_TYPES_DICT
 from wic import compiler, input_output, plugins
@@ -58,22 +57,23 @@ CWLInputParameter = Union[
 StrPath = TypeVar("StrPath", str, Path)
 
 
-class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
-    """Input of CLT."""
+class ProcessInput(BaseModel):  # pylint: disable=too-few-public-methods
+    """Input of CWL CommandLineTool or Workflow."""
 
     inp_type: Any
     name: str
+    # NOTE: Not optional, but we can't initialize it yet
+    parent_obj: Any = Field(default=None)  # Process: Union[Step, Workflow]
     value: Any = Field(default=None)  # validation happens at assignment
     required: bool = True
     linked: bool = False
 
-    def __init__(self, cwl_inp: CWLInputParameter) -> None:
-        inp_type = cwl_inp.type_  # NOTE: .type in version 0.31 only!
+    def __init__(self, name: str, inp_type: Any) -> None:
         if isinstance(inp_type, list) and "null" in inp_type:
             required = False
         else:
             required = True
-        super().__init__(inp_type=inp_type, name=cwl_inp.id, required=required)
+        super().__init__(inp_type=inp_type, name=name, required=required)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -94,7 +94,8 @@ class CLTInput(BaseModel):  # pylint: disable=too-few-public-methods
     ) -> None:
         """Set input value."""
         if check:
-            if not isinstance(__value, self.inp_type):
+            # NOTE: "TypeError: typing.Any cannot be used with isinstance()"
+            if not self.inp_type == Any and not isinstance(__value, self.inp_type):
                 raise TypeError(
                     f"invalid attribute type for {self.name}: "
                     f"got {__value.__class__.__name__}, "
@@ -152,6 +153,64 @@ def _(val: float) -> float:
 def _(val: bool) -> bool:
     return val
 
+# Process = Union[Step, Workflow]
+
+
+def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any:
+    index = process_self._input_names.index(__name)
+    if isinstance(__value, ProcessInput):
+        process_other = __value.parent_obj
+        if not __value.linked:
+            try:
+                local_input = process_self.inputs[index]
+                # NOTE: Relax exact equality for Any type
+                if not local_input.inp_type == __value.inp_type and not local_input.inp_type == Any and not __value.inp_type == Any:
+                    raise InvalidLinkError(
+                        f"links must have the same input type. "
+                        f"cannot link {local_input.name} to {__value.name}"
+                        f"with types {local_input.inp_type} to {__value.inp_type}"
+                    )
+                if isinstance(process_other, Workflow):
+                    tmp = __value.name  # Use the formal parameter / variable name
+                    local_input._set_value(f"~{tmp}", check=False, linked=True)
+                    __value._set_value(f"{tmp}", check=False, linked=True)
+                else:
+                    # Use the current value so we can exactly reproduce hand-crafted yml files.
+                    # (Very useful for regression testing!)
+                    # NOTE: process_name is either clt name or workflow name
+                    tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
+                    local_input._set_value(f"*{tmp}", check=False, linked=True)
+                    __value._set_value(f"&{tmp}", check=False, linked=True)
+            except BaseException as exc:
+                raise exc
+        else:  # value is already linked to another inp
+            try:
+                local_input = process_self.inputs[index]
+                # NOTE: Relax exact equality for Any type
+                if not local_input.inp_type == __value.inp_type and not local_input.inp_type == Any and not __value.inp_type == Any:
+                    raise InvalidLinkError(
+                        f"links must have the same input type. "
+                        f"cannot link {local_input.name} to {__value.name} "
+                        f"with types {local_input.inp_type} to {__value.inp_type}"
+                    )
+                if isinstance(process_other, Workflow):
+                    tmp = __value.name  # Use the formal parameter / variable name
+                    local_input._set_value(f"~{tmp}", check=False, linked=True)
+                    __value._set_value(f"{tmp}", check=False, linked=True)
+                else:
+                    current_value = __value.value
+                    local_input._set_value(
+                        current_value.replace("&", "*"), check=False, linked=True
+                    )
+            except BaseException as exc:
+                raise exc
+
+    else:
+        if isinstance(__value, str) and _is_link(__value):
+            process_self.inputs[index]._set_value(__value, check=False)
+        else:
+            process_self.inputs[index]._set_value(__value)
+
 
 class Step(BaseModel):  # pylint: disable=too-few-public-methods
     """Base class for Step of Workflow."""
@@ -159,9 +218,9 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
 
     clt: CWLCommandLineTool
     clt_path: Path
-    clt_name: str
+    process_name: str
     cwl_version: str
-    inputs: list[CLTInput]
+    inputs: list[ProcessInput]
     yaml: dict[str, Any]
     cfg_yaml: dict = Field(default_factory=_default_dict)
     _input_names: list[str] = PrivateAttr(default_factory=list)
@@ -210,75 +269,43 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                 cfg_yaml = yaml.safe_load(file)
         else:
             cfg_yaml = _default_dict()  # redundant, to avoid it being unbound
-        clt_name = clt_path_.stem
+        process_name = clt_path_.stem
         data = {
             "clt": clt,
             "clt_path": clt_path_,
             "cwl_version": clt.cwlVersion,
-            "clt_name": clt_name,
+            "process_name": process_name,
             "inputs": clt.inputs,
             "yaml": yaml_file,
             "cfg_yaml": cfg_yaml,
         }
         super().__init__(**data)
+        for inp in self.inputs:
+            inp.parent_obj = self  # Create a reference to the parent Step object
         self._input_names = [inp.id.split("#")[-1] for inp in clt.inputs]
         if config_path:
             self._set_from_io_cfg()
 
     @field_validator("inputs", mode="before")
     @classmethod
-    def cast_to_clt_input_model(
+    def cast_to_process_input_model(
         cls, cwl_inps: list[CWLInputParameter]
-    ) -> list[CLTInput]:
+    ) -> list[ProcessInput]:
         """Populate inputs from cwl.inputs."""
-        return [CLTInput(x) for x in cwl_inps]
+        # NOTE: .type in version 0.31 only!
+        # NOTE: Cannot initialize .parent_obj = self here due to @classmethod
+        return [ProcessInput(str(x.id), x.type_) for x in cwl_inps]
 
     def __repr__(self) -> str:
         repr_ = f"Step(clt_path={self.clt_path.__repr__()})"
         return repr_
 
     def __setattr__(self, __name: str, __value: Any) -> Any:
-        if __name in ["inputs", "yaml", "cfg_yaml", "clt_name", "_input_names",
+        if __name in ["inputs", "yaml", "cfg_yaml", "process_name", "_input_names",
                       "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
         if hasattr(self, "_input_names") and __name in self._input_names:
-            index = self._input_names.index(__name)
-            if isinstance(__value, CLTInput):
-                if not __value.linked:
-                    try:
-                        local_input = self.inputs[index]
-                        if not local_input.inp_type == __value.inp_type:
-                            raise InvalidLinkError(
-                                f"links must have the same input type. "
-                                f"cannot link {local_input.name} to {__value.name}"
-                            )
-                        # Use the current value so we can exactly reproduce hand-crafted yml files.
-                        # (Very useful for regression testing!)
-                        tmp = __value.value if __value.value else f"{__name}{self.clt_name}"
-                        local_input._set_value(f"*{tmp}", check=False, linked=True)
-                        __value._set_value(f"&{tmp}", check=False, linked=True)
-                    except BaseException as exc:
-                        raise exc
-                else:  # value is already linked to another inp
-                    try:
-                        local_input = self.inputs[index]
-                        if not local_input.inp_type == __value.inp_type:
-                            raise InvalidLinkError(
-                                f"links must have the same input type. "
-                                f"cannot link {local_input.name} to {__value.name}"
-                            )
-                        current_value = __value.value
-                        local_input._set_value(
-                            current_value.replace("&", "*"), check=False, linked=True
-                        )
-                    except BaseException as exc:
-                        raise exc
-
-            else:
-                if isinstance(__value, str) and _is_link(__value):
-                    self.inputs[index]._set_value(__value, check=False)
-                else:
-                    self.inputs[index]._set_value(__value)
+            set_input_Step_Workflow(self, __name, __value)
         else:
             return super().__setattr__(__name, __value)
 
@@ -305,7 +332,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
     @property
     def _yml(self) -> dict:
         d = {
-            self.clt_name: {
+            self.process_name: {
                 "in": {
                     inp.name: _yaml_value(inp.value)
                     for inp in self.inputs
@@ -319,7 +346,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         cwl_adapters = path.joinpath("cwl_adapters")
         cwl_adapters.mkdir(exist_ok=True, parents=True)
         with open(
-            cwl_adapters.joinpath(f"{self.clt_name}.cwl"),
+            cwl_adapters.joinpath(f"{self.process_name}.cwl"),
             "w",
             encoding="utf-8",
         ) as file:
@@ -336,38 +363,162 @@ def extract_tools_paths_NONPORTABLE(steps: list[Step]) -> Tools:
         Tools: A Tools object, which is just a dictionary mapping a globally unique
         (i.e. portable) identifier to a system-dependendent Path.
     """
-    return {StepId(step.clt_name, 'global'): Tool(str(step.clt_path), step.yaml) for step in steps}
+    return {StepId(step.process_name, 'global'): Tool(str(step.clt_path), step.yaml) for step in steps}
 
 
-DATACLASS_CONFIG = ConfigDict(validate_assignment=True)
+# Analogous to cu_parser.Process, we want to create our own Union. However,
+# Process = Union[Step, Workflow]  # Cannot define Process before Workflow
 
 
-@pydantic_dataclass(config=DATACLASS_CONFIG)
-class Workflow:
-    steps: list[Step]
-    name: str
-    yml_path: Optional[Path] = field(default=None, init=False, repr=False)
+class Workflow(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
+
+    steps: list  # list[Process]  # and cannot use Process defined after Workflow within a Workflow
+    process_name: str
+    inputs: list[ProcessInput] = []
+    _input_names: list[str] = PrivateAttr(default_factory=list)
+    yml_path: Optional[Path] = Field(default=None)
+    # Cannot use field() from dataclasses. Otherwise:
+    # from dataclasses import field
+    # field(default=None, init=False, repr=False)
+    # TypeError: 'ModelPrivateAttr' object is not iterable
+
+    def __init__(self, steps: list, workflow_name: str):
+        data = {
+            "process_name": workflow_name,
+            "steps": steps,
+        }
+        super().__init__(**data)
 
     def __post_init__(self) -> None:
+        self._validate()
+
+    def _validate(self) -> None:
+        # Only the root workflow should have all required inputs and can be validated.
+        # Cannot validate subworkflows because by definition,
+        # subworkflows will NOT have all required inputs.
         for s in self.steps:
             try:
-                s._validate()  # pylint: disable=W0212
+                if isinstance(s, Step):
+                    s._validate()  # pylint: disable=W0212
+                if isinstance(s, Workflow):
+                    # recursively validate subworkflows ?
+                    s._validate()  # pylint: disable=W0212
             except BaseException as exc:
                 raise InvalidStepError(
-                    f"{s.clt_name} is missing required inputs"
+                    f"{s.process_name} is missing required inputs"
                 ) from exc
 
     def append(self, step_: Step) -> None:
         """Append step to Workflow."""
-        if not isinstance(step_, Step):
-            raise TypeError("step must be a Step")
+        if not isinstance(step_, (Step, Workflow)):
+            raise TypeError("step must be either a Step or a Workflow")
         self.steps.append(step_)
 
     @property
     def yaml(self) -> dict[str, Any]:
-        """WIC YML representation."""
-        d = {"steps": [step._yml for step in self.steps]}  # pylint: disable=W0212
-        return d
+        """Converts a Workflow to the equivalent underlying WIC YML representation, in-memory."""
+        # NOTE: Use the CWL v1.2 `Any` type for lack of actual type information.
+        # TODO: try inp.inp_type (if initialized?)
+        inputs: dict[str, Any] = {inp.name: {'type': 'Any'} for inp in self.inputs}
+        steps = []
+        for s in self.steps:
+            if isinstance(s, Step):
+                steps.append(s._yml)
+            elif isinstance(s, Workflow):
+                ins = {
+                    inp.name: _yaml_value(inp.value)
+                    for inp in s.inputs
+                    if inp.value is not None  # Subworkflow args are not required
+                }
+                parentargs: dict[str, Any] = {"in": ins} if ins else {}
+                # See the second to last line of ast.read_ast_from_disk()
+                d = {'subtree': s.yaml,  # recursively call .yaml (i.e. on s, not self)
+                     'parentargs': parentargs}
+                steps.append({s.process_name + '.yml': d})
+            #  else: ...
+        yaml_contents = {"inputs": inputs, "steps": steps} if inputs else {"steps": steps}
+        return yaml_contents
+
+    def write_ast_to_disk(self, directory: Path) -> None:
+        """Converts a Workflow to the equivalent underlying WIC YML representation,
+        and writes each subworkflow to disk as a separate yml file.
+
+        Args:
+            directory (Path): The directory to write the yml file(s).
+        """
+        # NOTE: Use the CWL v1.2 `Any` type for lack of actual type information.
+        # TODO: try inp.inp_type (if initialized?)
+        inputs: dict[str, Any] = {inp.name: {'type': 'Any'} for inp in self.inputs}
+        steps = []
+        for s in self.steps:
+            if isinstance(s, Step):
+                steps.append(s._yml)
+            elif isinstance(s, Workflow):
+                ins = {
+                    inp.name: _yaml_value(inp.value)
+                    for inp in s.inputs
+                    if inp.value is not None  # Subworkflow args are not required
+                }
+                parentargs: dict[str, Any] = {"in": ins} if ins else {}
+                s.write_ast_to_disk(directory)  # recursively call
+                steps.append({s.process_name + '.yml': parentargs})
+            #  else: ...
+        yaml_contents = {"inputs": inputs, "steps": steps} if inputs else {"steps": steps}
+        # NOTE: For various reasons, process_name should be globally unique.
+        # In this case, it is to avoid overwriting files.
+        with open(str(directory / self.process_name) + '.yml', mode='w', encoding='utf-8') as f:
+            f.write(yaml.dump(yaml_contents, sort_keys=False, line_break='\n', indent=2))
+
+    def add_input(self, __name: str) -> Any:
+        # Assume the user wants to auto-generate an input on the fly
+        # Ideally, we need to figure out how to distinguish whether an attribute
+        # workflow = Workflow(...)
+        # workflow.foo
+        # workflow.bar
+        # is an explicit input and/or
+        # workflow.workflowname__step__1__stepname
+        # an auto-generated internal name
+        # (See https://workflow-inference-compiler.readthedocs.io/en/latest/dev/algorithms.html#namespacing)
+        # or if it is just a regular python field/method, etc.
+        # workflow.__repr__
+        # (and thus has nothing to do with CWL and should NOT be added as an input)
+        # For now, let's completely ignore that distinction, and hopefully
+        # the user never wants to get or set built-in python attributes!
+        logger.warning(f'Adding a new input {__name} to workflow {self.process_name}')
+        self._input_names.append(__name)
+        inp = ProcessInput(__name, 'Any')  # Use Any type
+        inp.parent_obj = self  # Create a reference to the parent Workflow object
+        self.inputs.append(inp)
+        return inp
+
+    # def __repr__(self) -> str:
+    #     repr_ = ...
+    #     return repr_
+
+    def __setattr__(self, __name: str, __value: Any) -> Any:
+        if __name in ["inputs", "yaml", "cfg_yaml", "process_name", "_input_names",
+                      "__private_attributes__", "__pydantic_private__"]:
+            return super().__setattr__(__name, __value)
+        if hasattr(self, "_input_names"):
+            if __name not in self._input_names:
+                self.add_input(__name)
+            set_input_Step_Workflow(self, __name, __value)
+        else:
+            return super().__setattr__(__name, __value)
+
+    def __getattr__(self, __name: str) -> Any:
+        if __name in ["__pydantic_private__", "__class__", "__private_attributes__"]:
+            return super().__getattribute__(__name)
+        if __name != "_input_names":  # and hasattr(self, "_input_names") ?
+            if __name in self._input_names:
+                return self.inputs[self._input_names.index(__name)]
+            else:
+                return self.add_input(__name)
+        # https://github.com/pydantic/pydantic/blob/812516d71a8696d5e29c5bdab40336d82ccde412/pydantic/main.py#L743-744
+        # "We put `__getattr__` in a non-TYPE_CHECKING block because otherwise, mypy allows arbitrary attribute access
+        # The same goes for __setattr__ and __delattr__, see: https://github.com/pydantic/pydantic/issues/8643"
+        return super().__getattr__(__name)  # type: ignore
 
     def _save_yaml(self) -> None:
         _WIC_PATH.mkdir(parents=True, exist_ok=True)
@@ -383,9 +534,38 @@ class Workflow:
         _WIC_PATH.mkdir(parents=True, exist_ok=True)
         for s in self.steps:
             try:
-                s._save_cwl(_WIC_PATH)  # pylint: disable=W0212
+                if isinstance(s, Step):
+                    s._save_cwl(_WIC_PATH)  # pylint: disable=W0212
             except BaseException as exc:
                 raise exc
+
+    def flatten_steps(self) -> list[Step]:
+        """Flattens all Steps into a linear list. This is similar, but different, from inlineing.
+
+        Returns:
+            list[Step]: a linear list of Steps
+        """
+        steps = []
+        for step in self.steps:
+            if isinstance(step, Step):
+                steps.append(step)
+            if isinstance(step, Workflow):
+                steps += step.flatten_steps()
+        return steps
+
+    # NOTE: Cannot return list[Workflow] because Workflow is not yet defined.
+    def flatten_subworkflows(self) -> list:
+        """Flattens all sub-Workflows into a linear list. The root workflow will be at index 0,
+        i.e. to get a list of all proper subworkflows, just use [1:]
+
+        Returns:
+            list: a linear list of sub-Workflows.
+        """
+        subworkflows = [self]
+        for step in self.steps:
+            if isinstance(step, Workflow):
+                subworkflows += step.flatten_subworkflows()
+        return subworkflows
 
     def compile(self, write_to_disk: bool = False) -> CompilerInfo:
         """Compile Workflow using WIC.
@@ -398,12 +578,16 @@ class Workflow:
             (in the Rose Tree) together with mutable cumulative environment\n
             information which needs to be passed through the recursion.
         """
-        args = get_args(self.name)  # Use mock CLI args
+        global global_config
+        self._validate()
+        args = get_args(self.process_name)  # Use mock CLI args
 
-        graph = get_graph_reps(self.name)
-        # NOTE: Once the Workflow class supports subworkflows, we will need to
-        # recursively convert sub-Workflows to YamlTrees here.
-        yaml_tree = YamlTree(StepId(self.name, 'global'), self.yaml)
+        graph = get_graph_reps(self.process_name)
+        yaml_tree = YamlTree(StepId(self.process_name, 'global'), self.yaml)
+
+        # NOTE: This is critical for control flow in the compiler. See utils.get_subkeys()
+        steps_config = extract_tools_paths_NONPORTABLE(self.flatten_steps())
+        global_config = merge(steps_config, global_config, strategy=Strategy.TYPESAFE_REPLACE)
 
         # The compile_workflow function is 100% in-memory
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {}, {},
@@ -418,10 +602,11 @@ class Workflow:
 
     def run(self) -> None:
         """Run compiled workflow."""
-        logger.info(f"Running {self.name}")
+        logger.info(f"Running {self.process_name}")
+        plugins.logging_filters()
         compiler_info = self.compile(write_to_disk=True)
 
-        args = get_args(self.name)  # Use mock CLI args
+        args = get_args(self.process_name)  # Use mock CLI args
         rose_tree: RoseTree = compiler_info.rose
 
         # If you don't like it, you can programmatically overwrite anything in args
@@ -437,4 +622,6 @@ class Workflow:
             input_output.write_to_disk(rose_tree, Path('autogenerated/'), relative_run_path=True)
 
         # Do NOT capture stdout and/or stderr and pipe warnings and errors into a black hole.
-        retval = run_local_module.run_local(args, rose_tree, None, 'cwltool', True)
+        retval = run_local_module.run_local(args, rose_tree, args.cachedir, 'cwltool', False)
+
+# Process = Union[Step, Workflow]
