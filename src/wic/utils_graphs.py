@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List
 
 import graphviz
+import networkx as nx
 
 from .wic_types import (GraphData, GraphReps, Json, Namespaces, Tool, Tools)
 
@@ -224,3 +225,19 @@ def add_subgraphs(args: argparse.Namespace,
             nodes_same_rank = '\t{rank=same; ' + '; '.join(steps_ranksame) + '}\n'
             graph_gv.body.append(nodes_same_rank)
             graph.graphdata.ranksame = steps_ranksame
+
+
+def get_graph_reps(name: str) -> GraphReps:
+    """Initialize graph representations
+
+    Args:
+        name (str): The name of the graph
+
+    Returns:
+        GraphReps: A tuple of graph representations
+    """
+    graph_gv = graphviz.Digraph(name=f'cluster_{name}')
+    graph_gv.attr(newrank='True')
+    graph_nx = nx.DiGraph()
+    graphdata = GraphData(str(name))
+    return GraphReps(graph_gv, graph_nx, graphdata)
