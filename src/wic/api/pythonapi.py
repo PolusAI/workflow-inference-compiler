@@ -19,7 +19,7 @@ from wic import compiler, input_output, plugins
 from wic import run_local as run_local_module
 from wic.schemas.wic_schema import get_args
 from wic.utils_graphs import get_graph_reps
-from wic.wic_types import CompilerInfo, RoseTree, StepId, YamlTree
+from wic.wic_types import CompilerInfo, RoseTree, StepId, Tool, Tools, YamlTree
 
 
 logger = logging.getLogger("WIC Python API")
@@ -297,6 +297,19 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
             file.write(yaml.dump(self.yaml))
 
 
+def extract_tools_paths_NONPORTABLE(steps: list[Step]) -> Tools:
+    """extract a Tools global configuration object from the NONPORTABLE paths hardcoded in the Steps.
+
+    Args:
+        steps (list[Step]): A list of Steps.
+
+    Returns:
+        Tools: A Tools object, which is just a dictionary mapping a globally unique
+        (i.e. portable) identifier to a system-dependendent Path.
+    """
+    return {StepId(step.clt_name, 'global'): Tool(str(step.clt_path), step.yaml) for step in steps}
+
+
 DATACLASS_CONFIG = ConfigDict(validate_assignment=True)
 
 
@@ -358,13 +371,16 @@ class Workflow:
         """
         args = get_args(self.name)  # Use mock CLI args
 
-        # We do NOT need to save anything to disk
-        tools_cwl = plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
-
         graph = get_graph_reps(self.name)
         # NOTE: Once the Workflow class supports subworkflows, we will need to
         # recursively convert sub-Workflows to YamlTrees here.
         yaml_tree = YamlTree(StepId(self.name, 'global'), self.yaml)
+
+        # We do NOT need to save anything to disk
+        # If we don't care about portability,
+        # we also don't need to READ anything from disk.
+        # tools_cwl: Tools = plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
+        tools_cwl: Tools = extract_tools_paths_NONPORTABLE(self.steps)
 
         # The compile_workflow function is 100% in-memory
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {}, {},
