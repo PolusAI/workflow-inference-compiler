@@ -1,0 +1,7 @@
+# This is not a stand alone workflow (part of test_rand_fail)
+steps:
+- fail:
+    # scatter: [with_probability]
+    in:
+      with_probability: '*arr_float'
+      failout: '&out_thing'

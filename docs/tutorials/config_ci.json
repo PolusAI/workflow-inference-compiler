@@ -10,7 +10,12 @@
     // NOTE: Most of the workflows in this list have free variables because they are subworkflows
     // i.e. if you try to run them, you will get "Missing required input parameter"
     "run_blacklist": [
-        "fix_protein"
+        "fix_protein",
+        "fail",
+        "test_rand_fail"
+    ],
+    "run_partial_failures": [
+        "test_rand_fail"
     ],
     // Run computationally intensive stress tests weekly.
     // e.g. these workflows should scatter over much larger input arrays.
