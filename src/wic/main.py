@@ -20,18 +20,37 @@ def main() -> None:
     args = cli.parser.parse_args()
     plugins.logging_filters()
 
-    tools_cwl = plugins.get_tools_cwl(args.homedir,
+    # User may specify a different homedir
+    default_config_file = Path(args.homedir)/'wic'/'global_config.json'
+    global_config: Json = {}
+    if not Path(args.config_file).exists():
+        if Path(args.config_file) == default_config_file:
+            global_config = io.get_default_config()
+            # write the default config object to the 'global_config.json' file in user's ~/wic directory
+            # for user to inspect and or modify the config json file
+            io.write_config_to_disk(global_config, default_config_file)
+            print(f'default config file : {default_config_file} generated')
+        else:
+            print(f"Error user specified config file {args.config_file} doesn't exist")
+            sys.exit()
+    else:
+        # reading user specified config file only if it exists
+        # never overwrite user's config file or generate another file in user's non-default directory
+        # TODO : Validate the json inside 'read_config_from_disk' function
+        global_config = io.read_config_from_disk(Path(args.config_file))
+
+    tools_cwl = plugins.get_tools_cwl(global_config,
                                       args.validate_plugins,
                                       not args.no_skip_dollar_schemas,
                                       args.quiet)
     # This takes ~1 second but it is not really necessary.
     # utils_graphs.make_plugins_dag(tools_cwl, args.graph_dark_theme)
-    yml_paths = plugins.get_yml_paths(args.homedir)
+    # pass around config object instead of reading from the disk!
+    yml_paths = plugins.get_yml_paths(global_config)
 
     # Perform initialization via mutating global variables (This is not ideal)
-    wicdir = Path(args.homedir) / 'wic'
-    compiler.inference_rules = dict(io.read_lines_pairs(wicdir / 'inference_rules.txt'))
-    inference.renaming_conventions = io.read_lines_pairs(wicdir / 'renaming_conventions.txt')
+    compiler.inference_rules = global_config.get('inference_rules', {})
+    inference.renaming_conventions = global_config.get('renaming_conventions', [])
 
     # Generate schemas for validation and vscode IntelliSense code completion
     yaml_stems = utils.flatten([list(p) for p in yml_paths.values()])

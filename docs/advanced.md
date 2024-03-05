@@ -3,32 +3,38 @@
 ## Edge Inference Configuration
 
 ### Naming Conventions
-If `--inference_use_naming_conventions` is enabled, matches can be refined based on the naming conventions of the inputs and outputs in the CWL CommandLineTools. Specifically, first `input_` is removed from the input name and `output_` is removed from all output names. Then, the default renamings contained in `renaming_conventions.txt` (shown below) are iteratively applied to the input name (only), and then the modified input name and all of the output names are checked for equality.
+If `--inference_use_naming_conventions` is enabled, matches can be refined based on the naming conventions of the inputs and outputs in the CWL CommandLineTools. Specifically, first `input_` is removed from the input name and `output_` is removed from all output names. Then, the default renamings contained in `renaming_conventions` tag of `config.json` (shown below) are iteratively applied to the input name (only), and then the modified input name and all of the output names are checked for equality.
 
 ```
-# The biobb CWL files do not always use consistent naming
-# conventions, so we need to perform some renamings here.
-# Eventually, the CWL files themselves should be fixed.
-
-energy_     edr_
-structure_  tpr_
-traj_       trr_
+"renaming_conventions": [
+        [
+            "energy_",
+            "edr_"
+        ],
+        [
+            "structure_",
+            "tpr_"
+        ],
+        [
+            "traj_",
+            "trr_"
+        ]
+    ]
 ```
 
 If there is now a unique match, then great! If there are still multiple matches, it chooses the first (i.e. most recent) match. If there are now no matches, it ignores the naming conventions and chooses the first (i.e. most recent) match based on types and formats only. If there are still multiple matches, it again chooses the first (i.e. most recent) match. Note that there are cases (i.e. file format conversions) where using naming conventions may not yield the desired behavior, so again ***`users should always check that edge inference actually produces the intended DAG`***.
 
 ### Inference Rules
 
-Users can customize the inference algorithm using inference rules. The default inference rules stored in inference_rules.txt are shown below:
+Users can customize the inference algorithm using inference rules. The default inference rules stored in `inference_rules` tag of `config.json` are shown below:
 
 ```
-# Amber, gromacs (zipped 3880) topology
-edam:format_3881 continue
-edam:format_3987 continue
-
-# Amber, gromacs coordinates
-edam:format_3878 break
-edam:format_2033 break
+"inference_rules": {
+        "edam:format_3881": "continue",
+        "edam:format_3987": "continue",
+        "edam:format_3878": "break",
+        "edam:format_2033": "break"
+    }
 ```
 
 Currently, the only inference rule implemented is `break`, which stops the inference algorithm from considering any further outputs beyond the current output from matching the current input. (The current output is allowed, i.e. break is inclusive.) This is useful when the most recent output file is desired, but the inference algorithm for some reason doesn't match it and chooses a subsequent / earlier file. This can happen when converting from one file format, performing a workflow step, and converting back to the original format, where in some cases the inference algorithm may choose the original file, thus accidentally skipping the workflow step.
@@ -229,7 +235,7 @@ wic:
 
 ## Namespaces
 
-Namespaces can be used to distinguish two different tools / workflows with the same name from different sources. For example, suppose a collaborator has shared an alternative minimization protocol, which we have downloaded to `bar/min.yml`. We can use their protocol by adding the line `foo    bar/` to `yml_dirs.txt` and annotating the call site in `basic.yml` with `namespace: foo` as shown below.
+Namespaces can be used to distinguish two different tools / workflows with the same name from different sources. For example, suppose a collaborator has shared an alternative minimization protocol, which we have downloaded to `bar/min.yml`. We can use their protocol by adding the namespace tag `foo` to `search_paths_yml` tag of `config.json` and annotating the call site in `basic.yml` with `namespace: foo` as shown below.
 
 ```yaml
 ...

@@ -93,7 +93,7 @@ def read_ast_from_disk(homedir: str,
             if paths_ns_i == {}:
                 wicdir = Path(homedir) / 'wic'
                 raise Exception(
-                    f'Error! namespace {plugin_ns} not found in yaml paths. Check {wicdir / "yml_dirs.txt"}')
+                    f"Error! namespace {plugin_ns} not found in yaml paths. Check 'search_paths_yml' in your config file")
             if stem not in paths_ns_i:
                 msg = f'Error! {stem} not found in namespace {plugin_ns} when attempting to read {step_id.stem}.yml'
                 if stem == 'in':
