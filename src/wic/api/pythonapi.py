@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess as sub
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
+from mergedeep import merge, Strategy
 import cwl_utils.parser as cu_parser
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
@@ -379,8 +380,9 @@ class Workflow:
         # We do NOT need to save anything to disk
         # If we don't care about portability,
         # we also don't need to READ anything from disk.
-        # tools_cwl: Tools = plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
-        tools_cwl: Tools = extract_tools_paths_NONPORTABLE(self.steps)
+        tools_disk: Tools = plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
+        tools_steps: Tools = extract_tools_paths_NONPORTABLE(self.steps)
+        tools_cwl = merge(tools_disk, tools_steps, strategy=Strategy.TYPESAFE_REPLACE)
 
         # The compile_workflow function is 100% in-memory
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {}, {},
