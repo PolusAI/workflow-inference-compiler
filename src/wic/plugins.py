@@ -4,7 +4,9 @@ import glob
 import os
 from pathlib import Path
 import re
+import sys
 import tempfile
+import traceback
 from typing import Any, Dict, Union
 
 import cwltool.load_tool
@@ -404,18 +406,26 @@ def blindly_execute_python_workflows() -> None:
     """
     # I hope u like Remote Code Execution vulnerabilities!
     # See https://en.wikipedia.org/wiki/Arithmetical_hierarchy
+    from wic.api import pythonapi  # pylint: disable=C0415:import-outside-toplevel
+    pythonapi.global_config = get_tools_cwl(str(Path().home()))  # Use path fallback in the CI
     paths = get_py_paths(str(Path().home()))
     paths_tuples = [(path_str, path)
                     for namespace, paths_dict in paths.items()
                     for path_str, path in paths_dict.items()]
-    for path_str, path in paths_tuples:
+    any_import_errors = False
+    for path_stem, path in paths_tuples:
+        if 'mm-workflows' in str(path) or 'docs/tutorials/' in str(path):
+            # Exclude paths that only contain 'regular' python files.
+            continue
         # NOTE: Use anything (unique?) for the python_module_name.
         try:
-            module = import_python_file(path_str, path)
+            module = import_python_file(path_stem, path)
         except Exception as e:
-            print(f'Could not import python file {path}')
-            print(e)
-            # TODO: Determine how to handle import failures
+            any_import_errors = True
+            if sys.version_info >= (3, 10):
+                traceback.print_exception(type(e), value=e, tb=None)
+            else:
+                traceback.print_exception(etype=type(e), value=e, tb=None)
         # NOTE: We could require all python API files to define a function, say
         # def workflow(...) -> Workflow
         # and then we could programmatically call it here:
@@ -425,3 +435,5 @@ def blindly_execute_python_workflows() -> None:
         # But since this is python (i.e. not Haskell) that in no way eliminates
         # the above security considerations.
         # So for now let's keep it simple and assume .compile() has been called.
+    if any_import_errors:
+        sys.exit(1)  # Make sure the CI fails
