@@ -386,8 +386,8 @@ class Workflow:
         rose_tree: RoseTree = compiler_info.rose
 
         # If you don't like it, you can programmatically overwrite anything in args
-        # args.no_docker_remove_entrypoints = True
-        if not args.no_docker_remove_entrypoints:
+        # args.docker_remove_entrypoints = True
+        if args.docker_remove_entrypoints:
             # Requires root, so guard behind CLI option
             if args.user_space_docker_cmd == 'docker':
                 plugins.remove_entrypoints_docker()

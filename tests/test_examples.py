@@ -216,7 +216,13 @@ def run_workflows(yml_path_str: str, yml_path: Path, cwl_runner: str, args: argp
 
         return
 
-    if not args.no_docker_remove_entrypoints:
+    # By top down demand, this is now False.
+    # So I hope u remembered to docker push before git push
+    # so that we aren't testing a stale docker image in the CI that doesn't
+    # correspond to the latest source code! And I especially hope your code
+    # passes the CI the first time, otherwise you'll have to keep manually
+    # deploying the same 'version' of your docker image(s) on dockerhub!
+    if args.docker_remove_entrypoints:
         # Requires root, so guard behind CLI option
         if args.user_space_docker_cmd == 'docker':
             wic.plugins.remove_entrypoints_docker()

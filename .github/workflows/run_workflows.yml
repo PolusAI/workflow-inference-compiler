@@ -171,13 +171,6 @@ jobs:
       run: cd workflow-inference-compiler/ && pytest -k test_cwl_docker_extract
       # For self-hosted runners, make sure the docker cache is up-to-date.
 
-      # Please read plugins.remove_entrypoints()
-      # NOTE: Entrypoints are automatically removed in test_cwl_docker_extract
-      # so this step is actually redundant, but keep it for emphasis.
-    - name: docker remove entrypoints
-      if: always()
-      run: python -c 'from wic import plugins; plugins.remove_entrypoints_docker()'
-
     - name: PyTest Run Workflows
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
