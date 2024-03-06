@@ -25,6 +25,21 @@ global_config: Tools = {}
 
 logger = logging.getLogger("WIC Python API")
 
+
+class DisableEverythingFilter(logging.Filter):
+    # pylint:disable=too-few-public-methods
+    def filter(self, record: logging.LogRecord) -> bool:
+        return False
+
+
+# Due to massive backlash from wic python API users who
+# are adamantly opposed to the autodiscovery feature because
+# reading from config files apparently isn't "pythonic",
+# disable any and all warnings coming from autodiscovery.
+logger_wicad = logging.getLogger("wicautodiscovery")
+logger_wicad.addFilter(DisableEverythingFilter())
+
+
 _WIC_PATH = Path(__file__).parent.parent.parent.parent  # WIC dir
 
 
