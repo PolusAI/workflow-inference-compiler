@@ -36,7 +36,9 @@ dependencies = [
     # between versions 0.30, 0.31, 0.32
     # See https://github.com/common-workflow-language/cwl-utils/releases/
     "typeguard",
-    "pydantic>=2.6"
+    "pydantic>=2.6",
+    "docker",
+    "podman" # FYI also need uidmap to run podman rootless
 ]
 
 [project.readme]
@@ -217,6 +219,7 @@ module = [
     "ruamel.*",
     "toil.*",
     "version.*",
+    "podman.*",
 ]
 ignore_missing_imports = true
 
