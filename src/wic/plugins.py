@@ -4,10 +4,13 @@ import glob
 import os
 from pathlib import Path
 import re
-from typing import Dict
+import tempfile
+from typing import Any, Dict, Union
 
 import cwltool.load_tool
 import yaml
+import podman
+import docker
 
 from . import input_output as io
 from .python_cwl_adapter import import_python_file
@@ -144,6 +147,75 @@ def cwl_update_outputs_optional(cwl: Cwl) -> Cwl:
         if isinstance(out_val_dict['type'], str) and out_val_dict['type'][-1] != '?':
             out_val_dict['type'] += '?'
     return cwl_mod
+
+
+Client = Union[docker.DockerClient, podman.PodmanClient]  # type: ignore
+
+
+def remove_entrypoints(client: Client, build: Any) -> None:
+    """remove/overwrite the entrypoints from all images
+
+    https://cwl.discourse.group/t/override-docker-entrypoint-in-command-line-tool/695/2
+    "Here is what the CWL standards have to say about software container entrypoints"
+    "I recommend changing your docker container to not use ENTRYPOINT."
+
+    This script will remove / overwrite the entrypoints in ALL of the docker images on your local machine.
+    (It will append -noentrypoint to the version tag.)
+
+    The reason is that we want to simultaneously allow
+    1. release environments, where users will simply run code in a docker image and
+    2. dev/test environments, where developers can run the latest code on the host machine and/or in the CI.
+
+    With entrypoints, there is no easy way to switch between 1 and 2; developers will
+    have to manually prepend the entrypoint string to the baseCommand, and/or possibly
+    modify paths to be w.r.t. their host machine instead of w.r.t. the image. (/opt/.../main.py)
+
+    Without entrypoints, to switch between 1 and 2, simply comment out DockerRequirement ... that's it!
+    The point is that we want a uniform API so that we can programmatically switch between 1 and 2 in the CI.
+    We want to run the integration tests first, and only push releases to dockerhub when the tests pass (NOT vice versa!).
+    """
+    # Get a list of all Docker images
+    images = client.images.list()
+
+    # Iterate over each container
+    for image in images:
+        if len(image.attrs['RepoTags']) != 0 and len(image.tags) != 0:
+            for tag in image.tags:
+                if tag.endswith('-noentrypoint'):
+                    continue
+
+                # Define the content of the Dockerfile
+                dockerfile_content = f'''
+                FROM {tag}
+                ENTRYPOINT []
+                '''
+                with tempfile.TemporaryDirectory() as tempdir:
+                    with open(tempdir + '/Dockerfile_tmp', mode='w', encoding='utf-8') as f:
+                        f.write(dockerfile_content)
+
+                    # Build the new Docker image from the Dockerfile
+                    new_image, build_logs = build.build(
+                        path=tempdir,
+                        dockerfile="Dockerfile_tmp",
+                        tag=f"{tag}-noentrypoint"
+                    )
+
+
+def remove_entrypoints_docker() -> None:
+    """remove/overwrite the entrypoints from all images (using docker)
+    """
+    client = docker.from_env()  # type: ignore
+    remove_entrypoints(client, client.images)
+
+
+def remove_entrypoints_podman() -> None:
+    """remove/overwrite the entrypoints from all images (using podman)
+    """
+    # See https://github.com/containers/podman-py?tab=readme-ov-file#example-usage
+    uri = "unix:///run/user/1000/podman/podman.sock"
+
+    with podman.PodmanClient(base_url=uri) as client:
+        remove_entrypoints(client, podman.domain.images_build.BuildMixin())
 
 
 def cwl_update_outputs_optional_rosetree(rose_tree: RoseTree) -> RoseTree:
