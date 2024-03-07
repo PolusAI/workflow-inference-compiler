@@ -39,8 +39,15 @@ parser.add_argument('--ignore_docker_processes', default=False, action="store_tr
 parser.add_argument('--user_space_docker_cmd', default='docker',
                     help='Specify which command to use to run OCI containers.')
 
-parser.add_argument('--no_docker_remove_entrypoints', default=False, action="store_true",
-                    help='Do not remove entrypoints from docker images before running workflows.')
+parser.add_argument('--docker_remove_entrypoints', default=False, action="store_true",
+                    help='''Remove entrypoints from docker images before running workflows.
+                    See https://cwl.discourse.group/t/override-docker-entrypoint-in-command-line-tool/695/2
+                    If your CWL CommandLineTools rely on non-portable docker entrypoints
+                    (i.e. if they do NOT explicitly have baseCommand: and/or arguments: tags)
+                    then this flag will almost certainly cause your workflows to fail.
+                    In other words, this flag can be used to tell you if your workflows are
+                    trapped inside a walled garden of docker containers or if there is at least a chance that
+                    they can be run in dev environments (conda, etc) and/or directly on the host machine.''')
 
 parser.add_argument('--allow_partial_failures', default=False, action="store_true",
                     help='''Let workflows to continue with partial failures

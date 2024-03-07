@@ -216,7 +216,7 @@ def run_workflows(yml_path_str: str, yml_path: Path, cwl_runner: str, args: argp
 
         return
 
-    if not args.no_docker_remove_entrypoints:
+    if args.docker_remove_entrypoints:
         # Requires root, so guard behind CLI option
         if args.user_space_docker_cmd == 'docker':
             wic.plugins.remove_entrypoints_docker()
