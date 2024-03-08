@@ -4,7 +4,9 @@ import glob
 import os
 from pathlib import Path
 import re
+import sys
 import tempfile
+import traceback
 from typing import Any, Dict, Union
 
 import cwltool.load_tool
@@ -397,31 +399,46 @@ def get_py_paths(homedir: str) -> Dict[str, Dict[str, Path]]:
 
 def blindly_execute_python_workflows() -> None:
     """This function imports (read: blindly executes) all python files in yml_dirs.txt
-       The python files are assumed to build a wic.api.pythonapi.Workflow object and
-       call the .compile() method, which has the desired side effect of writing a yml file to disk.
+       The python files are assumed to have a top-level workflow() function
+       which returns a wic.api.pythonapi.Workflow object.
        The python files should NOT call the .run() method!
        (from any code path that is automatically executed on import)
     """
     # I hope u like Remote Code Execution vulnerabilities!
     # See https://en.wikipedia.org/wiki/Arithmetical_hierarchy
+    from wic.api import pythonapi  # pylint: disable=C0415:import-outside-toplevel
+    pythonapi.global_config = get_tools_cwl(str(Path().home()))  # Use path fallback in the CI
     paths = get_py_paths(str(Path().home()))
     paths_tuples = [(path_str, path)
                     for namespace, paths_dict in paths.items()
                     for path_str, path in paths_dict.items()]
-    for path_str, path in paths_tuples:
+    any_import_errors = False
+    for path_stem, path in paths_tuples:
+        if 'mm-workflows' in str(path) or 'docs/tutorials/' in str(path):
+            # Exclude paths that only contain 'regular' python files.
+            continue
         # NOTE: Use anything (unique?) for the python_module_name.
         try:
-            module = import_python_file(path_str, path)
+            module = import_python_file(path_stem, path)
+            # Let's require all python API files to define a function, say
+            # def workflow() -> Workflow
+            # so we can programmatically call it here:
+            retval: pythonapi.Workflow = module.workflow()  # no arguments
+            # which allows us to programmatically call Workflow methods:
+            compiler_info = retval.compile()  # hopefully retval is actually a Workflow object!
+            # But since this is python (i.e. not Haskell) that in no way eliminates
+            # the above security considerations.
+
+            # This lets us use path.parent to write a *.yml file in the
+            # auto-discovery path, and thus re-use the existing wic CI
+            filepath = str(path.parent) + '/' + retval.name + '.yml'
+            with open(filepath, "w", encoding="utf-8") as file:
+                file.write(yaml.dump(retval.yaml, sort_keys=False, line_break='\n', indent=2))
         except Exception as e:
-            print(f'Could not import python file {path}')
-            print(e)
-            # TODO: Determine how to handle import failures
-        # NOTE: We could require all python API files to define a function, say
-        # def workflow(...) -> Workflow
-        # and then we could programmatically call it here:
-        # retval: Workflow = module.workflow(**args)
-        # which would allow us to programmatically call Workflow methods:
-        # retval.compile()  # hopefully retval is actually a Workflow object!
-        # But since this is python (i.e. not Haskell) that in no way eliminates
-        # the above security considerations.
-        # So for now let's keep it simple and assume .compile() has been called.
+            any_import_errors = True
+            if sys.version_info >= (3, 10):
+                traceback.print_exception(type(e), value=e, tb=None)
+            else:
+                traceback.print_exception(etype=type(e), value=e, tb=None)
+    if any_import_errors:
+        sys.exit(1)  # Make sure the CI fails

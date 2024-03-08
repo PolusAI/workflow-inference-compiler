@@ -14,6 +14,8 @@ import wic.plugins
 import wic.schemas
 import wic.schemas.wic_schema
 import wic.utils
+import wic.api
+import wic.api.pythonapi
 from wic.wic_types import Json, Yaml
 
 
@@ -33,6 +35,7 @@ def get_args(yaml_path: str = '', suppliedargs: List[str] = []) -> argparse.Name
 
 args = get_args()
 tools_cwl = wic.plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
+wic.api.pythonapi.global_config = tools_cwl  # Use path fallback in the CI
 yml_paths = wic.plugins.get_yml_paths(args.homedir)
 yaml_stems = wic.utils.flatten([list(p) for p in yml_paths.values()])
 schema_store: Dict[str, Json] = {}

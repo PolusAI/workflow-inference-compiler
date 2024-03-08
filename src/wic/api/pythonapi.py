@@ -4,13 +4,12 @@ import logging
 from dataclasses import field
 from functools import singledispatch
 from pathlib import Path
-import subprocess as sub
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
-from cwl_utils.parser import load_document_by_uri
+from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
@@ -19,7 +18,10 @@ from wic import compiler, input_output, plugins
 from wic import run_local as run_local_module
 from wic.schemas.wic_schema import get_args
 from wic.utils_graphs import get_graph_reps
-from wic.wic_types import CompilerInfo, RoseTree, StepId, YamlTree
+from wic.wic_types import CompilerInfo, RoseTree, StepId, Tool, Tools, YamlTree
+
+
+global_config: Tools = {}
 
 
 logger = logging.getLogger("WIC Python API")
@@ -169,12 +171,39 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         if not isinstance(clt_path, (Path, str)):
             raise TypeError("cwl_path must be a Path or str")
         clt_path_ = Path(clt_path) if isinstance(clt_path, str) else clt_path
-        try:
-            clt = load_document_by_uri(clt_path_)
-        except Exception as exc:
-            raise InvalidCLTError(f"invalid cwl file: {clt_path_}") from exc
-        with clt_path_.open("r", encoding="utf-8") as file:
-            yaml_file = yaml.safe_load(file)
+        stepid = StepId(clt_path_.stem, 'global')
+
+        if clt_path_.exists():
+            try:
+                clt = load_document_by_uri(clt_path_)
+            except Exception as exc:
+                raise InvalidCLTError(f"invalid cwl file: {clt_path_}") from exc
+            with clt_path_.open("r", encoding="utf-8") as file:
+                yaml_file = yaml.safe_load(file)
+
+            # Add the Tool to the global config dictionary. See explanation below.
+            global_config[stepid] = Tool(clt_path_.stem, yaml_file)
+        elif stepid in global_config:
+            # Use the path fallback mechanism.
+            # In other words, if the hardcoded, nonportable, system-dependent paths
+            # are not found above (i.e. because someone else is trying to run
+            # the workflow on another machine), then try to load the CLT from
+            # a global dictionary, which can be pre-configured to have paths
+            # that exist on the target machine.
+            # Again, global_config is just a dictionary; it couldn't be more pythonic.
+            # You can initialize it however you want (or not at all!).
+            tool = global_config[stepid]
+
+            logger.info(f'{clt_path_} does not exist, but {clt_path_.stem} was found in the global config.')
+            logger.info(f'Using file contents from {tool.run_path}')
+
+            yaml_file = tool.cwl
+            clt = load_document_by_yaml(yaml_file, tool.run_path)
+        else:
+            logger.warning(f'Warning! {clt_path_} does not exist, and')
+            logger.warning(f'{clt_path_.stem} was not found in the global config.')
+            raise InvalidCLTError(f"invalid cwl file: {clt_path_}")
+
         if config_path:
             cfg_path_ = Path(config_path) if isinstance(config_path, str) else config_path
             with cfg_path_.open("r", encoding="utf-8") as file:
@@ -297,6 +326,19 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
             file.write(yaml.dump(self.yaml))
 
 
+def extract_tools_paths_NONPORTABLE(steps: list[Step]) -> Tools:
+    """extract a Tools global configuration object from the NONPORTABLE paths hardcoded in the Steps.
+
+    Args:
+        steps (list[Step]): A list of Steps.
+
+    Returns:
+        Tools: A Tools object, which is just a dictionary mapping a globally unique
+        (i.e. portable) identifier to a system-dependendent Path.
+    """
+    return {StepId(step.clt_name, 'global'): Tool(str(step.clt_path), step.yaml) for step in steps}
+
+
 DATACLASS_CONFIG = ConfigDict(validate_assignment=True)
 
 
@@ -358,9 +400,6 @@ class Workflow:
         """
         args = get_args(self.name)  # Use mock CLI args
 
-        # We do NOT need to save anything to disk
-        tools_cwl = plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
-
         graph = get_graph_reps(self.name)
         # NOTE: Once the Workflow class supports subworkflows, we will need to
         # recursively convert sub-Workflows to YamlTrees here.
@@ -368,7 +407,7 @@ class Workflow:
 
         # The compile_workflow function is 100% in-memory
         compiler_info = compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {}, {},
-                                                  tools_cwl, True, relative_run_path=True, testing=False)
+                                                  global_config, True, relative_run_path=True, testing=False)
 
         if write_to_disk:
             # Now we can choose whether to write_to_disk or not
