@@ -16,7 +16,7 @@ requirements:
 inputs:
 
   input_array:
-    type: Any[]
+    type: Any
 
   input_bool_array:
     type: boolean[]
