@@ -33,11 +33,15 @@ dependencies = [
     # See https://github.com/common-workflow-language/cwl-utils/releases/
     "typeguard",
     "pydantic>=2.6",
+    "pydantic-settings",
     "docker",
     # FYI also need uidmap to run podman rootless
     "podman",
     # We are using the official release for these packages for now
     "toil[cwl]",
+    "fastapi",
+    "python-jose",
+    "uvicorn"
 ]
 
 [project.readme]
