@@ -10,24 +10,36 @@ See [overview](overview.md)
 
 Many software packages have a way of automatically discovering files which they can use. (examples: [pytest](https://docs.pytest.org/en/latest/explanation/goodpractices.html#conventions-for-python-test-discovery) [pylint](https://pylint.pycqa.org/en/latest/user_guide/usage/run.html))
 
-By default, wic will recursively search for tools / workflows within the directories (and subdirectories) listed in `~/wic/cwl_dirs.txt` and `~/wic/yml_dirs.txt`. The default cwl_dirs.txt is shown.
+By default, wic will recursively search for tools / workflows within the directories (and subdirectories) listed in the config file's json tags `search_paths_cwl` and `search_paths_yml`. The paths listed can be absolute or relative. The default `config.json` is shown.
 
 ***`We strongly recommend placing all repositories of tools / workflows in the same parent directory.`***
 
 (All your repos should be side-by-side in sibling directories, as shown.)
 
 ```
-# Namespace Directory
-global      ../workflow-inference-compiler/cwl_adapters/
-global      ../image-workflows/cwl_adapters/
-global      ../biobb_adapters/biobb_adapters/
-global      ../mm-workflows/cwl_adapters/
-gpu         ../mm-workflows/gpu/
-# foo       a/relative/path/
-# bar       /an/absolute/path/
+......
+"search_paths_cwl": {
+        "global": [
+            "../workflow-inference-compiler/cwl_adapters",
+            "../image-workflows/cwl_adapters",
+            "../biobb_adapters/biobb_adapters",
+            "../mm-workflows/cwl_adapters"
+        ],
+        "gpu": [
+            "../mm-workflows/gpu"
+        ]
+    },
+"search_paths_yml": {
+        "global": [
+            "./workflow-inference-compiler/docs/tutorials",
+            "../image-workflows/workflows",
+            "../mm-workflows/examples"
+        ]
+    }
+.....
 ```
 
-If you do not have these files in your `~/wic/` directory, they will be automatically created for you the first time you run wic. (Because of this, the first time you run wic you should be in the root directory of any one of your repos.) Then you can manually edit these files with additional sources of tools / workflows.
+If you do not specify config file using the command line argument `--config`, it will be automatically created for you the first time you run wic in `~/wic/global_config.json`. (Because of this, the first time you run wic you should be in the root directory of any one of your repos.) Then you can manually edit this file with additional sources of tools / workflows.
 
 To avoid dealing with relative file paths in YAML files, by default
 

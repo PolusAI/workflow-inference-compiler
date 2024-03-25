@@ -7,11 +7,13 @@ __version__ = _version.get_versions()['version']
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
 parser.add_argument('--yaml', type=str, required=('--generate_schemas_only' not in sys.argv),
                     help='Yaml workflow file')
+parser.add_argument('--config_file', type=str, required=False, default=str(Path().home()/'wic'/'global_config.json'),
+                    help='User provided (JSON) config file')
 # version action exits the parser Ref : https://github.com/python/cpython/blob/1f515e8a109204f7399d85b7fd806135166422d9/Lib/argparse.py#L1167
 parser.add_argument('--version', action='version', version=__version__,
                     default='==SUPPRESS==', help='Current version of the Workflow Inference Compiler')
 parser.add_argument('--generate_schemas_only', default=False, action="store_true",
-                    help='Generate schemas for the files in ~/wic/cwl_dirs.txt and ~/wic/yml_dirs.txt')
+                    help='Generate schemas for the files in config.json (search_paths_yml and search_paths_cwl)')
 parser.add_argument('--homedir', type=str, required=False, default=str(Path().home()),
                     help='The users home directory. This is necessary because CWL clears environment variables (e.g. HOME)')
 # Change default to True for now. See comment in compiler.py

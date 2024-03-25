@@ -17,11 +17,8 @@ docs/_build/
 gromacs_mdp.html
 NCI*
 error_*.txt
+*config.json
 validation_*.txt
-cwl_dirs.txt
-yml_dirs.txt
-inference_rules.txt
-renaming_conventions.txt
 .hypothesis/
 .env
 node_modules/

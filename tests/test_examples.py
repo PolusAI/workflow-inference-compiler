@@ -25,21 +25,24 @@ from wic.utils_graphs import get_graph_reps
 
 from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tuples
 
-# Look in each directory in yml_dirs.txt for separate config_ci.json files and combine them.
-yml_dirs_file = Path(get_args().homedir) / 'wic' / 'yml_dirs.txt'
-yml_dirs = wic.input_output.read_lines_pairs(yml_dirs_file)
+# Look in each directory of 'yml_dirs' tag in global_config.json
+# for separate config_ci.json files and combine them.
 config_ci: Json = {}
-for _yml_namespace, yml_dir in yml_dirs:
-    config_ci_json = Path(yml_dir) / 'config_ci.json'
-    if config_ci_json.exists():
-        print(f'Reading {config_ci_json}')
-        with open(config_ci_json) as f:
-            contents = f.read().splitlines()
-            # Strip out comments. (Comments are not allowed in JSON)
-            contents = [line for line in contents if not line.strip().startswith('//')]
-            config_ci_tmp = json.loads('\n'.join(contents))
-        # Use the Additive Strategy to e.g. concatenate lists
-        config_ci = merge(config_ci, config_ci_tmp, strategy=Strategy.TYPESAFE_ADDITIVE)
+global_config = wic.input_output.read_config_from_disk(Path(get_args().config_file))
+yml_dirs_tag = global_config['search_paths_yml']
+for _yml_namespaces in yml_dirs_tag:
+    yml_dirs = yml_dirs_tag[_yml_namespaces]
+    for yml_dir in yml_dirs:
+        config_ci_json = Path(yml_dir) / 'config_ci.json'
+        if config_ci_json.exists():
+            print(f'Reading {config_ci_json}')
+            with open(config_ci_json) as f:
+                contents = f.read().splitlines()
+                # Strip out comments. (Comments are not allowed in JSON)
+                contents = [line for line in contents if not line.strip().startswith('//')]
+                config_ci_tmp = json.loads('\n'.join(contents))
+            # Use the Additive Strategy to e.g. concatenate lists
+            config_ci = merge(config_ci, config_ci_tmp, strategy=Strategy.TYPESAFE_ADDITIVE)
 
 # Due to the computational complexity of the graph isomorphism problem, we
 # need to manually exclude large workflows.
@@ -97,7 +100,7 @@ def is_isomorphic_with_timeout(g_m: isomorphism.GraphMatcher, yml_path_str: str)
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist_on_push)
 def test_run_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Runs all of the workflows auto-discovered from the various
-       directories in yml_dirs.txt, excluding all workflows which have been
+       directories in 'search_paths_yml', excluding all workflows which have been
        blacklisted in the various config_ci.json files and excluding the weekly
        workflows."""
     args = get_args(str(yml_path))
@@ -108,7 +111,7 @@ def test_run_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: st
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist_on_push)
 def test_run_inlined_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Inlines and runs all of the workflows auto-discovered from the various
-       directories in yml_dirs.txt, excluding all workflows which have been
+       directories in 'search_paths_yml', excluding all workflows which have been
        blacklisted in the various config_ci.json files and excluding the weekly
        workflows."""
     args = get_args(str(yml_path), ['--cwl_inline_subworkflows'])

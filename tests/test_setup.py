@@ -1,15 +1,16 @@
 import argparse
+from pathlib import Path
 import sys
 import time
 from typing import Dict, List
 from unittest.mock import patch
-from pathlib import Path
 
 from hypothesis.strategies import SearchStrategy
 import hypothesis_jsonschema as hj
 
 import wic
 import wic.cli
+import wic.input_output as io
 import wic.plugins
 import wic.schemas
 import wic.schemas.wic_schema
@@ -34,9 +35,13 @@ def get_args(yaml_path: str = '', suppliedargs: List[str] = []) -> argparse.Name
 
 
 args = get_args()
-tools_cwl = wic.plugins.get_tools_cwl(args.homedir, quiet=args.quiet)
+# Just read from the disk and pass around config object
+global_config = io.read_config_from_disk(Path(args.config_file))
+tools_cwl = wic.plugins.get_tools_cwl(global_config, quiet=args.quiet)
 wic.api.pythonapi.global_config = tools_cwl  # Use path fallback in the CI
-yml_paths = wic.plugins.get_yml_paths(args.homedir)
+yml_paths = wic.plugins.get_yml_paths(global_config)
+
+
 yaml_stems = wic.utils.flatten([list(p) for p in yml_paths.values()])
 schema_store: Dict[str, Json] = {}
 validator = wic.schemas.wic_schema.get_validator(tools_cwl, yaml_stems, schema_store, write_to_disk=True)

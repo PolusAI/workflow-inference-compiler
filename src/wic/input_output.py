@@ -1,14 +1,13 @@
 import argparse
-import logging
+import copy
 import json
 from pathlib import Path
-import subprocess as sub
 from typing import Any, List, Tuple
 
 import yaml
 
 from . import auto_gen_header
-from .wic_types import (Namespaces, NodeData, RoseTree, Yaml, ExplicitEdgeCalls)
+from .wic_types import (Namespaces, NodeData, RoseTree, Yaml, ExplicitEdgeCalls, Json)
 
 
 def read_lines_pairs(filename: Path) -> List[Tuple[str, str]]:
@@ -112,43 +111,69 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
         write_to_disk(sub_rose_tree, subpath, relative_run_path)
 
 
-logger_wicad = logging.getLogger("wicautodiscovery")
-
-
-def copy_config_files(homedir: str) -> None:
-    """Copies the following configuration files to ~/wic/\n
-    cwl_dirs.txt, yml_dirs.txt, renaming_conventions.txt, inference_rules.txt
+def write_config_to_disk(config: Json, config_file: Path) -> None:
+    """Writes config json object to config_file
 
     Args:
-        homedir (str): The users home directory
+        config (Json): The json object that is to be written to disk
+        config_file (Path): The file path where it is to be written
     """
-    files = ['cwl_dirs.txt', 'yml_dirs.txt', 'renaming_conventions.txt', 'inference_rules.txt']
+    config_dir = Path(config_file).parent
+    # make the full path if it doesn't exist
+    config_dir.mkdir(parents=True, exist_ok=True)
+    with open(config_file, 'w', encoding='utf-8') as f:
+        json.dump(config, f)
+
+
+def read_config_from_disk(config_file: Path) -> Json:
+    """Returns the config json object from config_file with absolute paths
+
+    Args:
+        config_file (Path): The path of json file where it is to be read from
+
+    Returns:
+        Json: The config json object with absolute filepaths
+    """
+    config: Json = {}
+    # config_file can contain absolute or relative paths
+    with open(config_file, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    conf_tags = ['search_paths_cwl', 'search_paths_yml']
+    for tag in conf_tags:
+        config[tag] = get_absolute_paths(config[tag])
+    return config
+
+
+def get_default_config() -> Json:
+    """Returns the default config with absolute paths
+
+    Returns:
+        Json: The config json object with absolute filepaths
+    """
     src_dir = Path(__file__).parent
-    wicdir = Path(homedir) / 'wic'
-    wicdir.mkdir(exist_ok=True)
-
-    for file in files:
-        if not (wicdir / file).exists():
-            logger_wicad.warning(f'Writing {str(wicdir / file)}')
-            logger_wicad.warning('Please check this file and make sure that the paths in it are correct.')
-            cmd = ['cp', str(src_dir / file), str(wicdir / file)]
-            sub.run(cmd, check=True)
-
-    write_absolute_config_files(wicdir / 'cwl_dirs.txt')
-    write_absolute_config_files(wicdir / 'yml_dirs.txt')
+    conf_tags = ['search_paths_cwl', 'search_paths_yml']
+    default_config: Json = {}
+    # config.json can contain absolute or relative paths
+    default_config = read_config_from_disk(src_dir/'config.json')
+    for tag in conf_tags:
+        default_config[tag] = get_absolute_paths(default_config[tag])
+    return default_config
 
 
-def write_absolute_config_files(dirs_file: Path) -> None:
-    """Makes the paths within the \*_dirs.txt files absolute
+def get_absolute_paths(sub_config: Json) -> Json:
+    """Makes the paths within the dirs_file file absolute and write them into sub_config object.
 
     Args:
-        dirs_file (Path): The path to the \*_dirs.txt file
-        dirs_file_abs (str): The path to the absolute \*_dirs.txt file
+        sub_config (dict): The json (sub)object where filepaths are stored
+
+    Returns:
+        Json: The json (sub)object with absolute filepaths
     """
-    ns_paths = read_lines_pairs(dirs_file)
-    pairs_abs = [ns + ' ' + str(Path(path).absolute()) for ns, path in ns_paths]
-    with open(dirs_file, mode='w', encoding='utf-8') as f:
-        f.write('\n'.join(pairs_abs))
+    abs_sub_config = copy.deepcopy(sub_config)
+    for ns in abs_sub_config:
+        abs_paths = [str(Path(path).absolute()) for path in abs_sub_config[ns]]
+        abs_sub_config[ns] = abs_paths
+    return abs_sub_config
 
 
 def write_absolute_yaml_tags(args: argparse.Namespace, in_dict_in: Yaml, namespaces: Namespaces,
@@ -178,6 +203,3 @@ def write_absolute_yaml_tags(args: argparse.Namespace, in_dict_in: Yaml, namespa
     for arg_key_ in arg_keys_:
         in_name_ = f'{step_name_i}___{arg_key_}'  # {step_name_i}_input___{arg_key}
         explicit_edge_calls_copy.update({in_name_: (namespaces + [step_name_i], arg_key_)})
-
-    write_absolute_config_files(Path(args.homedir) / 'wic' / 'cwl_dirs.txt')
-    write_absolute_config_files(Path(args.homedir) / 'wic' / 'yml_dirs.txt')
