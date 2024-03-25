@@ -32,9 +32,7 @@ class DisableEverythingFilter(logging.Filter):
         return False
 
 
-# Due to massive backlash from wic python API users who
-# are adamantly opposed to the autodiscovery feature because
-# reading from config files apparently isn't "pythonic",
+# Based on user feedback,
 # disable any and all warnings coming from autodiscovery.
 logger_wicad = logging.getLogger("wicautodiscovery")
 logger_wicad.addFilter(DisableEverythingFilter())
