@@ -1,6 +1,7 @@
 """CWL Types."""
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 
 class CWLTypesEnum(str, Enum):
@@ -25,4 +26,5 @@ CWL_TYPES_DICT: dict[str, object] = {
     "string": str,
     "File": Path,
     "Directory": Path,
+    "Any": Any,
 }

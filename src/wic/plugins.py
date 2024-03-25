@@ -1,5 +1,6 @@
 import copy
 import logging
+import json
 import glob
 import os
 from pathlib import Path
@@ -431,9 +432,23 @@ def blindly_execute_python_workflows() -> None:
 
             # This lets us use path.parent to write a *.yml file in the
             # auto-discovery path, and thus re-use the existing wic CI
-            filepath = str(path.parent) + '/' + retval.name + '.yml'
-            with open(filepath, "w", encoding="utf-8") as file:
-                file.write(yaml.dump(retval.yaml, sort_keys=False, line_break='\n', indent=2))
+            retval.write_ast_to_disk(path.parent)
+
+            # Programmatically blacklist subworkflows from running in config_ci.json
+            # (Again, because subworkflows are missing inputs and cannot run.)
+            config_ci = path.parent / 'config_ci.json'
+            json_contents = {}
+            if config_ci.exists():
+                with open(config_ci, mode='r', encoding='utf-8') as r:
+                    json_contents = json.load(r)
+            run_blacklist: list[str] = json_contents.get('run_blacklist', [])
+            # Use [1:] for proper subworkflows only
+            subworkflows: list[pythonapi.Workflow] = retval.flatten_subworkflows()[1:]
+            run_blacklist += [wf.process_name for wf in subworkflows]
+            json_contents['run_blacklist'] = run_blacklist
+            with open(config_ci, mode='w', encoding='utf-8') as f:
+                json.dump(json_contents, f)
+
         except Exception as e:
             any_import_errors = True
             if sys.version_info >= (3, 10):
