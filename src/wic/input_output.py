@@ -1,4 +1,5 @@
 import argparse
+import logging
 import json
 from pathlib import Path
 import subprocess as sub
@@ -111,6 +112,9 @@ def write_to_disk(rose_tree: RoseTree, path: Path, relative_run_path: bool) -> N
         write_to_disk(sub_rose_tree, subpath, relative_run_path)
 
 
+logger_wicad = logging.getLogger("wicautodiscovery")
+
+
 def copy_config_files(homedir: str) -> None:
     """Copies the following configuration files to ~/wic/\n
     cwl_dirs.txt, yml_dirs.txt, renaming_conventions.txt, inference_rules.txt
@@ -125,8 +129,8 @@ def copy_config_files(homedir: str) -> None:
 
     for file in files:
         if not (wicdir / file).exists():
-            print(f'Writing {str(wicdir / file)}')
-            print('Please check this file and make sure that the paths in it are correct.')
+            logger_wicad.warning(f'Writing {str(wicdir / file)}')
+            logger_wicad.warning('Please check this file and make sure that the paths in it are correct.')
             cmd = ['cp', str(src_dir / file), str(wicdir / file)]
             sub.run(cmd, check=True)
 
