@@ -138,11 +138,10 @@ def _get_value_from_cfg(value: Any) -> Any:  # validation happens in Step
     return value
 
 
-def _is_link(s: str) -> bool:
-    """Return True if s starts with & or *."""
-    if s.startswith("&") or s.startswith("*"):
-        return True
-    return False
+def _is_link(s: dict) -> bool:
+    """Return True if s is a dictionary with a single key !& or !*"""
+    # See utils_yaml.py
+    return isinstance(s, dict) and (list(s.keys()) == ['!&'] or list(s.keys()) == ['!*'])
 
 
 # Process = Union[Step, Workflow]
@@ -171,8 +170,10 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     # (Very useful for regression testing!)
                     # NOTE: process_name is either clt name or workflow name
                     tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
-                    local_input._set_value(f"*{tmp}", check=False, linked=True)
-                    __value._set_value(f"&{tmp}", check=False, linked=True)
+                    alias_dict = {'!*': {'key': tmp}}
+                    local_input._set_value(alias_dict, check=False, linked=True)
+                    anchor_dict = {'!&': {'key': tmp, 'val': tmp}}  # TODO: deprecate val
+                    __value._set_value(anchor_dict, check=False, linked=True)
             except BaseException as exc:
                 raise exc
         else:  # value is already linked to another inp
@@ -190,15 +191,14 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     local_input._set_value(f"~{tmp}", check=False, linked=True)
                     __value._set_value(f"{tmp}", check=False, linked=True)
                 else:
-                    current_value = __value.value
-                    local_input._set_value(
-                        current_value.replace("&", "*"), check=False, linked=True
-                    )
+                    anchor_dict = __value.value
+                    alias_dict = {'!*': {'key': anchor_dict['!&']['key']}}
+                    local_input._set_value(alias_dict, check=False, linked=True)
             except BaseException as exc:
                 raise exc
 
     else:
-        if isinstance(__value, str) and _is_link(__value):
+        if _is_link(__value):
             process_self.inputs[index]._set_value(__value, check=False)
         else:
             process_self.inputs[index]._set_value(__value)
