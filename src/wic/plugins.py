@@ -9,7 +9,6 @@ import sys
 import tempfile
 import traceback
 from typing import Any, Dict, Union
-import json
 
 import cwltool.load_tool
 import yaml
