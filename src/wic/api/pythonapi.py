@@ -1,7 +1,6 @@
 # pylint: disable=W1203
 """CLT utilities."""
 import logging
-from functools import singledispatch
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
@@ -145,26 +144,6 @@ def _is_link(s: str) -> bool:
         return True
     return False
 
-
-@singledispatch
-def _yaml_value(val: Any) -> Union[str, bool, int, float]:
-    """Convert value to YAML compatible value."""
-    return str(val)
-
-
-@_yaml_value.register
-def _(val: int) -> int:
-    return val
-
-
-@_yaml_value.register
-def _(val: float) -> float:
-    return val
-
-
-@_yaml_value.register
-def _(val: bool) -> bool:
-    return val
 
 # Process = Union[Step, Workflow]
 
@@ -344,13 +323,29 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
 
     @property
     def _yml(self) -> dict:
+        names_values: dict[str, Any] = {}  # NOTE: the values can be arbitrary JSON; not just strings!
+        for inp in self.inputs:
+            if inp.value is not None:
+                if isinstance(inp.value, Path):
+                    # Special case for Path since it does not inherit from YAMLObject
+                    names_values[inp.name] = str(inp.value)
+                elif isinstance(inp.value, yaml.YAMLObject):
+                    # Serialization and deserialization logic should always be
+                    # encapsulated within each object. For the pyyaml library,
+                    # each object should inherit from pyyaml.YAMLObject.
+                    # See https://pyyaml.org/wiki/PyYAMLDocumentation
+                    # Section "Constructors, representers, resolvers"
+                    # class Monster(yaml.YAMLObject): ...
+                    names_values[inp.name] = inp.value
+                else:
+                    logger.warning(f'Warning! input name {inp.name} input value {inp.value}')
+                    logger.warning('is not an instance of YAMLObject. The default str() serialization')
+                    logger.warning('logic often gives bad results. Please explicitly inherit from YAMLObject.')
+                    names_values[inp.name] = inp.value
+
         d = {
             self.process_name: {
-                "in": {
-                    inp.name: _yaml_value(inp.value)
-                    for inp in self.inputs
-                    if inp.value is not None
-                }
+                "in": names_values
             }
         }
         return d
@@ -440,7 +435,7 @@ class Workflow(BaseModel):
                 steps.append(s._yml)
             elif isinstance(s, Workflow):
                 ins = {
-                    inp.name: _yaml_value(inp.value)
+                    inp.name: inp.value
                     for inp in s.inputs
                     if inp.value is not None  # Subworkflow args are not required
                 }
@@ -469,7 +464,7 @@ class Workflow(BaseModel):
                 steps.append(s._yml)
             elif isinstance(s, Workflow):
                 ins = {
-                    inp.name: _yaml_value(inp.value)
+                    inp.name: inp.value
                     for inp in s.inputs
                     if inp.value is not None  # Subworkflow args are not required
                 }
