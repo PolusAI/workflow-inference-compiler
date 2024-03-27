@@ -172,18 +172,17 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     str_nonempty = {'type': 'string', 'minLength': 1}
     anytype: Dict[Any, Any] = {}
 
+    # See utils_yaml.py
     anchorprops = default_schema()
     anchorprops['properties'] = {'key': str_nonempty, 'val': anytype}
     anchorprops['required'] = ['key', 'val']
     anchor = default_schema()
-    anchor['properties'] = {'!&': anchorprops}
-    anchor['required'] = ['!&']
+    anchor['properties'] = {'wic_anchor': anchorprops}  # !&
     aliasprops = default_schema()
     aliasprops['properties'] = {'key': str_nonempty}
     aliasprops['required'] = ['key']
     alias = default_schema()
-    alias['properties'] = {'!*': aliasprops}
-    alias['required'] = ['!*']
+    alias['properties'] = {'wic_alias': aliasprops}  # !*
 
     # required = []
     for key, val in cwl['inputs'].items():

@@ -441,7 +441,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             arg_val = steps[i][step_key]['in'][arg_key]
             # Convert native YAML to a JSON-encoded string for specific tags.
             tags = ['config']
-            if arg_key in tags and isinstance(arg_val, Dict) and ('!&' not in arg_val) and ('!*' not in arg_val):
+            if arg_key in tags and isinstance(arg_val, Dict) and ('wic_anchor' not in arg_val) and ('wic_alias' not in arg_val):
                 arg_val = json.dumps(arg_val)  # Do NOT wrap config: in {'source': ...}
             elif isinstance(arg_val, str):
                 arg_val = {'source': arg_val}
@@ -506,8 +506,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                         arg_val['source'] = step_name_j + '/' + out_name
                         break
                 steps[i][step_key]['in'][arg_key] = arg_val"""
-            elif isinstance(arg_val, Dict) and '!&' in arg_val:
-                arg_val = arg_val['!&']
+            elif isinstance(arg_val, Dict) and 'wic_anchor' in arg_val:
+                arg_val = arg_val['wic_anchor']
                 edgedef = arg_val['key']
                 filename = arg_val['val']
 
@@ -529,8 +529,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     # TODO: Show input node?
                 else:
                     raise Exception(f"Error! Multiple definitions of &{edgedef}!")
-            elif isinstance(arg_val, Dict) and '!*' in arg_val and 'cwl_watcher' not in step_key:
-                arg_val = arg_val['!*']
+            elif isinstance(arg_val, Dict) and 'wic_alias' in arg_val and 'cwl_watcher' not in step_key:
+                arg_val = arg_val['wic_alias']
                 # NOTE: Exclude cwl_watcher from explicit edge dereferences.
                 # Since cwl_watcher requires explicit filenames for globbing,
                 # we do not want to replace them with internal CWL dependencies!
@@ -644,9 +644,9 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             else:
                 # NOTE: See comment above about excluding cwl_watcher from
                 # explicit edge dereferences.
-                if (isinstance(arg_val, Dict) and '!*' in arg_val and
+                if (isinstance(arg_val, Dict) and 'wic_alias' in arg_val and
                         'cwl_watcher' in step_key and 'file_pattern' not in arg_key):
-                    arg_val = arg_val['!*']
+                    arg_val = arg_val['wic_alias']
                     arg_val = {'source': arg_val['key']}
 
                 if (arg_key in steps[i][step_key].get('scatter', []) or

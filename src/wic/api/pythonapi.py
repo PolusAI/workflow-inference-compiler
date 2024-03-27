@@ -139,9 +139,9 @@ def _get_value_from_cfg(value: Any) -> Any:  # validation happens in Step
 
 
 def _is_link(s: dict) -> bool:
-    """Return True if s is a dictionary with a single key !& or !*"""
+    """Return True if s is a dictionary with a single key wic_anchor or wic_alias"""
     # See utils_yaml.py
-    return isinstance(s, dict) and (list(s.keys()) == ['!&'] or list(s.keys()) == ['!*'])
+    return isinstance(s, dict) and (list(s.keys()) == ['wic_anchor'] or list(s.keys()) == ['wic_alias'])
 
 
 # Process = Union[Step, Workflow]
@@ -170,9 +170,9 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     # (Very useful for regression testing!)
                     # NOTE: process_name is either clt name or workflow name
                     tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
-                    alias_dict = {'!*': {'key': tmp}}
+                    alias_dict = {'wic_alias': {'key': tmp}}
                     local_input._set_value(alias_dict, check=False, linked=True)
-                    anchor_dict = {'!&': {'key': tmp, 'val': tmp}}  # TODO: deprecate val
+                    anchor_dict = {'wic_anchor': {'key': tmp, 'val': tmp}}  # TODO: deprecate val
                     __value._set_value(anchor_dict, check=False, linked=True)
             except BaseException as exc:
                 raise exc
@@ -192,7 +192,7 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     __value._set_value(f"{tmp}", check=False, linked=True)
                 else:
                     anchor_dict = __value.value
-                    alias_dict = {'!*': {'key': anchor_dict['!&']['key']}}
+                    alias_dict = {'wic_alias': {'key': anchor_dict['wic_anchor']['key']}}
                     local_input._set_value(alias_dict, check=False, linked=True)
             except BaseException as exc:
                 raise exc
