@@ -261,22 +261,7 @@ def main() -> None:
     # In CWL all env variables are hidden by default so Path().home() doesn't work
     # Also User may specify a different homedir
     default_config_file = Path(args.homedir)/'wic'/'global_config.json'
-    global_config: Json = {}
-    if not Path(args.config_file).exists():
-        if Path(args.config_file) == default_config_file:
-            global_config = io.get_default_config()
-            # write the default config object to the 'global_config.json' file in user's ~/wic directory
-            # for user to inspect and or modify the config json file
-            io.write_config_to_disk(global_config, default_config_file)
-            print(f'default config file : {default_config_file} generated')
-        else:
-            print(f"Error user specified config file {args.config_file} doesn't exist")
-            sys.exit()
-    else:
-        # reading user specified config file only if it exists
-        # never overwrite user's config file or generate another file in user's non-default directory
-        # TODO : Validate the json inside 'read_config_from_disk' function
-        global_config = io.read_config_from_disk(Path(args.config_file))
+    global_config: Json = io.get_config(Path(args.config_file), default_config_file)
 
     tools_cwl = get_tools_cwl(global_config, quiet=args.quiet)
     yml_paths = get_yml_paths(global_config)
