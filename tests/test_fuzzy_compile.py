@@ -70,12 +70,13 @@ class TestFuzzyCompile(unittest.TestCase):
             multi_def_str = 'Error! Multiple definitions of &'
             unbound_lit_var = 'Error! Unbound literal variable ~'
             python_script = 'Error! Cannot load python_script'
+            self_reference = 'Error! Cannot self-reference the same step!'
             # Certain constraints are conditionally dependent on values and are
             # not easily encoded in the schema, so catch them here.
             # Moreover, although we check for the existence of input files in
             # stage_input_files, we cannot encode file existence in json schema
             # to check the python_script script: tag before compile time.
-            if multi_def_str in str(e) or unbound_lit_var in str(e) or python_script in str(e):
+            if multi_def_str in str(e) or unbound_lit_var in str(e) or python_script in str(e) or self_reference in str(e):
                 pass
             else:
                 # import yaml

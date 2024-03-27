@@ -1,7 +1,6 @@
 # pylint: disable=W1203
 """CLT utilities."""
 import logging
-from functools import singledispatch
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
@@ -139,32 +138,11 @@ def _get_value_from_cfg(value: Any) -> Any:  # validation happens in Step
     return value
 
 
-def _is_link(s: str) -> bool:
-    """Return True if s starts with & or *."""
-    if s.startswith("&") or s.startswith("*"):
-        return True
-    return False
+def _is_link(s: dict) -> bool:
+    """Return True if s is a dictionary with a single key wic_anchor or wic_alias"""
+    # See utils_yaml.py
+    return isinstance(s, dict) and (list(s.keys()) == ['wic_anchor'] or list(s.keys()) == ['wic_alias'])
 
-
-@singledispatch
-def _yaml_value(val: Any) -> Union[str, bool, int, float]:
-    """Convert value to YAML compatible value."""
-    return str(val)
-
-
-@_yaml_value.register
-def _(val: int) -> int:
-    return val
-
-
-@_yaml_value.register
-def _(val: float) -> float:
-    return val
-
-
-@_yaml_value.register
-def _(val: bool) -> bool:
-    return val
 
 # Process = Union[Step, Workflow]
 
@@ -192,8 +170,10 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     # (Very useful for regression testing!)
                     # NOTE: process_name is either clt name or workflow name
                     tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
-                    local_input._set_value(f"*{tmp}", check=False, linked=True)
-                    __value._set_value(f"&{tmp}", check=False, linked=True)
+                    alias_dict = {'wic_alias': {'key': tmp}}
+                    local_input._set_value(alias_dict, check=False, linked=True)
+                    anchor_dict = {'wic_anchor': {'key': tmp, 'val': tmp}}  # TODO: deprecate val
+                    __value._set_value(anchor_dict, check=False, linked=True)
             except BaseException as exc:
                 raise exc
         else:  # value is already linked to another inp
@@ -211,15 +191,14 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     local_input._set_value(f"~{tmp}", check=False, linked=True)
                     __value._set_value(f"{tmp}", check=False, linked=True)
                 else:
-                    current_value = __value.value
-                    local_input._set_value(
-                        current_value.replace("&", "*"), check=False, linked=True
-                    )
+                    anchor_dict = __value.value
+                    alias_dict = {'wic_alias': {'key': anchor_dict['wic_anchor']['key']}}
+                    local_input._set_value(alias_dict, check=False, linked=True)
             except BaseException as exc:
                 raise exc
 
     else:
-        if isinstance(__value, str) and _is_link(__value):
+        if _is_link(__value):
             process_self.inputs[index]._set_value(__value, check=False)
         else:
             process_self.inputs[index]._set_value(__value)
@@ -344,13 +323,29 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
 
     @property
     def _yml(self) -> dict:
+        names_values: dict[str, Any] = {}  # NOTE: the values can be arbitrary JSON; not just strings!
+        for inp in self.inputs:
+            if inp.value is not None:
+                if isinstance(inp.value, Path):
+                    # Special case for Path since it does not inherit from YAMLObject
+                    names_values[inp.name] = str(inp.value)
+                elif isinstance(inp.value, yaml.YAMLObject):
+                    # Serialization and deserialization logic should always be
+                    # encapsulated within each object. For the pyyaml library,
+                    # each object should inherit from pyyaml.YAMLObject.
+                    # See https://pyyaml.org/wiki/PyYAMLDocumentation
+                    # Section "Constructors, representers, resolvers"
+                    # class Monster(yaml.YAMLObject): ...
+                    names_values[inp.name] = inp.value
+                else:
+                    logger.warning(f'Warning! input name {inp.name} input value {inp.value}')
+                    logger.warning('is not an instance of YAMLObject. The default str() serialization')
+                    logger.warning('logic often gives bad results. Please explicitly inherit from YAMLObject.')
+                    names_values[inp.name] = inp.value
+
         d = {
             self.process_name: {
-                "in": {
-                    inp.name: _yaml_value(inp.value)
-                    for inp in self.inputs
-                    if inp.value is not None
-                }
+                "in": names_values
             }
         }
         return d
@@ -440,7 +435,7 @@ class Workflow(BaseModel):
                 steps.append(s._yml)
             elif isinstance(s, Workflow):
                 ins = {
-                    inp.name: _yaml_value(inp.value)
+                    inp.name: inp.value
                     for inp in s.inputs
                     if inp.value is not None  # Subworkflow args are not required
                 }
@@ -469,7 +464,7 @@ class Workflow(BaseModel):
                 steps.append(s._yml)
             elif isinstance(s, Workflow):
                 ins = {
-                    inp.name: _yaml_value(inp.value)
+                    inp.name: inp.value
                     for inp in s.inputs
                     if inp.value is not None  # Subworkflow args are not required
                 }

@@ -7,6 +7,8 @@ import numpy as np
 from scipy.optimize import least_squares
 import yaml
 
+from wic.utils_yaml import wic_loader
+
 
 def test_scattering_scaling(minval: int = 100, maxval: int = 500, step: int = 100) -> None:
     """Tests that execution time scales linearly with input array size"""
@@ -20,7 +22,7 @@ def test_scattering_scaling(minval: int = 100, maxval: int = 500, step: int = 10
         # Modify the inputs file using the scaling parameter
         inputs_yml = f'{basedir}/scattering_scaling_inputs.yml'
         with open(inputs_yml, mode='r', encoding='utf-8') as f:
-            d = yaml.safe_load(f.read())
+            d = yaml.load(f.read(), Loader=wic_loader())
 
         d['scattering_scaling__step__1__array_int___maxval'] = i
 
