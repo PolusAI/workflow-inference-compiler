@@ -329,6 +329,15 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                 if isinstance(inp.value, Path):
                     # Special case for Path since it does not inherit from YAMLObject
                     names_values[inp.name] = str(inp.value)
+                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_anchor', {}).get('key', {}), Path):
+                    # Special case for Path since it does not inherit from YAMLObject
+                    names_values[inp.name] = {'wic_anchor': {'key': str(inp.value['wic_anchor']['key']),
+                                                             'val': str(inp.value['wic_anchor']['val'])}}
+                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_alias', {}).get('key', {}), Path):
+                    # Special case for Path since it does not inherit from YAMLObject
+                    names_values[inp.name] = {'wic_alias': {'key': str(inp.value['wic_alias']['key'])}}
+                elif isinstance(inp.value, str):
+                    names_values[inp.name] = inp.value  # Obviously strings are serializable
                 elif isinstance(inp.value, yaml.YAMLObject):
                     # Serialization and deserialization logic should always be
                     # encapsulated within each object. For the pyyaml library,
