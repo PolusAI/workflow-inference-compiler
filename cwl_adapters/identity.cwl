@@ -23,15 +23,6 @@ inputs:
     format:
     - edam:format_2330
 
-  output:
-    label: The output data
-    doc: |-
-      The output data
-    type: string
-    format:
-    - edam:format_2330
-    default: .
-
 outputs:
   output:
     label: The output data

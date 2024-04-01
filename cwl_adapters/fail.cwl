@@ -28,8 +28,7 @@ inputs:
   with_probability:
     type: float
     default: 0.01  # i.e. 1%
-  failout:
-    type: string?
+
 outputs:
   failout:
     type: string

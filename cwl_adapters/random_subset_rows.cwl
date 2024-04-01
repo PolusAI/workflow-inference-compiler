@@ -54,10 +54,6 @@ inputs:
       prefix: --output_file
     default: "Index.txt"
 
-  output_indices:
-    label: indices list
-    type: string?
-
 outputs:
   output_file:
     label: output file of subset indices

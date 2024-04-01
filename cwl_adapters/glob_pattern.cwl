@@ -27,12 +27,6 @@ inputs:
   output_file_format:
     type: string
 
-  output_files_path:
-    type: string?
-
-  output_filenames_path:
-    type: string?
-
 outputs:
   output_files_path:
     type: File[]

@@ -22,10 +22,6 @@ inputs:
     label: Path to the input array
     type: Any
 
-  output_array:
-    label: Path to the output array (subset)
-    type: string?
-
 outputs:
   output_array:
     label: Path to the output array (subset)

@@ -14,6 +14,7 @@ arguments: [$(inputs.script)]
 requirements:
   DockerRequirement:
     dockerPull: cyangnyu/check_linear_fit
+  InlineJavascriptRequirement: {}
 
 inputs:
   script:
@@ -49,15 +50,11 @@ inputs:
     inputBinding:
       prefix: --slope_max
 
-  output:
-    type: string?
 outputs:
-  output:
-    type:
-      type: array
-      items: string
+  success:
+    type: boolean
     outputBinding:
-      glob: $(inputs.output)
+      outputEval: $(true)  # If check_linear_fit.py didn't call sys.exit(1), then it called sys.exit(0)
 
 $namespaces:
   edam: https://edamontology.org/
