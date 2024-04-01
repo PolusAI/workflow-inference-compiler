@@ -434,6 +434,35 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             graph_nx.add_node(step_node_name)
             graphdata.nodes.append((step_node_name, attrs))
 
+        if 'out' not in steps[i][step_key]:
+            steps[i][step_key]['out'] = []
+
+        if steps[i][step_key]['out']:
+            if isinstance(steps[i][step_key]['out'], Dict):
+                print('Error! The `out` tag should be a list, not a dictionary!')
+            for j in range(len(steps[i][step_key]['out'])):
+                out_val = steps[i][step_key]['out'][j]
+                if isinstance(out_val, Dict):
+                    keys = list(out_val.keys())
+                    if len(keys) != 1:
+                        print('Error! There should only be one anchor per out: list entry!')
+                        # raise exception?
+                    out_key = keys[0]
+                    out_val = out_val[out_key]
+                    if isinstance(out_val, Dict) and 'wic_anchor' in out_val:
+                        out_val = out_val['wic_anchor']
+                        edgedef = out_val['key']
+
+                        # NOTE: There can only be one definition, but multiple call sites.
+                        if not explicit_edge_defs_copy.get(edgedef):
+                            steps[i][step_key]['out'][j] = out_key  # discard anchor / retain string key
+                            explicit_edge_defs_copy.update({edgedef: (namespaces + [step_name_i], out_key)})
+                            # Add a 'dummy' value to explicit_edge_calls, because
+                            # that determines sub_args_provided when the recursion returns.
+                            explicit_edge_calls_copy.update({edgedef: (namespaces + [step_name_i], out_key)})
+                        else:
+                            raise Exception(f"Error! Multiple definitions of &{edgedef}!")
+
         # NOTE: sub_args_provided are handled within the args_required loop below
         for arg_key in args_provided:
             # Extract input value into separate yml file
@@ -506,29 +535,6 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                         arg_val['source'] = step_name_j + '/' + out_name
                         break
                 steps[i][step_key]['in'][arg_key] = arg_val"""
-            elif isinstance(arg_val, Dict) and 'wic_anchor' in arg_val:
-                arg_val = arg_val['wic_anchor']
-                edgedef = arg_val['key']
-                filename = arg_val['val']
-
-                # print('arg_key, arg_val['source']', arg_key, arg_val['source'])
-                # NOTE: There can only be one definition, but multiple call sites.
-                if not explicit_edge_defs_copy.get(edgedef):
-                    # if first time encountering arg_val, i.e. if defining
-                    if filename:
-                        inputs_workflow.update({in_name: in_dict})
-                        in_dict = {**in_dict, 'value': {'source': filename}}
-                        inputs_file_workflow.update({in_name: in_dict})
-                        steps[i][step_key]['in'][arg_key] = {'source': in_name}
-                    else:
-                        del steps[i][step_key]['in'][arg_key]
-                    explicit_edge_defs_copy.update({edgedef: (namespaces + [step_name_i], arg_key)})
-                    # Add a 'dummy' value to explicit_edge_calls, because
-                    # that determines sub_args_provided when the recursion returns.
-                    explicit_edge_calls_copy.update({edgedef: (namespaces + [step_name_i], arg_key)})
-                    # TODO: Show input node?
-                else:
-                    raise Exception(f"Error! Multiple definitions of &{edgedef}!")
             elif isinstance(arg_val, Dict) and 'wic_alias' in arg_val and 'cwl_watcher' not in step_key:
                 arg_val = arg_val['wic_alias']
                 # NOTE: Exclude cwl_watcher from explicit edge dereferences.

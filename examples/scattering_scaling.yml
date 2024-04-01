@@ -1,13 +1,15 @@
 steps:
 - array_int:
     in:
-      array: !& {arr_int:}
       maxval: 10
+    out:
+    - array: !& arr_int
 - toString:
     scatter: [input]
     in:
       input: !* arr_int
-      output: !& {arr_string:}
+    out:
+    - output: !& arr_string
 - echo:
     scatter: [message]
     in:

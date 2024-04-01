@@ -172,7 +172,7 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
                     alias_dict = {'wic_alias': {'key': tmp}}
                     local_input._set_value(alias_dict, check=False, linked=True)
-                    anchor_dict = {'wic_anchor': {'key': tmp, 'val': tmp}}  # TODO: deprecate val
+                    anchor_dict = {'wic_anchor': {'key': tmp}}
                     __value._set_value(anchor_dict, check=False, linked=True)
             except BaseException as exc:
                 raise exc
@@ -323,21 +323,25 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
 
     @property
     def _yml(self) -> dict:
-        names_values: dict[str, Any] = {}  # NOTE: the values can be arbitrary JSON; not just strings!
+        names_values_in: dict[str, Any] = {}  # NOTE: input values can be arbitrary JSON; not just strings!
+        wic_anchors_out: list = []  # The out: tag is a list, not a dict
         for inp in self.inputs:
             if inp.value is not None:
+                if isinstance(inp.value, dict) and 'wic_anchor' in inp.value:
+                    val = inp.value['wic_anchor']['key']
+                    # Special case for Path since it does not inherit from YAMLObject
+                    if isinstance(val, Path):
+                        val = str(val)
+                    wic_anchors_out.append({inp.name: {'wic_anchor': {'key': val}}})
+
                 if isinstance(inp.value, Path):
                     # Special case for Path since it does not inherit from YAMLObject
-                    names_values[inp.name] = str(inp.value)
-                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_anchor', {}).get('key', {}), Path):
-                    # Special case for Path since it does not inherit from YAMLObject
-                    names_values[inp.name] = {'wic_anchor': {'key': str(inp.value['wic_anchor']['key']),
-                                                             'val': str(inp.value['wic_anchor']['val'])}}
+                    names_values_in[inp.name] = str(inp.value)
                 elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_alias', {}).get('key', {}), Path):
                     # Special case for Path since it does not inherit from YAMLObject
-                    names_values[inp.name] = {'wic_alias': {'key': str(inp.value['wic_alias']['key'])}}
+                    names_values_in[inp.name] = {'wic_alias': {'key': str(inp.value['wic_alias']['key'])}}
                 elif isinstance(inp.value, str):
-                    names_values[inp.name] = inp.value  # Obviously strings are serializable
+                    names_values_in[inp.name] = inp.value  # Obviously strings are serializable
                 elif isinstance(inp.value, yaml.YAMLObject):
                     # Serialization and deserialization logic should always be
                     # encapsulated within each object. For the pyyaml library,
@@ -345,16 +349,17 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                     # See https://pyyaml.org/wiki/PyYAMLDocumentation
                     # Section "Constructors, representers, resolvers"
                     # class Monster(yaml.YAMLObject): ...
-                    names_values[inp.name] = inp.value
+                    names_values_in[inp.name] = inp.value
                 else:
                     logger.warning(f'Warning! input name {inp.name} input value {inp.value}')
                     logger.warning('is not an instance of YAMLObject. The default str() serialization')
                     logger.warning('logic often gives bad results. Please explicitly inherit from YAMLObject.')
-                    names_values[inp.name] = inp.value
+                    names_values_in[inp.name] = inp.value
 
         d = {
             self.process_name: {
-                "in": names_values
+                "in": names_values_in,
+                "out": wic_anchors_out,
             }
         }
         return d

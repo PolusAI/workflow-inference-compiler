@@ -173,11 +173,6 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     anytype: Dict[Any, Any] = {}
 
     # See utils_yaml.py
-    anchorprops = default_schema()
-    anchorprops['properties'] = {'key': str_nonempty, 'val': anytype}
-    anchorprops['required'] = ['key', 'val']
-    anchor = default_schema()
-    anchor['properties'] = {'wic_anchor': anchorprops}  # !&
     aliasprops = default_schema()
     aliasprops['properties'] = {'key': str_nonempty}
     aliasprops['required'] = ['key']
@@ -195,7 +190,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
 
         # Handle special cases
         if key == 'config' and name in config_schemas:
-            inputs_props[key] = {'anyOf': [str_nonempty, anchor, alias,
+            inputs_props[key] = {'anyOf': [str_nonempty, alias,
                                            {**config_schemas[name], **metadata}]}
             continue
 
@@ -219,9 +214,9 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
                 jsontype = str_nonempty
             if isinstance(jsontype['type'], List) and 'string' in jsontype['type']:
                 jsontype['type'].remove('string')
-            inputs_props[key] = {'anyOf': [str_nonempty, anchor, alias, {**jsontype, **metadata}]}
+            inputs_props[key] = {'anyOf': [str_nonempty, alias, {**jsontype, **metadata}]}
         else:
-            inputs_props[key] = {'anyOf': [str_nonempty, anchor, alias]}
+            inputs_props[key] = {'anyOf': [str_nonempty, alias]}
 
     # Do not mark properties which are required for CWL as required for yml,
     # because the whole point of inference is that we shouldn't have to!
@@ -262,10 +257,23 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     outputs = default_schema()
     outputs['properties'] = outputs_props
 
+    # See utils_yaml.py
+    anchorprops = default_schema()
+    anchorprops['properties'] = {'key': str_nonempty}
+    anchor = default_schema()
+    anchor['properties'] = {'wic_anchor': anchorprops}  # !&
+
+    keys_anchors: Json = {}
+    for key in cwl['outputs'].keys():
+        key_schema = default_schema()
+        key_schema['properties'] = {key: anchor}
+
     # NOTE: This function generates schemas compatible with call sites in a
     # workflow. Specifically, the types of `inputs:` and `in:` are the same (Json)
     # but we want to use out, NOT outputs below, which has type List[str].
-    out = {'type': 'array', 'items': {'type': 'string', 'enum': list(cwl['outputs'].keys())}}
+    outputs_keys = {'type': 'string', 'enum': list(cwl['outputs'].keys())}
+    # Moreover, we want to support the wic_anchor !& syntax in the out: tag
+    out = {'type': 'array', 'items': {'anyOf': [outputs_keys, keys_anchors]}}
 
     step_props = default_schema()
     step_props['title'] = cwl.get('label', '')
@@ -315,6 +323,7 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     # Call recursive reference
     recursive_ref = {'$dynamicRef': '#wic'}
     in_props: Json = {}  # TODO: Add yml specific properties
+    out_props: Json = {}  # TODO: Add yml specific properties
 
     scatter_props: Json = {}  # TODO: Add yml specific properties
     scattermethod_props: Json = {'type': 'string', 'enum': ['dotproduct', 'flat_crossproduct', 'nested_crossproduct']}
@@ -323,6 +332,7 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     if not hypothesis:
         # Empty wildcard {} schemas can cause problems with hypothesis.
         choices_props['in'] = in_props
+        choices_props['out'] = out_props
         choices_props['scatter'] = scatter_props
     choices = default_schema()
     choices['properties'] = choices_props
@@ -431,13 +441,22 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     str_nonempty = {'type': 'string', 'minLength': 1}
 
     if not hypothesis:
-        script_schema: Json = {}
-        script_schema['type'] = 'object'
-        script_schema['additionalProperties'] = True
-        script_schema['properties'] = {'script': str_nonempty}
+        in_schema: Json = {}
+        in_schema['type'] = 'object'
+        in_schema['additionalProperties'] = True
+        in_schema['properties'] = {'script': str_nonempty}
 
-        in_schema = default_schema()
-        in_schema['properties'] = {'in': script_schema}
+        # See utils_yaml.py
+        anchorprops = default_schema()
+        anchorprops['properties'] = {'key': str_nonempty}
+        anchor = default_schema()
+        anchor['properties'] = {'wic_anchor': anchorprops}  # !&
+
+        # NOTE: We do not know the specific keys statically, so we have to use str_nonempty
+        out_schema: Json = {'type': 'array', 'items': {'anyOf': [str_nonempty, anchor]}}
+
+        in_out_schema = default_schema()
+        in_out_schema['properties'] = {'in': in_schema, 'out': out_schema}
 
         python_script_schema = default_schema()
         python_script_schema['properties'] = {'python_script': in_schema}

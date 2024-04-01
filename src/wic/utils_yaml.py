@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Dict, Type
 
 import yaml
 
@@ -8,13 +8,10 @@ import yaml
 # because then these constructors will fire again.
 
 
-def anchor_constructor(loader: yaml.SafeLoader, node: yaml.nodes.MappingNode) -> Dict[str, Dict[str, Any]]:
-    pairs: List[Tuple[str, Any]] = loader.construct_pairs(node)
-    if not len(pairs) == 1:
-        raise Exception("Error! " + str(dict(pairs)) + " must be a single {key, val}")
-    (key, val) = pairs[0]
+def anchor_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> Dict[str, Dict[str, Any]]:
+    key = loader.construct_scalar(node)
     name = 'wic_anchor'  # NOT '!&'
-    return {name: {'key': key, 'val': val}}
+    return {name: {'key': key}}
 
 
 def alias_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> Dict[str, Dict[str, Any]]:

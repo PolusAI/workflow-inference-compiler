@@ -3,18 +3,26 @@ steps:
     in:
       config:
         pdb_code: 1aki
-      output_pdb_path: !& {protein.pdb:}
+      output_pdb_path: protein.pdb
+    out:
+    - output_pdb_path: !& protein_edge
 - fix_amides:
     in:
-      input_pdb_path: !* protein.pdb
-      output_pdb_path: !& {protein_fix_amides.pdb:}
+      input_pdb_path: !* protein_edge
+      output_pdb_path: protein_fix_amides.pdb
+    out:
+    - output_pdb_path: !& protein_fix_amides_edge
 - fix_side_chain:
     in:
-      input_pdb_path: !* protein_fix_amides.pdb
-      output_pdb_path: !& {protein_fix_side_chain.pdb:}
+      input_pdb_path: !* protein_fix_amides_edge
+      output_pdb_path: protein_fix_side_chain.pdb
+    out:
+    - output_pdb_path: !& protein_fix_side_chain_edge
 - extract_model:
     in:
       config:
         models: [1]
-      input_structure_path: !* protein_fix_side_chain.pdb
-      output_structure_path: !& {protein_model_1.pdb:}
+      input_structure_path: !* protein_fix_side_chain_edge
+      output_structure_path: protein_model_1.pdb
+    out:
+    - output_structure_path: !& protein_model_1_edge
