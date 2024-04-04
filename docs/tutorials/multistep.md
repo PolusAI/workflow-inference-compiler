@@ -2,7 +2,7 @@
 
 Our first multi step workflow will consist of downloading a protein from an online database. Unfortunately, experiments are typically unable to resolve all of the atoms and/or residues, so it is necessary to 'fix' the initial data.
 
-On the right is a visual representation of the workflow as a computational graph. The nodes are the steps, and the edges are the input and output files. This graph representation is automatically generated every time you compile a workflow. It is very useful for visually debugging issues with workflows, and so it is a very good idea to ***`always look at the graph representation`*** before running a workflow.
+On the right is a visual representation of the workflow as a computational graph. The nodes are the steps, and the edges are the input and output files. This graph representation is automatically generated every time you compile a workflow (with `--graphviz`). It is very useful for visually debugging issues with workflows, and so it is a very good idea to ***`always look at the graph representation`*** before running a workflow.
 
 <table>
 <tr>
@@ -15,21 +15,29 @@ steps:
     in:
       config:
         pdb_code: 1aki
-      output_pdb_path: '&protein.pdb'
+      output_pdb_path: protein.pdb
+    out:
+    - output_pdb_path: !& protein_edge
 - fix_amides:
     in:
-      input_pdb_path: '*protein.pdb'
-      output_pdb_path: '&protein_fix_amides.pdb'
+      input_pdb_path: !* protein_edge
+      output_pdb_path: protein_fix_amides.pdb
+    out:
+    - output_pdb_path: !& protein_fix_amides_edge
 - fix_side_chain:
     in:
-      input_pdb_path: '*protein_fix_amides.pdb'
-      output_pdb_path: '&protein_fix_side_chain.pdb'
+      input_pdb_path: !* protein_fix_amides_edge
+      output_pdb_path: protein_fix_side_chain.pdb
+    out:
+    - output_pdb_path: !& protein_fix_side_chain_edge
 - extract_model:
     in:
       config:
         models: [1]
-      input_structure_path: '*protein_fix_side_chain.pdb'
-      output_structure_path: '&protein_model_1.pdb'
+      input_structure_path: !* protein_fix_side_chain_edge
+      output_structure_path: protein_model_1.pdb
+    out:
+    - output_structure_path: !& protein_model_1_edge
 ```
 
 </td>
@@ -44,38 +52,7 @@ docs/tutorials/multistep1.yml.gv.png
 
 ## Explicit Edges
 
-The first thing you might notice is that all of the filenames are prefixed with `&` and then `*` (and they are in quotes). This is the syntax for explicitly creating an edge between an output and a later input. Note that `&` must come first and can only be defined once, but then you can use `*` multiple times in any later step.
-
-Note that if you just use regular filenames, they are treated as inputs which are external to the workflow, and thus are assumed to already exist on your filesystem. For example, if we remove the `&` and `*` around `protein_fix_amides.pdb`, we will get the following error message:
-
-```yaml
-steps:
-- pdb:
-    in:
-      config:
-        pdb_code: 1aki
-      output_pdb_path: '&protein.pdb'
-- fix_amides:
-    in:
-      input_pdb_path: '*protein.pdb'
-      output_pdb_path: protein_fix_amides.pdb
-- fix_side_chain:
-    in:
-      input_pdb_path: protein_fix_amides.pdb
-      output_pdb_path: '&protein_fix_side_chain.pdb'
-- extract_model:
-    in:
-      config:
-        models: [1]
-      input_structure_path: '*protein_fix_side_chain.pdb'
-      output_structure_path: '&protein_model_1.pdb'
-```
-
-```
-Error! /Users/jakefennick/workflow-inference-compiler/docs/tutorials/protein_fix_amides.pdb does not exist!
-(Did you forget to use an explicit edge?)
-See https://workflow-inference-compiler.readthedocs.io/en/latest/userguide.html#explicit-edges
-```
+The first thing you might notice is the `!&` and `!*` notation. This is the syntax for explicitly creating an edge between an output and a later input. Note that `!&` must come first and can only be defined once, but then you can use `!*` multiple times in any later step.
 
 ## Visualizing the results
 
@@ -106,7 +83,7 @@ steps:
     in:
       config:
         models: [1]
-      output_structure_path: '&protein_model_1.pdb'
+      output_structure_path: protein_model_1.pdb
 ```
 
 </td>

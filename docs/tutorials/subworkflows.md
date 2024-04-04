@@ -18,7 +18,7 @@ steps:
     in:
       config:
         models: [1]
-      output_structure_path: '&protein_model_1.pdb'
+      output_structure_path: protein_model_1.pdb
 ```
 
 docs/tutorials/fix_protein.yml

@@ -61,7 +61,7 @@ The edge inference algorithm is actually rather simple: For each input with a gi
 
 ## Explicit Edges
 
-If for some reason edge inference fails, you can always explicitly specify the edges using `'&var'` and `'*var'` notation. Simply use `'&var'` to create a reference to an output filename and then, in an input in any later step, use `'*var'` to dereference the filename and create an explicit edge between the output and the input. See [`examples/gromacs`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs) in `mm-workflows` repository for a concrete example. Due to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!), these variables will need to be in quotes. (The notation is intended to be nearly identical, but instead of using `'*var'` to refer to the *contents* of `'&var'` it refers to the *path* to `'&var'`.)
+If for some reason edge inference fails, you can always explicitly specify the edges using `!& var` and `!* var` notation. Simply use `!& var` to create a reference to an output and then, in an input in any later step, use `!* var` to dereference the output and create an explicit edge between the output and the input. See [`examples/gromacs`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs) in `mm-workflows` repository for a concrete example. This notation is intended to be similar to yaml's [anchors and aliases](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) notation (which you can still use!).
 
 ## Inline Inputs
 
@@ -74,4 +74,4 @@ steps:
       message: Hello World
 ```
 
-Note that this is one key different between WIC and CWL. In CWL, all inputs must be given in a separate file. In WIC, inputs can be given inline and after compilation they will be automatically extracted into the separate file.
+Note that this is one key difference between WIC and CWL. In CWL, all inputs must be given in a separate file. In WIC, inputs can be given inline and after compilation they will be automatically extracted into the separate file.
