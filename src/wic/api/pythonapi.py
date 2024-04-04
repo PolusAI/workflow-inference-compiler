@@ -66,6 +66,12 @@ CWLInputParameter = Union[
     cu_parser.cwl_v1_2.CommandInputParameter,
 ]  # cwl_utils does not have CommandInputParameter union
 
+CWLOutputParameter = Union[
+    cu_parser.cwl_v1_0.CommandOutputParameter,
+    cu_parser.cwl_v1_1.CommandOutputParameter,
+    cu_parser.cwl_v1_2.CommandOutputParameter,
+]  # cwl_utils does not have CommandInputParameter union
+
 StrPath = TypeVar("StrPath", str, Path)
 
 
@@ -120,6 +126,57 @@ class ProcessInput(BaseModel):  # pylint: disable=too-few-public-methods
             self.linked = True
 
 
+class ProcessOutput(BaseModel):  # pylint: disable=too-few-public-methods
+    """Output of CWL CommandLineTool or Workflow."""
+
+    out_type: Any
+    name: str
+    # NOTE: Not optional, but we can't initialize it yet
+    parent_obj: Any = Field(default=None)  # Process: Union[Step, Workflow]
+    value: Any = Field(default=None)  # validation happens at assignment
+    required: bool = True
+    linked: bool = False
+
+    def __init__(self, name: str, out_type: Any) -> None:
+        if isinstance(out_type, list) and "null" in out_type:
+            required = False
+        else:
+            required = True
+        super().__init__(out_type=out_type, name=name, required=required)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def get_name_from_id(cls, cwl_id: str) -> Any:
+        """Return name of input from InputParameter.id."""
+        return cwl_id.split("#")[-1]
+
+    @field_validator("out_type", mode="before")
+    @classmethod
+    def set_out_type(cls, out: Any) -> Any:
+        """Return out_type."""
+        if isinstance(out, list):  # optional outs
+            out = out[1]
+        return CWL_TYPES_DICT[out]
+
+    def _set_value(
+        self, __value: Any, check: bool = True, linked: bool = False
+    ) -> None:
+        """Set output value."""
+        if check:
+            # NOTE: "TypeError: typing.Any cannot be used with isinstance()"
+            if not self.out_type == Any and not isinstance(__value, self.out_type):
+                raise TypeError(
+                    f"invalid attribute type for {self.name}: "
+                    f"got {__value.__class__.__name__}, "
+                    f"expected {self.out_type.__name__}"
+                )
+            self.value = __value
+            return
+        self.value = __value  # to be used for linking inputs */&
+        if linked:
+            self.linked = True
+
+
 def _default_dict() -> dict:
     return {}
 
@@ -149,17 +206,17 @@ def _is_link(s: dict) -> bool:
 
 def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any:
     index = process_self._input_names.index(__name)
-    if isinstance(__value, ProcessInput):
+    if isinstance(__value, ProcessOutput):
         process_other = __value.parent_obj
         if not __value.linked:
             try:
                 local_input = process_self.inputs[index]
                 # NOTE: Relax exact equality for Any type
-                if not local_input.inp_type == __value.inp_type and not local_input.inp_type == Any and not __value.inp_type == Any:
+                if not local_input.inp_type == __value.out_type and not local_input.inp_type == Any and not __value.out_type == Any:
                     raise InvalidLinkError(
                         f"links must have the same input type. "
                         f"cannot link {local_input.name} to {__value.name}"
-                        f"with types {local_input.inp_type} to {__value.inp_type}"
+                        f"with types {local_input.inp_type} to {__value.out_type}"
                     )
                 if isinstance(process_other, Workflow):
                     tmp = __value.name  # Use the formal parameter / variable name
@@ -180,11 +237,11 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
             try:
                 local_input = process_self.inputs[index]
                 # NOTE: Relax exact equality for Any type
-                if not local_input.inp_type == __value.inp_type and not local_input.inp_type == Any and not __value.inp_type == Any:
+                if not local_input.inp_type == __value.out_type and not local_input.inp_type == Any and not __value.out_type == Any:
                     raise InvalidLinkError(
                         f"links must have the same input type. "
                         f"cannot link {local_input.name} to {__value.name} "
-                        f"with types {local_input.inp_type} to {__value.inp_type}"
+                        f"with types {local_input.inp_type} to {__value.out_type}"
                     )
                 if isinstance(process_other, Workflow):
                     tmp = __value.name  # Use the formal parameter / variable name
@@ -213,9 +270,11 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
     process_name: str
     cwl_version: str
     inputs: list[ProcessInput]
+    outputs: list[ProcessOutput]
     yaml: dict[str, Any]
     cfg_yaml: dict = Field(default_factory=_default_dict)
     _input_names: list[str] = PrivateAttr(default_factory=list)
+    _output_names: list[str] = PrivateAttr(default_factory=list)
 
     def __init__(self, clt_path: StrPath, config_path: Optional[StrPath] = None):
         # validate using cwl.utils
@@ -268,6 +327,7 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
             "cwl_version": clt.cwlVersion,
             "process_name": process_name,
             "inputs": clt.inputs,
+            "outputs": clt.outputs,
             "yaml": yaml_file,
             "cfg_yaml": cfg_yaml,
         }
@@ -275,6 +335,9 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         for inp in self.inputs:
             inp.parent_obj = self  # Create a reference to the parent Step object
         self._input_names = [inp.id.split("#")[-1] for inp in clt.inputs]
+        for out in self.outputs:
+            out.parent_obj = self  # Create a reference to the parent Step object
+        self._output_names = [out.id.split("#")[-1] for out in clt.outputs]
         if config_path:
             self._set_from_io_cfg()
 
@@ -288,12 +351,22 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         # NOTE: Cannot initialize .parent_obj = self here due to @classmethod
         return [ProcessInput(str(x.id), x.type_) for x in cwl_inps]
 
+    @field_validator("outputs", mode="before")
+    @classmethod
+    def cast_to_process_output_model(
+        cls, cwl_outs: list[CWLOutputParameter]
+    ) -> list[ProcessOutput]:
+        """Populate outputs from cwl.outputs."""
+        # NOTE: .type in version 0.31 only!
+        # NOTE: Cannot initialize .parent_obj = self here due to @classmethod
+        return [ProcessOutput(str(x.id), x.type_) for x in cwl_outs]
+
     def __repr__(self) -> str:
         repr_ = f"Step(clt_path={self.clt_path.__repr__()})"
         return repr_
 
     def __setattr__(self, __name: str, __value: Any) -> Any:
-        if __name in ["inputs", "yaml", "cfg_yaml", "process_name", "_input_names",
+        if __name in ["inputs", "outputs", "yaml", "cfg_yaml", "process_name", "_input_names", "_output_names",
                       "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
         if hasattr(self, "_input_names") and __name in self._input_names:
@@ -304,8 +377,8 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
     def __getattr__(self, __name: str) -> Any:
         if __name in ["__pydantic_private__", "__class__", "__private_attributes__"]:
             return super().__getattribute__(__name)
-        if __name != "_input_names" and __name in self._input_names:  # and hasattr(self, "_input_names") ?
-            return self.inputs[self._input_names.index(__name)]
+        if __name != "_output_names" and __name in self._output_names:  # and hasattr(self, "_output_names") ?
+            return self.outputs[self._output_names.index(__name)]
         # https://github.com/pydantic/pydantic/blob/812516d71a8696d5e29c5bdab40336d82ccde412/pydantic/main.py#L743-744
         # "We put `__getattr__` in a non-TYPE_CHECKING block because otherwise, mypy allows arbitrary attribute access
         # The same goes for __setattr__ and __delattr__, see: https://github.com/pydantic/pydantic/issues/8643"
@@ -323,25 +396,17 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
 
     @property
     def _yml(self) -> dict:
-        names_values_in: dict[str, Any] = {}  # NOTE: input values can be arbitrary JSON; not just strings!
-        wic_anchors_out: list = []  # The out: tag is a list, not a dict
+        in_dict: dict[str, Any] = {}  # NOTE: input values can be arbitrary JSON; not just strings!
         for inp in self.inputs:
             if inp.value is not None:
-                if isinstance(inp.value, dict) and 'wic_anchor' in inp.value:
-                    val = inp.value['wic_anchor']['key']
-                    # Special case for Path since it does not inherit from YAMLObject
-                    if isinstance(val, Path):
-                        val = str(val)
-                    wic_anchors_out.append({inp.name: {'wic_anchor': {'key': val}}})
-
                 if isinstance(inp.value, Path):
                     # Special case for Path since it does not inherit from YAMLObject
-                    names_values_in[inp.name] = str(inp.value)
+                    in_dict[inp.name] = str(inp.value)
                 elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_alias', {}).get('key', {}), Path):
                     # Special case for Path since it does not inherit from YAMLObject
-                    names_values_in[inp.name] = {'wic_alias': {'key': str(inp.value['wic_alias']['key'])}}
+                    in_dict[inp.name] = {'wic_alias': {'key': str(inp.value['wic_alias']['key'])}}
                 elif isinstance(inp.value, str):
-                    names_values_in[inp.name] = inp.value  # Obviously strings are serializable
+                    in_dict[inp.name] = inp.value  # Obviously strings are serializable
                 elif isinstance(inp.value, yaml.YAMLObject):
                     # Serialization and deserialization logic should always be
                     # encapsulated within each object. For the pyyaml library,
@@ -349,17 +414,19 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                     # See https://pyyaml.org/wiki/PyYAMLDocumentation
                     # Section "Constructors, representers, resolvers"
                     # class Monster(yaml.YAMLObject): ...
-                    names_values_in[inp.name] = inp.value
+                    in_dict[inp.name] = inp.value
                 else:
                     logger.warning(f'Warning! input name {inp.name} input value {inp.value}')
                     logger.warning('is not an instance of YAMLObject. The default str() serialization')
                     logger.warning('logic often gives bad results. Please explicitly inherit from YAMLObject.')
-                    names_values_in[inp.name] = inp.value
+                    in_dict[inp.name] = inp.value
 
+        out_list: list = []  # The out: tag is a list, not a dict
+        out_list = [{out.name: out.value} for out in self.outputs if out.value]
         d = {
             self.process_name: {
-                "in": names_values_in,
-                "out": wic_anchors_out,
+                "in": in_dict,
+                "out": out_list,
             }
         }
         return d
@@ -398,7 +465,9 @@ class Workflow(BaseModel):
     steps: list  # list[Process]  # and cannot use Process defined after Workflow within a Workflow
     process_name: str
     inputs: list[ProcessInput] = []
+    outputs: list[ProcessOutput] = []
     _input_names: list[str] = PrivateAttr(default_factory=list)
+    _output_names: list[str] = PrivateAttr(default_factory=list)
     yml_path: Optional[Path] = Field(default=None)
     # Cannot use field() from dataclasses. Otherwise:
     # from dataclasses import field
@@ -437,12 +506,23 @@ class Workflow(BaseModel):
             raise TypeError("step must be either a Step or a Workflow")
         self.steps.append(step_)
 
+        # for name in step_._input_names:
+        #     self._input_names.append(name)
+        # for inp in step_.inputs:
+        #     self.inputs.append(inp)
+
+        # for name in step_._output_names:
+        #     self._output_names.append(name)
+        # for out in step_.outputs:
+        #     self.outputs.append(out)
+
     @property
     def yaml(self) -> dict[str, Any]:
         """Converts a Workflow to the equivalent underlying WIC YML representation, in-memory."""
         # NOTE: Use the CWL v1.2 `Any` type for lack of actual type information.
         # TODO: try inp.inp_type (if initialized?)
         inputs: dict[str, Any] = {inp.name: {'type': 'Any'} for inp in self.inputs}
+        # TODO: outputs?
         steps = []
         for s in self.steps:
             if isinstance(s, Step):
@@ -472,6 +552,7 @@ class Workflow(BaseModel):
         # NOTE: Use the CWL v1.2 `Any` type for lack of actual type information.
         # TODO: try inp.inp_type (if initialized?)
         inputs: dict[str, Any] = {inp.name: {'type': 'Any'} for inp in self.inputs}
+        # TODO: outputs?
         steps = []
         for s in self.steps:
             if isinstance(s, Step):
@@ -514,14 +595,28 @@ class Workflow(BaseModel):
         self.inputs.append(inp)
         return inp
 
+    def add_output(self, __name: str) -> Any:
+        logger.warning(f'Adding a new output {__name} to workflow {self.process_name}')
+        self._output_names.append(__name)
+        out = ProcessOutput(__name, 'Any')  # Use Any type
+        out.parent_obj = self  # Create a reference to the parent Workflow object
+        self.outputs.append(out)
+        return out
+
     # def __repr__(self) -> str:
     #     repr_ = ...
     #     return repr_
 
     def __setattr__(self, __name: str, __value: Any) -> Any:
-        if __name in ["inputs", "yaml", "cfg_yaml", "process_name", "_input_names",
+        if __name in ["inputs", "outputs", "yaml", "cfg_yaml", "process_name", "_input_names", "_output_names",
                       "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
+        # NOTE: Unlike the syntax `... = workflow.attribute`
+        # where attribute is interpreted to be a formal parameter / an input variable for the workflow,
+        # the syntax `workflow.attribute = ...` is ambiguous.
+        # attribute could refer to the actual parameter / input value, or
+        # attribute could refer to a formal output variable for the workflow.
+        # By default, we have arbitrarily chosen the former.
         if hasattr(self, "_input_names"):
             if __name not in self._input_names:
                 self.add_input(__name)
@@ -532,11 +627,12 @@ class Workflow(BaseModel):
     def __getattr__(self, __name: str) -> Any:
         if __name in ["__pydantic_private__", "__class__", "__private_attributes__"]:
             return super().__getattribute__(__name)
-        if __name != "_input_names":  # and hasattr(self, "_input_names") ?
-            if __name in self._input_names:
-                return self.inputs[self._input_names.index(__name)]
+        # TODO: double check the following logic.
+        if __name != "_input_names" and __name != "_output_names":  # and hasattr(self, "_output_names") ?
+            if __name in self._output_names:
+                return self.outputs[self._output_names.index(__name)]
             else:
-                return self.add_input(__name)
+                return self.add_output(__name)
         # https://github.com/pydantic/pydantic/blob/812516d71a8696d5e29c5bdab40336d82ccde412/pydantic/main.py#L743-744
         # "We put `__getattr__` in a non-TYPE_CHECKING block because otherwise, mypy allows arbitrary attribute access
         # The same goes for __setattr__ and __delattr__, see: https://github.com/pydantic/pydantic/issues/8643"
