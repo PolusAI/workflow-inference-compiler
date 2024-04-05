@@ -24,9 +24,6 @@ inputs:
     type: string
     default: "."
 
-  subdirectory:
-    type: Directory
-
 outputs:
   subdirectory:
     type: Directory

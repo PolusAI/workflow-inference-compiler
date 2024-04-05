@@ -31,9 +31,6 @@ inputs:
     label: Round to number of decimal places of precision.
     doc: Round to number of decimal places of precision.
 
-  array:
-    type: string?
-
 outputs:
   array:
     type: float[]

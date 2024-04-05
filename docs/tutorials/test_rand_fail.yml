@@ -1,14 +1,15 @@
 steps:
 - array_float:
     in:
-      array: '&arr_float'
       minval: 0.9
       maxval: 1
       step: 0.01
       decimal_places: 2
+    out:
+    - array: !& arr_float
 - fail.yml:
     scatter: [fail__step__1__fail___with_probability]
 - echo:
     scatter: [message]
     in:
-      message: '*out_thing'
+      message: !* out_thing

@@ -25,9 +25,6 @@ inputs:
     type: int
     default: 1
 
-  array:
-    type: string?
-
 outputs:
   array:
     type: int[]

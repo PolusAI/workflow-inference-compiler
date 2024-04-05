@@ -3,5 +3,6 @@ steps:
 - fail:
     # scatter: [with_probability]
     in:
-      with_probability: '*arr_float'
-      failout: '&out_thing'
+      with_probability: !* arr_float
+    out:
+    - failout: !& out_thing

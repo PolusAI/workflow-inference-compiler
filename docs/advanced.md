@@ -97,12 +97,12 @@ Speculative execution is currently implemented by `cwl_watcher`, which invokes a
 ```yaml
 ...
   - mdrun:
-      in:
-        output_edr_path: '&nvt.edr' # Explicit edge reference / anchor
+      out:
+      - output_edr_path: !& nvt.edr # Explicit edge reference / anchor
         # (This edge can be inferred, but made explicit for demonstration purposes.)
   - gmx_energy:
       in:
-        input_energy_path: '*nvt.edr' # Explicit edge dereference / alias
+        input_energy_path: !* nvt.edr # Explicit edge dereference / alias
         config:
           terms: [Temperature]
         output_xvg_path: temperature.xvg
@@ -111,7 +111,7 @@ Speculative execution is currently implemented by `cwl_watcher`, which invokes a
   - cwl_watcher:
       in:
         #cachedir_path: /absolute/path/to/cachedir/ (automatically filled in by wic)
-        file_pattern: '*nvt.edr' # This * is a glob wildcard, NOT an explicit edge!
+        file_pattern: '*nvt.edr'  # Any strings that start with & or * need to be escaped in quotes
         cwl_tool: gmx_energy # This can also be an arbitrary subworkflow!
         max_times: '5'
         config:
@@ -206,7 +206,7 @@ wic:
 
 This example shows how we can recursively pass in parameters / recursively overload metadata.
 
-Suppose we want to do a very careful minimization, first in vacuum and then in solvent (i.e. [`examples/gromacs/setup_vac_min.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup_vac_min.yml) in `mm-workflows`). We would like to re-use the abstract minimization protocol from `min.yml`. However, our stability analysis requires an explicit edge definition from the final minimized coordinates (i.e. in solvent). If we try to simply add `output_tpr_path: '&min.tpr'` directly to `min.yml`, there will be duplicate definitions! This is not allowed (it will generate an exception).
+Suppose we want to do a very careful minimization, first in vacuum and then in solvent (i.e. [`examples/gromacs/setup_vac_min.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup_vac_min.yml) in `mm-workflows`). We would like to re-use the abstract minimization protocol from `min.yml`. However, our stability analysis requires an explicit edge definition from the final minimized coordinates (i.e. in solvent). If we try to simply add `- output_tpr_path: !& min.tpr` directly to `min.yml`, there will be duplicate definitions! This is not allowed (it will generate an exception).
 
 The solution is to pass in this parameter to only the second instance of `min.yml`. Since every `*.yml` file may contain a `wic:` tag, this is implemented by simply recursively merging the dictionaries, where values from parent `*.yml` files overwrite values in the child `*.yml` files. Note that we do not need to modify `min.yml`!
 
@@ -228,8 +228,8 @@ wic:
             wic:
               steps:
                 (1, grompp):
-                  in:
-                    output_tpr_path: '&min.tpr'
+                  out:
+                  - output_tpr_path: !& min.tpr
 ...
 ```
 

@@ -77,12 +77,15 @@ docs/tutorials/naming_conventions_explicit.yml
 steps:
 - ambiguous:
     in:
-      uniquename1: '&string1'
-      uniquename2: '&string2'
+      uniquename1: string1
+      uniquename2: string2
+    out:
+    - uniquename1: !& edge1
+    - uniquename2: !& edge2
 - ambiguous:
     in:
-      uniquename1: '*string1'
-      uniquename2: '*string2'
+      uniquename1: !* edge1
+      uniquename2: !* edge2
 ```
 </td>
 <td>

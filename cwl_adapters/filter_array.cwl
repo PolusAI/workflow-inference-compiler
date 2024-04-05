@@ -21,9 +21,6 @@ inputs:
   input_bool_array:
     type: boolean[]
 
-  output_array:
-    type: string?
-
 outputs:
 
   output_array:
