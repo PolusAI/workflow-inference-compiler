@@ -20,10 +20,24 @@ def alias_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> D
     return {name: {'key': key}}
 
 
-def inlineinput_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> Dict[str, Dict[str, Any]]:
-    val = loader.construct_scalar(node)
+def inlineinput_constructor(loader: yaml.SafeLoader, node: yaml.nodes.Node) -> Dict[str, Dict[str, Any]]:
+    val: Any
+    if isinstance(node, yaml.nodes.ScalarNode):
+        try:
+            # loader.construct_scalar always returns a string, whereas
+            val = yaml.safe_load(node.value)
+            # yaml.safe_load returns the correct primitive types
+        except Exception:
+            # but fallback to a string if it is not actually a primitive type.
+            val = loader.construct_scalar(node)
+    elif isinstance(node, yaml.nodes.MappingNode):
+        val = loader.construct_mapping(node)
+    elif isinstance(node, yaml.nodes.SequenceNode):
+        val = loader.construct_sequence(node)
+    else:
+        raise Exception(f'Unknown yaml node type! {node}')
     name = 'wic_inline_input'  # NOT '!ii'
-    return {name: {'val': val}}
+    return {name: {'key': val}}
 
 
 def wic_loader() -> Type[yaml.SafeLoader]:

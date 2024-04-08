@@ -179,6 +179,12 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     alias = default_schema()
     alias['properties'] = {'wic_alias': aliasprops}  # !*
 
+    iiprops = default_schema()
+    iiprops['properties'] = {'key': anytype}
+    iiprops['required'] = ['key']
+    ii = default_schema()
+    ii['properties'] = {'wic_inline_input': iiprops}  # !ii
+
     # required = []
     for key, val in cwl['inputs'].items():
         metadata = {'title': val.get('label', ''), 'description': val.get('doc', '')}
@@ -190,7 +196,7 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
 
         # Handle special cases
         if key == 'config' and name in config_schemas:
-            inputs_props[key] = {'anyOf': [str_nonempty, alias,
+            inputs_props[key] = {'anyOf': [str_nonempty, alias, ii,
                                            {**config_schemas[name], **metadata}]}
             continue
 
@@ -203,7 +209,15 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
             continue
 
         if key == 'config' and name == 'config_tag_mdp':
-            inputs_props[key] = config_schemas.get('grompp', {})
+            grompp = config_schemas.get('grompp', {})
+
+            iiprops_mdp = default_schema()
+            iiprops_mdp['properties'] = {'key': grompp}
+            iiprops_mdp['required'] = ['key']
+            ii_mdp = default_schema()
+            ii_mdp['properties'] = {'wic_inline_input': iiprops_mdp}  # !ii
+
+            inputs_props[key] = ii_mdp
             continue
 
         # Add type information, with exceptions
@@ -214,9 +228,9 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
                 jsontype = str_nonempty
             if isinstance(jsontype['type'], List) and 'string' in jsontype['type']:
                 jsontype['type'].remove('string')
-            inputs_props[key] = {'anyOf': [str_nonempty, alias, {**jsontype, **metadata}]}
+            inputs_props[key] = {'anyOf': [str_nonempty, alias, ii, {**jsontype, **metadata}]}
         else:
-            inputs_props[key] = {'anyOf': [str_nonempty, alias]}
+            inputs_props[key] = {'anyOf': [str_nonempty, alias, ii]}
 
     # Do not mark properties which are required for CWL as required for yml,
     # because the whole point of inference is that we shouldn't have to!

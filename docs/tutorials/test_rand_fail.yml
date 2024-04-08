@@ -1,10 +1,10 @@
 steps:
 - array_float:
     in:
-      minval: 0.9
-      maxval: 1
-      step: 0.01
-      decimal_places: 2
+      minval: !ii 0.9
+      maxval: !ii 1
+      step: !ii 0.01
+      decimal_places: !ii 2
     out:
     - array: !& arr_float
 - fail.yml:
