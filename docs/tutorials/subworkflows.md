@@ -11,12 +11,12 @@ docs/tutorials/multistep3.yml
 steps:
 - pdb:
     in:
-      config:
+      config: !ii
         pdb_code: 1aki
 - fix_protein.yml:
 - extract_model:
     in:
-      config:
+      config: !ii
         models: [1]
       output_structure_path: protein_model_1.pdb
 ```

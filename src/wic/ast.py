@@ -286,9 +286,13 @@ def python_script_generate_cwl(yaml_tree_tuple: YamlTree,
                 # This generates a CWL CommandLineTool for an arbitrary python script.
                 yml_args = copy.deepcopy(steps[i][step_key]['in'])
                 python_script_path = yml_args.get('script', '')
+                if isinstance(python_script_path, dict) and 'wic_inline_input' in python_script_path:
+                    python_script_path = python_script_path['wic_inline_input']['key']
                 # NOTE: The existence of the script: tag should now be guaranteed in the schema
                 del yml_args['script']
                 python_script_docker_pull = yml_args.get('dockerPull', '')  # Optional
+                if isinstance(python_script_docker_pull, dict) and 'wic_inline_input' in python_script_docker_pull:
+                    python_script_docker_pull = python_script_docker_pull['wic_inline_input']['key']
                 if 'dockerPull' in yml_args:
                     del yml_args['dockerPull']
                     del steps[i][step_key]['in']['dockerPull']

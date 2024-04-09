@@ -2,6 +2,6 @@
 steps:
   - nvidia_smi:
       in:
-        query: index,uuid,name,temperature.gpu,utilization.gpu,memory.used,memory.total 
-        file_format: csv
-        output_txt_path: output.csv
+        query: !ii index,uuid,name,temperature.gpu,utilization.gpu,memory.used,memory.total
+        file_format: !ii csv
+        output_txt_path: !ii output.csv

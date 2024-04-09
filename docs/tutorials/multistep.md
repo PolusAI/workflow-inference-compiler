@@ -13,7 +13,7 @@ docs/tutorials/multistep1.yml
 steps:
 - pdb:
     in:
-      config:
+      config: !ii
         pdb_code: 1aki
       output_pdb_path: protein.pdb
     out:
@@ -32,7 +32,7 @@ steps:
     - output_pdb_path: !& protein_fix_side_chain_edge
 - extract_model:
     in:
-      config:
+      config: !ii
         models: [1]
       input_structure_path: !* protein_fix_side_chain_edge
       output_structure_path: protein_model_1.pdb
@@ -75,13 +75,13 @@ docs/tutorials/multistep2.yml
 steps:
 - pdb:
     in:
-      config:
+      config: !ii
         pdb_code: 1aki
 - fix_amides:
 - fix_side_chain:
 - extract_model:
     in:
-      config:
+      config: !ii
         models: [1]
       output_structure_path: protein_model_1.pdb
 ```

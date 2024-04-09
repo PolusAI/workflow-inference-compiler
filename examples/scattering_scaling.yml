@@ -1,7 +1,7 @@
 steps:
 - array_int:
     in:
-      maxval: 10
+      maxval: !ii 10
     out:
     - array: !& arr_int
 - toString:

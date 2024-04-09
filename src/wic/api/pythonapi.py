@@ -108,19 +108,9 @@ class ProcessInput(BaseModel):  # pylint: disable=too-few-public-methods
         return CWL_TYPES_DICT[inp]
 
     def _set_value(
-        self, __value: Any, check: bool = True, linked: bool = False
+        self, __value: Any, linked: bool = False
     ) -> None:
         """Set input value."""
-        if check:
-            # NOTE: "TypeError: typing.Any cannot be used with isinstance()"
-            if not self.inp_type == Any and not isinstance(__value, self.inp_type):
-                raise TypeError(
-                    f"invalid attribute type for {self.name}: "
-                    f"got {__value.__class__.__name__}, "
-                    f"expected {self.inp_type.__name__}"
-                )
-            self.value = __value
-            return
         self.value = __value  # to be used for linking inputs */&
         if linked:
             self.linked = True
@@ -159,19 +149,9 @@ class ProcessOutput(BaseModel):  # pylint: disable=too-few-public-methods
         return CWL_TYPES_DICT[out]
 
     def _set_value(
-        self, __value: Any, check: bool = True, linked: bool = False
+        self, __value: Any, linked: bool = False
     ) -> None:
         """Set output value."""
-        if check:
-            # NOTE: "TypeError: typing.Any cannot be used with isinstance()"
-            if not self.out_type == Any and not isinstance(__value, self.out_type):
-                raise TypeError(
-                    f"invalid attribute type for {self.name}: "
-                    f"got {__value.__class__.__name__}, "
-                    f"expected {self.out_type.__name__}"
-                )
-            self.value = __value
-            return
         self.value = __value  # to be used for linking inputs */&
         if linked:
             self.linked = True
@@ -195,12 +175,6 @@ def _get_value_from_cfg(value: Any) -> Any:  # validation happens in Step
     return value
 
 
-def _is_link(s: dict) -> bool:
-    """Return True if s is a dictionary with a single key wic_anchor or wic_alias"""
-    # See utils_yaml.py
-    return isinstance(s, dict) and (list(s.keys()) == ['wic_anchor'] or list(s.keys()) == ['wic_alias'])
-
-
 # Process = Union[Step, Workflow]
 
 
@@ -220,17 +194,17 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     )
                 if isinstance(process_other, Workflow):
                     tmp = __value.name  # Use the formal parameter / variable name
-                    local_input._set_value(f"~{tmp}", check=False, linked=True)
-                    __value._set_value(f"{tmp}", check=False, linked=True)
+                    local_input._set_value(f"{tmp}", linked=True)
+                    __value._set_value(f"{tmp}", linked=True)
                 else:
                     # Use the current value so we can exactly reproduce hand-crafted yml files.
                     # (Very useful for regression testing!)
                     # NOTE: process_name is either clt name or workflow name
                     tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
                     alias_dict = {'wic_alias': {'key': tmp}}
-                    local_input._set_value(alias_dict, check=False, linked=True)
+                    local_input._set_value(alias_dict, linked=True)
                     anchor_dict = {'wic_anchor': {'key': tmp}}
-                    __value._set_value(anchor_dict, check=False, linked=True)
+                    __value._set_value(anchor_dict, linked=True)
             except BaseException as exc:
                 raise exc
         else:  # value is already linked to another inp
@@ -245,20 +219,26 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     )
                 if isinstance(process_other, Workflow):
                     tmp = __value.name  # Use the formal parameter / variable name
-                    local_input._set_value(f"~{tmp}", check=False, linked=True)
-                    __value._set_value(f"{tmp}", check=False, linked=True)
+                    local_input._set_value(f"{tmp}", linked=True)
+                    __value._set_value(f"{tmp}", linked=True)
                 else:
                     anchor_dict = __value.value
                     alias_dict = {'wic_alias': {'key': anchor_dict['wic_anchor']['key']}}
-                    local_input._set_value(alias_dict, check=False, linked=True)
+                    local_input._set_value(alias_dict, linked=True)
             except BaseException as exc:
                 raise exc
 
     else:
-        if _is_link(__value):
-            process_self.inputs[index]._set_value(__value, check=False)
-        else:
-            process_self.inputs[index]._set_value(__value)
+        obj = process_self.inputs[index]
+        # NOTE: "TypeError: typing.Any cannot be used with isinstance()"
+        if not obj.inp_type == Any and not isinstance(__value, obj.inp_type):
+            raise TypeError(
+                f"invalid attribute type for {obj.name}: "
+                f"got {__value.__class__.__name__}, "
+                f"expected {obj.inp_type.__name__}"
+            )
+        ii_dict = {'wic_inline_input': {'key': __value}}
+        process_self.inputs[index]._set_value(ii_dict)
 
 
 class Step(BaseModel):  # pylint: disable=too-few-public-methods
@@ -405,6 +385,9 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                 elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_alias', {}).get('key', {}), Path):
                     # Special case for Path since it does not inherit from YAMLObject
                     in_dict[inp.name] = {'wic_alias': {'key': str(inp.value['wic_alias']['key'])}}
+                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_inline_input', {}).get('key', {}), Path):
+                    # Special case for Path since it does not inherit from YAMLObject
+                    in_dict[inp.name] = {'wic_inline_input': {'key': str(inp.value['wic_inline_input']['key'])}}
                 elif isinstance(inp.value, str):
                     in_dict[inp.name] = inp.value  # Obviously strings are serializable
                 elif isinstance(inp.value, yaml.YAMLObject):

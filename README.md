@@ -47,7 +47,7 @@ label: Conjugate Gradient
 steps:
   - grompp:
       in:
-        config:
+        config: !ii
           mdp:
             integrator: cg
             nsteps: 1000
@@ -58,7 +58,7 @@ steps:
         pme_terms: cpu
   - gmx_energy:
       in:
-        config:
+        config: !ii
           terms: [Potential]
         output_xvg_path: energy_min_cg.xvg
 ```

@@ -103,7 +103,7 @@ Speculative execution is currently implemented by `cwl_watcher`, which invokes a
   - gmx_energy:
       in:
         input_energy_path: !* nvt.edr # Explicit edge dereference / alias
-        config:
+        config: !ii
           terms: [Temperature]
         output_xvg_path: temperature.xvg
 # NOTE: explicit edges are not supported with cwl_watcher, and all filenames
@@ -114,10 +114,10 @@ Speculative execution is currently implemented by `cwl_watcher`, which invokes a
         file_pattern: '*nvt.edr'  # Any strings that start with & or * need to be escaped in quotes
         cwl_tool: gmx_energy # This can also be an arbitrary subworkflow!
         max_times: '5'
-        config:
+        config: !ii
           in:
             input_energy_path: '*nvt.edr' # This * is automatically removed.
-            config:
+            config: !ii
               terms: [Temperature]
             output_xvg_path: temperature.xvg
 ...
