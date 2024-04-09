@@ -451,8 +451,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     out_key = keys[0]
                     out_val = out_val[out_key]
                     if isinstance(out_val, Dict) and 'wic_anchor' in out_val:
-                        out_val = out_val['wic_anchor']
-                        edgedef = out_val['key']
+                        edgedef = out_val['wic_anchor']
 
                         # NOTE: There can only be one definition, but multiple call sites.
                         if not explicit_edge_defs_copy.get(edgedef):
@@ -473,7 +472,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             tags = ['config']
             if arg_key in tags and isinstance(arg_val, Dict) and ('wic_inline_input' in arg_val):
                 # Do NOT wrap config: in {'source': ...}
-                arg_val = {'wic_inline_input': {'key': json.dumps(arg_val['wic_inline_input']['key'])}}
+                arg_val = {'wic_inline_input': json.dumps(arg_val['wic_inline_input'])}
             elif isinstance(arg_val, str):
                 arg_val = {'source': arg_val}
             # Use triple underscore for namespacing so we can split later
@@ -495,21 +494,21 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # NOTE: Exclude cwl_watcher from explicit edge dereferences.
                 # Since cwl_watcher requires explicit filenames for globbing,
                 # we do not want to replace them with internal CWL dependencies!
-                if not explicit_edge_defs_copy.get(arg_val['key']):
+                if not explicit_edge_defs_copy.get(arg_val):
                     if is_root and not testing:
                         # Even if is_root, we don't want to raise an Exception
                         # here because in test_cwl_embedding_independence, we
                         # recompile all subworkflows as if they were root. That
                         # will cause this code path to be taken but it is not
                         # actually an error. Add a CWL input for testing only.
-                        raise Exception(f"Error! No definition found for &{arg_val['key']}!")
+                        raise Exception(f"Error! No definition found for &{arg_val}!")
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = {'source': in_name}
                     # Add a 'dummy' value to explicit_edge_calls anyway, because
                     # that determines sub_args_provided when the recursion returns.
                     explicit_edge_calls_copy.update({in_name: (namespaces + [step_name_i], arg_key)})
                 else:
-                    (nss_def_init, var) = explicit_edge_defs_copy[arg_val['key']]
+                    (nss_def_init, var) = explicit_edge_defs_copy[arg_val]
 
                     nss_def_embedded = var.split('___')[:-1]
                     nss_call_embedded = arg_key.split('___')[:-1]
@@ -546,7 +545,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     elif len(nss_call_tails) > 1:
                         inputs_workflow.update({in_name: in_dict})
                         # Store explicit edge call site info up through the recursion.
-                        d = {in_name: explicit_edge_defs_copy[arg_val['key']]}
+                        d = {in_name: explicit_edge_defs_copy[arg_val]}
                         # d = {in_name, (namespaces + [step_name_i], var)} # ???
                         explicit_edge_calls_copy.update(d)
                         steps[i][step_key]['in'][arg_key] = {'source': in_name}
@@ -601,7 +600,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
                         utils_graphs.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
             elif isinstance(arg_val, Dict) and 'wic_inline_input' in arg_val:
-                arg_val = arg_val['wic_inline_input']['key']
+                arg_val = arg_val['wic_inline_input']
 
                 if arg_key in steps[i][step_key].get('scatter', []):
                     # Promote scattered input types to arrays

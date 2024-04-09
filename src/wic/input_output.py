@@ -220,10 +220,10 @@ def write_absolute_yaml_tags(args: argparse.Namespace, in_dict_in: Yaml, namespa
     # we don't want users' home directories in the yml files.
     cachedir_path = Path(args.cachedir).absolute()
     # print('setting cachedir_path to', cachedir_path)
-    in_dict_in['root_workflow_yml_path'] = {'wic_inline_input': {'key': str(Path(args.yaml).parent.absolute())}}
+    in_dict_in['root_workflow_yml_path'] = {'wic_inline_input': str(Path(args.yaml).parent.absolute())}
 
-    in_dict_in['cachedir_path'] = {'wic_inline_input': {'key': str(cachedir_path)}}
-    in_dict_in['homedir'] = {'wic_inline_input': {'key': args.homedir}}
+    in_dict_in['cachedir_path'] = {'wic_inline_input': str(cachedir_path)}
+    in_dict_in['homedir'] = {'wic_inline_input': args.homedir}
 
     # Add a 'dummy' values to explicit_edge_calls, because
     # that determines sub_args_provided when the recursion returns.

@@ -201,9 +201,9 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     # (Very useful for regression testing!)
                     # NOTE: process_name is either clt name or workflow name
                     tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
-                    alias_dict = {'wic_alias': {'key': tmp}}
+                    alias_dict = {'wic_alias': tmp}
                     local_input._set_value(alias_dict, linked=True)
-                    anchor_dict = {'wic_anchor': {'key': tmp}}
+                    anchor_dict = {'wic_anchor': tmp}
                     __value._set_value(anchor_dict, linked=True)
             except BaseException as exc:
                 raise exc
@@ -223,7 +223,7 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     __value._set_value(f"{tmp}", linked=True)
                 else:
                     anchor_dict = __value.value
-                    alias_dict = {'wic_alias': {'key': anchor_dict['wic_anchor']['key']}}
+                    alias_dict = {'wic_alias': anchor_dict['wic_anchor']}
                     local_input._set_value(alias_dict, linked=True)
             except BaseException as exc:
                 raise exc
@@ -237,7 +237,7 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                 f"got {__value.__class__.__name__}, "
                 f"expected {obj.inp_type.__name__}"
             )
-        ii_dict = {'wic_inline_input': {'key': __value}}
+        ii_dict = {'wic_inline_input': __value}
         process_self.inputs[index]._set_value(ii_dict)
 
 
@@ -382,12 +382,12 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                 if isinstance(inp.value, Path):
                     # Special case for Path since it does not inherit from YAMLObject
                     in_dict[inp.name] = str(inp.value)
-                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_alias', {}).get('key', {}), Path):
+                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_alias', {}), Path):
                     # Special case for Path since it does not inherit from YAMLObject
-                    in_dict[inp.name] = {'wic_alias': {'key': str(inp.value['wic_alias']['key'])}}
-                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_inline_input', {}).get('key', {}), Path):
+                    in_dict[inp.name] = {'wic_alias': str(inp.value['wic_alias'])}
+                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_inline_input', {}), Path):
                     # Special case for Path since it does not inherit from YAMLObject
-                    in_dict[inp.name] = {'wic_inline_input': {'key': str(inp.value['wic_inline_input']['key'])}}
+                    in_dict[inp.name] = {'wic_inline_input': str(inp.value['wic_inline_input'])}
                 elif isinstance(inp.value, str):
                     in_dict[inp.name] = inp.value  # Obviously strings are serializable
                 elif isinstance(inp.value, yaml.YAMLObject):

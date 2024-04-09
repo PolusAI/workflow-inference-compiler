@@ -8,16 +8,16 @@ import yaml
 # because then these constructors will fire again.
 
 
-def anchor_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> Dict[str, Dict[str, Any]]:
-    key = loader.construct_scalar(node)
+def anchor_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> Dict[str, Any]:
+    val = loader.construct_scalar(node)
     name = 'wic_anchor'  # NOT '!&'
-    return {name: {'key': key}}
+    return {name: val}
 
 
-def alias_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> Dict[str, Dict[str, Any]]:
-    key = loader.construct_scalar(node)
+def alias_constructor(loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode) -> Dict[str, Any]:
+    val = loader.construct_scalar(node)
     name = 'wic_alias'  # NOT '!*'
-    return {name: {'key': key}}
+    return {name: val}
 
 
 def inlineinput_constructor(loader: yaml.SafeLoader, node: yaml.nodes.Node) -> Dict[str, Dict[str, Any]]:
@@ -37,7 +37,7 @@ def inlineinput_constructor(loader: yaml.SafeLoader, node: yaml.nodes.Node) -> D
     else:
         raise Exception(f'Unknown yaml node type! {node}')
     name = 'wic_inline_input'  # NOT '!ii'
-    return {name: {'key': val}}
+    return {name: val}
 
 
 def wic_loader() -> Type[yaml.SafeLoader]:

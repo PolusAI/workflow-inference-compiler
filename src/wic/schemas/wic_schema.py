@@ -173,17 +173,11 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     anytype: Dict[Any, Any] = {}
 
     # See utils_yaml.py
-    aliasprops = default_schema()
-    aliasprops['properties'] = {'key': str_nonempty}
-    aliasprops['required'] = ['key']
     alias = default_schema()
-    alias['properties'] = {'wic_alias': aliasprops}  # !*
+    alias['properties'] = {'wic_alias': str_nonempty}  # !*
 
-    iiprops = default_schema()
-    iiprops['properties'] = {'key': anytype}
-    iiprops['required'] = ['key']
     ii = default_schema()
-    ii['properties'] = {'wic_inline_input': iiprops}  # !ii
+    ii['properties'] = {'wic_inline_input': anytype}  # !ii
 
     # required = []
     for key, val in cwl['inputs'].items():
@@ -211,11 +205,8 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
         if key == 'config' and name == 'config_tag_mdp':
             grompp = config_schemas.get('grompp', {})
 
-            iiprops_mdp = default_schema()
-            iiprops_mdp['properties'] = {'key': grompp}
-            iiprops_mdp['required'] = ['key']
             ii_mdp = default_schema()
-            ii_mdp['properties'] = {'wic_inline_input': iiprops_mdp}  # !ii
+            ii_mdp['properties'] = {'wic_inline_input': grompp}  # !ii
 
             inputs_props[key] = ii_mdp
             continue
@@ -272,10 +263,8 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
     outputs['properties'] = outputs_props
 
     # See utils_yaml.py
-    anchorprops = default_schema()
-    anchorprops['properties'] = {'key': str_nonempty}
     anchor = default_schema()
-    anchor['properties'] = {'wic_anchor': anchorprops}  # !&
+    anchor['properties'] = {'wic_anchor': str_nonempty}  # !&
 
     keys_anchors: Json = {}
     for key in cwl['outputs'].keys():
@@ -461,10 +450,8 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
         in_schema['properties'] = {'script': str_nonempty}
 
         # See utils_yaml.py
-        anchorprops = default_schema()
-        anchorprops['properties'] = {'key': str_nonempty}
         anchor = default_schema()
-        anchor['properties'] = {'wic_anchor': anchorprops}  # !&
+        anchor['properties'] = {'wic_anchor': str_nonempty}  # !&
 
         # NOTE: We do not know the specific keys statically, so we have to use str_nonempty
         out_schema: Json = {'type': 'array', 'items': {'anyOf': [str_nonempty, anchor]}}
