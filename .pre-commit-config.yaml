@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v4.6.0
     hooks:
     -   id: check-added-large-files  # prevents giant files from being committed.
     -   id: check-ast  # simply checks whether the files parse as valid python.
@@ -40,13 +40,13 @@ repos:
     # NOTE: requirements-txt-fixer modifies requirements.txt in-place!
     # -   id: sort-simple-yaml  # sorts simple yaml files which consist only of top-level keys, preserving comments and blocks.
     -   id: trailing-whitespace  # trims trailing whitespace.
--   repo: https://github.com/pre-commit/mirrors-autopep8
-    rev: v2.0.4
+-   repo: https://github.com/hhatto/autopep8
+    rev: v2.1.0
     hooks:
     -   id: autopep8
         args: [--exit-code, --recursive, --diff, --max-line-length, "120"]
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.5.1
+    rev: v1.9.0
     hooks:
     -   id: mypy
         args: [--no-strict-optional, --ignore-missing-imports]
@@ -83,10 +83,10 @@ repos:
     -   id: rst-inline-touching-normal  # Detect mistake of inline code touching normal text in rst
     -   id: text-unicode-replacement-char  # Forbid files which have a UTF-8 Unicode replacement character
 -   repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.9.0.5
+    rev: v0.10.0.1
     hooks:
     -   id: shellcheck
 - repo: https://github.com/codespell-project/codespell
-  rev: v2.2.5
+  rev: v2.2.6
   hooks:
   - id: codespell
