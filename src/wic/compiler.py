@@ -468,13 +468,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # Extract input value into separate yml file
             # Replace it here with a new variable name
             arg_val = steps[i][step_key]['in'][arg_key]
+
             # Convert native YAML to a JSON-encoded string for specific tags.
             tags = ['config']
             if arg_key in tags and isinstance(arg_val, Dict) and ('wic_inline_input' in arg_val):
-                # Do NOT wrap config: in {'source': ...}
                 arg_val = {'wic_inline_input': json.dumps(arg_val['wic_inline_input'])}
-            elif isinstance(arg_val, str):
-                arg_val = {'source': arg_val}
+
             # Use triple underscore for namespacing so we can split later
             in_name = f'{step_name_i}___{arg_key}'  # {step_name_i}_input___{arg_key}
 
@@ -623,6 +622,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     graphdata.nodes.append((input_node_name, attrs))
                     graphdata.edges.append((input_node_name, step_node_name, {}))
             else:
+                arg_var: str = arg_val
                 # Leave un-evaluated, i.e. allow the user to inject raw CWL.
                 # The un-evaluated string should refer to either an inputs: variable
                 # or an internal CWL dependency, i.e. an output from a previous step.
@@ -637,20 +637,20 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # (yet) be inlined. Somehow, if they are not marked with
                 # inlineable: False, test_inline_subworkflows can still pass.
                 # This Exception will (correctly) cause such inlineing tests to fail.
-                if arg_val['source'] not in yaml_tree.get('inputs', {}):
+                if arg_var not in yaml_tree.get('inputs', {}):
                     if not args.allow_raw_cwl:
-                        print(f"Warning! Did you forget to use !ii before {arg_val['source']} in {yaml_stem}.yml?")
+                        print(f"Warning! Did you forget to use !ii before {arg_var} in {yaml_stem}.yml?")
                         print('If you want to compile the workflow anyway, use --allow_raw_cwl')
                         sys.exit(1)
 
                     inputs = yaml_tree.get('inputs', {})
                     unbound_lit_var = 'Error! Unbound literal variable'
                     if inputs == {}:
-                        raise Exception(f"{unbound_lit_var}{arg_val['source']} not in inputs: tag in {yaml_stem}.yml")
+                        raise Exception(f"{unbound_lit_var}{arg_var} not in inputs: tag in {yaml_stem}.yml")
                     inputs_dump = yaml.dump({'inputs': inputs})
-                    raise Exception(f"{unbound_lit_var}{arg_val['source']} not in\n{inputs_dump}\nin {yaml_stem}.yml")
+                    raise Exception(f"{unbound_lit_var}{arg_var} not in\n{inputs_dump}\nin {yaml_stem}.yml")
 
-                inputs_key_dict = yaml_tree['inputs'][arg_val['source']]
+                inputs_key_dict = yaml_tree['inputs'][arg_var]
                 if 'doc' in inputs_key_dict:
                     inputs_key_dict['doc'] += '\\n' + in_dict.get('doc', '')
                 else:
@@ -660,12 +660,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 else:
                     inputs_key_dict['label'] = in_dict.get('label', '')
 
-                if arg_val['source'] in input_mapping_copy:
-                    input_mapping_copy[arg_val['source']].append(in_name)
+                if arg_var in input_mapping_copy:
+                    input_mapping_copy[arg_var].append(in_name)
                 else:
-                    input_mapping_copy[arg_val['source']] = [in_name]
+                    input_mapping_copy[arg_var] = [in_name]
                 # TODO: We can use un-evaluated variable names for input mapping; no notation for output mapping!
-                steps[i][step_key]['in'][arg_key] = arg_val  # Leave un-evaluated
+                steps[i][step_key]['in'][arg_key] = {'source': arg_var}  # Leave un-evaluated
 
         for arg_key in args_required:
             # print('arg_key', arg_key)
@@ -853,8 +853,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         else:
             # We cannot store string values as a dict, so use type: ignore
             arg_val = in_dict['value']
-            new_val = arg_val['source'] if isinstance(arg_val, Dict) and 'source' in arg_val else arg_val
-            new_keyval = {key: new_val}
+            new_keyval = {key: arg_val}
         # else:
         #    raise Exception(f"Error! Unknown type: {in_dict['type']}")
         yaml_inputs.update(new_keyval)
