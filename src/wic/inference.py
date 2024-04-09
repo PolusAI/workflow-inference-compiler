@@ -219,7 +219,6 @@ def perform_edge_inference(args: argparse.Namespace,
             else:
                 vars_workflow_output_internal.append(f'{step_name_j}/{out_key}')
 
-            # arg_val = {'source': f'{step_name_j}/{out_key}'}
             arg_val = f'{step_name_j}/{out_key}'
             arg_keyval = {arg_key: arg_val}
             steps_i = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
@@ -332,7 +331,6 @@ def perform_edge_inference(args: argparse.Namespace,
         # which should match in the parent workflow.
         inputs_workflow.update({in_name: in_dict})
 
-        # arg_keyval = {arg_key: {'source': in_name}}
         arg_keyval = {arg_key: in_name}
         steps_i = utils_cwl.add_yamldict_keyval_in(steps[i], step_key, arg_keyval)
         return steps_i

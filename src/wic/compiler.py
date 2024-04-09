@@ -451,8 +451,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     out_key = keys[0]
                     out_val = out_val[out_key]
                     if isinstance(out_val, Dict) and 'wic_anchor' in out_val:
-                        out_val = out_val['wic_anchor']
-                        edgedef = out_val['key']
+                        edgedef = out_val['wic_anchor']
 
                         # NOTE: There can only be one definition, but multiple call sites.
                         if not explicit_edge_defs_copy.get(edgedef):
@@ -469,13 +468,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # Extract input value into separate yml file
             # Replace it here with a new variable name
             arg_val = steps[i][step_key]['in'][arg_key]
+
             # Convert native YAML to a JSON-encoded string for specific tags.
             tags = ['config']
             if arg_key in tags and isinstance(arg_val, Dict) and ('wic_inline_input' in arg_val):
-                # Do NOT wrap config: in {'source': ...}
-                arg_val = {'wic_inline_input': {'key': json.dumps(arg_val['wic_inline_input']['key'])}}
-            elif isinstance(arg_val, str):
-                arg_val = {'source': arg_val}
+                arg_val = {'wic_inline_input': json.dumps(arg_val['wic_inline_input'])}
+
             # Use triple underscore for namespacing so we can split later
             in_name = f'{step_name_i}___{arg_key}'  # {step_name_i}_input___{arg_key}
 
@@ -495,21 +493,21 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # NOTE: Exclude cwl_watcher from explicit edge dereferences.
                 # Since cwl_watcher requires explicit filenames for globbing,
                 # we do not want to replace them with internal CWL dependencies!
-                if not explicit_edge_defs_copy.get(arg_val['key']):
+                if not explicit_edge_defs_copy.get(arg_val):
                     if is_root and not testing:
                         # Even if is_root, we don't want to raise an Exception
                         # here because in test_cwl_embedding_independence, we
                         # recompile all subworkflows as if they were root. That
                         # will cause this code path to be taken but it is not
                         # actually an error. Add a CWL input for testing only.
-                        raise Exception(f"Error! No definition found for &{arg_val['key']}!")
+                        raise Exception(f"Error! No definition found for &{arg_val}!")
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = {'source': in_name}
                     # Add a 'dummy' value to explicit_edge_calls anyway, because
                     # that determines sub_args_provided when the recursion returns.
                     explicit_edge_calls_copy.update({in_name: (namespaces + [step_name_i], arg_key)})
                 else:
-                    (nss_def_init, var) = explicit_edge_defs_copy[arg_val['key']]
+                    (nss_def_init, var) = explicit_edge_defs_copy[arg_val]
 
                     nss_def_embedded = var.split('___')[:-1]
                     nss_call_embedded = arg_key.split('___')[:-1]
@@ -546,7 +544,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     elif len(nss_call_tails) > 1:
                         inputs_workflow.update({in_name: in_dict})
                         # Store explicit edge call site info up through the recursion.
-                        d = {in_name: explicit_edge_defs_copy[arg_val['key']]}
+                        d = {in_name: explicit_edge_defs_copy[arg_val]}
                         # d = {in_name, (namespaces + [step_name_i], var)} # ???
                         explicit_edge_calls_copy.update(d)
                         steps[i][step_key]['in'][arg_key] = {'source': in_name}
@@ -601,7 +599,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
                         utils_graphs.add_graph_edge(args, graph_init, nss_def, nss_call, label, color='blue')
             elif isinstance(arg_val, Dict) and 'wic_inline_input' in arg_val:
-                arg_val = arg_val['wic_inline_input']['key']
+                arg_val = arg_val['wic_inline_input']
 
                 if arg_key in steps[i][step_key].get('scatter', []):
                     # Promote scattered input types to arrays
@@ -624,6 +622,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     graphdata.nodes.append((input_node_name, attrs))
                     graphdata.edges.append((input_node_name, step_node_name, {}))
             else:
+                arg_var: str = arg_val
                 # Leave un-evaluated, i.e. allow the user to inject raw CWL.
                 # The un-evaluated string should refer to either an inputs: variable
                 # or an internal CWL dependency, i.e. an output from a previous step.
@@ -638,20 +637,20 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # (yet) be inlined. Somehow, if they are not marked with
                 # inlineable: False, test_inline_subworkflows can still pass.
                 # This Exception will (correctly) cause such inlineing tests to fail.
-                if arg_val['source'] not in yaml_tree.get('inputs', {}):
+                if arg_var not in yaml_tree.get('inputs', {}):
                     if not args.allow_raw_cwl:
-                        print(f"Warning! Did you forget to use !ii before {arg_val['source']} in {yaml_stem}.yml?")
+                        print(f"Warning! Did you forget to use !ii before {arg_var} in {yaml_stem}.yml?")
                         print('If you want to compile the workflow anyway, use --allow_raw_cwl')
                         sys.exit(1)
 
                     inputs = yaml_tree.get('inputs', {})
                     unbound_lit_var = 'Error! Unbound literal variable'
                     if inputs == {}:
-                        raise Exception(f"{unbound_lit_var}{arg_val['source']} not in inputs: tag in {yaml_stem}.yml")
+                        raise Exception(f"{unbound_lit_var}{arg_var} not in inputs: tag in {yaml_stem}.yml")
                     inputs_dump = yaml.dump({'inputs': inputs})
-                    raise Exception(f"{unbound_lit_var}{arg_val['source']} not in\n{inputs_dump}\nin {yaml_stem}.yml")
+                    raise Exception(f"{unbound_lit_var}{arg_var} not in\n{inputs_dump}\nin {yaml_stem}.yml")
 
-                inputs_key_dict = yaml_tree['inputs'][arg_val['source']]
+                inputs_key_dict = yaml_tree['inputs'][arg_var]
                 if 'doc' in inputs_key_dict:
                     inputs_key_dict['doc'] += '\\n' + in_dict.get('doc', '')
                 else:
@@ -661,12 +660,12 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 else:
                     inputs_key_dict['label'] = in_dict.get('label', '')
 
-                if arg_val['source'] in input_mapping_copy:
-                    input_mapping_copy[arg_val['source']].append(in_name)
+                if arg_var in input_mapping_copy:
+                    input_mapping_copy[arg_var].append(in_name)
                 else:
-                    input_mapping_copy[arg_val['source']] = [in_name]
+                    input_mapping_copy[arg_var] = [in_name]
                 # TODO: We can use un-evaluated variable names for input mapping; no notation for output mapping!
-                steps[i][step_key]['in'][arg_key] = arg_val  # Leave un-evaluated
+                steps[i][step_key]['in'][arg_key] = {'source': arg_var}  # Leave un-evaluated
 
         for arg_key in args_required:
             # print('arg_key', arg_key)
@@ -854,8 +853,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         else:
             # We cannot store string values as a dict, so use type: ignore
             arg_val = in_dict['value']
-            new_val = arg_val['source'] if isinstance(arg_val, Dict) and 'source' in arg_val else arg_val
-            new_keyval = {key: new_val}
+            new_keyval = {key: arg_val}
         # else:
         #    raise Exception(f"Error! Unknown type: {in_dict['type']}")
         yaml_inputs.update(new_keyval)
