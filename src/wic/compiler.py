@@ -639,16 +639,16 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # This Exception will (correctly) cause such inlineing tests to fail.
                 if arg_var not in yaml_tree.get('inputs', {}):
                     if not args.allow_raw_cwl:
-                        print(f"Warning! Did you forget to use !ii before {arg_var} in {yaml_stem}.yml?")
+                        print(f"Warning! Did you forget to use !ii before {arg_var} in {yaml_stem}.wic?")
                         print('If you want to compile the workflow anyway, use --allow_raw_cwl')
                         sys.exit(1)
 
                     inputs = yaml_tree.get('inputs', {})
                     unbound_lit_var = 'Error! Unbound literal variable'
                     if inputs == {}:
-                        raise Exception(f"{unbound_lit_var}{arg_var} not in inputs: tag in {yaml_stem}.yml")
+                        raise Exception(f"{unbound_lit_var}{arg_var} not in inputs: tag in {yaml_stem}.wic")
                     inputs_dump = yaml.dump({'inputs': inputs})
-                    raise Exception(f"{unbound_lit_var}{arg_var} not in\n{inputs_dump}\nin {yaml_stem}.yml")
+                    raise Exception(f"{unbound_lit_var}{arg_var} not in\n{inputs_dump}\nin {yaml_stem}.wic")
 
                 inputs_key_dict = yaml_tree['inputs'][arg_var]
                 if 'doc' in inputs_key_dict:

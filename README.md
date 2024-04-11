@@ -38,9 +38,9 @@ cd ..
 ```
 ```
 wic --generate_schemas_only
-wic --yaml ../mm-workflows/examples/gromacs/tutorial.yml --graphviz --run_local --quiet
+wic --yaml ../mm-workflows/examples/gromacs/tutorial.wic --graphviz --run_local --quiet
 ```
-That last command will infer edges, compile the yml to CWL, generate a GraphViz diagram of the root workflow, and run it locally.
+That last command will infer edges, compile to CWL, generate a GraphViz diagram of the root workflow, and run it locally.
 
 ```yaml
 label: Conjugate Gradient
@@ -62,9 +62,9 @@ steps:
           terms: [Potential]
         output_xvg_path: energy_min_cg.xvg
 ```
-The subworkflow [`examples/gromacs/cg.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/cg.yml) in `mm-workflows` is shown above, and the GraphViz diagram of the root workflow [`examples/gromacs/tutorial.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/tutorial.yml) in `mm-workflows` is shown below.
+The subworkflow [`examples/gromacs/cg.wic`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/cg.wic) in `mm-workflows` is shown above, and the GraphViz diagram of the root workflow [`examples/gromacs/tutorial.wic`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/tutorial.wic) in `mm-workflows` is shown below.
 
-![Workflow](examples/gromacs/tutorial.yml.gv.png)
+![Workflow](examples/gromacs/tutorial.wic.gv.png)
 
 If you add the --parallel flag to the above command then, in another terminal, you can view the plots in real-time:
 ```

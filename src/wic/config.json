@@ -10,7 +10,7 @@
             "../mm-workflows/gpu"
         ]
     },
-    "search_paths_yml": {
+    "search_paths_wic": {
         "global": [
             "../workflow-inference-compiler/docs/tutorials",
             "../image-workflows/workflows",

@@ -59,7 +59,7 @@ def read_ast_from_disk(homedir: str,
     wic = {'wic': yaml_tree.get('wic', {})}
     if 'backends' in wic['wic']:
         # Recursively expand each backend, but do NOT choose a specific backend.
-        # Require back_name to be .yml? For now, yes.
+        # Require back_name to be .wic? For now, yes.
         backends_trees = []
         for back_name, back in wic['wic']['backends'].items():
             plugin_ns = wic['wic'].get('namespace', 'global')
@@ -94,16 +94,16 @@ def read_ast_from_disk(homedir: str,
             if paths_ns_i == {}:
                 wicdir = Path(homedir) / 'wic'
                 raise Exception(
-                    f"Error! namespace {plugin_ns} not found in yaml paths. Check 'search_paths_yml' in your config file")
+                    f"Error! namespace {plugin_ns} not found in yaml paths. Check 'search_paths_wic' in your config file")
             if stem not in paths_ns_i:
-                msg = f'Error! {stem} not found in namespace {plugin_ns} when attempting to read {step_id.stem}.yml'
+                msg = f'Error! {stem} not found in namespace {plugin_ns} when attempting to read {step_id.stem}.wic'
                 if stem == 'in':
                     msg += f'\n(Check that you have properly indented the `in` tag in {step_id.stem})'
                 raise Exception(msg)
             yaml_path = paths_ns_i[stem]
 
-            if not (yaml_path.exists() and yaml_path.suffix == '.yml'):
-                raise Exception(f'Error! {yaml_path} does not exist or is not a .yml file.')
+            if not (yaml_path.exists() and yaml_path.suffix == '.wic'):
+                raise Exception(f'Error! {yaml_path} does not exist or is not a .wic file.')
 
             # Load the high-level yaml sub workflow file.
             with open(yaml_path, mode='r', encoding='utf-8') as y:
@@ -126,7 +126,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
                     tools: Tools) -> YamlTree:
     """Implements 'parameter passing' by recursively merging wic: yml tags.
     Values from the parent workflow will overwrite / override subworkflows.
-    See https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/basic.yml for details
+    See https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/basic.wic for details
 
     Args:
         yaml_tree_tuple (YamlTree): A tuple of a name and a yml AST
@@ -151,7 +151,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
 
     if 'backends' in wic['wic']:
         # Recursively expand each backend, but do NOT choose a specific backend.
-        # Require back_name to be .yml? For now, yes.
+        # Require back_name to be .wic? For now, yes.
         backends_trees = []
         for stepid, back in wic['wic']['backends'].items():
             backends_tree = merge_yml_trees(YamlTree(stepid, back), wic_parent, tools)

@@ -42,7 +42,7 @@ def remove_dot_dollar(tree: Cwl) -> Cwl:
     """
     tree_str = str(yaml.dump(tree, sort_keys=False, line_break='\n', indent=2))
     tree_str_no_dd = tree_str.replace('$namespaces', 'namespaces').replace(
-        '$schemas', 'schemas').replace('.yml', '_yml')
+        '$schemas', 'schemas').replace('.wic', '_wic')
     tree_no_dd: Cwl = yaml.load(tree_str_no_dd, Loader=wic_loader())  # This effectively copies tree
     return tree_no_dd
 
@@ -195,7 +195,7 @@ def upload_all(rose_tree: RoseTree, tools: Tools, args: argparse.Namespace, is_r
             plugin_id = upload_plugin(args.compute_url, access_token, tool_i, stem)
             run_val = f'plugin:{stem}:{__version__}'
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
-        step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
+        step_name_i = step_name_i.replace('.wic', '_wic')  # Due to calling remove_dot_dollar above
         cwl_tree_run['steps'][step_name_i]['run'] = run_val
 
     workflow_id: str = ''

@@ -3,7 +3,7 @@ steps:
     in:
       config: !ii
         pdb_code: 1aki
-- fix_protein.yml:
+- fix_protein.wic:
 - extract_model:
     in:
       config: !ii

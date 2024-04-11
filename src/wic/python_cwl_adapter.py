@@ -100,13 +100,13 @@ def check_args_match_inputs(module_: ModuleType, args: Dict[str, Any], check: bo
     error = False
     for arg in args:
         if arg not in module_.inputs:
-            print(f'Error! YML argument {arg} not in python arguments {module_.inputs}')
+            print(f'Error! wic argument {arg} not in python arguments {module_.inputs}')
             error = True
     # Wait until after inference
     if check:
         for arg in module_.inputs:
             if arg not in args:
-                print(f'Error! Python argument {arg} not in YML arguments {args}')
+                print(f'Error! Python argument {arg} not in wic arguments {args}')
                 error = True
     if error:
         sys.exit(1)

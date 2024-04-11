@@ -85,7 +85,7 @@ def rerun_cwltool(homedir: str, _directory_realtime: Path, cachedir_path: Path, 
 
         # Construct a single-step workflow and add its arguments
         # import yaml
-        if Path(cwl_tool).suffix == '.yml':
+        if Path(cwl_tool).suffix == '.wic':
             yaml_path = cwl_tool
             wic_steps = {'steps': {f'(1, {cwl_tool})': {'wic': {'steps': args_vals_new}}}}
             root_yaml_tree = {'wic': wic_steps, 'steps': [{cwl_tool: None}]}
@@ -116,7 +116,7 @@ def rerun_cwltool(homedir: str, _directory_realtime: Path, cachedir_path: Path, 
 
         # TODO: Support other namespaces
         plugin_ns = 'global'  # wic['wic'].get('namespace', 'global')
-        yaml_path = f'{cwl_tool}_only.yml'
+        yaml_path = f'{cwl_tool}_only.wic'
         stepid = StepId(yaml_path, plugin_ns)
         yaml_tree = YamlTree(stepid, yml)
         subgraph = GraphReps(graphviz.Digraph(name=yaml_path), nx.DiGraph(), GraphData(yaml_path))
@@ -224,7 +224,7 @@ def cli_watcher() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(prog='main', description='Speculatively execute a high-level yaml workflow file.')
     parser.add_argument('--cwl_tool', type=str, required=True,
-                        help='CWL or YML filestem')
+                        help='CWL or WIC filestem')
     parser.add_argument('--cachedir_path', type=str, required=True,
                         help='This should be set to the --cachedir option from the main cli')
     parser.add_argument('--file_pattern', type=str, required=True,

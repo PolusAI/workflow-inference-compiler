@@ -51,10 +51,10 @@ wic:
   backends:
     gromacs:
       steps:
-        - npt_gromacs.yml:
+        - npt_gromacs.wic:
     amber:
       steps:
-        - npt_amber.yml:
+        - npt_amber.wic:
   graphviz:
     label: Constant Pressure
 ```
@@ -63,18 +63,18 @@ Then you just need to choose a specific backend at the call site:
 
 ```yaml
 steps:
-  - nvt.yml:
-  - npt.yml:
+  - nvt.wic:
+  - npt.wic:
 
 wic:
   graphviz:
     label: Equilibration
   steps:
-    (2, npt.yml):
+    (2, npt.wic):
       wic:
         backend: amber
 ```
-This will override the default backend of `gromacs` and use `amber`. This really just means that `npt_amber.yml` is called instead of `npt_gromacs.yml` The system will automatically insert the necessary file format conversions as determined below.
+This will override the default backend of `gromacs` and use `amber`. This really just means that `npt_amber.wic` is called instead of `npt_gromacs.wic` The system will automatically insert the necessary file format conversions as determined below.
 
 The most common use case of backend independence is to swap out 'identical' subworkflows. However, this constraint is intentionally not enforced and it is completely up to the user. In fact, you may want to swap out two backends that use different algorithms to achieve the same high-level goal. In other words, 'backend independence' is really just a form of [ad hoc polymorphism](https://en.wikipedia.org/wiki/Ad_hoc_polymorphism) and/or [dynamic dispatch](https://en.wikipedia.org/wiki/Dynamic_dispatch).
 
@@ -86,13 +86,13 @@ For now, the possible file format conversions are limited to a whitelist of know
 
 #### Known issues
 
-Note however that while conversion_*.cwl files can come from pre-compiled yml subworkflows, it is currently necessary to find & replace all instances of triple underscores ___ with double underscores __. (This is because triple underscores are reserved/interpreted by the compiler as ‘internal’ namespaceing, and in this case we want to treat pre-compiled yml files as a black box. See the [dev guide](dev/algorithms.md#namespacing) for the gory details.)
+Note however that while conversion_*.cwl files can come from pre-compiled wic subworkflows, it is currently necessary to find & replace all instances of triple underscores ___ with double underscores __. (This is because triple underscores are reserved/interpreted by the compiler as ‘internal’ namespaceing, and in this case we want to treat pre-compiled wic files as a black box. See the [dev guide](dev/algorithms.md#namespacing) for the gory details.)
 
 ## Real-time analysis / Speculative Execution
 
 Ordinarily the runtime system will wait until the previous step(s) are all complete before executing the next step. However, for real-time analysis we want to speculatively execute an arbitrary subworkflow (i.e. to parse log files, etc) before the the previous step(s) have finished. (Note that 'previous' is w.r.t. the DAG, i.e. it refers to all of the nodes which are dependencies of the current step.)
 
-Speculative execution is currently implemented by `cwl_watcher`, which invokes a second instance of the runtime system separately and asynchronously. A portion of [`examples/gromacs/nvt.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/nvt.yml) in `mm-workflows` is shown below. You can see that the `in:` tag of gmx_energy is identical to the `config:` tag of cwl_watcher. This currently needs to be manually copy & pasted (and indented), but it should be possible to automatically do this in the future.
+Speculative execution is currently implemented by `cwl_watcher`, which invokes a second instance of the runtime system separately and asynchronously. A portion of [`examples/gromacs/nvt.wic`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/nvt.wic) in `mm-workflows` is shown below. You can see that the `in:` tag of gmx_energy is identical to the `config:` tag of cwl_watcher. This currently needs to be manually copy & pasted (and indented), but it should be possible to automatically do this in the future.
 
 ```yaml
 ...
@@ -184,7 +184,7 @@ YAML files can be annotated with metadata inside of a top-level `wic:` tag. Meta
 
 A simple use case is providing labeling and alignment metadata for generating the Graphviz DAGs. There is also a `style: invis` tag, which can be used to hide certain nodes. For now, these three tags are sufficient for generating visually appealing DAGs. We do not anticipate needing to support many additional graphviz features.
 
-A portion of [`examples/gromacs/setup.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup.yml) in `mm-workflows` is shown below.
+A portion of [`examples/gromacs/setup.wic`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup.wic) in `mm-workflows` is shown below.
 
 ```yaml
 ...
@@ -206,13 +206,13 @@ wic:
 
 This example shows how we can recursively pass in parameters / recursively overload metadata.
 
-Suppose we want to do a very careful minimization, first in vacuum and then in solvent (i.e. [`examples/gromacs/setup_vac_min.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup_vac_min.yml) in `mm-workflows`). We would like to re-use the abstract minimization protocol from `min.yml`. However, our stability analysis requires an explicit edge definition from the final minimized coordinates (i.e. in solvent). If we try to simply add `- output_tpr_path: !& min.tpr` directly to `min.yml`, there will be duplicate definitions! This is not allowed (it will generate an exception).
+Suppose we want to do a very careful minimization, first in vacuum and then in solvent (i.e. [`examples/gromacs/setup_vac_min.wic`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/setup_vac_min.wic) in `mm-workflows`). We would like to re-use the abstract minimization protocol from `min.wic`. However, our stability analysis requires an explicit edge definition from the final minimized coordinates (i.e. in solvent). If we try to simply add `- output_tpr_path: !& min.tpr` directly to `min.wic`, there will be duplicate definitions! This is not allowed (it will generate an exception).
 
-The solution is to pass in this parameter to only the second instance of `min.yml`. Since every `*.yml` file may contain a `wic:` tag, this is implemented by simply recursively merging the dictionaries, where values from parent `*.yml` files overwrite values in the child `*.yml` files. Note that we do not need to modify `min.yml`!
+The solution is to pass in this parameter to only the second instance of `min.wic`. Since every `*.wic` file may contain a `wic:` tag, this is implemented by simply recursively merging the dictionaries, where values from parent `*.wic` files overwrite values in the child `*.wic` files. Note that we do not need to modify `min.wic`!
 
 Thus we retain edge inference, explicit edges, composability, reusability, and have even gained customizability!
 
-A portion of [`examples/gromacs/basic.yml`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/basic.yml) is shown below.
+A portion of [`examples/gromacs/basic.wic`](https://github.com/PolusAI/mm-workflows/blob/main/examples/gromacs/basic.wic) is shown below.
 
 ```yaml
 ...
@@ -221,10 +221,10 @@ wic:
   graphviz:
     label: Molecular Dynamics
   steps:
-    (1, min.yml):
+    (1, min.wic):
       wic:
         steps:
-          (2, cg.yml):
+          (2, cg.wic):
             wic:
               steps:
                 (1, grompp):
@@ -235,7 +235,7 @@ wic:
 
 ## Namespaces
 
-Namespaces can be used to distinguish two different tools / workflows with the same name from different sources. For example, suppose a collaborator has shared an alternative minimization protocol, which we have downloaded to `bar/min.yml`. We can use their protocol by adding the namespace tag `foo` to `search_paths_yml` tag of `config.json` and annotating the call site in `basic.yml` with `namespace: foo` as shown below.
+Namespaces can be used to distinguish two different tools / workflows with the same name from different sources. For example, suppose a collaborator has shared an alternative minimization protocol, which we have downloaded to `bar/min.wic`. We can use their protocol by adding the namespace tag `foo` to `search_paths_wic` tag of `config.json` and annotating the call site in `basic.wic` with `namespace: foo` as shown below.
 
 ```yaml
 ...
@@ -243,7 +243,7 @@ wic:
   graphviz:
     label: Molecular Dynamics
   steps:
-    (1, min.yml):
+    (1, min.wic):
       wic:
         namespace: foo
 ...

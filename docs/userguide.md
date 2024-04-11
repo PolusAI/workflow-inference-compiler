@@ -10,7 +10,7 @@ See [overview](overview.md)
 
 Many software packages have a way of automatically discovering files which they can use. (examples: [pytest](https://docs.pytest.org/en/latest/explanation/goodpractices.html#conventions-for-python-test-discovery) [pylint](https://pylint.pycqa.org/en/latest/user_guide/usage/run.html))
 
-By default, wic will recursively search for tools / workflows within the directories (and subdirectories) listed in the config file's json tags `search_paths_cwl` and `search_paths_yml`. The paths listed can be absolute or relative. The default `config.json` is shown.
+By default, wic will recursively search for tools / workflows within the directories (and subdirectories) listed in the config file's json tags `search_paths_cwl` and `search_paths_wic`. The paths listed can be absolute or relative. The default `config.json` is shown.
 
 ***`We strongly recommend placing all repositories of tools / workflows in the same parent directory.`***
 
@@ -29,7 +29,7 @@ By default, wic will recursively search for tools / workflows within the directo
             "../mm-workflows/gpu"
         ]
     },
-"search_paths_yml": {
+"search_paths_wic": {
         "global": [
             "./workflow-inference-compiler/docs/tutorials",
             "../image-workflows/workflows",

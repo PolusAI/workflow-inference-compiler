@@ -91,7 +91,7 @@ jobs:
         # (Many of the packages conflict with pypy.)
         run: cd mm-workflows/ && pip install ".[test]" && mm-workflows
 
-      - name: Generate WIC Python API Workflows (*.py -> *.yml)
+      - name: Generate WIC Python API Workflows (*.py -> *.wic)
         if: always()
         run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
 
@@ -102,7 +102,7 @@ jobs:
         # Please read docs/validation.md#Property-Based-Testing
         # This is essentially an integration test for all of the
         # WIC Python API workflows as well as the WIC Python API itself.
-      - name: Validate WIC Python API Workflows (*.py -> *.yml)
+      - name: Validate WIC Python API Workflows (*.py -> *.wic)
         if: always()
         run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
 

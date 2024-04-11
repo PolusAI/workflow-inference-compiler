@@ -1,4 +1,4 @@
-// NOTE: This file should be in one of the directories listed in 'search_paths_yml'
+// NOTE: This file should be in one of the directories listed in 'search_paths_wic'
 // tag of config.json
 // (Technically comments are not allowed in JSON, but we are manually
 // stripping out all lines that start with // before parsing.)

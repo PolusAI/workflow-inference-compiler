@@ -7,7 +7,7 @@ On the right is a visual representation of the workflow as a computational graph
 <table>
 <tr>
 <td>
-docs/tutorials/multistep1.yml
+docs/tutorials/multistep1.wic
 
 ```yaml
 steps:
@@ -42,9 +42,9 @@ steps:
 
 </td>
 <td>
-docs/tutorials/multistep1.yml.gv.png
+docs/tutorials/multistep1.wic.gv.png
 
-![Multistep](multistep1.yml.gv.png)
+![Multistep](multistep1.wic.gv.png)
 
 </td>
 </tr>
@@ -62,14 +62,14 @@ This particular workflow creates files which represent 3D coordinates, so we can
 
 ## Edge Inference
 
-Creating explicit edges can be a bit tedious and verbose, but in many cases the correct edges can be determined automatically. In this case, all of the steps take the previous pdb file as input and produce an output pdb file, so this is rather trivial. However, for more complex workflows edge inference can drastically simplify the yml files. Note that explicit edges are drawn in blue, and inferred edges are drawn in black/white.
+Creating explicit edges can be a bit tedious and verbose, but in many cases the correct edges can be determined automatically. In this case, all of the steps take the previous pdb file as input and produce an output pdb file, so this is rather trivial. However, for more complex workflows edge inference can drastically simplify the wic files. Note that explicit edges are drawn in blue, and inferred edges are drawn in black/white.
 
 For technical reasons edge inference is not perfect, so ***`users should always check that edge inference actually produces the intended graph`***. For details on the algorithm, see the [user guide](../userguide.md/#edge-inference-algorithm).
 
 <table>
 <tr>
 <td>
-docs/tutorials/multistep2.yml
+docs/tutorials/multistep2.wic
 
 ```yaml
 steps:
@@ -88,9 +88,9 @@ steps:
 
 </td>
 <td>
-docs/tutorials/multistep2.yml.gv.png
+docs/tutorials/multistep2.wic.gv.png
 
-![Multistep](multistep2.yml.gv.png)
+![Multistep](multistep2.wic.gv.png)
 
 </td>
 </tr>
