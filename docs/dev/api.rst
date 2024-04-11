@@ -1,14 +1,6 @@
 Developer API
 ====================================
 
-vis.filewatcher
-------------------------------------
-.. automodule:: vis.filewatcher
-
-vis.viewer
-------------------------------------
-.. automodule:: vis.viewer
-
 wic.ast
 ------------------------------------
 .. automodule:: wic.ast

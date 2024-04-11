@@ -89,18 +89,6 @@ pre-commit install
 
 You should now have the `wic` executable available in your terminal.
 
-## Jupyter notebook visualization
-
-The visualization currently needs to be in its own conda environment.
-
-```
-./install_conda.sh
-conda create --name vis
-conda activate vis
-./install_nglview.sh
-pip install -e ".[all]"
-```
-
 ## CUDA
 
 Some of the workflows require an Nvidia CUDA GPU. Please see the Nvidia [installation guides](https://docs.nvidia.com/cuda/#installation-guides) for more information.

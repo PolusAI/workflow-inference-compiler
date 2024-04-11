@@ -1,7 +1,6 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
 requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.29"]
-# NOTE: The above list mostly comes from https://github.com/nglviewer/nglview/pull/969/files
 # NOTE: Use upper bound of <68 for setuptools due to 2to3 error.
 # See https://stackoverflow.com/questions/72414481/error-in-anyjson-setup-command-use-2to3-is-invalid
 
@@ -30,7 +29,6 @@ dependencies = [
     "requests",
     "mergedeep",
     "networkx",
-    "beautifulsoup4", # Solely for parsing gromacs mdp options html
     "cwl-utils>=0.32",
     # CommandInputParameter attr changed from `type_` to `type` and back to `type_`
     # between versions 0.30, 0.31, 0.32
@@ -109,7 +107,6 @@ doc = [
     "sphinx",
     "myst-parser",
     "sphinx-autodoc-typehints",
-    "ipytree",
 ]
 plots = ["matplotlib"]
 cyto = ["ipycytoscape"] # only for DAG visualization
@@ -211,10 +208,7 @@ module = [
     "graphviz.*",
     "mergedeep.*",
     "networkx.*",
-    "mdtraj.*",
-    "nglview.*",
     "matplotlib.*",
-    "ipytree.*",
     "ipywidgets.*",
     "scipy.*",
     "ruamel.*",
