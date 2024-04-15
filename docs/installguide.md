@@ -21,7 +21,7 @@ pip install -e ".[all]"
 pre-commit install  # Required for developers
 
 cd install && ./install_mm-workflows.sh && cd ..
-wic --generate_schemas_only
+wic --generate_schemas
 ```
 
 Developers should fork the upstream repository and clone their fork using the git@ url, then run the command
@@ -42,7 +42,7 @@ If you are experiencing hanging, and if the command `ps aux | grep com.docker | 
 
 ## podman
 
-Alternatively, instead of docker you can use [podman](https://podman.io/whatis.html). podman is a daemonless (more secure) way to run containers. On linux, you can install podman via conda `conda install -c conda-forge podman` or using distro-specific methods. To run workflows with podman, simply append `--user_space_docker_cmd podman` after `--run_local`.
+Alternatively, instead of docker you can use [podman](https://podman.io/whatis.html). podman is a daemonless (more secure) way to run containers. On linux, you can install podman via conda `conda install -c conda-forge podman` or using distro-specific methods. To run workflows with podman, simply append `--container_engine podman` after `--run_local`.
 
 ## Installation on Windows
 
@@ -151,7 +151,7 @@ To enable this feature, simply install the YAML vscode extension (by Red Hat). T
 ```
 
 ```
-wic --generate_schemas_only
+wic --generate_schemas
 ```
 
 (You should also run this command anytime you change the input/output API. If you are getting validation errors, try re-running this command!)

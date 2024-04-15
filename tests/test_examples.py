@@ -20,11 +20,12 @@ import wic.utils
 import wic.ast
 import wic.plugins
 from wic import auto_gen_header
+from wic.cli import get_args
 from wic.utils_yaml import wic_loader
 from wic.wic_types import NodeData, StepId, Yaml, YamlTree, Json
 from wic.utils_graphs import get_graph_reps
 
-from .test_setup import get_args, tools_cwl, yml_paths, validator, yml_paths_tuples
+from .test_setup import tools_cwl, yml_paths, validator, yml_paths_tuples
 
 # Look in each directory of search_paths_wic tag in global_config.json
 # for separate config_ci.json files and combine them.
@@ -222,9 +223,9 @@ def run_workflows(yml_path_str: str, yml_path: Path, cwl_runner: str, args: argp
 
     if args.docker_remove_entrypoints:
         # Requires root, so guard behind CLI option
-        if args.user_space_docker_cmd == 'docker':
+        if args.container_engine == 'docker':
             wic.plugins.remove_entrypoints_docker()
-        if args.user_space_docker_cmd == 'podman':
+        if args.container_engine == 'podman':
             wic.plugins.remove_entrypoints_podman()
 
         rose_tree = wic.plugins.dockerPull_append_noentrypoint_rosetree(rose_tree)
@@ -236,7 +237,11 @@ def run_workflows(yml_path_str: str, yml_path: Path, cwl_runner: str, args: argp
     # NOTE: Do not use --cachedir; we want to actually test everything.
     retval = wic.run_local.run_local(args, rose_tree, None, cwl_runner, True)
     assert retval == 0
-    return
+
+    # Finally, since there is an output file copying bug in cwltool,
+    # we need to copy the output files manually. See comment above.
+    if args.copy_output_files:
+        wic.run_local.copy_output_files(yaml_stem)
 
 
 @pytest.mark.fast

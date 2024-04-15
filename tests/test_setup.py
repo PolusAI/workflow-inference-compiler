@@ -1,9 +1,6 @@
-import argparse
 from pathlib import Path
-import sys
 import time
-from typing import Dict, List
-from unittest.mock import patch
+from typing import Dict
 
 from hypothesis.strategies import SearchStrategy
 import hypothesis_jsonschema as hj
@@ -20,21 +17,7 @@ import wic.api.pythonapi
 from wic.wic_types import Json, Yaml
 
 
-def get_args(yaml_path: str = '', suppliedargs: List[str] = []) -> argparse.Namespace:
-    """This is used to get mock command line arguments, default + suppled args
-
-    Returns:
-        argparse.Namespace: The mocked command line arguments
-    """
-    defaultargs = ['wic', '--yaml', yaml_path, '--cwl_output_intermediate_files', 'True']  # ignore --yaml
-    testargs = defaultargs + suppliedargs
-    # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
-    with patch.object(sys, 'argv', testargs):
-        args: argparse.Namespace = wic.cli.parser.parse_args()
-    return args
-
-
-args = get_args()
+args = wic.cli.get_args()
 # Just read from the disk and pass around config object
 global_config = io.read_config_from_disk(Path(args.config_file))
 tools_cwl = wic.plugins.get_tools_cwl(global_config, quiet=args.quiet)

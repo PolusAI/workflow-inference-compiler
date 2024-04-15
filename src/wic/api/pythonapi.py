@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from wic.api._types import CWL_TYPES_DICT
 from wic import compiler, input_output, plugins
 from wic import run_local as run_local_module
-from wic.schemas.wic_schema import get_args
+from wic.cli import get_args
 from wic.utils_graphs import get_graph_reps
 from wic.wic_types import CompilerInfo, RoseTree, StepId, Tool, Tools, YamlTree
 
@@ -714,9 +714,9 @@ class Workflow(BaseModel):
         # args.docker_remove_entrypoints = True
         if args.docker_remove_entrypoints:
             # Requires root, so guard behind CLI option
-            if args.user_space_docker_cmd == 'docker':
+            if args.container_engine == 'docker':
                 plugins.remove_entrypoints_docker()
-            if args.user_space_docker_cmd == 'podman':
+            if args.container_engine == 'podman':
                 plugins.remove_entrypoints_podman()
 
             rose_tree = plugins.dockerPull_append_noentrypoint_rosetree(rose_tree)
@@ -724,5 +724,10 @@ class Workflow(BaseModel):
 
         # Do NOT capture stdout and/or stderr and pipe warnings and errors into a black hole.
         retval = run_local_module.run_local(args, rose_tree, args.cachedir, 'cwltool', False)
+
+        # Finally, since there is an output file copying bug in cwltool,
+        # we need to copy the output files manually. See comment above.
+        if args.copy_output_files:
+            run_local_module.copy_output_files(self.process_name)
 
 # Process = Union[Step, Workflow]

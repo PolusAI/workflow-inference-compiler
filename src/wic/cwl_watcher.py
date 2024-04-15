@@ -109,10 +109,7 @@ def rerun_cwltool(homedir: str, _directory_realtime: Path, cachedir_path: Path, 
         time_initial = time.time()
 
         # Setup dummy args
-        testargs = ['wic', '--yaml', '', '--cwl_output_intermediate_files', 'True']  # ignore --yaml
-        # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
-        with patch.object(sys, 'argv', testargs):
-            args = cli.parser.parse_args()
+        args = cli.get_args()
 
         # TODO: Support other namespaces
         plugin_ns = 'global'  # wic['wic'].get('namespace', 'global')

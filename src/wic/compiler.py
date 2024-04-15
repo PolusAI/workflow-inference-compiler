@@ -494,9 +494,6 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
             if isinstance(arg_val, Dict) and 'wic_alias' in arg_val:
                 arg_val = arg_val['wic_alias']
-                # NOTE: Exclude cwl_watcher from explicit edge dereferences.
-                # Since cwl_watcher requires explicit filenames for globbing,
-                # we do not want to replace them with internal CWL dependencies!
                 if not explicit_edge_defs_copy.get(arg_val):
                     if is_root and not testing:
                         # Even if is_root, we don't want to raise an Exception
@@ -504,7 +501,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                         # recompile all subworkflows as if they were root. That
                         # will cause this code path to be taken but it is not
                         # actually an error. Add a CWL input for testing only.
-                        raise Exception(f"Error! No definition found for &{arg_val}!")
+                        raise Exception(f"Error! No definition found for !&{arg_val}!")
                     inputs_workflow.update({in_name: in_dict})
                     steps[i][step_key]['in'][arg_key] = {'source': in_name}
                     # Add a 'dummy' value to explicit_edge_calls anyway, because

@@ -62,7 +62,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         retval: The return value
     """
 
-    docker_cmd: str = args.user_space_docker_cmd
+    docker_cmd: str = args.container_engine
     # Check that docker is installed, so users don't get a nasty runtime error.
     cmd = [docker_cmd, 'run', '--rm', 'hello-world']
     try:
@@ -130,9 +130,9 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         quiet = ['--quiet'] if args.quiet else []
         cachedir_ = ['--cachedir', cachedir] if cachedir else []
         net = ['--custom-net', args.custom_net] if args.custom_net else []
-        provenance = ['--provenance', 'provenance']
+        provenance = ['--provenance', f'provenance/{yaml_stem}'] if not args.no_provenance else []
         docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
-        write_summary = ['--write-summary', args.write_summary] if args.write_summary else []
+        write_summary = ['--write-summary', f'output_{yaml_stem}.json']
         path_check = ['--relax-path-checks']
         # See https://github.com/common-workflow-language/cwltool/blob/5a645dfd4b00e0a704b928cc0bae135b0591cc1a/cwltool/command_line_tool.py#L94
         # NOTE: Using --leave-outputs to disable --outdir
@@ -153,6 +153,9 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             generate_run_script(cmdline)
             return 0  # Do not actually run
 
+        # If we are actually running, then enable --copy_output_files
+        args.copy_output_files = True
+
         print('Running ' + cmdline)
         if use_subprocess:
             # To run in parallel (i.e. pytest ... --workers 8 ...), we need to
@@ -165,10 +168,8 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             print('via cwltool.main.main python API')
             try:
                 retval = cwltool.main.main(cmd[1:])
-                assert retval == 0
 
-                if args.write_summary:
-                    print(f'Final output json blob is in {args.write_summary}')
+                print(f'Final output json metadata blob is in output_{yaml_stem}.json')
 
                 # See https://pypi.org/project/cwltool/#import-as-a-module
                 # This also works, but doesn't easily allow using --leave-outputs, --provenence, --cachedir
@@ -199,7 +200,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
 
         # NOTE: toil-cwl-runner always runs in parallel
         net = ['--custom-net', args.custom_net] if args.custom_net else []
-        provenance = ['--provenance', 'provenance']
+        provenance = ['--provenance', f'provenance/{yaml_stem}'] if not args.no_provenance else []
         docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
         path_check = ['--relax-path-checks']
         # See https://github.com/common-workflow-language/cwltool/blob/5a645dfd4b00e0a704b928cc0bae135b0591cc1a/cwltool/command_line_tool.py#L94
@@ -229,10 +230,6 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             print('via toil.cwl.cwltoil.main python API')
             try:
                 retval = toil.cwl.cwltoil.main(cmd[1:])
-                assert retval == 0
-
-                if args.write_summary:
-                    print(f'Final output json blob is in {args.write_summary}')
 
             except Exception as e:
                 retval = 1
@@ -262,11 +259,22 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             if not d == cachedir_path:
                 shutil.rmtree(d)  # Be VERY careful when programmatically deleting directories!
 
-    # Finally, since there is an output file copying bug in cwltool,
-    # we need to copy the output files manually. See comment above.
-    output_json_file_prov = Path('provenance/workflow/primary-output.json')
-    # NOTE: The contents of args.write_summary (as printed to stdout) is
-    # slightly different than provenance/workflow/primary-output.json!
+    return retval
+
+
+def copy_output_files(yaml_stem: str) -> None:
+    """Copies output files from the cachedir to outdir/
+
+    Args:
+        yaml_stem (str): The --yaml filename (without .extension)
+    """
+    output_json_file = Path(f'output_{yaml_stem}.json')
+    if output_json_file.exists():
+        pass  # TODO
+
+    output_json_file_prov = Path(f'provenance/{yaml_stem}/workflow/primary-output.json')
+    # NOTE: The contents of --write-summary is
+    # slightly different than provenance/{yaml_stem}/workflow/primary-output.json!
     # They are NOT the same file!
     if output_json_file_prov.exists():
         with open(output_json_file_prov, mode='r', encoding='utf-8') as f:
@@ -278,7 +286,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             yaml_stem_init, shortened = utils.shorten_namespaced_output_name(namespaced_output_name)
             parentdirs = yaml_stem_init + '/' + shortened.replace('___', '/')
             Path('outdir/' + parentdirs).mkdir(parents=True, exist_ok=True)
-            source = 'provenance/workflow/' + location
+            source = f'provenance/{yaml_stem}/workflow/' + location
             # NOTE: Even though we are using subdirectories (not just a single output directory),
             # there is still the possibility of filename collisions, i.e. when scattering.
             # For now, let's use a similar trick as cwltool of append _2, _3 etc.
@@ -296,8 +304,6 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
             dests.add(dest)
             cmd = ['cp', source, dest]
             sub.run(cmd, check=True)
-
-    return retval
 
 
 def stage_input_files(yml_inputs: Yaml, root_yml_dir_abs: Path,
