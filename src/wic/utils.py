@@ -325,7 +325,7 @@ def recursively_contains_dict_key(key: str, obj: Any) -> bool:
         bool: True if key is found, else False.
     """
     if isinstance(obj, List):
-        return any([recursively_delete_dict_key(key, x) for x in obj])
+        return any([recursively_contains_dict_key(key, x) for x in obj])
     if isinstance(obj, Dict):
         return (key in obj.keys()) or any(recursively_contains_dict_key(key, val) for val in obj.values())
     return False
@@ -398,54 +398,6 @@ def get_step_name_1(step_1_names: List[str],
         step_name_1 = f'"{step_name_1}"'
 
     return step_name_1
-
-
-def recursively_insert_into_dict_tree(tree: Dict, keys: List[str], val: Any) -> Dict:
-    """Recursively inserts a value into a nested tree of Dicts, creating new Dicts as necessary.
-
-    Args:
-        tree (Dict): A nested tree of Dicts.
-        keys (List[str]): The path through the tree to the value.
-        val (Any): The value to be inserted.
-
-    Returns:
-        Dict: The updated tree with val inserted as per the path specified by keys.
-    """
-    if keys == []:
-        return tree
-    key = keys[0]
-    if len(keys) == 1:
-        if isinstance(tree, Dict):
-            if key in tree:
-                tree[key].append(val)
-            else:
-                tree[key] = [val]
-        if isinstance(tree, List):
-            # TODO: Output Directories cause problems with uniqueness of names,
-            # so for now we have to terminate the recursion.
-            tree.append(val)
-        return tree
-    subtree = tree.get(key, {})
-    tree[key] = recursively_insert_into_dict_tree(subtree, keys[1:], val)
-    return tree
-
-
-def provenance_list_to_tree(files: List[Tuple[str, str, str]]) -> Dict:
-    """Converts the flattened list of workflow steps into a nested tree of Dicts corresponding to subworkflows.
-
-    Args:
-        files (List[Tuple[str, str, str]]): This should be the output of parse_provenance_output_files(...)
-
-    Returns:
-        Dict: A nested tree of Dicts corresponding to subworkflows.
-    """
-    tree: Dict = {}
-    for location, namespaced_output_name, basename in files:
-        namespaces = namespaced_output_name.split('___')
-        # print(yaml.dump(tree))
-        # print((location, namespaced_output_name, basename))
-        tree = recursively_insert_into_dict_tree(tree, namespaces, (location, namespaced_output_name, basename))
-    return tree
 
 
 def parse_provenance_output_files(output_json: Json) -> List[Tuple[str, str, str]]:
