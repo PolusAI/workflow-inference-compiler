@@ -1,7 +1,7 @@
 name: Run Workflows Weekly
 
 # The purpose of this CI file is to stress test our workflows at scale.
-# The *_weekly.yml workflows scatter over a much larger number of examples.
+# The *_weekly.wic workflows scatter over a much larger number of examples.
 # Note that toil-cwl-runner is slightly slower than cwltool, but
 # there are deadlocking problems with `cwltool --parallel`
 
@@ -114,7 +114,7 @@ jobs:
       # (Many of the packages conflict with pypy.)
       run: cd mm-workflows/ && pip install ".[test]" && mm-workflows
 
-    - name: Generate WIC Python API Workflows (*.py -> *.yml)
+    - name: Generate WIC Python API Workflows (*.py -> *.wic)
       if: always()
       run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
 
@@ -125,7 +125,7 @@ jobs:
       # Please read docs/validation.md#Property-Based-Testing
       # This is essentially an integration test for all of the
       # WIC Python API workflows as well as the WIC Python API itself.
-    - name: Validate WIC Python API Workflows (*.py -> *.yml)
+    - name: Validate WIC Python API Workflows (*.py -> *.wic)
       if: always()
       run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
 

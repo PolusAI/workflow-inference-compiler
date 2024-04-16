@@ -154,7 +154,7 @@ def read_config_from_disk(config_file: Path) -> Json:
     # config_file can contain absolute or relative paths
     with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)
-    conf_tags = ['search_paths_cwl', 'search_paths_yml']
+    conf_tags = ['search_paths_cwl', 'search_paths_wic']
     for tag in conf_tags:
         config[tag] = get_absolute_paths(config[tag])
     return config

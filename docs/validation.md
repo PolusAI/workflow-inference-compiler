@@ -62,7 +62,7 @@ We can randomly generate ***`entire synthetic workflows!`***
 
 This has [already been implemented](https://github.com/PolusAI/workflow-inference-compiler/blob/master/tests/test_fuzzy_compile.py), and it has been incredibly useful for finding a few (and thankfully only a few!) bugs. It also revealed a few subtle design issues (which have long ago been fixed).
 
-The [Fuzzy Compile CI logs](https://github.com/PolusAI/workflow-inference-compiler/actions/workflows/fuzzy_compile_weekly.yml) should speak for themselves.
+The [Fuzzy Compile CI logs](https://github.com/PolusAI/workflow-inference-compiler/actions/workflows/fuzzy_compile_weekly.wic) should speak for themselves.
 
 ## Well what about ... !?!
 

@@ -46,7 +46,7 @@ outputs:
 <table>
 <tr>
 <td>
-docs/tutorials/naming_conventions.yml
+docs/tutorials/naming_conventions.wic
 
 ```yaml
 steps:
@@ -58,9 +58,9 @@ steps:
 ```
 </td>
 <td>
-docs/tutorials/naming_conventions.yml_no_flag.png
+docs/tutorials/naming_conventions.wic_no_flag.png
 
-![naming_conventions_no_flag](naming_conventions.yml_no_flag.png)
+![naming_conventions_no_flag](naming_conventions.wic_no_flag.png)
 
 </td>
 </tr>
@@ -71,7 +71,7 @@ As mentioned above, since there is an ambiguity in the output types (both are ty
 <table>
 <tr>
 <td>
-docs/tutorials/naming_conventions_explicit.yml
+docs/tutorials/naming_conventions_explicit.wic
 
 ```yaml
 steps:
@@ -89,9 +89,9 @@ steps:
 ```
 </td>
 <td>
-docs/tutorials/naming_conventions_explicit.yml.gv.png
+docs/tutorials/naming_conventions_explicit.wic.gv.png
 
-![naming_conventions_explicit](naming_conventions_explicit.yml.gv.png)
+![naming_conventions_explicit](naming_conventions_explicit.wic.gv.png)
 
 </td>
 </tr>
@@ -102,7 +102,7 @@ We can see that the input uniquename1 in step 2 is now "correctly" connected to 
 <table>
 <tr>
 <td>
-docs/tutorials/naming_conventions.yml
+docs/tutorials/naming_conventions.wic
 
 ```yaml
 steps:
@@ -114,9 +114,9 @@ steps:
 ```
 </td>
 <td>
-docs/tutorials/naming_conventions.yml_with_flag.png
+docs/tutorials/naming_conventions.wic_with_flag.png
 
-![naming_conventions_no_flag](naming_conventions.yml_with_flag.png)
+![naming_conventions_no_flag](naming_conventions.wic_with_flag.png)
 
 </td>
 </tr>

@@ -197,7 +197,7 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                     local_input._set_value(f"{tmp}", linked=True)
                     __value._set_value(f"{tmp}", linked=True)
                 else:
-                    # Use the current value so we can exactly reproduce hand-crafted yml files.
+                    # Use the current value so we can exactly reproduce hand-crafted wic files.
                     # (Very useful for regression testing!)
                     # NOTE: process_name is either clt name or workflow name
                     tmp = __value.value if __value.value else f"{__name}{process_self.process_name}"
@@ -520,7 +520,7 @@ class Workflow(BaseModel):
                 # See the second to last line of ast.read_ast_from_disk()
                 d = {'subtree': s.yaml,  # recursively call .yaml (i.e. on s, not self)
                      'parentargs': parentargs}
-                steps.append({s.process_name + '.yml': d})
+                steps.append({s.process_name + '.wic': d})
             #  else: ...
         yaml_contents = {"inputs": inputs, "steps": steps} if inputs else {"steps": steps}
         return yaml_contents
@@ -548,12 +548,12 @@ class Workflow(BaseModel):
                 }
                 parentargs: dict[str, Any] = {"in": ins} if ins else {}
                 s.write_ast_to_disk(directory)  # recursively call
-                steps.append({s.process_name + '.yml': parentargs})
+                steps.append({s.process_name + '.wic': parentargs})
             #  else: ...
         yaml_contents = {"inputs": inputs, "steps": steps} if inputs else {"steps": steps}
         # NOTE: For various reasons, process_name should be globally unique.
         # In this case, it is to avoid overwriting files.
-        with open(str(directory / self.process_name) + '.yml', mode='w', encoding='utf-8') as f:
+        with open(str(directory / self.process_name) + '.wic', mode='w', encoding='utf-8') as f:
             f.write(yaml.dump(yaml_contents, sort_keys=False, line_break='\n', indent=2))
 
     def add_input(self, __name: str) -> Any:
@@ -623,7 +623,7 @@ class Workflow(BaseModel):
 
     def _save_yaml(self) -> None:
         _WIC_PATH.mkdir(parents=True, exist_ok=True)
-        self.yml_path = _WIC_PATH.joinpath(f"{self.name}.yml")
+        self.yml_path = _WIC_PATH.joinpath(f"{self.name}.wic")
         with open(self.yml_path, "w", encoding="utf-8") as file:
             file.write(yaml.dump(self.yaml))
 

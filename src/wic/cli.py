@@ -13,7 +13,7 @@ parser.add_argument('--config_file', type=str, required=False, default=str(Path(
 parser.add_argument('--version', action='version', version=__version__,
                     default='==SUPPRESS==', help='Current version of the Workflow Inference Compiler')
 parser.add_argument('--generate_schemas_only', default=False, action="store_true",
-                    help='Generate schemas for the files in config.json (search_paths_yml and search_paths_cwl)')
+                    help='Generate schemas for the files in config.json (search_paths_wic and search_paths_cwl)')
 parser.add_argument('--homedir', type=str, required=False, default=str(Path().home()),
                     help='The users home directory. This is necessary because CWL clears environment variables (e.g. HOME)')
 # Change default to True for now. See comment in compiler.py

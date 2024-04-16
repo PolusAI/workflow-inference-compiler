@@ -279,7 +279,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
         yaml_tree_back: YamlTree = sub_forests_dict[step_id].yaml_tree
         step_1 = yaml_tree_back.yml['steps'][0]
         step_name_1 = list(step_1.keys())[0]
-        if Path(step_name_1).suffix == '.yml':
+        if Path(step_name_1).suffix == '.wic':
             # Choose a specific backend
             return flatten_forest(sub_forests_dict[step_id])
         return [forest]
@@ -392,9 +392,9 @@ def get_step_name_1(step_1_names: List[str],
     else:
         step_name_1 = step_name_str(yaml_stem, 0, steps_keys[0])
         step_name_1 = '___'.join(namespaces + [step_name_1])
-    # NOTE: Since the names of subgraphs '*.yml' contain a period, we need to
+    # NOTE: Since the names of subgraphs '*.wic' contain a period, we need to
     # escape them by enclosing the whole name in double quotes. Otherwise:
-    # "Error: *.yml.gv: syntax error in line n near '.'"
+    # "Error: *.wic.gv: syntax error in line n near '.'"
         step_name_1 = f'"{step_name_1}"'
 
     return step_name_1

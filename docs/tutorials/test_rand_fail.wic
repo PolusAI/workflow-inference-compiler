@@ -7,7 +7,7 @@ steps:
       decimal_places: !ii 2
     out:
     - array: !& arr_float
-- fail.yml:
+- fail.wic:
     scatter: [fail__step__1__fail___with_probability]
 - echo:
     scatter: [message]
