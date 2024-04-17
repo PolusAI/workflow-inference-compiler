@@ -487,7 +487,20 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     # schema['required'] = ['steps'] # steps are not required, e.g. npt.wic
 
     schema_props = {'steps': steps,
-                    'label': str_nonempty, 'doc': str_nonempty}
+                    'class': str_nonempty,
+                    'cwlVersion': str_nonempty,  # TODO enum https://www.commonwl.org/v1.2/Workflow.html#CWLVersion
+                    # TODO https://www.commonwl.org/v1.2/SchemaSalad.html#Explicit_context
+                    '$base': str_nonempty,
+                    '$namespaces': {},  # TODO
+                    '$schemas': {},  # TODO
+                    '$graph': {},  # TODO
+                    '$import': {},  # TODO https://www.commonwl.org/v1.2/SchemaSalad.html#Import
+                    '$include': {},  # TODO https://www.commonwl.org/v1.2/SchemaSalad.html#Include
+                    'id': str_nonempty,
+                    'hints': {},  # TODO
+                    'requirements': {},  # TODO
+                    'label': str_nonempty,
+                    'doc': str_nonempty}
     # schema_props['wic'] = wic_tag_schema(hypothesis) # NOTE: This technically 'works'
     # with hypothesis, but the wic_tag_schema still needs some work.
 
