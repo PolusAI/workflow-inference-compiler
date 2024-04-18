@@ -182,10 +182,9 @@ def get_workflow_outputs(args: argparse.Namespace,
             # we want to pollute our output directory with intermediate files.
             # (You can always enable --provenance to get intermediate files.)
             # NOTE: Remove is_root for now because in test_cwl_embedding_independence,
-            # we recompile all subworkflows as if they were root. Thus, for now
-            # we need to enable args.cwl_output_intermediate_files
+            # we recompile all subworkflows as if they were root.
             # Exclude intermediate 'output' files.
-            if out_var in vars_workflow_output_internal and not args.cwl_output_intermediate_files:  # and is_root
+            if out_var in vars_workflow_output_internal:  # and is_root
                 continue
             out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
             # print('out_name', out_name)

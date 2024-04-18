@@ -1,9 +1,6 @@
-import argparse
 import json
 from pathlib import Path
 import random
-from unittest.mock import patch
-import sys
 from typing import Any, Dict, List
 
 import networkx as nx
@@ -12,7 +9,8 @@ from jsonschema import RefResolver, Draft202012Validator
 import yaml
 
 import wic
-from wic import ast, cli, compiler, utils_cwl
+from wic import ast, compiler, utils_cwl
+from wic.cli import get_args
 from wic.utils_yaml import wic_loader
 from wic.wic_types import GraphData, GraphReps, NodeData, StepId, Yaml, YamlTree
 from ..wic_types import Json, Tools
@@ -519,19 +517,6 @@ def wic_main_schema(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[s
     # "f.write(json.dumps(schema, indent=2))"
 
     return schema
-
-
-def get_args(yml_path: str = '') -> argparse.Namespace:
-    """This is used to get mock command line arguments.
-
-    Returns:
-        argparse.Namespace: The mocked command line arguments
-    """
-    testargs = ['wic', '--yaml', yml_path, '--cwl_output_intermediate_files', 'True']  # ignore --yaml
-    # For now, we need to enable --cwl_output_intermediate_files. See comment in compiler.py
-    with patch.object(sys, 'argv', testargs):
-        args: argparse.Namespace = wic.cli.parser.parse_args()
-    return args
 
 
 def compile_workflow_generate_schema(homedir: str,

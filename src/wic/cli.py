@@ -1,36 +1,38 @@
 import argparse
 import sys
 from pathlib import Path
+from unittest.mock import patch
+
 from . import _version
 __version__ = _version.get_versions()['version']
 
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
-parser.add_argument('--yaml', type=str, required=('--generate_schemas_only' not in sys.argv),
+parser.add_argument('--yaml', type=str, required=('--generate_schemas' not in sys.argv),
                     help='Yaml workflow file')
 parser.add_argument('--config_file', type=str, required=False, default=str(Path().home()/'wic'/'global_config.json'),
                     help='User provided (JSON) config file')
 # version action exits the parser Ref : https://github.com/python/cpython/blob/1f515e8a109204f7399d85b7fd806135166422d9/Lib/argparse.py#L1167
 parser.add_argument('--version', action='version', version=__version__,
                     default='==SUPPRESS==', help='Current version of the Workflow Inference Compiler')
-parser.add_argument('--generate_schemas_only', default=False, action="store_true",
+parser.add_argument('--generate_schemas', default=False, action="store_true",
                     help='Generate schemas for the files in config.json (search_paths_wic and search_paths_cwl)')
 parser.add_argument('--homedir', type=str, required=False, default=str(Path().home()),
                     help='The users home directory. This is necessary because CWL clears environment variables (e.g. HOME)')
-# Change default to True for now. See comment in compiler.py
-parser.add_argument('--cwl_output_intermediate_files', type=bool, required=False, default=True,
-                    help='Enable output files which are used between steps (for debugging).')
 parser.add_argument('--insert_steps_automatically', default=False, action="store_true",
                     help='''Attempt to fix inference failures by speculatively
                     inserting workflow steps from a curated whitelist.''')
-parser.add_argument('--write_summary',
-                    help='Path to write the final output JSON object to. Default is stdout.')
+parser.add_argument('--no_provenance', default=False, action="store_true",
+                    help='Do not use the --provenance feature of CWL. (You should only disable provenance if absolutely necessary.)')
+parser.add_argument('--copy_output_files', default=False, action="store_true",
+                    help='Copies output files from the cachedir to outdir/ (automatically enabled with --run_local)')
 
 parser.add_argument('--parallel', default=False, action="store_true",
                     help='''When running locally, execute independent steps in parallel.
                     \nThis is required for real-time analysis, but it may cause issues with
                     \nhanging (particularly when scattering). See user guide for details.''')
 parser.add_argument('--quiet', default=False, action="store_true",
-                    help='''Disable verbose output. This will not print out the commands used for each step.''')
+                    help='''Disable verbose output. This will not print out the commands used for each step,
+                    and it will capture all stdout/stderr into log files for each step.''')
 parser.add_argument('--cwl_runner', type=str, required=False, default='cwltool', choices=['cwltool', 'toil-cwl-runner'],
                     help='The CWL runner to use for running workflows locally.')
 parser.add_argument('--allow_raw_cwl', default=False, action="store_true",
@@ -40,7 +42,7 @@ parser.add_argument('--ignore_docker_install', default=False, action="store_true
                     \n--ignore_docker_install does NOT change whether or not any step in your workflow uses docker!''')
 parser.add_argument('--ignore_docker_processes', default=False, action="store_true",
                     help='Do not check whether there are too many running docker processes before running workflows.')
-parser.add_argument('--user_space_docker_cmd', default='docker',
+parser.add_argument('--container_engine', default='docker',
                     help='Specify which command to use to run OCI containers.')
 
 parser.add_argument('--docker_remove_entrypoints', default=False, action="store_true",
@@ -113,3 +115,16 @@ parser.add_argument('--graph_dark_theme', default=False, action="store_true",
                     help='Changees the color of the fonts and edges from white to black.')
 parser.add_argument('--custom_net', type=str, required=False,
                     help='Passes --custom-net flag to cwltool.')
+
+
+def get_args(yaml_path: str = '', suppliedargs: list[str] = []) -> argparse.Namespace:
+    """This is used to get mock command line arguments, default + suppled args
+
+    Returns:
+        argparse.Namespace: The mocked command line arguments
+    """
+    defaultargs = ['wic', '--yaml', yaml_path]  # ignore --yaml
+    testargs = defaultargs + suppliedargs
+    with patch.object(sys, 'argv', testargs):
+        args: argparse.Namespace = parser.parse_args()
+    return args

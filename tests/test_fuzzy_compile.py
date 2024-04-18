@@ -17,7 +17,7 @@ import wic.schemas.wic_schema
 import wic.utils
 from wic.wic_types import GraphData, GraphReps, Yaml, YamlTree, StepId
 
-from .test_setup import get_args, tools_cwl, yml_paths, validator, wic_strategy
+from .test_setup import tools_cwl, yml_paths, validator, wic_strategy
 
 
 class TestFuzzyCompile(unittest.TestCase):
@@ -49,7 +49,7 @@ class TestFuzzyCompile(unittest.TestCase):
             yml_path_stem = Path(subkeys[0]).stem
             yml_path = yml_paths[plugin_ns][yml_path_stem]
 
-        args = get_args(str(yml_path))
+        args = wic.cli.get_args(str(yml_path))
 
         y_t = YamlTree(StepId('random_stepid', plugin_ns), yml)
         yaml_tree_raw = wic.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator,
