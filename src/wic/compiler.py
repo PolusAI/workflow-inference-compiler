@@ -776,7 +776,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         if args.allow_partial_failures:
             when_null_clauses = []
             for arg_in in args_required:
-                when_null_clauses.append(f'inputs.{arg_in} != null')
+                when_null_clauses.append(f'inputs["{arg_in}"] != null')
             when_clause = ' && '.join(when_null_clauses)
             if when_null_clauses:
                 if 'when' in steps[i][step_key]:
