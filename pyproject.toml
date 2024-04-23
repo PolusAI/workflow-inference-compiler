@@ -114,7 +114,7 @@ all = ["workflow-inference-compiler[test,doc,plots,cyto,runners-src,mypy-types]"
 
 [project.scripts]
 wic = "wic.main:main"
-cwl_watcher = "wic.cwl_watcher:main"
+cwl_subinterpreter = "wic.cwl_subinterpreter:main"
 cwltool_filterlog = "wic.run_local:cwltool_main"
 # Need an extra entrypoint to avoid mixing up WIC cli flags with cwltool cli flags
 cwltool_filterlog_pf = "wic.run_local:cwltool_main_pf"

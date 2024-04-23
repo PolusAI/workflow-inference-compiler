@@ -32,8 +32,8 @@ To use static dispatch, first you need to create a YAML file which aggregates th
 
 ```yaml
 wic:
-  default_backend: implementation1
-  backends:
+  default_implementation: implementation1
+  implementations:
     implementation1:
       steps:
         - implementation1.wic:
@@ -54,7 +54,7 @@ wic:
   steps:
     (2, static_dispatch.wic):
       wic:
-        backend: implementation2
+        implementation: implementation2
 ```
 
 The most common use case of static dispatch is to swap out 'identical' subworkflows. However, this constraint is intentionally not enforced and it is completely up to the user. In fact, you may want to swap out two implementations that use different algorithms to achieve the same high-level goal.
@@ -73,7 +73,7 @@ Note however that while insert_steps_automatically_*.cwl files can come from pre
 
 For realtime monitoring, we want to asynchronously run an auxiliary workflow while the main workflow is still running. We implement this by invoking a subinterpreter.
 
-The `cwl_watcher` subinterpreter will repeatedly run an auxiliary workflow which is completely independent from the main workflow, upto some fixed number of iterations. (A fixed number of iterations is used because the main interpreter and subinterpreter are completely independent; there is no way of passing status information between the interpreters.)
+The `cwl_subinterpreter` subinterpreter will repeatedly run an auxiliary workflow which is completely independent from the main workflow, upto some fixed number of iterations. (A fixed number of iterations is used because the main interpreter and subinterpreter are completely independent; there is no way of passing status information between the interpreters.)
 
 NOTE: This should be considered an experimental feature; the CWL standard does not consider realtime monitoring (and/or other implementation-specific details).
 

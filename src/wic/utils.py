@@ -162,51 +162,51 @@ def get_subkeys(steps_keys: List[str], tools_stems: List[str]) -> List[str]:
     return [key for key in steps_keys if (key not in tools_stems) and (not key.startswith('python_script'))]
 
 
-def extract_backend(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
-    """Chooses a specific backend for a given CWL workflow step.
+def extract_implementation(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
+    """Chooses a specific implementation for a given CWL workflow step.
 
-    The backends should be thought of as either 'exactly' identical, or at
+    The implementations should be thought of as either 'exactly' identical, or at
     least the same high-level protocol but implemented with a different algorithm.
 
     Args:
-        yaml_tree (Yaml): A Yaml AST dict with sub-dicts for each backend.
+        yaml_tree (Yaml): A Yaml AST dict with sub-dicts for each implementation.
         yaml_path (Path): The filepath of yaml_tree, only used for error reporting.
 
     Raises:
-        Exception: If the steps: and/or backend: tags are not present.
+        Exception: If the steps: and/or implementation: tags are not present.
 
     Returns:
-        Tuple[str, Yaml]: The Yaml AST dict of the chosen backend.
+        Tuple[str, Yaml]: The Yaml AST dict of the chosen implementation.
     """
     yaml_tree_copy = copy.deepcopy(yaml_tree)
-    backend = ''
-    if 'backends' in wic:
-        if 'default_backend' in wic:
-            backend = wic['default_backend']
-        if 'backend' in wic:
-            backend = wic['backend']
-        if backend == '':
-            raise Exception(f'Error! No backend in {yaml_path}!')
+    implementation = ''
+    if 'implementations' in wic:
+        if 'default_implementation' in wic:
+            implementation = wic['default_implementation']
+        if 'implementation' in wic:
+            implementation = wic['implementation']
+        if implementation == '':
+            raise Exception(f'Error! No implementation in {yaml_path}!')
 
         plugin_ns = wic.get('namespace', 'global')
-        stepid = StepId(backend, plugin_ns)
-        if stepid not in wic['backends']:
+        stepid = StepId(implementation, plugin_ns)
+        if stepid not in wic['implementations']:
             print(yaml.dump(yaml_tree))
             print(yaml.dump(wic))
-            print(wic['backends'])
-            raise Exception(f'Error! No steps for backend {stepid} in {yaml_path}!')
-        steps = wic['backends'][stepid]['steps']
+            print(wic['implementations'])
+            raise Exception(f'Error! No steps for implementation {stepid} in {yaml_path}!')
+        steps = wic['implementations'][stepid]['steps']
         yaml_tree_copy.update({'steps': steps})
         # TODO: Use the entire back_tree? Useful for inputs:
-        # back_tree = wic['backends'][stepid]
+        # back_tree = wic['implementations'][stepid]
         # if 'wic' in back_tree:
         #    del back_tree['wic']
         # yaml_tree_copy.update(back_tree)
     elif 'steps' in yaml_tree_copy:
         pass  # steps = yaml_tree_copy['steps']
     else:
-        raise Exception(f'Error! No backends and/or steps in {yaml_path}!')
-    return (backend, yaml_tree_copy)
+        raise Exception(f'Error! No implementations and/or steps in {yaml_path}!')
+    return (implementation, yaml_tree_copy)
 
 
 def flatten(lists: List[List[Any]]) -> List[Any]:
@@ -252,7 +252,7 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
         forest (YamlForest): The yaml AST forest to be flattened
 
     Raises:
-        Exception: If backend: tags are missing.
+        Exception: If implementation: tags are missing.
 
     Returns:
         List[YamlForest]: The flattened forest
@@ -264,23 +264,23 @@ def flatten_forest(forest: YamlForest) -> List[YamlForest]:
     wic = {'wic': yaml_tree.get('wic', {})}
     plugin_ns = wic['wic'].get('namespace', 'global')
 
-    if 'backends' in wic['wic']:
+    if 'implementations' in wic['wic']:
         # pretty_print_forest(forest)
         back_name = ''
-        if 'default_backend' in wic['wic']:
-            back_name = wic['wic']['default_backend']
-        if 'backend' in wic['wic']:
-            back_name = wic['wic']['backend']
+        if 'default_implementation' in wic['wic']:
+            back_name = wic['wic']['default_implementation']
+        if 'implementation' in wic['wic']:
+            back_name = wic['wic']['implementation']
         if back_name == '':
             pretty_print_forest(forest)
-            raise Exception('Error! No backend in yaml forest!\n')
+            raise Exception('Error! No implementation in yaml forest!\n')
         sub_forests_dict = dict(forest.sub_forests)
         step_id = StepId(back_name, plugin_ns)
         yaml_tree_back: YamlTree = sub_forests_dict[step_id].yaml_tree
         step_1 = yaml_tree_back.yml['steps'][0]
         step_name_1 = list(step_1.keys())[0]
         if Path(step_name_1).suffix == '.wic':
-            # Choose a specific backend
+            # Choose a specific implementation
             return flatten_forest(sub_forests_dict[step_id])
         return [forest]
 

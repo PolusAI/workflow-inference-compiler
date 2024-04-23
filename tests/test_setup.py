@@ -57,16 +57,16 @@ def wic_yaml_filter_blank_steps(yml: Yaml) -> bool:
     return not (steps == [] or any([step == {} for step in steps]))
 
 
-def wic_yaml_filter_backends_or_steps(yml: Yaml) -> bool:
-    """Filters out Yaml instances with no backends and no steps.
+def wic_yaml_filter_implementations_or_steps(yml: Yaml) -> bool:
+    """Filters out Yaml instances with no implementations and no steps.
 
     Args:
         yml (Yaml): A randomly generated Yaml instance.
 
     Returns:
-        bool: True if there is either backends or steps (or both).
+        bool: True if there is either implementations or steps (or both).
     """
-    return ('backends' in yml or 'steps' in yml)
+    return ('implementations' in yml or 'steps' in yml)
 
 
 time_initial = time.time()
@@ -76,7 +76,7 @@ wic_strategy: SearchStrategy = hj.from_schema(wic_schema)
 # NOTE: The CLI version of mypy and the VSCode version of mypy disagree on the
 # following line. The "type: ignore" comment is NOT unused.
 wic_strategy = wic_strategy.filter(wic_yaml_filter_blank_steps)
-wic_strategy = wic_strategy.filter(wic_yaml_filter_backends_or_steps)
+wic_strategy = wic_strategy.filter(wic_yaml_filter_implementations_or_steps)
 
 time_final = time.time()
 print(f'from_schema time: {round(time_final - time_initial, 4)} seconds')

@@ -192,9 +192,9 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
                                            {**config_schemas[name], **metadata}]}
             continue
 
-        if key == 'config' and name == 'cwl_watcher':
+        if key == 'config' and name == 'cwl_subinterpreter':
             # This may cause problems with hypothesis, but since the
-            # cwl_watcher config tag takes an arbitrary Json-encoded string
+            # cwl_subinterpreter config tag takes an arbitrary Json-encoded string
             # as input, we cannot restrict this particular sub-schema.
             empty_schema: Dict = {}
             inputs_props[key] = empty_schema
@@ -348,11 +348,11 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     # additionalProperties = False still works with patternProperties FYI
     steps['patternProperties'] = {pat_int_str: choices}
 
-    # backends = default_schema()
-    backends: Dict[Any, Any] = {}
-    backends['type'] = 'object'
-    backends['additionalProperties'] = True
-    # TODO: Restrict the backend properties and make default_backend an enum
+    # implementations = default_schema()
+    implementations: Dict[Any, Any] = {}
+    implementations['type'] = 'object'
+    implementations['additionalProperties'] = True
+    # TODO: Restrict the implementation properties and make default_implementation an enum
 
     str_nonempty = {'type': 'string', 'minLength': 1}
 
@@ -360,8 +360,8 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     # namespace['enum'] = ...
     # TODO: Restrict the namespace properties to only those in search_paths_wic
 
-    backend = str_nonempty
-    default_backend = str_nonempty
+    implementation = str_nonempty
+    default_implementation = str_nonempty
     inlineable = {'type': 'boolean'}
 
     schema = default_schema(url=True)
@@ -375,13 +375,13 @@ def wic_tag_schema(hypothesis: bool = False) -> Json:
     version = {'type': 'string', 'pattern': pat_semver}
     driver = {'type': 'string', 'enum': ['slurm', 'argo']}
 
-    schema_props = {'graphviz': graphviz_schema, 'steps': steps, 'backend': backend,
-                    'default_backend': default_backend,
+    schema_props = {'graphviz': graphviz_schema, 'steps': steps, 'implementation': implementation,
+                    'default_implementation': default_implementation,
                     'version': str_nonempty, 'driver': driver,
                     'namespace': namespace, 'inlineable': inlineable}
     if not hypothesis:
         # {'additionalProperties': True} can cause problems with hypothesis.
-        schema_props['backends'] = backends
+        schema_props['implementations'] = implementations
     schema['properties'] = schema_props
     return schema
 

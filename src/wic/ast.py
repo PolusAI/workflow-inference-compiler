@@ -57,17 +57,17 @@ def read_ast_from_disk(homedir: str,
         sys.exit(1)
 
     wic = {'wic': yaml_tree.get('wic', {})}
-    if 'backends' in wic['wic']:
-        # Recursively expand each backend, but do NOT choose a specific backend.
+    if 'implementations' in wic['wic']:
+        # Recursively expand each implementation, but do NOT choose a specific implementation.
         # Require back_name to be .wic? For now, yes.
-        backends_trees = []
-        for back_name, back in wic['wic']['backends'].items():
+        implementations_trees = []
+        for back_name, back in wic['wic']['implementations'].items():
             plugin_ns = wic['wic'].get('namespace', 'global')
             stepid = StepId(back_name, plugin_ns)
-            backends_tree = read_ast_from_disk(homedir, YamlTree(stepid, back), yml_paths, tools, validator,
-                                               ignore_validation_errors)
-            backends_trees.append(backends_tree)
-        yaml_tree['wic']['backends'] = dict(backends_trees)
+            implementations_tree = read_ast_from_disk(homedir, YamlTree(stepid, back), yml_paths, tools, validator,
+                                                      ignore_validation_errors)
+            implementations_trees.append(implementations_tree)
+        yaml_tree['wic']['implementations'] = dict(implementations_trees)
         return YamlTree(step_id, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -149,14 +149,14 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
     yaml_tree['wic'] = wic['wic']
     wic_steps = wic['wic'].get('steps', {})
 
-    if 'backends' in wic['wic']:
-        # Recursively expand each backend, but do NOT choose a specific backend.
+    if 'implementations' in wic['wic']:
+        # Recursively expand each implementation, but do NOT choose a specific implementation.
         # Require back_name to be .wic? For now, yes.
-        backends_trees = []
-        for stepid, back in wic['wic']['backends'].items():
-            backends_tree = merge_yml_trees(YamlTree(stepid, back), wic_parent, tools)
-            backends_trees.append(backends_tree)
-        yaml_tree['wic']['backends'] = dict(backends_trees)
+        implementations_trees = []
+        for stepid, back in wic['wic']['implementations'].items():
+            implementations_tree = merge_yml_trees(YamlTree(stepid, back), wic_parent, tools)
+            implementations_trees.append(implementations_tree)
+        yaml_tree['wic']['implementations'] = dict(implementations_trees)
         return YamlTree(step_id, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
@@ -214,12 +214,12 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
     (step_id, yaml_tree) = yaml_tree_tuple
 
     wic = {'wic': yaml_tree.get('wic', {})}
-    if 'backends' in wic['wic']:
-        backends_forest_list = []
-        for stepid, back in wic['wic']['backends'].items():
-            backend_forest = (stepid, tree_to_forest(YamlTree(stepid, back), tools))
-            backends_forest_list.append(backend_forest)
-        return YamlForest(YamlTree(step_id, yaml_tree), backends_forest_list)
+    if 'implementations' in wic['wic']:
+        implementations_forest_list = []
+        for stepid, back in wic['wic']['implementations'].items():
+            implementation_forest = (stepid, tree_to_forest(YamlTree(stepid, back), tools))
+            implementations_forest_list.append(implementation_forest)
+        return YamlForest(YamlTree(step_id, yaml_tree), implementations_forest_list)
 
     steps: List[Yaml] = yaml_tree['steps']
     wic_steps = wic['wic'].get('steps', {})
@@ -261,12 +261,12 @@ def python_script_generate_cwl(yaml_tree_tuple: YamlTree,
 
     wic = {'wic': yaml_tree.get('wic', {})}
 
-    if 'backends' in wic['wic']:
-        backends_trees = []
-        for stepid, back in wic['wic']['backends'].items():
-            backends_tree = python_script_generate_cwl(YamlTree(stepid, back), root_yml_dir_abs, tools)
-            backends_trees.append(backends_tree)
-        yaml_tree['wic']['backends'] = dict(backends_trees)
+    if 'implementations' in wic['wic']:
+        implementations_trees = []
+        for stepid, back in wic['wic']['implementations'].items():
+            implementations_tree = python_script_generate_cwl(YamlTree(stepid, back), root_yml_dir_abs, tools)
+            implementations_trees.append(implementations_tree)
+        yaml_tree['wic']['implementations'] = dict(implementations_trees)
         return YamlTree(step_id, yaml_tree)
 
     steps: List[Yaml] = yaml_tree['steps']
