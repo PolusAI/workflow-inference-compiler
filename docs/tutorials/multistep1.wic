@@ -1,28 +1,21 @@
 steps:
-- pdb:
+- touch:
     in:
-      config: !ii
-        pdb_code: 1aki
-      output_pdb_path: !ii protein.pdb
+      filename: !ii empty.txt
     out:
-    - output_pdb_path: !& protein_edge
-- fix_amides:
+    - file: !& file_touch
+- append:
     in:
-      input_pdb_path: !* protein_edge
-      output_pdb_path: !ii protein_fix_amides.pdb
+      str: !ii Hello
+      file: !* file_touch
     out:
-    - output_pdb_path: !& protein_fix_amides_edge
-- fix_side_chain:
+    - file: !& file_append_1
+- append:
     in:
-      input_pdb_path: !* protein_fix_amides_edge
-      output_pdb_path: !ii protein_fix_side_chain.pdb
+      str: !ii World!
+      file: !* file_append_1
     out:
-    - output_pdb_path: !& protein_fix_side_chain_edge
-- extract_model:
+    - file: !& file_append_2
+- cat:
     in:
-      config: !ii
-        models: [1]
-      input_structure_path: !* protein_fix_side_chain_edge
-      output_structure_path: !ii protein_model_1.pdb
-    out:
-    - output_structure_path: !& protein_model_1_edge
+      file: !* file_append_2

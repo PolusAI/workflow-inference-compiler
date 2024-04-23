@@ -50,7 +50,7 @@ def compile_workflow(yaml_tree_ast: YamlTree,
     """
     ast_modified = True
     yaml_tree = yaml_tree_ast
-    # There ought to be at most one file format conversion between each step.
+    # There ought to be at most one insertion between each step.
     # If everything is working correctly, we should thus reach the fixed point
     # in at most n-1 iterations. However, due to the possibility of bugs in the
     # implementation and/or spurious inputs, we should guarantee termination.
@@ -428,7 +428,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             # TODO: This causes test_cwl_embedding_independence to fail.
             # yml = sub_node_data.yml if ast_modified else sub_yaml_tree.yml
             # step_i_wic_graphviz = yml.get('wic', {}).get('graphviz', {})
-            # TODO: For file format conversions, figure out why this is using
+            # TODO: For insertions, figure out why this is using
             # the label from the parent workflow.
             # label = step_i_wic_graphviz.get('label', label)
             default_style = 'rounded, filled'
@@ -728,25 +728,25 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             else:
                 if args.inference_disable:
                     continue
-                conversions: List[StepId] = []
+                insertions: List[StepId] = []
                 in_name_in_inputs_file_workflow: bool = (in_name in inputs_file_workflow)
                 arg_key_in_yaml_tree_inputs: bool = (arg_key in yaml_tree.get('inputs', {}))
                 steps[i] = inference.perform_edge_inference(args, tools, tools_lst, steps_keys,
                                                             yaml_stem, i, steps, arg_key, graph, is_root, namespaces,
                                                             vars_workflow_output_internal, input_mapping_copy, output_mapping_copy, inputs_workflow, in_name,
-                                                            in_name_in_inputs_file_workflow, arg_key_in_yaml_tree_inputs, conversions, wic_steps, testing)
+                                                            in_name_in_inputs_file_workflow, arg_key_in_yaml_tree_inputs, insertions, wic_steps, testing)
                 # NOTE: For now, perform_edge_inference mutably appends to
                 # inputs_workflow and vars_workflow_output_internal.
 
-                # Automatically insert file format conversion
-                conversions = list(set(conversions))  # Remove duplicates
-                if len(conversions) != 0 and args.insert_steps_automatically:
-                    conversion = conversions[0]
-                    print('Automaticaly inserting file format conversion', conversion, i)
-                    if len(conversions) != 1:
-                        print('Warning! More than one file format conversion! Choosing', conversion)
+                # Automatically insert steps
+                insertions = list(set(insertions))  # Remove duplicates
+                if len(insertions) != 0 and args.insert_steps_automatically:
+                    insertion = insertions[0]
+                    print('Automaticaly inserting step', insertion, i)
+                    if len(insertions) != 1:
+                        print('Warning! More than one step! Choosing', insertion)
 
-                    yaml_tree_mod = insert_step_into_workflow(yaml_tree_orig, conversion, tools, i)
+                    yaml_tree_mod = insert_step_into_workflow(yaml_tree_orig, insertion, tools, i)
 
                     node_data = NodeData(namespaces, yaml_stem, yaml_tree_mod, yaml_tree, tool_i, {},
                                          explicit_edge_defs_copy2, explicit_edge_calls_copy2,
@@ -890,7 +890,7 @@ def insert_step_into_workflow(yaml_tree_orig: Yaml, stepid: StepId, tools: Tools
     steps_mod: List[Yaml] = yaml_tree_mod['steps']
     steps_mod.insert(i, {stepid.stem: None})
 
-    # Add inference rules annotations (i.e. for file format conversion)
+    # Add inference rules annotations (i.e. for insertions)
     tool = tools[stepid]
     out_tool = tool.cwl['outputs']
 

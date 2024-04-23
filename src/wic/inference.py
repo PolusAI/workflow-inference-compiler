@@ -28,7 +28,7 @@ def perform_edge_inference(args: argparse.Namespace,
                            in_name: str,
                            in_name_in_inputs_file_workflow: bool,
                            arg_key_in_yaml_tree_inputs: bool,
-                           conversions: List[StepId],
+                           insertions: List[StepId],
                            wic_steps: Yaml,
                            testing: bool) -> Yaml:
     """This function implements the core edge inference feature.
@@ -57,7 +57,7 @@ def perform_edge_inference(args: argparse.Namespace,
         in_name_in_inputs_file_workflow (bool): Used to determine whether\n
         failure to find a match should be considered an error.
         arg_key_in_yaml_tree_inputs (bool): Determines whether at least one level of recursion has been performed.
-        conversions (List[StepId]): If exact inference fails, a list of possible file format conversions is stored here.
+        insertions (List[StepId]): If exact inference fails, a list of possible steps to automatically insert is stored here.
         wic_steps (Yaml): The metadata associated with the given workflow.
         testing: Used to disable some optional features which are unnecessary for testing.
 
@@ -191,11 +191,11 @@ def perform_edge_inference(args: argparse.Namespace,
                         # print(f'Arbitrarily choosing the first match {format_matches[0][0]}')
                         out_key = format_matches[0][0]
                     elif len(name_matches) == 1:
-                        # NOTE: This clause currently causes problems with file format conversions.
+                        # NOTE: This clause currently causes problems with insertions.
                         # Specifically, we want to convert from format A to B, perform the calculation
                         # in format B, then convert the results back to format A. However, if the
-                        # naming conventions of the result do not match the second conversion
-                        # (but DO match the first conversion), the files will be directly converted
+                        # naming conventions of the result do not match the second insertion
+                        # (but DO match the first insertion), the files will be directly converted
                         # from A to B to A, thus skipping the calculation in B entirely!
                         # Great! We found a unique match.
                         out_key = name_matches[0][0]
@@ -263,27 +263,22 @@ def perform_edge_inference(args: argparse.Namespace,
         if break_inference:
             break
 
-    # If no match yet, we can look for a potential file format conversion.
-    # NOTE: What we are doing here is basically a simplified version of the
-    # Automated Pipeline Exporer https://github.com/sanctuuary/APE
-    # The problem with APE (and SAT solvers in general) is that the number of
-    # solutions typically increases exponentially with the number of variables.
-    # APE forces the user to manually choose which solution is correct. We want
-    # to find unique solutions (if possible), so limit to n=1 inserted steps.
+    # If no match yet, we can look for a potential steps to insert automatically.
+    # NOTE: PLEASE READ docs/advanced.md#program-synthesis
     out_formats = [out_format for attempted_matches in attempted_matches_all
                    for (out_key_, out_format) in attempted_matches]
     # print('out_formats', out_formats)
     for in_format in in_formats:
         for out_format in out_formats:
-            # Obviously we don't need a conversion if the file formats are the same.
+            # Obviously we don't need an insertion if the file formats are the same.
             if in_format == out_format:
                 continue
 
             for step_id, tool in tools.items():
-                # For now, let's restrict to a whitelist of known file format
-                # conversions. Otherwise, there are way too many solutions.
+                # For now, let's restrict to a whitelist.
+                # Otherwise, there are way too many solutions.
                 # (In principle, this can be used to insert arbitrary subworkflows.)
-                if not step_id.stem.startswith('conversion_'):
+                if not step_id.stem.startswith('insert_steps_automatically_'):
                     continue
 
                 in_tool = tool.cwl['inputs']
@@ -300,9 +295,9 @@ def perform_edge_inference(args: argparse.Namespace,
                 # However, that can easily fail (i.e. if there is one transitive
                 # match). See docs/algorithms.md for more details.
                 if in_format in tool_out_formats and out_format in tool_in_formats_flat:
-                    # We may have found a file format conversion.
+                    # We may have found an insertion.
                     # print('step_id.stem, in_format, out_format:', step_id.stem, in_format, out_format)
-                    conversions.append(step_id)
+                    insertions.append(step_id)
 
     match = False
     if not match:

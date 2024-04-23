@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 name = "workflow-inference-compiler"
 dynamic = ["version"]
 authors = [{name = "Jake Fennick", email = "jake.fennick@axleinfo.com"}]
-description = "DSL for inferring the edges of a CWL workflow DAG, with examples in molecular dynamics"
+description = "DSL for inferring the edges of a CWL workflow DAG"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

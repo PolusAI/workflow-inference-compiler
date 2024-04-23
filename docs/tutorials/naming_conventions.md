@@ -52,8 +52,8 @@ docs/tutorials/naming_conventions.wic
 steps:
 - ambiguous:
     in:
-      uniquename1: string1
-      uniquename2: string2
+      uniquename1: !ii string1
+      uniquename2: !ii string2
 - ambiguous:
 ```
 </td>
@@ -77,8 +77,8 @@ docs/tutorials/naming_conventions_explicit.wic
 steps:
 - ambiguous:
     in:
-      uniquename1: string1
-      uniquename2: string2
+      uniquename1: !ii string1
+      uniquename2: !ii string2
     out:
     - uniquename1: !& edge1
     - uniquename2: !& edge2
@@ -108,8 +108,8 @@ docs/tutorials/naming_conventions.wic
 steps:
 - ambiguous:
     in:
-      uniquename1: string1
-      uniquename2: string2
+      uniquename1: !ii string1
+      uniquename2: !ii string2
 - ambiguous:
 ```
 </td>

@@ -11,7 +11,7 @@
     // NOTE: Most of the workflows in this list have free variables because they are subworkflows
     // i.e. if you try to run them, you will get "Missing required input parameter"
     "run_blacklist": [
-        "fix_protein",
+        "append_twice",
         "fail",
         "test_rand_fail"
     ],

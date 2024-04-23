@@ -1,12 +1,11 @@
 steps:
-- pdb:
+- touch:
     in:
-      config: !ii
-        pdb_code: 1aki
-- fix_amides:
-- fix_side_chain:
-- extract_model:
+      filename: !ii empty.txt
+- append:
     in:
-      config: !ii
-        models: [1]
-      output_structure_path: !ii protein_model_1.pdb
+      str: !ii Hello
+- append:
+    in:
+      str: !ii World!
+- cat:

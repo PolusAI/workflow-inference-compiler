@@ -1,11 +1,6 @@
 steps:
-- pdb:
+- touch:
     in:
-      config: !ii
-        pdb_code: 1aki
-- fix_protein.wic:
-- extract_model:
-    in:
-      config: !ii
-        models: [1]
-      output_structure_path: !ii protein_model_1.pdb
+      filename: !ii empty.txt
+- append_twice.wic:
+- cat:
