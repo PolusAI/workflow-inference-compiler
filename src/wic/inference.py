@@ -6,7 +6,7 @@ from . import utils, utils_cwl, utils_graphs
 from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
                         WorkflowInputs, Yaml)
 
-# NOTE: This must be initialized in main.py and/or cwl_watcher.py
+# NOTE: This must be initialized in main.py and/or cwl_subinterpreter.py
 renaming_conventions: List[Tuple[str, str]] = []
 
 

@@ -8,7 +8,7 @@ label: Speculatively executes an arbitrary CommandLineTool (upto max_times) by f
 doc: |-
   Speculatively executes an arbitrary CommandLineTool (upto max_times) by file watching / polling --cachedir. This is primarily intended for parsing logfiles before the associated CWL process has finished.
 
-baseCommand: cwl_watcher
+baseCommand: cwl_subinterpreter
 
 inputs:
   cachedir_path:
@@ -78,7 +78,7 @@ inputs:
       prefix: --root_workflow_yml_path
 
   homedir:
-    label: The full absolute path to the uers home directory.
+    label: The full absolute path to the users home directory.
     doc: |
       The full absolute path to the root users home directory.
     type: string

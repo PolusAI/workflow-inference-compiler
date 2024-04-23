@@ -192,11 +192,11 @@ def get_absolute_paths(sub_config: Json) -> Json:
 
 def write_absolute_yaml_tags(args: argparse.Namespace, in_dict_in: Yaml, namespaces: Namespaces,
                              step_name_i: str, explicit_edge_calls_copy: ExplicitEdgeCalls) -> None:
-    """cwl_watcher requires all paths to be absolute.
+    """cwl_subinterpreter requires all paths to be absolute.
 
     Args:
         args (argparse.Namespace): The command line arguments
-        in_dict_in (Yaml): The in: subtag of a cwl_watcher: tag. (Mutates in_dict_in)
+        in_dict_in (Yaml): The in: subtag of a cwl_subinterpreter: tag. (Mutates in_dict_in)
         namespaces (Namespaces): Specifies the path in the yml AST to the current subworkflow
         step_name_i (str): The name of the current workflow step
         explicit_edge_calls_copy (ExplicitEdgeCalls): Stores the (path, value) of the explicit edge call sites

@@ -13,9 +13,9 @@ wic.compiler
 ------------------------------------
 .. automodule:: wic.compiler
 
-wic.cwl_watcher
+wic.cwl_subinterpreter
 ------------------------------------
-.. automodule:: wic.cwl_watcher
+.. automodule:: wic.cwl_subinterpreter
 
 wic.inference
 ------------------------------------

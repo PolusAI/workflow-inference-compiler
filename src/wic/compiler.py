@@ -19,7 +19,7 @@ from .wic_types import (CompilerInfo, EnvData, ExplicitEdgeCalls,
                         NodeData, RoseTree, Tool, Tools, WorkflowInputsFile,
                         Yaml, YamlTree, StepId)
 
-# NOTE: This must be initialized in main.py and/or cwl_watcher.py
+# NOTE: This must be initialized in main.py and/or cwl_subinterpreter.py
 inference_rules: Dict[str, str] = {}
 
 
@@ -362,7 +362,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         if 'in' not in steps[i][step_key]:
             steps[i][step_key]['in'] = {}
 
-        if 'cwl_watcher' == step_key:
+        if 'cwl_subinterpreter' == step_key:
             in_dict_in = steps[i][step_key]['in']  # NOTE: Mutates in_dict_in
             io.write_absolute_yaml_tags(args, in_dict_in, namespaces, step_name_i, explicit_edge_calls_copy)
 

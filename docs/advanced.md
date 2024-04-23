@@ -73,7 +73,7 @@ Note however that while insert_steps_automatically_*.cwl files can come from pre
 
 For realtime monitoring, we want to asynchronously run an auxiliary workflow while the main workflow is still running. We implement this by invoking a subinterpreter.
 
-The `cwl_watcher` subinterpreter will repeatedly run an auxiliary workflow which is completely independent from the main workflow, upto some fixed number of iterations. (A fixed number of iterations is used because the main interpreter and subinterpreter are completely independent; there is no way of passing status information between the interpreters.)
+The `cwl_subinterpreter` subinterpreter will repeatedly run an auxiliary workflow which is completely independent from the main workflow, upto some fixed number of iterations. (A fixed number of iterations is used because the main interpreter and subinterpreter are completely independent; there is no way of passing status information between the interpreters.)
 
 NOTE: This should be considered an experimental feature; the CWL standard does not consider realtime monitoring (and/or other implementation-specific details).
 

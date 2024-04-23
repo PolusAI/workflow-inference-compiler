@@ -192,9 +192,9 @@ def cwl_schema(name: str, cwl: Json, id_prefix: str) -> Json:
                                            {**config_schemas[name], **metadata}]}
             continue
 
-        if key == 'config' and name == 'cwl_watcher':
+        if key == 'config' and name == 'cwl_subinterpreter':
             # This may cause problems with hypothesis, but since the
-            # cwl_watcher config tag takes an arbitrary Json-encoded string
+            # cwl_subinterpreter config tag takes an arbitrary Json-encoded string
             # as input, we cannot restrict this particular sub-schema.
             empty_schema: Dict = {}
             inputs_props[key] = empty_schema
