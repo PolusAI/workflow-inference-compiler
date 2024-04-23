@@ -9,24 +9,23 @@ docs/tutorials/multistep3.wic
 
 ```yaml
 steps:
-- pdb:
+- touch:
     in:
-      config: !ii
-        pdb_code: 1aki
-- fix_protein.wic:
-- extract_model:
-    in:
-      config: !ii
-        models: [1]
-      output_structure_path: protein_model_1.pdb
+      filename: !ii empty.txt
+- append_twice.wic:
+- cat:
 ```
 
-docs/tutorials/fix_protein.wic
+docs/tutorials/append_twice.wic
 
 ```yaml
 steps:
-- fix_amides:
-- fix_side_chain:
+- append:
+    in:
+      str: !ii Hello
+- append:
+    in:
+      str: !ii World!
 ```
 
 </td>
@@ -39,4 +38,4 @@ docs/tutorials/multistep3.wic.gv.png
 </tr>
 </table>
 
-We have simply moved the fix_* steps into `fix_protein.wic` and called it from the main workflow. As you can see from the arrows in the graphical representation, the exact same edges have been inferred! The inference algorithm is guaranteed to work identically across subworkflow boundaries! You are completely free to abstract away minor details behind a subworkflow, and the main workflow graph will be identical.
+We have simply moved the append steps into `append_twice.wic` and called it from the main workflow. As you can see from the arrows in the graphical representation, the exact same edges have been inferred! The inference algorithm is guaranteed to work identically across subworkflow boundaries! You are completely free to abstract away minor details behind a subworkflow, and the main workflow graph will be identical.

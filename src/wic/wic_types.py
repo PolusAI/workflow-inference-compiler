@@ -102,7 +102,7 @@ class NodeData(NamedTuple):
     name: str
     yml: Yaml  # i.e. The AST that was compiled.
     # If this is not the AST that was passed in, then the compiler introduced
-    # some modifications (i.e. file format conversions) and you need to recompile
+    # some modifications (i.e. --insert_steps_automatically) and you need to recompile
     compiled_cwl: Cwl
     tool: Tool
     workflow_inputs_file: WorkflowInputsFile
@@ -133,7 +133,7 @@ class CompilerInfo(NamedTuple):
 
 # Create a type for our Abstract Syntax Tree (AST).
 # We can probably use Dict here if str is step_name_i not just yaml_stem.
-# If we need to insert steps (i.e. file format conversions), that will happen
+# If we need to insert steps, that will happen
 # after edge inference, so there should not be a uniqueness issue w.r.t. step
 # number re-indexing.
 

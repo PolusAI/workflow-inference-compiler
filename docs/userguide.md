@@ -71,7 +71,9 @@ Of course, if you supply an input value directly, then the algorithm doesn't nee
 steps:
 - echo:
     in:
-      message: Hello World
+      message: !ii Hello World
 ```
 
-Note that this is one key difference between WIC and CWL. In CWL, all inputs must be given in a separate file. In WIC, inputs can be given inline and after compilation they will be automatically extracted into the separate file.
+Note that this is one key difference between WIC and CWL. In CWL, all inputs must be given in a separate file. In WIC, inputs can be given inline with !ii and after compilation they will be automatically extracted into the separate file.
+
+(NOTE: raw CWL is still supported with the --allow_raw_cwl flag.)

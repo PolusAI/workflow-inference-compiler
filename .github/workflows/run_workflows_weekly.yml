@@ -112,7 +112,7 @@ jobs:
       # NOTE: Use ".[test]" instead of ".[all]"
       # We do not want or need to install the workflow_deps extra.
       # (Many of the packages conflict with pypy.)
-      run: cd mm-workflows/ && pip install ".[test]" && mm-workflows
+      run: cd mm-workflows/ && pip install ".[test]" && mm-workflows --generate_schemas
 
     - name: Generate WIC Python API Workflows (*.py -> *.wic)
       if: always()
