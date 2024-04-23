@@ -18,14 +18,14 @@ from .wic_types import Namespaces, Yaml, Tools, YamlTree, StepId, NodeData, Rose
 
 def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
                                 tools: Tools,
-                                backend: bool = False,
+                                implementation: bool = False,
                                 namespaces_init: Namespaces = []) -> List[Namespaces]:
     """Traverses a yml AST and finds all subworkflows which can be inlined into their parent workflow.
 
     Args:
         yaml_tree_tuple (YamlTree): A tuple of name and yml AST
         tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
-        backend (bool): True if the immediate parent workflow is a backend.
+        implementation (bool): True if the immediate parent workflow is a implementation.
         namespaces_init (Namespaces): The initial subworkflow to start the traversal ([] == root)
 
     Returns:
@@ -37,10 +37,10 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
     # Check for top-level yml dsl args
     wic = {'wic': yaml_tree.get('wic', {})}
 
-    if 'backends' in wic['wic']:
+    if 'implementations' in wic['wic']:
         # Use yaml_name (instead of back_name) and do not append to namespace_init.
         sub_namespaces_list = []
-        for stepid, back in wic['wic']['backends'].items():
+        for stepid, back in wic['wic']['implementations'].items():
             sub_namespaces = get_inlineable_subworkflows(YamlTree(stepid, back), tools, True, namespaces_init)
             sub_namespaces_list.append(sub_namespaces)
         return utils.flatten(sub_namespaces_list)
@@ -52,7 +52,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
     # All subworkflows are inlineable, except scattered subworkflows.
     inlineable = wic['wic'].get('inlineable', True)
-    namespaces = [namespaces_init] if inlineable and namespaces_init != [] and not backend else []
+    namespaces = [namespaces_init] if inlineable and namespaces_init != [] and not implementation else []
 
     for i, step_key in enumerate(steps_keys):
         yaml_stem = Path(yaml_name).stem
@@ -84,20 +84,20 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
     yaml_name = step_id.stem
 
     wic = {'wic': yaml_tree.get('wic', {})}
-    if 'backends' in wic['wic']:
+    if 'implementations' in wic['wic']:
         if len(namespaces) == 1:  # and namespaces[0] == yaml_name ?
-            (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, wic['wic'], Path(''))
+            (back_name_, yaml_tree) = utils.extract_implementation(yaml_tree, wic['wic'], Path(''))
             yaml_tree = {'steps': yaml_tree['steps']}  # Remove wic tag
             len_substeps = len(yaml_tree['steps'])
             return YamlTree(StepId(back_name_, step_id.plugin_ns), yaml_tree), 0  # len_substeps  # TODO: check step_id
 
         # Pass namespaces through unmodified
-        backends_trees = []
-        for stepid, back in wic['wic']['backends'].items():
-            backend_tree, len_substeps = inline_subworkflow(YamlTree(stepid, back), namespaces)
-            backends_trees.append(backend_tree)
-        yaml_tree['wic']['backends'] = dict(backends_trees)
-        return YamlTree(step_id, yaml_tree), 0  # choose len_substeps from which backend?
+        implementations_trees = []
+        for stepid, back in wic['wic']['implementations'].items():
+            implementation_tree, len_substeps = inline_subworkflow(YamlTree(stepid, back), namespaces)
+            implementations_trees.append(implementation_tree)
+        yaml_tree['wic']['implementations'] = dict(implementations_trees)
+        return YamlTree(step_id, yaml_tree), 0  # choose len_substeps from which implementation?
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)

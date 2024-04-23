@@ -157,7 +157,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
     yaml_stem = Path(yaml_path).stem
 
-    (back_name_, yaml_tree) = utils.extract_backend(yaml_tree, wic['wic'], Path(yaml_path))
+    (back_name_, yaml_tree) = utils.extract_implementation(yaml_tree, wic['wic'], Path(yaml_path))
     steps: List[Yaml] = yaml_tree['steps']
 
     steps_keys = utils.get_steps_keys(steps)
