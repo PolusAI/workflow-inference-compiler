@@ -388,6 +388,9 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
                 elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_inline_input', {}), Path):
                     # Special case for Path since it does not inherit from YAMLObject
                     in_dict[inp.name] = {'wic_inline_input': str(inp.value['wic_inline_input'])}
+                elif isinstance(inp.value, dict) and isinstance(inp.value.get('wic_inline_input', {}), str):
+                    # Special case for inline str since it does not inherit from YAMLObject
+                    in_dict[inp.name] = {'wic_inline_input': inp.value.get('wic_inline_input')}
                 elif isinstance(inp.value, str):
                     in_dict[inp.name] = inp.value  # Obviously strings are serializable
                 elif isinstance(inp.value, yaml.YAMLObject):
