@@ -9,7 +9,7 @@ from mergedeep import merge, Strategy
 from jsonschema import Draft202012Validator
 import yaml
 
-from . import python_cwl_adapter, utils
+from . import python_cwl_adapter, utils, utils_cwl
 from .wic_types import Yaml, Tools, YamlTree, YamlForest, StepId, Tool
 from wic.utils_yaml import wic_loader
 
@@ -39,6 +39,8 @@ def read_ast_from_disk(homedir: str,
         YamlTree: A tuple of the root filepath and the associated yml AST
     """
     (step_id, yaml_tree) = yaml_tree_tuple
+
+    yaml_tree = utils_cwl.desugar_into_canonical_normal_form(yaml_tree)
 
     try:
         if not ignore_validation_errors:

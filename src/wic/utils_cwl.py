@@ -2,6 +2,7 @@ import argparse
 import copy
 from pathlib import Path
 from typing import Any, Dict, List
+import yaml
 
 from . import utils
 from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
@@ -238,6 +239,105 @@ def canonicalize_type(type_obj: Any) -> Any:
         if type_obj.get('type') == 'array':
             return {**type_obj, 'items': canonicalize_type(type_obj['items'])}
     return type_obj
+
+
+def canonicalize_steps_list(steps: Yaml) -> List[Yaml]:
+    if isinstance(steps, list):
+        all_dicts = all([isinstance(elt, dict) for elt in steps])
+        if not all_dicts:
+            msg = 'Error! If steps: tag is a List then all its elements should be Dictionaries!'
+            raise Exception(f"{msg}\n{yaml.dump(steps)}")
+        return steps
+    if isinstance(steps, dict):
+        all_dicts = all([isinstance(val, dict) for val in steps.values()])
+        if not all_dicts:
+            msg = 'Error! If steps: tag is a Dictionary then all its values should be Dictionaries!'
+            raise Exception(f"{msg}\n{yaml.dump(steps)}")
+        return [{'id': key, **val} for key, val in steps.items()]
+    # steps should either be a list or a dict, but...
+    return steps
+
+
+def remove_id_tags(list_of_dicts_with_id_keys: list) -> dict[str, Yaml]:
+    d_canon = {}
+    for d in list_of_dicts_with_id_keys:
+        id_tag = d['id']
+        del d['id']
+        # NOTE: The order of the steps may not be preserved!
+        d_canon[id_tag] = d
+    return d_canon
+
+
+def canonicalize_steps_dict(steps: Yaml) -> Dict[str, Yaml]:
+    if isinstance(steps, list):
+        all_dicts = all([isinstance(elt, dict) for elt in steps])
+        if not all_dicts:
+            msg = 'Error! If steps: tag is a List then all its elements should be Dictionaries!'
+            raise Exception(f"{msg}\n{yaml.dump(steps)}")
+        return remove_id_tags(steps)
+    if isinstance(steps, dict):
+        all_dicts = all([isinstance(val, dict) for val in steps.values()])
+        if not all_dicts:
+            msg = 'Error! If steps: tag is a dictionary then all its values should be dictionaries!'
+            raise Exception(f"{msg}\n{yaml.dump(steps)}")
+        return steps
+    # steps should either be a list or a dict, but...
+    return steps
+
+
+def canonicalize_inputs_dict(inputs: Yaml) -> Dict[str, Yaml]:
+    inputs_canon = {}
+    if isinstance(inputs, dict):
+        for key, val in inputs.items():
+            if isinstance(val, dict):
+                inputs_canon[key] = val
+            elif isinstance(val, str):
+                inputs_canon[key] = {'type': val}  # NOTICE
+            else:
+                msg = 'Error! If inputs: tag is a dictionary, then all its values should be either strings (representing types) or dictionaries.'
+                raise Exception(f"{msg}\n{yaml.dump(inputs)}")
+    if isinstance(inputs, list):
+        all_dicts = all([isinstance(elt, dict) for elt in inputs])
+        if not all_dicts:
+            msg = 'Error! If inputs: tag is a list then all its elements should be dictionaries!'
+            raise Exception(f"{msg}\n{yaml.dump(inputs)}")
+        return remove_id_tags(inputs)
+    return inputs_canon
+
+
+def canonicalize_outputs_dict(outputs: Yaml) -> Dict[str, Yaml]:
+    outputs_canon = {}
+    if isinstance(outputs, dict):
+        for key, val in outputs.items():
+            if isinstance(val, dict):
+                outputs_canon[key] = val
+            elif isinstance(val, str):
+                # TODO need to lookup output file mapping!
+                outputs_canon[key] = val  # type: ignore
+            else:
+                msg = 'Error! outputs: tag should be a dictionary whose values are either strings (representing output files) or dictionaries.'
+                raise Exception(f"{msg}\n{yaml.dump(outputs)}")
+    if isinstance(outputs, list):
+        all_dicts = all([isinstance(elt, dict) for elt in outputs])
+        if not all_dicts:
+            msg = 'Error! If outputs: tag is a list then all its elements should be dictionaries!'
+            raise Exception(f"{msg}\n{yaml.dump(outputs)}")
+        return remove_id_tags(outputs)
+    return outputs_canon
+
+
+def desugar_into_canonical_normal_form(cwl: Yaml) -> Yaml:
+    if 'inputs' in cwl:
+        # Arbitrarily choose dict form
+        cwl['inputs'] = canonicalize_inputs_dict(cwl['inputs'])
+    if 'outputs' in cwl:
+        cwl['outputs'] = canonicalize_outputs_dict(cwl['outputs'])
+    # Temporarily comment out
+    # if 'steps' in cwl:
+    #     # NOTE: No steps: to canonicalize for class: CommandLineTool
+    #     # Arbitrarily choose dict form
+    #     cwl['steps'] = canonicalize_steps_dict(cwl['steps'])
+    return cwl
 
 
 def copy_cwl_input_output_dict(io_dict: Dict, remove_qmark: bool = False) -> Dict:
