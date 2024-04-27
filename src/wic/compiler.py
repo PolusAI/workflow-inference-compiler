@@ -638,7 +638,16 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # (yet) be inlined. Somehow, if they are not marked with
                 # inlineable: False, test_inline_subworkflows can still pass.
                 # This Exception will (correctly) cause such inlineing tests to fail.
-                if arg_var not in yaml_tree.get('inputs', {}):
+                hashable = False
+                inputs_key_dict = {}
+                try:
+                    hash(arg_var)
+                    hashable = True
+                    inputs_key_dict = yaml_tree['inputs'][arg_var]
+                except Exception:
+                    pass
+
+                if not args.allow_raw_cwl and (not hashable or arg_var not in yaml_tree.get('inputs', {})):
                     if not args.allow_raw_cwl:
                         print(f"Warning! Did you forget to use !ii before {arg_var} in {yaml_stem}.wic?")
                         print('If you want to compile the workflow anyway, use --allow_raw_cwl')
@@ -651,7 +660,6 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                     inputs_dump = yaml.dump({'inputs': inputs})
                     raise Exception(f"{unbound_lit_var}{arg_var} not in\n{inputs_dump}\nin {yaml_stem}.wic")
 
-                inputs_key_dict = yaml_tree['inputs'][arg_var]
                 if 'doc' in inputs_key_dict:
                     inputs_key_dict['doc'] += '\\n' + in_dict.get('doc', '')
                 else:
@@ -661,12 +669,14 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 else:
                     inputs_key_dict['label'] = in_dict.get('label', '')
 
-                if arg_var in input_mapping_copy:
+                if not hashable:
+                    pass  # ???
+                elif arg_var in input_mapping_copy:
                     input_mapping_copy[arg_var].append(in_name)
                 else:
                     input_mapping_copy[arg_var] = [in_name]
                 # TODO: We can use un-evaluated variable names for input mapping; no notation for output mapping!
-                steps[i][step_key]['in'][arg_key] = {'source': arg_var}  # Leave un-evaluated
+                steps[i][step_key]['in'][arg_key] = arg_var  # Leave un-evaluated
 
         for arg_key in args_required:
             # print('arg_key', arg_key)
