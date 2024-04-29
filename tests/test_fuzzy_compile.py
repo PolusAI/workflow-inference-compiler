@@ -40,8 +40,7 @@ class TestFuzzyCompile(unittest.TestCase):
         plugin_ns = 'global'
         yml_path = Path('random_stepid')
         steps_keys = wic.utils.get_steps_keys(yml.get('steps', []))
-        tools_stems = [stepid.stem for stepid in tools_cwl]
-        subkeys = wic.utils.get_subkeys(steps_keys, tools_stems)
+        subkeys = wic.utils.get_subkeys(steps_keys)
         if subkeys:
             # NOTE: Since all filepaths are currently relative w.r.t. --yaml,
             # we need to supply a fake --yaml. Using [0] works because we are

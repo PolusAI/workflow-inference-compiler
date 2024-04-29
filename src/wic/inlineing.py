@@ -47,8 +47,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     # All subworkflows are inlineable, except scattered subworkflows.
     inlineable = wic['wic'].get('inlineable', True)

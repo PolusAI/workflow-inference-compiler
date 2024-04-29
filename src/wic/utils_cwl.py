@@ -5,34 +5,26 @@ from typing import Any, Dict, List
 import yaml
 
 from . import utils
-from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
+from .wic_types import (GraphReps, InternalOutputs, Namespaces, Tool, Tools,
                         WorkflowOutputs, Yaml)
 
 
-def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
+def maybe_add_requirements(yaml_tree: Yaml, steps_keys: List[str],
                            wic_steps: Yaml, subkeys: List[str]) -> None:
     """Adds any necessary CWL requirements
 
     Args:
         yaml_tree (Yaml): A tuple of name and yml AST
-        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
         steps_keys (List[str]): The name of each step in the current CWL workflow
         wic_steps (Yaml): The metadata associated with the workflow steps
         subkeys (List[str]): The keys associated with subworkflows
     """
-    bools = []
     subwork = []
     scatter = []
     stepinp = []
     jsreq = []
     for i, step_key in enumerate(steps_keys):
         sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
-
-        if step_key not in subkeys:
-            plugin_ns_i = sub_wic.get('wic', {}).get('namespace', 'global')
-            step_id = StepId(Path(step_key).stem, plugin_ns_i)
-            sub = tools[step_id].cwl['class'] == 'Workflow'
-            bools.append(sub)
 
         if 'scatter' in yaml_tree['steps'][i][step_key]:
             scatter = ['ScatterFeatureRequirement']
@@ -47,7 +39,7 @@ def maybe_add_requirements(yaml_tree: Yaml, tools: Tools, steps_keys: List[str],
                 utils.recursively_contains_dict_key('valueFrom', sub_wic_copy)):
             stepinp = ['StepInputExpressionRequirement', 'InlineJavascriptRequirement']
 
-    if (not subkeys == []) or any(bools):
+    if not subkeys == []:
         subwork = ['SubworkflowFeatureRequirement']
 
     reqs = subwork + scatter + stepinp + jsreq
@@ -143,16 +135,17 @@ def get_workflow_outputs(args: argparse.Namespace,
     for i, step_key in enumerate(steps_keys):
         tool_i = tools_lst[i].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        step_name_or_key = step_name_i if step_key == Path(tools_lst[i].run_path).stem else step_key
         out_keys = steps[i][step_key]['out']
         for out_key in out_keys:
-            out_var = f'{step_name_i}/{out_key}'
+            out_var = f'{step_name_or_key}/{out_key}'
             # Avoid duplicating intermediate outputs in GraphViz
             out_key_no_namespace = out_key.split('___')[-1]
             if args.graph_show_outputs:
                 vars_nss = [var.replace('/', '___') for var in vars_workflow_output_internal]
                 case1 = (tool_i['class'] == 'Workflow') and (not out_key in vars_nss)
                 # Avoid duplicating outputs from subgraphs in parent graphs.
-                namespaced_output_name = '___'.join(namespaces + [step_name_i, out_key])
+                namespaced_output_name = '___'.join(namespaces + [step_name_or_key, out_key])
                 lengths_off_by_one = (len(step_node_name.split('___')) + 1 == len(namespaced_output_name.split('___')))
                 # TODO: check is_root here
                 case1 = case1 and not is_root and lengths_off_by_one
@@ -187,7 +180,7 @@ def get_workflow_outputs(args: argparse.Namespace,
             # Exclude intermediate 'output' files.
             if out_var in vars_workflow_output_internal:  # and is_root
                 continue
-            out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
+            out_name = f'{step_name_or_key}___{out_key}'  # Use triple underscore for namespacing so we can split later
             # print('out_name', out_name)
 
         for out_key, out_dict in outputs_workflow[i].items():
@@ -196,8 +189,8 @@ def get_workflow_outputs(args: argparse.Namespace,
                 # Promote scattered output types to arrays
                 out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
 
-            out_name = f'{step_name_i}___{out_key}'  # Use triple underscore for namespacing so we can split later
-            out_var = f'{step_name_i}/{out_key}'
+            out_name = f'{step_name_or_key}___{out_key}'  # Use triple underscore for namespacing so we can split later
+            out_var = f'{step_name_or_key}/{out_key}'
             workflow_outputs.update({out_name: {**out_dict, 'outputSource': out_var}})
         # print('workflow_outputs', workflow_outputs)
     # NOTE: The fix_conflicts 'feature' of cwltool prevents files from being

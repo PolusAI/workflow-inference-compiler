@@ -162,8 +162,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
     steps_keys = utils.get_steps_keys(steps)
 
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     # Add headers
     # Use 1.0 because cromwell only supports 1.0 and we are not using 1.1 / 1.2 features.
@@ -305,7 +304,19 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
             explicit_edge_defs_copy.update(sub_env_data.explicit_edge_defs)
             explicit_edge_calls_copy.update(sub_env_data.explicit_edge_calls)
         else:
-            tool_i = tools[stepid]
+            run_tag = steps[i][step_key].get('run', '')
+            run_tag_stem = Path(run_tag).stem if isinstance(run_tag, str) else ''
+            stepid_runtag = StepId(run_tag_stem, 'global')
+
+            if stepid in tools:
+                # Use auto-discovery mechanism (with step_key)
+                tool_i = tools[stepid]
+            elif stepid_runtag in tools:
+                # Use auto-discovery mechanism (with run tag)
+                tool_i = tools[stepid_runtag]
+            else:
+                msg = f'Error! Neither {stepid.stem} nor {stepid_runtag.stem} found!'
+                raise Exception(msg)
             # Programmatically modify tool_i here
             graph_dummy = graph  # Just use anything here to satisfy mypy
             name_stem = Path(tool_i.run_path).stem
@@ -355,6 +366,10 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         if steps[i][step_key]:
             if not 'run' in steps[i][step_key]:
                 steps[i][step_key].update({'run': run_path})
+            elif isinstance(steps[i][step_key]['run'], str):
+                steps[i][step_key].update({'run': run_path})
+            else:
+                pass  # run: tag can also contain inlined file contents
         else:
             steps[i] = {step_key: {'run': run_path}}
 
@@ -824,15 +839,16 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     yaml_tree.update({'outputs': outputs_combined})
 
     # NOTE: currently mutates yaml_tree (maybe)
-    utils_cwl.maybe_add_requirements(yaml_tree, tools, steps_keys, wic_steps, subkeys)
+    utils_cwl.maybe_add_requirements(yaml_tree, steps_keys, wic_steps, subkeys)
 
     # Finally, rename the steps to be unique
     # and convert the list of steps into a dict
     steps_dict = {}
     for i, step_key in enumerate(steps_keys):
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        step_name_or_key = step_name_i if step_key in tools else step_key
         # steps[i] = {step_name_i: steps[i][step_key]}
-        steps_dict.update({step_name_i: steps[i][step_key]})
+        steps_dict.update({step_name_or_key: steps[i][step_key]})
     yaml_tree.update({'steps': steps_dict})
 
     # Dump the workflow inputs to a separate yml file.

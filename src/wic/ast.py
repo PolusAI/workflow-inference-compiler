@@ -75,8 +75,7 @@ def read_ast_from_disk(homedir: str,
     steps: List[Yaml] = yaml_tree['steps']
     wic_steps = wic['wic'].get('steps', {})
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     for i, step_key in enumerate(steps_keys):
         stem = Path(step_key).stem
@@ -163,8 +162,7 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     for i, step_key in enumerate(steps_keys):
         # Recursively merge subworkflows, to implement parameter passing.
@@ -226,8 +224,7 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
     steps: List[Yaml] = yaml_tree['steps']
     wic_steps = wic['wic'].get('steps', {})
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     yaml_forest_list = []
 
@@ -273,8 +270,7 @@ def python_script_generate_cwl(yaml_tree_tuple: YamlTree,
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     for i, step_key in enumerate(steps_keys):
         if step_key in subkeys:
