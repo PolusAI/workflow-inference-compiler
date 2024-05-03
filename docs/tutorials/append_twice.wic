@@ -1,7 +1,7 @@
 steps:
-- append:
-    in:
-      str: !ii Hello
-- append:
-    in:
-      str: !ii World!
+- id: append
+  in:
+    str: !ii Hello
+- id: append
+  in:
+    str: !ii World!

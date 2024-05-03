@@ -26,12 +26,12 @@ def maybe_add_requirements(yaml_tree: Yaml, steps_keys: List[str],
     for i, step_key in enumerate(steps_keys):
         sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
 
-        if 'scatter' in yaml_tree['steps'][i][step_key]:
+        if 'scatter' in yaml_tree['steps'][i]:
             scatter = ['ScatterFeatureRequirement']
-        if 'when' in yaml_tree['steps'][i][step_key]:
+        if 'when' in yaml_tree['steps'][i]:
             jsreq = ['InlineJavascriptRequirement']
 
-        in_step = yaml_tree['steps'][i][step_key].get('in')
+        in_step = yaml_tree['steps'][i].get('in')
         sub_wic_copy = copy.deepcopy(sub_wic)
         if 'wic' in sub_wic_copy:
             del sub_wic_copy['wic']
@@ -64,14 +64,14 @@ def add_yamldict_keyval_in(steps_i: Yaml, step_key: str, keyval: Yaml) -> Yaml:
         Yaml: The first Yaml dict with the second Yaml dict merged into it.
     """
     # TODO: Check whether we can just use deepmerge.merge()
-    if steps_i[step_key]:
-        if 'in' in steps_i[step_key]:
-            new_keys = dict(list(steps_i[step_key]['in'].items()) + list(keyval.items()))
-            new_keyvals = dict([(k, v) if k != 'in' else (k, new_keys) for k, v in steps_i[step_key].items()])
+    if steps_i:
+        if 'in' in steps_i:
+            new_keys = dict(list(steps_i['in'].items()) + list(keyval.items()))
+            new_keyvals = dict([(k, v) if k != 'in' else (k, new_keys) for k, v in steps_i.items()])
         else:
             new_keys = keyval
-            new_keyvals = dict(list(steps_i[step_key].items()) + [('in', new_keys)])
-        steps_i[step_key].update(new_keyvals)
+            new_keyvals = dict(list(steps_i.items()) + [('in', new_keys)])
+        steps_i.update(new_keyvals)
     else:
         steps_i = {step_key: {'in': keyval}}
     return steps_i
@@ -89,13 +89,13 @@ def add_yamldict_keyval_out(steps_i: Yaml, step_key: str, strs: List[str]) -> Ya
         Yaml: The first Yaml dict with the second Yaml dict merged into it.
     """
     # TODO: Check whether we can just use deepmerge.merge()
-    if steps_i[step_key]:
-        if 'out' in steps_i[step_key]:
-            new_strs = steps_i[step_key]['out'] + strs
-            new_keyvals = dict([(k, v) if k != 'out' else (k, new_strs) for k, v in steps_i[step_key].items()])
+    if steps_i:
+        if 'out' in steps_i:
+            new_strs = steps_i['out'] + strs
+            new_keyvals = dict([(k, v) if k != 'out' else (k, new_strs) for k, v in steps_i.items()])
         else:
-            new_keyvals = dict(list(steps_i[step_key].items()) + [('out', strs)])
-        steps_i[step_key].update(new_keyvals)
+            new_keyvals = dict(list(steps_i.items()) + [('out', strs)])
+        steps_i.update(new_keyvals)
     else:
         steps_i = {step_key: {'out': strs}}
     return steps_i
@@ -135,8 +135,10 @@ def get_workflow_outputs(args: argparse.Namespace,
     for i, step_key in enumerate(steps_keys):
         tool_i = tools_lst[i].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
-        step_name_or_key = step_name_i if step_key == Path(tools_lst[i].run_path).stem else step_key
-        out_keys = steps[i][step_key]['out']
+        step_name_or_key = step_name_i if step_key.endswith('.wic') \
+            or Path(step_key).stem == Path(tools_lst[i].run_path).stem else step_key
+        # step_name_or_key = step_name_i if stepid in tools else step_key
+        out_keys = steps[i]['out']
         for out_key in out_keys:
             out_var = f'{step_name_or_key}/{out_key}'
             # Avoid duplicating intermediate outputs in GraphViz
@@ -185,7 +187,7 @@ def get_workflow_outputs(args: argparse.Namespace,
 
         for out_key, out_dict in outputs_workflow[i].items():
             out_dict['type'] = canonicalize_type(out_dict['type'])
-            if 'scatter' in steps[i][step_key]:
+            if 'scatter' in steps[i]:
                 # Promote scattered output types to arrays
                 out_dict['type'] = {'type': 'array', 'items': out_dict['type']}
 
@@ -242,11 +244,12 @@ def canonicalize_steps_list(steps: Yaml) -> List[Yaml]:
             raise Exception(f"{msg}\n{yaml.dump(steps)}")
         return steps
     if isinstance(steps, dict):
-        all_dicts = all([isinstance(val, dict) for val in steps.values()])
+        items = [(key, {}) if val is None else (key, val) for key, val in steps.items()]
+        all_dicts = all([isinstance(val, dict) for key, val in items])
         if not all_dicts:
             msg = 'Error! If steps: tag is a Dictionary then all its values should be Dictionaries!'
             raise Exception(f"{msg}\n{yaml.dump(steps)}")
-        return [{'id': key, **val} for key, val in steps.items()]
+        return [{'id': key, **val} for key, val in items]
     # steps should either be a list or a dict, but...
     return steps
 
@@ -325,11 +328,14 @@ def desugar_into_canonical_normal_form(cwl: Yaml) -> Yaml:
         cwl['inputs'] = canonicalize_inputs_dict(cwl['inputs'])
     if 'outputs' in cwl:
         cwl['outputs'] = canonicalize_outputs_dict(cwl['outputs'])
-    # Temporarily comment out
-    # if 'steps' in cwl:
-    #     # NOTE: No steps: to canonicalize for class: CommandLineTool
-    #     # Arbitrarily choose dict form
-    #     cwl['steps'] = canonicalize_steps_dict(cwl['steps'])
+    if 'steps' in cwl:
+        # NOTE: No steps: to canonicalize for class: CommandLineTool
+        # Choose list form due to
+        # 1. dict keys must be unique (thus cannot use the same CLT twice)
+        # 2. Some AST transformations (i.e. python_script) need to mutate the step id in-place
+        # (which is not possible in dict form)
+        # 3. Inlineing a subworkflow dict into the parent workflow dict may also cause key collisions.
+        cwl['steps'] = canonicalize_steps_list(cwl['steps'])
     return cwl
 
 

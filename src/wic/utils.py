@@ -140,10 +140,7 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
     Returns:
         List[str]: The name of each step in the given CWL workflow
     """
-    # Get the dictionary key (i.e. the name) of each step.
-    steps_keys = []
-    for step in steps:
-        steps_keys += list(step)
+    steps_keys = [step_dict['id'] for step_dict in steps]
     # print(steps_keys)
     return steps_keys
 

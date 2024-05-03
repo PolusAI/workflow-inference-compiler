@@ -1,12 +1,12 @@
 steps:
-- ambiguous:
-    in:
-      uniquename1: !ii string1
-      uniquename2: !ii string2
-    out:
-    - uniquename1: !& edge1
-    - uniquename2: !& edge2
-- ambiguous:
-    in:
-      uniquename1: !* edge1
-      uniquename2: !* edge2
+- id: ambiguous
+  in:
+    uniquename1: !ii string1
+    uniquename2: !ii string2
+  out:
+  - uniquename1: !& edge1
+  - uniquename2: !& edge2
+- id: ambiguous
+  in:
+    uniquename1: !* edge1
+    uniquename2: !* edge2

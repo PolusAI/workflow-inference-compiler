@@ -407,10 +407,9 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         out_list: list = []  # The out: tag is a list, not a dict
         out_list = [{out.name: out.value} for out in self.outputs if out.value]
         d = {
-            self.process_name: {
-                "in": in_dict,
-                "out": out_list,
-            }
+            "id": self.process_name,
+            "in": in_dict,
+            "out": out_list,
         }
         return d
 
@@ -518,9 +517,10 @@ class Workflow(BaseModel):
                 }
                 parentargs: dict[str, Any] = {"in": ins} if ins else {}
                 # See the second to last line of ast.read_ast_from_disk()
-                d = {'subtree': s.yaml,  # recursively call .yaml (i.e. on s, not self)
+                d = {'id': self.process_name + '.wic',
+                     'subtree': s.yaml,  # recursively call .yaml (i.e. on s, not self)
                      'parentargs': parentargs}
-                steps.append({s.process_name + '.wic': d})
+                steps.append(d)
             #  else: ...
         yaml_contents = {"inputs": inputs, "steps": steps} if inputs else {"steps": steps}
         return yaml_contents
@@ -548,7 +548,7 @@ class Workflow(BaseModel):
                 }
                 parentargs: dict[str, Any] = {"in": ins} if ins else {}
                 s.write_ast_to_disk(directory)  # recursively call
-                steps.append({s.process_name + '.wic': parentargs})
+                steps.append({'id': s.process_name + '.wic', **parentargs})
             #  else: ...
         yaml_contents = {"inputs": inputs, "steps": steps} if inputs else {"steps": steps}
         # NOTE: For various reasons, process_name should be globally unique.
@@ -623,8 +623,8 @@ class Workflow(BaseModel):
 
     def _save_yaml(self) -> None:
         _WIC_PATH.mkdir(parents=True, exist_ok=True)
-        self.yml_path = _WIC_PATH.joinpath(f"{self.name}.wic")
-        with open(self.yml_path, "w", encoding="utf-8") as file:
+        self.yml_path = _WIC_PATH.joinpath(f"{self.process_name}.wic")
+        with open(f"{self.process_name}.wic", "w", encoding="utf-8") as file:
             file.write(yaml.dump(self.yaml))
 
     def _save_all_cwl(self) -> None:

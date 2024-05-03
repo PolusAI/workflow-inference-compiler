@@ -65,6 +65,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
     docker_cmd: str = args.container_engine
     # Check that docker is installed, so users don't get a nasty runtime error.
     cmd = [docker_cmd, 'run', '--rm', 'hello-world']
+    output = ''
     try:
         docker_cmd_exists = True
         proc = sub.run(cmd, check=False, stdout=sub.PIPE, stderr=sub.STDOUT)

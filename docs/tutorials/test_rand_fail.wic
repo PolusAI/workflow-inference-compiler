@@ -1,5 +1,5 @@
 steps:
-- array_float:
+  array_float:
     in:
       minval: !ii 0.9
       maxval: !ii 1
@@ -7,9 +7,9 @@ steps:
       decimal_places: !ii 2
     out:
     - array: !& arr_float
-- fail.wic:
+  fail.wic:
     scatter: [fail__step__1__fail___with_probability]
-- echo:
+  echo:
     scatter: [message]
     in:
       message: !* out_thing
