@@ -16,15 +16,7 @@ class CWLTypesEnum(str, Enum):
     DIRECTORY = "Directory"
 
 
-CWL_TYPES_DICT: dict[str, object] = {
-    "null": None,
-    "boolean": bool,
-    "int": int,
-    "long": int,
-    "float": float,
-    "double": float,
-    "string": str,
-    "File": Path,
-    "Directory": Path,
-    "Any": Any,
-}
+class ScatterMethod(Enum):
+    dotproduct = "dotproduct"
+    flat_crossproduct = "flat_crossproduct"
+    nested_crossproduct = "nested_crossproduct"

@@ -11,12 +11,13 @@ from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
-from wic.api._types import CWL_TYPES_DICT
-from wic import compiler, input_output, plugins
+from wic import compiler, input_output, plugins, utils_cwl
 from wic import run_local as run_local_module
 from wic.cli import get_args
 from wic.utils_graphs import get_graph_reps
 from wic.wic_types import CompilerInfo, RoseTree, StepId, Tool, Tools, YamlTree
+
+from ._types import ScatterMethod
 
 
 global_config: Tools = {}
@@ -87,6 +88,7 @@ class ProcessInput(BaseModel):  # pylint: disable=too-few-public-methods
     linked: bool = False
 
     def __init__(self, name: str, inp_type: Any) -> None:
+        inp_type = utils_cwl.canonicalize_type(inp_type)
         if isinstance(inp_type, list) and "null" in inp_type:
             required = False
         else:
@@ -105,7 +107,7 @@ class ProcessInput(BaseModel):  # pylint: disable=too-few-public-methods
         """Return inp_type."""
         if isinstance(inp, list):  # optional inps
             inp = inp[1]
-        return CWL_TYPES_DICT[inp]
+        return inp
 
     def _set_value(
         self, __value: Any, linked: bool = False
@@ -128,6 +130,7 @@ class ProcessOutput(BaseModel):  # pylint: disable=too-few-public-methods
     linked: bool = False
 
     def __init__(self, name: str, out_type: Any) -> None:
+        out_type = utils_cwl.canonicalize_type(out_type)
         if isinstance(out_type, list) and "null" in out_type:
             required = False
         else:
@@ -146,7 +149,7 @@ class ProcessOutput(BaseModel):  # pylint: disable=too-few-public-methods
         """Return out_type."""
         if isinstance(out, list):  # optional outs
             out = out[1]
-        return CWL_TYPES_DICT[out]
+        return out
 
     def _set_value(
         self, __value: Any, linked: bool = False
@@ -186,12 +189,12 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
             try:
                 local_input = process_self.inputs[index]
                 # NOTE: Relax exact equality for Any type
-                if not local_input.inp_type == __value.out_type and not local_input.inp_type == Any and not __value.out_type == Any:
-                    raise InvalidLinkError(
-                        f"links must have the same input type. "
-                        f"cannot link {local_input.name} to {__value.name}"
-                        f"with types {local_input.inp_type} to {__value.out_type}"
-                    )
+                # if not local_input.inp_type == __value.out_type and not local_input.inp_type == Any and not __value.out_type == Any:
+                #     raise InvalidLinkError(
+                #         f"links must have the same input type. "
+                #         f"cannot link {local_input.name} to {__value.name}"
+                #         f"with types {local_input.inp_type} to {__value.out_type}"
+                #     )
                 if isinstance(process_other, Workflow):
                     tmp = __value.name  # Use the formal parameter / variable name
                     local_input._set_value(f"{tmp}", linked=True)
@@ -211,12 +214,12 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
             try:
                 local_input = process_self.inputs[index]
                 # NOTE: Relax exact equality for Any type
-                if not local_input.inp_type == __value.out_type and not local_input.inp_type == Any and not __value.out_type == Any:
-                    raise InvalidLinkError(
-                        f"links must have the same input type. "
-                        f"cannot link {local_input.name} to {__value.name} "
-                        f"with types {local_input.inp_type} to {__value.out_type}"
-                    )
+                # if not local_input.inp_type == __value.out_type and not local_input.inp_type == Any and not __value.out_type == Any:
+                #     raise InvalidLinkError(
+                #         f"links must have the same input type. "
+                #         f"cannot link {local_input.name} to {__value.name} "
+                #         f"with types {local_input.inp_type} to {__value.out_type}"
+                #     )
                 if isinstance(process_other, Workflow):
                     tmp = __value.name  # Use the formal parameter / variable name
                     local_input._set_value(f"{tmp}", linked=True)
@@ -229,14 +232,14 @@ def set_input_Step_Workflow(process_self: Any, __name: str, __value: Any) -> Any
                 raise exc
 
     else:
-        obj = process_self.inputs[index]
+        # obj = process_self.inputs[index]
         # NOTE: "TypeError: typing.Any cannot be used with isinstance()"
-        if not obj.inp_type == Any and not isinstance(__value, obj.inp_type):
-            raise TypeError(
-                f"invalid attribute type for {obj.name}: "
-                f"got {__value.__class__.__name__}, "
-                f"expected {obj.inp_type.__name__}"
-            )
+        # if not obj.inp_type == Any and not isinstance(__value, obj.inp_type) and not isinstance(__value, list):
+        #     raise TypeError(
+        #         f"invalid attribute type for {obj.name}: "
+        #         f"got {__value.__class__.__name__}, "
+        #         f"expected {obj.inp_type.__name__}"
+        #     )
         ii_dict = {'wic_inline_input': __value}
         process_self.inputs[index]._set_value(ii_dict)
 
@@ -253,6 +256,10 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
     outputs: list[ProcessOutput]
     yaml: dict[str, Any]
     cfg_yaml: dict = Field(default_factory=_default_dict)
+
+    # these are not part of 'clt data'
+    scatter: list[ProcessInput] = []
+    scatterMethod: str = ''
     _input_names: list[str] = PrivateAttr(default_factory=list)
     _output_names: list[str] = PrivateAttr(default_factory=list)
 
@@ -349,6 +356,18 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         if __name in ["inputs", "outputs", "yaml", "cfg_yaml", "process_name", "_input_names", "_output_names",
                       "__private_attributes__", "__pydantic_private__"]:
             return super().__setattr__(__name, __value)
+        if __name == "scatterMethod":
+            if hasattr(ScatterMethod, __value):
+                return super().__setattr__(__name, __value)
+            else:
+                raise ValueError(
+                    f"Invalid value for scatterMethod the valid values are : \n {ScatterMethod.dotproduct.value} "
+                    f"{ScatterMethod.flat_crossproduct.value} {ScatterMethod.nested_crossproduct.value}\n")
+        if __name == "scatter":
+            if not all([isinstance(x, ProcessInput) for x in __value]):
+                raise TypeError("all scatter inputs must be ProcessInput type")
+            return super().__setattr__(__name, __value)
+
         if hasattr(self, "_input_names") and __name in self._input_names:
             set_input_Step_Workflow(self, __name, __value)
         else:
@@ -409,11 +428,21 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
 
         out_list: list = []  # The out: tag is a list, not a dict
         out_list = [{out.name: out.value} for out in self.outputs if out.value]
+        # list of inputs to be scattered on
+        scatter_list: list = []
+        scatter_list = [sc_inp.name for sc_inp in self.scatter]
+
         d = {
             "id": self.process_name,
             "in": in_dict,
             "out": out_list,
         }
+        # scatter operates on input sink
+        if self.scatter:
+            d[self.process_name]["scatter"] = scatter_list
+            if '' == self.scatterMethod:
+                self.scatterMethod = ScatterMethod.dotproduct.value
+            d[self.process_name]["scatterMethod"] = self.scatterMethod
         return d
 
     def _save_cwl(self, path: Path) -> None:
