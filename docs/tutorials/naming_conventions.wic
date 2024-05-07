@@ -1,6 +1,6 @@
 steps:
-- ambiguous:
-    in:
-      uniquename1: !ii string1
-      uniquename2: !ii string2
-- ambiguous:
+- id: ambiguous
+  in:
+    uniquename1: !ii string1
+    uniquename2: !ii string2
+- id: ambiguous

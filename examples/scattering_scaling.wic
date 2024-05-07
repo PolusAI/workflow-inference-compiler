@@ -1,16 +1,16 @@
 steps:
-- array_int:
+  array_int:
     in:
       maxval: !ii 10
     out:
     - array: !& arr_int
-- toString:
+  toString:
     scatter: [input]
     in:
       input: !* arr_int
     out:
     - output: !& arr_string
-- echo:
+  echo:
     scatter: [message]
     in:
       message: !* arr_string

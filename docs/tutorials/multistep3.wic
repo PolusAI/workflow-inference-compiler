@@ -1,6 +1,6 @@
 steps:
-- touch:
-    in:
-      filename: !ii empty.txt
-- append_twice.wic:
-- cat:
+- id: touch
+  in:
+    filename: !ii empty.txt
+- id: append_twice.wic
+- id: cat

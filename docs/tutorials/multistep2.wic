@@ -1,11 +1,11 @@
 steps:
-- touch:
-    in:
-      filename: !ii empty.txt
-- append:
-    in:
-      str: !ii Hello
-- append:
-    in:
-      str: !ii World!
-- cat:
+- id: touch
+  in:
+    filename: !ii empty.txt
+- id: append
+  in:
+    str: !ii Hello
+- id: append
+  in:
+    str: !ii World!
+- id: cat

@@ -15,7 +15,7 @@ import yaml
 import podman
 import docker
 
-from . import input_output as io
+from . import input_output as io, utils_cwl
 from .python_cwl_adapter import import_python_file
 from .wic_types import Cwl, NodeData, RoseTree, StepId, Tool, Tools, Json
 
@@ -124,6 +124,9 @@ def get_tools_cwl(config: Json, validate_plugins: bool = False,
 
                 if validate_plugins:
                     validate_cwl(cwl_path_str, skip_schemas)
+
+                tool = utils_cwl.desugar_into_canonical_normal_form(tool)
+
                 if quiet:
                     # Capture stdout and stderr
                     if not 'stdout' in tool:

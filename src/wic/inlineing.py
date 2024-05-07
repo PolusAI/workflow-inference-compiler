@@ -47,8 +47,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     # All subworkflows are inlineable, except scattered subworkflows.
     inlineable = wic['wic'].get('inlineable', True)
@@ -58,7 +57,7 @@ def get_inlineable_subworkflows(yaml_tree_tuple: YamlTree,
         yaml_stem = Path(yaml_name).stem
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
         if step_key in subkeys:
-            sub_yml_tree = steps[i][step_key]['subtree']
+            sub_yml_tree = steps[i]['subtree']
 
             y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree)
             sub_namespaces = get_inlineable_subworkflows(y_t, tools, False, namespaces_init + [step_name_i])
@@ -113,8 +112,8 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
     # because due to overloading we may need to modify parent wic tags.
 
     (yaml_stem, i, step_key) = utils.parse_step_name_str(namespaces[0])
-    sub_yml_tree = steps[i][step_key]['subtree']
-    sub_parentargs = steps[i][step_key]['parentargs']
+    sub_yml_tree = steps[i]['subtree']
+    sub_parentargs = steps[i]['parentargs']
 
     len_substeps = 0
     if len(namespaces) == 1:
@@ -156,7 +155,7 @@ def inline_subworkflow(yaml_tree_tuple: YamlTree, namespaces: Namespaces) -> Tup
         # NOTE: Since parentargs are applied after compiling a subworkflow,
         # and since inlineing removes the subworkflow, parentargs does not
         # appear to be inlineing invariant! However, using ~ syntax helps.
-        steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': sub_parentargs}
+        steps[i] = {'id': step_key, 'subtree': sub_yml_tree, 'parentargs': sub_parentargs}
 
     yaml_tree['wic'] = inline_subworkflow_wic_tag(wic, namespaces, len_substeps)
 
@@ -193,10 +192,10 @@ def apply_args(sub_yml_tree: Yaml, sub_parentargs: Yaml) -> Yaml:
             # sub_keys = utils.get_subkeys(steps_keys, tools)
             # to check whether or not `step_key in sub_keys` and thus
             # whether or not to use ['parentargs']
-            in_step = steps[i][step_key].get('in', {})  # CommandLineTools should have ['in'] (if any)
+            in_step = steps[i].get('in', {})  # CommandLineTools should have ['in'] (if any)
             if not in_step:
                 # Subworkflows should have ['parentargs']['in'] (if any)
-                in_step = steps[i][step_key].get('parentargs', {}).get('in', {})
+                in_step = steps[i].get('parentargs', {}).get('in', {})
 
             for inputkey, inputval in in_step.items():
                 if inputval == '~' + argkey:
@@ -318,8 +317,8 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
     for i, step_key in enumerate(steps_keys):
         if step_key in list(subkeysdict.keys()):
             count += 1  # Check that we inline all subworkflows
-            inputs = steps[step_key]['in']
-            scattervars = steps[step_key].get('scatter', [])
+            inputs = steps[i]['in']
+            scattervars = steps[i].get('scatter', [])
 
             sub_cwl_tree = subkeysdict[step_key]
             sub_steps = sub_cwl_tree['steps']
@@ -404,7 +403,7 @@ def inline_subworkflow_cwl(rose_tree: RoseTree) -> RoseTree:
             steps_new.update(sub_steps_new)
         else:
             # Otherwise, just copy the step
-            steps_new[step_key] = steps[step_key]
+            steps_new[i] = steps[i]
 
     if count != len(subkeysdict):
         print('Error! Not all subworkflows inlined!')

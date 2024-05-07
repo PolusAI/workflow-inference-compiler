@@ -1,4 +1,4 @@
 steps:
-- echo:
+  echo:
     in:
       message: !ii Hello World

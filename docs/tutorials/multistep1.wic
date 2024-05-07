@@ -1,21 +1,24 @@
+# NOTE: Since we are using append twice, steps cannot be a dictionary.
+# We have to use a list with id: tags
+# (and make sure id: in: and out: all have the same indentation)
 steps:
-- touch:
-    in:
-      filename: !ii empty.txt
-    out:
-    - file: !& file_touch
-- append:
-    in:
-      str: !ii Hello
-      file: !* file_touch
-    out:
-    - file: !& file_append_1
-- append:
-    in:
-      str: !ii World!
-      file: !* file_append_1
-    out:
-    - file: !& file_append_2
-- cat:
-    in:
-      file: !* file_append_2
+- id: touch
+  in:
+    filename: !ii empty.txt
+  out:
+  - file: !& file_touch
+- id: append
+  in:
+    str: !ii Hello
+    file: !* file_touch
+  out:
+  - file: !& file_append_1
+- id: append
+  in:
+    str: !ii World!
+    file: !* file_append_1
+  out:
+  - file: !& file_append_2
+- id: cat
+  in:
+    file: !* file_append_2

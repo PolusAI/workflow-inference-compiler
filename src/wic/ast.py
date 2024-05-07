@@ -9,7 +9,7 @@ from mergedeep import merge, Strategy
 from jsonschema import Draft202012Validator
 import yaml
 
-from . import python_cwl_adapter, utils
+from . import python_cwl_adapter, utils, utils_cwl
 from .wic_types import Yaml, Tools, YamlTree, YamlForest, StepId, Tool
 from wic.utils_yaml import wic_loader
 
@@ -39,6 +39,8 @@ def read_ast_from_disk(homedir: str,
         YamlTree: A tuple of the root filepath and the associated yml AST
     """
     (step_id, yaml_tree) = yaml_tree_tuple
+
+    yaml_tree = utils_cwl.desugar_into_canonical_normal_form(yaml_tree)
 
     try:
         if not ignore_validation_errors:
@@ -73,8 +75,7 @@ def read_ast_from_disk(homedir: str,
     steps: List[Yaml] = yaml_tree['steps']
     wic_steps = wic['wic'].get('steps', {})
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     for i, step_key in enumerate(steps_keys):
         stem = Path(step_key).stem
@@ -113,10 +114,12 @@ def read_ast_from_disk(homedir: str,
             (step_id_, sub_yml_tree) = read_ast_from_disk(homedir, y_t, yml_paths, tools, validator,
                                                           ignore_validation_errors)
 
-            step_i_dict = {} if steps[i][step_key] is None else steps[i][step_key]
+            steps_i_copy = {**steps[i]}
+            step_i_id = steps[i]['id']
+            del steps_i_copy['id']
             # Do not merge these two dicts; use subtree and parentargs so we can
             # apply subtree before compilation and parentargs after compilation.
-            steps[i][step_key] = {'subtree': sub_yml_tree, 'parentargs': step_i_dict}
+            steps[i] = {'id': step_i_id, 'subtree': sub_yml_tree, 'parentargs': steps_i_copy}
 
     return YamlTree(step_id, yaml_tree)
 
@@ -161,20 +164,19 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     for i, step_key in enumerate(steps_keys):
         # Recursively merge subworkflows, to implement parameter passing.
         if step_key in subkeys:
             # Extract the sub yaml file that we pre-loaded from disk.
-            sub_yml_tree_initial = steps[i][step_key]['subtree']
+            sub_yml_tree_initial = steps[i]['subtree']
             sub_wic = wic_steps.get(f'({i+1}, {step_key})', {})
 
             y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree_initial)
             (step_key_, sub_yml_tree) = merge_yml_trees(y_t, sub_wic, tools)
             # Now mutably overwrite the self args with the merged args
-            steps[i][step_key]['subtree'] = sub_yml_tree
+            steps[i]['subtree'] = sub_yml_tree
 
         # Extract provided CWL args, if any, and (recursively) merge them with
         # provided CWL args passed in from the parent, if any.
@@ -189,14 +191,13 @@ def merge_yml_trees(yaml_tree_tuple: YamlTree,
                 clt_args = copy.deepcopy(clt_args)
                 del clt_args['wic']
             sub_yml_tree = clt_args
-            args_provided_dict_self = {}
-            if steps[i][step_key]:
-                args_provided_dict_self = steps[i][step_key]
+            args_provided_dict_self = steps[i]
+            steps_i_id = steps[i]['id']
             # NOTE: To support overloading, the parent args must overwrite the child args!
             args_provided_dict = merge(args_provided_dict_self, sub_yml_tree,
                                        strategy=Strategy.TYPESAFE_REPLACE)  # TYPESAFE_ADDITIVE ?
             # Now mutably overwrite the self args with the merged args
-            steps[i][step_key] = args_provided_dict
+            steps[i] = {**args_provided_dict, 'id': steps_i_id}
 
     return YamlTree(step_id, yaml_tree)
 
@@ -224,8 +225,7 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
     steps: List[Yaml] = yaml_tree['steps']
     wic_steps = wic['wic'].get('steps', {})
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     yaml_forest_list = []
 
@@ -235,7 +235,7 @@ def tree_to_forest(yaml_tree_tuple: YamlTree, tools: Tools) -> YamlForest:
             wic_step_i = wic_steps.get(f'({i+1}, {step_key})', {})
             plugin_ns_i = wic_step_i.get('wic', {}).get('namespace', 'global')
 
-            sub_yaml_tree = steps[i][step_key]['subtree']
+            sub_yaml_tree = steps[i]['subtree']
             sub_yml_forest = tree_to_forest(YamlTree(StepId(step_key, plugin_ns_i), sub_yaml_tree), tools)
             (sub_yml_tree_step_id, sub_yml_tree_) = sub_yml_forest.yaml_tree
             yaml_forest_list.append((sub_yml_tree_step_id, sub_yml_forest))
@@ -271,20 +271,19 @@ def python_script_generate_cwl(yaml_tree_tuple: YamlTree,
 
     steps: List[Yaml] = yaml_tree['steps']
     steps_keys = utils.get_steps_keys(steps)
-    tools_stems = [stepid.stem for stepid in tools]
-    subkeys = utils.get_subkeys(steps_keys, tools_stems)
+    subkeys = utils.get_subkeys(steps_keys)
 
     for i, step_key in enumerate(steps_keys):
         if step_key in subkeys:
-            sub_yml_tree_initial = steps[i][step_key]['subtree']
+            sub_yml_tree_initial = steps[i]['subtree']
             y_t = YamlTree(StepId(step_key, step_id.plugin_ns), sub_yml_tree_initial)
             (step_key_, sub_yml_tree) = python_script_generate_cwl(y_t, root_yml_dir_abs, tools)
-            steps[i][step_key]['subtree'] = sub_yml_tree
+            steps[i]['subtree'] = sub_yml_tree
 
         if step_key not in subkeys:
             if 'python_script' == step_key:
                 # This generates a CWL CommandLineTool for an arbitrary python script.
-                yml_args = copy.deepcopy(steps[i][step_key]['in'])
+                yml_args = copy.deepcopy(steps[i]['in'])
                 python_script_path = yml_args.get('script', '')
                 if isinstance(python_script_path, dict) and 'wic_inline_input' in python_script_path:
                     python_script_path = python_script_path['wic_inline_input']
@@ -295,7 +294,7 @@ def python_script_generate_cwl(yaml_tree_tuple: YamlTree,
                     python_script_docker_pull = python_script_docker_pull['wic_inline_input']
                 if 'dockerPull' in yml_args:
                     del yml_args['dockerPull']
-                    del steps[i][step_key]['in']['dockerPull']
+                    del steps[i]['in']['dockerPull']
                 python_script_path = root_yml_dir_abs / Path(python_script_path)
                 python_script_mod = Path(python_script_path).name[:-3]
                 module = python_cwl_adapter.get_module(python_script_mod, python_script_path, yml_args)
@@ -312,7 +311,12 @@ def python_script_generate_cwl(yaml_tree_tuple: YamlTree,
                     f.write(yaml.dump(generated_cwl, sort_keys=False, line_break='\n', indent=2))
 
                 # Now replace step_key with unique_id in the workflow
-                steps[i] = {unique_id: steps[i][step_key]}
+                # NOTE: In addition to duplicate keys,
+                # this is why we are forced to use canonicalize_steps_list
+                # (We can replace a list element in-place, but if we delete a
+                # dict key and add another key, the second key gets added to the
+                # end of the dict...)
+                steps[i] = {**steps[i], 'id': unique_id}
                 # and add the auto-generated CWL CommandLineTool to tools
                 step_id_ = StepId(unique_id, 'global')
                 tool_i = Tool(filepath, generated_cwl)

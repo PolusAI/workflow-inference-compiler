@@ -140,26 +140,22 @@ def get_steps_keys(steps: List[Yaml]) -> List[str]:
     Returns:
         List[str]: The name of each step in the given CWL workflow
     """
-    # Get the dictionary key (i.e. the name) of each step.
-    steps_keys = []
-    for step in steps:
-        steps_keys += list(step)
+    steps_keys = [step_dict['id'] for step_dict in steps]
     # print(steps_keys)
     return steps_keys
 
 
-def get_subkeys(steps_keys: List[str], tools_stems: List[str]) -> List[str]:
+def get_subkeys(steps_keys: List[str]) -> List[str]:
     """This function determines which step keys are associated with subworkflows.\n
     This is critical for the control flow in many areas of the compiler.
 
     Args:
         steps_keys (List[str]): All of the step keys for the current workflow.
-        tools_stems (List[str]): All of the step keys associated with CommandLineTools.
 
     Returns:
         List[str]: The list of step keys associated with subworkflows of the current workflow.
     """
-    return [key for key in steps_keys if (key not in tools_stems) and (not key.startswith('python_script'))]
+    return [key for key in steps_keys if key.endswith('.wic')]
 
 
 def extract_implementation(yaml_tree: Yaml, wic: Yaml, yaml_path: Path) -> Tuple[str, Yaml]:
