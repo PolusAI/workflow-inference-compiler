@@ -1,0 +1,15 @@
+# Demonstrates scattering on a subset of inputs and a non default scattering method
+steps:
+- id: array_indices
+  in:
+    input_array: !ii ["hello world", "not hello world", "nothing!"]
+    input_indices: !ii [0,2]
+  out:
+    - output_array: !& filt_message
+- id: echo_3
+  scatter: [message1,message2]
+  scatterMethod: flat_crossproduct
+  in:
+    message1: !* filt_message
+    message2: !* filt_message
+    message3: !ii scalar
