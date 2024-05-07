@@ -15,7 +15,8 @@ import yaml
 import podman
 import docker
 
-from . import input_output as io, utils_cwl
+
+from . import input_output as io, utils_cwl, cli
 from .python_cwl_adapter import import_python_file
 from .wic_types import Cwl, NodeData, RoseTree, StepId, Tool, Tools, Json
 
@@ -151,7 +152,11 @@ def cwl_update_outputs_optional(cwl: Cwl) -> Cwl:
     """
     cwl_mod = copy.deepcopy(cwl)
     # Update success codes to allow simple failures
-    cwl_mod['successCodes'] = [0, 1]
+    args = cli.parser.parse_args()
+    # default value of cwl_mod['successCodes'] = 0 and 'partial_failure_success_codes' = [0,1]
+    # take the Union of 0 and partial_failure_success_codes, the 'successCodes' might not be set
+    # never discard 0 (actual success)
+    cwl_mod['successCodes'] = list(set([0] + args.partial_failure_success_codes))
     # Update outputs optional
     for out_key, out_val_dict in cwl_mod['outputs'].items():
         if isinstance(out_val_dict['type'], str) and out_val_dict['type'][-1] != '?':
@@ -443,7 +448,7 @@ def blindly_execute_python_workflows() -> None:
             # the above security considerations.
 
             # This lets us use path.parent to write a *.wic file in the
-            # auto-discovery path, and thus re-use the existing wic CI
+            # auto-discovery path, and thus reuse the existing wic CI
             retval.write_ast_to_disk(path.parent)
 
             # Programmatically blacklist subworkflows from running in config_ci.json
