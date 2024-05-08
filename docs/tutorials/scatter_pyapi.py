@@ -1,9 +1,7 @@
-from pathlib import Path
-
 from wic.api.pythonapi import Step, Workflow
 
 
-def build_workflow() -> Workflow:
+def small_workflow() -> Workflow:
     # scatter on all inputs
     # step array_ind
     array_ind = Step(clt_path='../../cwl_adapters/array_indices.cwl')
@@ -26,7 +24,7 @@ def build_workflow() -> Workflow:
     return wkflw
 
 
-def build_workflow_e3() -> Workflow:
+def workflow() -> Workflow:
     # scatter on a subset of inputs
     # step array_indices
     array_ind = Step(clt_path='../../cwl_adapters/array_indices.cwl')
@@ -53,6 +51,8 @@ def build_workflow_e3() -> Workflow:
     return wkflw
 
 
-scatter_wic = build_workflow_e3()
-scatter_wic.compile(True)  # Do NOT .run() here
-scatter_wic.run()
+# Do NOT .run() here
+
+if __name__ == '__main__':
+    scatter_wic = workflow()
+    scatter_wic.run()  # .run() here inside main

@@ -439,10 +439,10 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
         }
         # scatter operates on input sink
         if self.scatter:
-            d[self.process_name]["scatter"] = scatter_list
+            d["scatter"] = scatter_list
             if '' == self.scatterMethod:
                 self.scatterMethod = ScatterMethod.dotproduct.value
-            d[self.process_name]["scatterMethod"] = self.scatterMethod
+            d["scatterMethod"] = self.scatterMethod
         return d
 
     def _save_cwl(self, path: Path) -> None:
