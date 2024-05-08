@@ -140,7 +140,7 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         # See https://github.com/dnanexus/dx-cwl/issues/20
         # --outdir has one or more bugs which will cause workflows to fail!!!
         docker_pull = ['--disable-pull']  # Use cwl-docker-extract to pull images
-        script = 'cwltool_filterlog_pf' if args.allow_partial_failures else 'cwltool_filterlog'
+        script = 'cwltool_filterlog_pf' if args.partial_failure_enable else 'cwltool_filterlog'
         cmd = [script] + docker_pull + parallel + quiet + cachedir_ + net + provenance + \
             docker_cmd_ + write_summary + skip_schemas + path_check
         cmd += ['--leave-outputs',

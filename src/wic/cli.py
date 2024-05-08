@@ -55,9 +55,12 @@ parser.add_argument('--docker_remove_entrypoints', default=False, action="store_
                     trapped inside a walled garden of docker containers or if there is at least a chance that
                     they can be run in dev environments (conda, etc) and/or directly on the host machine.''')
 
-parser.add_argument('--allow_partial_failures', default=False, action="store_true",
+parser.add_argument('--partial_failure_enable', default=False, action="store_true",
                     help='''Let workflows to continue with partial failures
                     \n(i.e. run next steps after failure step by guarding for possible no input)''')
+
+parser.add_argument('--partial_failure_success_codes', nargs='*', type=int, default=[0, 1], required=False,
+                    help='Let users add custom error codes to be treated as success')
 
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--generate_run_script', default=False, action="store_true",

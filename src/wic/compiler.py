@@ -795,7 +795,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
 
         steps[i] = utils_cwl.add_yamldict_keyval_out(steps[i], step_key, list(tool_i.cwl['outputs'].keys()))
 
-        if args.allow_partial_failures:
+        if args.partial_failure_enable:
             when_null_clauses = []
             for arg_in in args_required:
                 when_null_clauses.append(f'inputs["{arg_in}"] != null')
