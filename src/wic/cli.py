@@ -69,17 +69,9 @@ group_run.add_argument('--generate_run_script', default=False, action="store_tru
                        help='Just generates run.sh and exits. Does not actually invoke ./run.sh')
 group_run.add_argument('--run_local', default=False, action="store_true",
                        help='After generating the cwl file(s), run it on your local machine.')
-group_run.add_argument('--run_compute', default=False, action="store_true",
-                       help='After generating the cwl file(s), run it on the remote labshare Compute platform.')
-parser.add_argument('--compute_driver', type=str, required=False, default='slurm', choices=['slurm', 'argo'],
-                    help='The driver to use for running workflows on labshare Compute.')
-# Use required=('--run_compute' in sys.argv) make other args conditionally required.
-# See https://stackoverflow.com/questions/19414060/argparse-required-argument-y-if-x-is-present
-# For example, if run_compute is enabled, you MUST enable cwl_inline_subworkflows!
-# Plugins with 'class: Workflow' (i.e. subworkflows) are not currently supported.
 
-parser.add_argument('--cwl_inline_subworkflows', default=('--run_compute' in sys.argv), action="store_true",
-                    help='Before generating the cwl file, inline all subworkflows. Required for --run_compute')
+parser.add_argument('--cwl_inline_subworkflows', default=False, action="store_true",
+                    help='Before generating the cwl file, inline all subworkflows.')
 parser.add_argument('--inference_disable', default=False, action="store_true",
                     help='Disables use of the inference algorithm when compiling.')
 parser.add_argument('--inference_use_naming_conventions', default=False, action="store_true",
@@ -94,15 +86,6 @@ parser.add_argument('--no_skip_dollar_schemas', default=False, action="store_tru
                     See https://github.com/common-workflow-language/cwltool/issues/623''')
 parser.add_argument('--cachedir', type=str, required=False, default='cachedir',
                     help='The directory to save intermediate results; useful with RealtimePlots.py')
-
-AWS_URL = 'http://compute.ci.aws.labshare.org'
-NCATS_URL = 'https://compute.scb-ncats.io/'
-
-parser.add_argument('--compute_url', type=str, default=NCATS_URL,
-                    help='The URL associated with the labshare Compute API. Required for --run_compute')
-parser.add_argument('--compute_access_token', type=str, required=('--run_compute' in sys.argv),
-                    help="""The access_token used for authentication. Required for --run_compute
-                    For now, get this manually from https://a-qa.labshare.org/""")
 
 parser.add_argument('--graphviz', default=False, action="store_true",
                     help='Generate a DAG using graphviz.')
