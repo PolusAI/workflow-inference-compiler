@@ -29,10 +29,6 @@ wic.input_output
 ------------------------------------
 .. automodule:: wic.input_output
 
-wic.labshare
-------------------------------------
-.. automodule:: wic.labshare
-
 wic.main
 ------------------------------------
 .. automodule:: wic.main
