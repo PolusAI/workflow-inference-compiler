@@ -284,8 +284,11 @@ def copy_output_files(yaml_stem: str) -> None:
 
         dests = set()
         for location, namespaced_output_name, basename in files:
-            yaml_stem_init, shortened = utils.shorten_namespaced_output_name(namespaced_output_name)
-            parentdirs = yaml_stem_init + '/' + shortened.replace('___', '/')
+            try:
+                yaml_stem_init, shortened = utils.shorten_namespaced_output_name(namespaced_output_name)
+                parentdirs = yaml_stem_init + '/' + shortened.replace('___', '/')
+            except:
+                parentdirs = namespaced_output_name  # For --allow_raw_cwl
             Path('outdir/' + parentdirs).mkdir(parents=True, exist_ok=True)
             source = f'provenance/{yaml_stem}/workflow/' + location
             # NOTE: Even though we are using subdirectories (not just a single output directory),
