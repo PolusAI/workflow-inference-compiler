@@ -24,7 +24,8 @@ jobs:
           pip install .[test]
       - name: Test with pytest
         run: |
-          python -m pytest -v
+          python -m pytest -k test_cwl_docker_extract
+          python -m pytest -vv
 
       - name: Build wic
         run: |
