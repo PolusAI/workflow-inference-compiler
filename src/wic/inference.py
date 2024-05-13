@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from . import utils, utils_cwl, utils_graphs
 from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, Tools,
@@ -8,6 +8,27 @@ from .wic_types import (GraphReps, InternalOutputs, Namespaces, StepId, Tool, To
 
 # NOTE: This must be initialized in main.py and/or cwl_subinterpreter.py
 renaming_conventions: List[Tuple[str, str]] = []
+
+
+def types_match(in_type: Any, out_type: Any) -> bool:
+    if in_type == out_type:
+        return True
+    if isinstance(in_type, list) and not isinstance(out_type, list):
+        return any([x == out_type for x in in_type])
+    if isinstance(out_type, list) and not isinstance(in_type, list):
+        # If only some of the output types match the input type, and
+        # if at runtime the actual output is one of those matches,
+        # then great! But we can't know that at compile time.
+        # If we want to guarantee this won't fail (due to format mismatch)
+        # at runtime then use all, not any. However, using all excludes many
+        # common use cases (format: ["null", ...]) and there are plenty of
+        # other ways to fail at runtime, so for now let's allow it.
+        # (If inference makes the 'wrong' choice, just use an explicit edge!)
+        return any([x == in_type for x in out_type])
+    if isinstance(in_type, list) and isinstance(out_type, list):
+        # Same comment here
+        return any([x in in_type for x in out_type])
+    return False
 
 
 def perform_edge_inference(args: argparse.Namespace,
@@ -131,10 +152,10 @@ def perform_edge_inference(args: argparse.Namespace,
             # print('out_key, out_format, rule', out_key, out_format, inference_rule)
             attempted_matches.append((out_key, out_format))
             # Great! We found an 'exact' type and format match.
-            if (out_dict['type'] == in_dict['type']):  # First we have to match the types.
+            if types_match(in_dict['type'], out_dict['type']):  # First we have to match the types.
                 if in_formats:
-                    # Then, if we have any input formats, the output format has to match.
-                    if out_format in in_formats:
+                    # Then, if we have an input format or formats, the output format has to match.
+                    if out_format == in_formats or out_format in in_formats:
                         format_matches.append((out_key, out_format))
                 else:
                     # Otherwise, formats are optional and we match only on type.
