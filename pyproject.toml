@@ -36,7 +36,12 @@ dependencies = [
     "typeguard",
     "pydantic>=2.6",
     "docker",
-    "podman" # FYI also need uidmap to run podman rootless
+    # FYI also need uidmap to run podman rootless
+    "podman", 
+    # We are using the official release for these packages for now
+    "toil[cwl]",
+    "cwltool",
+    "cwl-utils"
 ]
 
 [project.readme]
