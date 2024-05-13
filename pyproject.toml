@@ -62,6 +62,8 @@ test = [
     "pytest-parallel",
     "coverage",
     "mypy",
+    "numpy",
+    "scipy",
     "pylint",
     "autopep8",
     "pre-commit",

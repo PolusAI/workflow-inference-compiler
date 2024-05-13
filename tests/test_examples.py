@@ -30,7 +30,7 @@ from .test_setup import tools_cwl, yml_paths, validator, yml_paths_tuples
 # Look in each directory of search_paths_wic tag in global_config.json
 # for separate config_ci.json files and combine them.
 config_ci: Json = {}
-global_config = wic.input_output.read_config_from_disk(Path(get_args().config_file))
+global_config = wic.input_output.get_config(Path(get_args().config_file), Path(get_args().config_file))
 search_paths_wic_tag = global_config['search_paths_wic']
 for _yml_namespaces in search_paths_wic_tag:
     yml_dirs = search_paths_wic_tag[_yml_namespaces]

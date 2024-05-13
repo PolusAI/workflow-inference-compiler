@@ -19,7 +19,7 @@ from wic.wic_types import Json, Yaml
 
 args = wic.cli.get_args()
 # Just read from the disk and pass around config object
-global_config = io.read_config_from_disk(Path(args.config_file))
+global_config = io.get_config(Path(args.config_file), Path(args.config_file))
 tools_cwl = wic.plugins.get_tools_cwl(global_config, quiet=args.quiet)
 wic.api.pythonapi.global_config = tools_cwl  # Use path fallback in the CI
 yml_paths = wic.plugins.get_yml_paths(global_config)
