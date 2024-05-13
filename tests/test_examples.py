@@ -121,6 +121,7 @@ def test_run_inlined_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_ru
 
 
 # partial failure tests
+@pytest.mark.skip_pypi_ci
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_partial_failure)
 def test_run_partial_failures_pass(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Run workflows allowing partial failures. yml files of workflows which are known to have failure steps"""

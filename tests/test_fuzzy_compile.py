@@ -19,7 +19,7 @@ from wic.wic_types import GraphData, GraphReps, Yaml, YamlTree, StepId
 
 from .test_setup import tools_cwl, yml_paths, validator, wic_strategy
 
-
+@pytest.mark.skip_pypi_ci
 class TestFuzzyCompile(unittest.TestCase):
 
     @pytest.mark.slow

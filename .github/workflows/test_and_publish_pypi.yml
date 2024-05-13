@@ -25,7 +25,7 @@ jobs:
       - name: Test with pytest
         run: |
           python -m pytest -k test_cwl_docker_extract
-          python -m pytest -vv
+          python -m pytest -m "not skip_pypi_ci" -vv
 
       - name: Build wic
         run: |
