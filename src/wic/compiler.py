@@ -866,7 +866,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
         new_keyval: WorkflowInputsFile = {}
         if 'File' == in_dict['type']:
             # path = Path(in_dict['value']).name # NOTE: Use .name ?
-            newval = {'class': 'File', 'path': in_dict['value']}
+            newval = {'class': 'File', 'location': in_dict['value']}
             if 'format' in in_dict:
                 in_format = in_dict['format']
                 if isinstance(in_format, List):
