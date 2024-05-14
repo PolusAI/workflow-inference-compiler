@@ -40,7 +40,6 @@ dependencies = [
     "podman", 
     # We are using the official release for these packages for now
     "toil[cwl]",
-    "cwltool",
     "cwl-utils"
 ]
 
@@ -117,6 +116,7 @@ doc = [
 ]
 plots = ["matplotlib"]
 cyto = ["ipycytoscape"] # only for DAG visualization
+all_except_runner_src = ["workflow-inference-compiler[test,doc,plots,cyto,mypy-types]"]
 all = ["workflow-inference-compiler[test,doc,plots,cyto,runners-src,mypy-types]"]
 
 [project.scripts]
