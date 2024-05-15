@@ -30,7 +30,7 @@ from .test_setup import tools_cwl, yml_paths, validator, yml_paths_tuples
 # Look in each directory of search_paths_wic tag in global_config.json
 # for separate config_ci.json files and combine them.
 config_ci: Json = {}
-global_config = wic.input_output.read_config_from_disk(Path(get_args().config_file))
+global_config = wic.input_output.get_config(Path(get_args().config_file), Path(get_args().config_file))
 search_paths_wic_tag = global_config['search_paths_wic']
 for _yml_namespaces in search_paths_wic_tag:
     yml_dirs = search_paths_wic_tag[_yml_namespaces]
@@ -121,6 +121,7 @@ def test_run_inlined_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_ru
 
 
 # partial failure tests
+@pytest.mark.skip_pypi_ci
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_partial_failure)
 def test_run_partial_failures_pass(yml_path_str: str, yml_path: Path, cwl_runner: str) -> None:
     """Run workflows allowing partial failures. yml files of workflows which are known to have failure steps"""
