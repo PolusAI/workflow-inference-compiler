@@ -40,7 +40,6 @@ dependencies = [
     "podman", 
     # We are using the official release for these packages for now
     "toil[cwl]",
-    "cwl-utils"
 ]
 
 [project.readme]
