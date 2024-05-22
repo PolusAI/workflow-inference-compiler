@@ -37,7 +37,7 @@ dependencies = [
     "pydantic>=2.6",
     "docker",
     # FYI also need uidmap to run podman rootless
-    "podman", 
+    "podman",
     # We are using the official release for these packages for now
     "toil[cwl]",
 ]
@@ -106,6 +106,7 @@ runners-src = [
     "toil[cwl] @ git+https://github.com/jfennick/toil.git",
     "cwltool @ git+https://github.com/jfennick/cwltool.git",
     "cwl-utils @ git+https://github.com/jfennick/cwl-utils.git",
+    "prov @ git+https://github.com/jfennick/prov.git",
 ]
 # See docs/requirements.txt
 doc = [
