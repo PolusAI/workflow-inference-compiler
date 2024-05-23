@@ -260,6 +260,8 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
     # these are not part of 'clt data'
     scatter: list[ProcessInput] = []
     scatterMethod: str = ''
+    # use when tag to enable conditional steps
+    when: str = ''
     _input_names: list[str] = PrivateAttr(default_factory=list)
     _output_names: list[str] = PrivateAttr(default_factory=list)
 
@@ -367,6 +369,11 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
             if not all([isinstance(x, ProcessInput) for x in __value]):
                 raise TypeError("all scatter inputs must be ProcessInput type")
             return super().__setattr__(__name, __value)
+        if __name == "when":
+            if (isinstance(__value, str)) and __value.startswith('$(') and __value.endswith(')'):
+                return super().__setattr__(__name, __value)
+            else:
+                raise ValueError("Invalid input to when.The js string must start with '$(' and end with ')'")
 
         if hasattr(self, "_input_names") and __name in self._input_names:
             set_input_Step_Workflow(self, __name, __value)
@@ -443,6 +450,9 @@ class Step(BaseModel):  # pylint: disable=too-few-public-methods
             if '' == self.scatterMethod:
                 self.scatterMethod = ScatterMethod.dotproduct.value
             d["scatterMethod"] = self.scatterMethod
+        # when operates on step
+        if self.when != '':
+            d["when"] = self.when
         return d
 
     def _save_cwl(self, path: Path) -> None:

@@ -1,0 +1,10 @@
+steps:
+  toString:
+    in:
+      input: !ii 27
+    out:
+    - output: !& string_int
+  echo:
+    when: '$(inputs.message < "27")'
+    in:
+      message: !* string_int
