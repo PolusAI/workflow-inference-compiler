@@ -28,7 +28,7 @@ WORKDIR /workflow-inference-compiler
 # wic within a conda environment. Let's just install it globally!
 RUN mamba env update --name base --file install/pypy.yml
 RUN mamba env update --name base --file install/system_deps.yml
-RUN pip install -e ".[all]"
+RUN pip install -e ".[all_except_runner_src]"
 
 RUN mamba clean --all --yes
 RUN pip cache purge
