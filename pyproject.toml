@@ -7,7 +7,7 @@ requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.29"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "workflow-inference-compiler"
+name = "sophios"
 dynamic = ["version"]
 authors = [{name = "Jake Fennick", email = "jake.fennick@axleinfo.com"}]
 description = "DSL for inferring the edges of a CWL workflow DAG"
@@ -149,7 +149,7 @@ VCS = "git"
 style = "pep440-pre"
 versionfile_source = "src/wic/_version.py"
 versionfile_build = "wic/_version.py"
-tag_prefix = "''"
+tag_prefix = "v"
 
 [tool.build_sphinx]
 source_dir = "docs"
