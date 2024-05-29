@@ -1,13 +1,13 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
-requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.29"]
+requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.29", "tomli"]
 # NOTE: Use upper bound of <68 for setuptools due to 2to3 error.
 # See https://stackoverflow.com/questions/72414481/error-in-anyjson-setup-command-use-2to3-is-invalid
 
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "workflow-inference-compiler"
+name = "sophios"
 dynamic = ["version"]
 authors = [{name = "Jake Fennick", email = "jake.fennick@axleinfo.com"}]
 description = "DSL for inferring the edges of a CWL workflow DAG"
@@ -119,15 +119,15 @@ all_except_runner_src = ["workflow-inference-compiler[test,doc,plots,cyto,mypy-t
 all = ["workflow-inference-compiler[test,doc,plots,cyto,runners-src,mypy-types]"]
 
 [project.scripts]
-wic = "wic.main:main"
-cwl_subinterpreter = "wic.cwl_subinterpreter:main"
-cwltool_filterlog = "wic.run_local:cwltool_main"
+sophios = "sophios.main:main"
+cwl_subinterpreter = "sophios.cwl_subinterpreter:main"
+cwltool_filterlog = "sophios.run_local:cwltool_main"
 # Need an extra entrypoint to avoid mixing up WIC cli flags with cwltool cli flags
-cwltool_filterlog_pf = "wic.run_local:cwltool_main_pf"
+cwltool_filterlog_pf = "sophios.run_local:cwltool_main_pf"
 
 # Need the following defined in order to make versioneer work with git tags
 [tool.setuptools.dynamic]
-version = {attr = "wic.__version__"}
+version = {attr = "sophios.__version__"}
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -139,7 +139,7 @@ namespaces = true
 
 [tool.setuptools.package-data]
 "*" = ["*.txt"]
-"wic" = ["*.json"]
+"sophios" = ["*.json"]
 
 [tool.aliases]
 test = "pytest --workers 8"
@@ -147,9 +147,9 @@ test = "pytest --workers 8"
 [tool.versioneer]
 VCS = "git"
 style = "pep440-pre"
-versionfile_source = "src/wic/_version.py"
-versionfile_build = "wic/_version.py"
-tag_prefix = "''"
+versionfile_source = "src/sophios/_version.py"
+versionfile_build = "sophios/_version.py"
+tag_prefix = "v"
 
 [tool.build_sphinx]
 source_dir = "docs"

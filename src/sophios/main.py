@@ -9,7 +9,7 @@ import graphviz
 import networkx as nx
 import yaml
 
-from wic.utils_yaml import wic_loader
+from sophios.utils_yaml import wic_loader
 from . import input_output as io
 from . import ast, cli, compiler, inference, inlineing, plugins, run_local, utils  # , utils_graphs
 from .schemas import wic_schema
