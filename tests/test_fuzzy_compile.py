@@ -53,7 +53,7 @@ class TestFuzzyCompile(unittest.TestCase):
 
         y_t = YamlTree(StepId('random_stepid', plugin_ns), yml)
         yaml_tree_raw = sophios.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator,
-                                                   args.ignore_validation_errors)
+                                                       args.ignore_validation_errors)
         yaml_tree = sophios.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
         root_yml_dir_abs = yml_path.parent.absolute()
         yaml_tree = sophios.ast.python_script_generate_cwl(yaml_tree, root_yml_dir_abs, tools_cwl)
@@ -65,7 +65,8 @@ class TestFuzzyCompile(unittest.TestCase):
         graph = GraphReps(graph_gv, graph_nx, graphdata)
         try:
             compiler_info = sophios.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {},
-                                                          {}, tools_cwl, True, relative_run_path=True, testing=True)
+                                                              {}, tools_cwl, True, relative_run_path=True,
+                                                              testing=True)
         except Exception as e:
             multi_def_str = 'Error! Multiple definitions of &'
             unbound_lit_var = 'Error! Unbound literal variable ~'

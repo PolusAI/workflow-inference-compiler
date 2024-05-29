@@ -37,7 +37,7 @@ dependencies = [
     "pydantic>=2.6",
     "docker",
     # FYI also need uidmap to run podman rootless
-    "podman", 
+    "podman",
     # We are using the official release for these packages for now
     "toil[cwl]",
 ]
@@ -206,7 +206,7 @@ ignore_errors = false
 # versioneer to the exclude=regex above, but this works.
 
 [[tool.mypy.overrides]]
-module = ["wic._version", "versioneer"]
+module = ["sophios._version", "versioneer"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]

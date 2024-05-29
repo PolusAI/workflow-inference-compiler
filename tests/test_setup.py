@@ -36,9 +36,9 @@ yml_paths_tuples = [(yml_path_str, yml_path)
 
 for yml_path_str, yml_path in yml_paths_tuples:
     schema = sophios.schemas.wic_schema.compile_workflow_generate_schema(args.homedir, yml_path_str, yml_path,
-                                                                     tools_cwl, yml_paths, validator,
-                                                                     args.ignore_validation_errors,
-                                                                     args.allow_raw_cwl)
+                                                                         tools_cwl, yml_paths, validator,
+                                                                         args.ignore_validation_errors,
+                                                                         args.allow_raw_cwl)
     # overwrite placeholders in schema_store. See comment in get_validator()
     schema_store[schema['$id']] = schema
 
