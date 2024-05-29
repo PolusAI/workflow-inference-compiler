@@ -7,7 +7,7 @@ import numpy as np
 from scipy.optimize import least_squares
 import yaml
 
-from wic.utils_yaml import wic_loader
+from sophios.utils_yaml import wic_loader
 
 
 def test_scattering_scaling(minval: int = 100, maxval: int = 500, step: int = 100) -> None:

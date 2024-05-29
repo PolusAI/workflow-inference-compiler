@@ -7,15 +7,15 @@ from hypothesis import given, settings, HealthCheck
 import networkx as nx
 import pytest
 
-import wic
-import wic.ast
-import wic.cli
-import wic.main
-import wic.plugins
-import wic.schemas
-import wic.schemas.wic_schema
-import wic.utils
-from wic.wic_types import GraphData, GraphReps, Yaml, YamlTree, StepId
+import sophios
+import sophios.ast
+import sophios.cli
+import sophios.main
+import sophios.plugins
+import sophios.schemas
+import sophios.schemas.wic_schema
+import sophios.utils
+from sophios.wic_types import GraphData, GraphReps, Yaml, YamlTree, StepId
 
 from .test_setup import tools_cwl, yml_paths, validator, wic_strategy
 
@@ -40,8 +40,8 @@ class TestFuzzyCompile(unittest.TestCase):
         """
         plugin_ns = 'global'
         yml_path = Path('random_stepid')
-        steps_keys = wic.utils.get_steps_keys(yml.get('steps', []))
-        subkeys = wic.utils.get_subkeys(steps_keys)
+        steps_keys = sophios.utils.get_steps_keys(yml.get('steps', []))
+        subkeys = sophios.utils.get_subkeys(steps_keys)
         if subkeys:
             # NOTE: Since all filepaths are currently relative w.r.t. --yaml,
             # we need to supply a fake --yaml. Using [0] works because we are
@@ -49,14 +49,14 @@ class TestFuzzyCompile(unittest.TestCase):
             yml_path_stem = Path(subkeys[0]).stem
             yml_path = yml_paths[plugin_ns][yml_path_stem]
 
-        args = wic.cli.get_args(str(yml_path))
+        args = sophios.cli.get_args(str(yml_path))
 
         y_t = YamlTree(StepId('random_stepid', plugin_ns), yml)
-        yaml_tree_raw = wic.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator,
+        yaml_tree_raw = sophios.ast.read_ast_from_disk(args.homedir, y_t, yml_paths, tools_cwl, validator,
                                                    args.ignore_validation_errors)
-        yaml_tree = wic.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
+        yaml_tree = sophios.ast.merge_yml_trees(yaml_tree_raw, {}, tools_cwl)
         root_yml_dir_abs = yml_path.parent.absolute()
-        yaml_tree = wic.ast.python_script_generate_cwl(yaml_tree, root_yml_dir_abs, tools_cwl)
+        yaml_tree = sophios.ast.python_script_generate_cwl(yaml_tree, root_yml_dir_abs, tools_cwl)
 
         graph_gv = graphviz.Digraph(name=f'cluster_{yml_path}')
         graph_gv.attr(newrank='True')
@@ -64,7 +64,7 @@ class TestFuzzyCompile(unittest.TestCase):
         graphdata = GraphData(str(yml_path))
         graph = GraphReps(graph_gv, graph_nx, graphdata)
         try:
-            compiler_info = wic.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {},
+            compiler_info = sophios.compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {},
                                                           {}, tools_cwl, True, relative_run_path=True, testing=True)
         except Exception as e:
             multi_def_str = 'Error! Multiple definitions of &'
@@ -85,5 +85,5 @@ class TestFuzzyCompile(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    wic.plugins.logging_filters()
+    sophios.plugins.logging_filters()
     unittest.main()
