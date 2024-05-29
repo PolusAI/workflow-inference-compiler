@@ -1,6 +1,6 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
-requires = ["setuptools>=42,<68", "wheel", "versioneer[toml]==0.29", "tomli"]
+requires = ["setuptools>=42", "wheel", "versioneer[toml]==0.29", "tomli"]
 # NOTE: Use upper bound of <68 for setuptools due to 2to3 error.
 # See https://stackoverflow.com/questions/72414481/error-in-anyjson-setup-command-use-2to3-is-invalid
 
@@ -115,8 +115,8 @@ doc = [
 ]
 plots = ["matplotlib"]
 cyto = ["ipycytoscape"] # only for DAG visualization
-all_except_runner_src = ["workflow-inference-compiler[test,doc,plots,cyto,mypy-types]"]
-all = ["workflow-inference-compiler[test,doc,plots,cyto,runners-src,mypy-types]"]
+all_except_runner_src = ["sophios[test,doc,plots,cyto,mypy-types]"]
+all = ["sophios[test,doc,plots,cyto,runners-src,mypy-types]"]
 
 [project.scripts]
 sophios = "sophios.main:main"
