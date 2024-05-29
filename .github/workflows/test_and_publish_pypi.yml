@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: 3.9
 
-      - name: Install wic 🔧
+      - name: Install sophios 🔧
         run: |
           pip install .[test]
       - name: Test with pytest
@@ -27,7 +27,7 @@ jobs:
           python -m pytest -k test_cwl_docker_extract
           python -m pytest -m "not skip_pypi_ci" -vv
 
-      - name: Build wic
+      - name: Build sophios
         run: |
           python -m pip install twine build
 

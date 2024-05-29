@@ -151,20 +151,20 @@ jobs:
       # (Many of the packages conflict with pypy.)
       run: cd mm-workflows/ && pip install ".[test]" && mm-workflows --generate_schemas
 
-    - name: Generate WIC Python API Workflows (*.py -> *.wic)
+    - name: Generate Sophios Python API Workflows (*.py -> *.wic)
       if: always()
-      run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
+      run: cd workflow-inference-compiler/ && python -c 'import sophios; import sophios.plugins; sophios.plugins.blindly_execute_python_workflows()'
 
-    - name: Generate WIC Validation Jsonschema
+    - name: Generate Sophios Validation Jsonschema
       if: always()
-      run: cd workflow-inference-compiler/ && wic --generate_schemas
+      run: cd workflow-inference-compiler/ && sophios --generate_schemas
 
       # Please read docs/validation.md#Property-Based-Testing
       # This is essentially an integration test for all of the
       # WIC Python API workflows as well as the WIC Python API itself.
-    - name: Validate WIC Python API Workflows (*.py -> *.wic)
+    - name: Validate Sophios Python API Workflows (*.py -> *.wic)
       if: always()
-      run: cd workflow-inference-compiler/ && python -c 'import wic; import wic.plugins; wic.plugins.blindly_execute_python_workflows()'
+      run: cd workflow-inference-compiler/ && python -c 'import sophios; import sophios.plugins; sophios.plugins.blindly_execute_python_workflows()'
 
     - name: cwl-docker-extract (i.e. recursively docker pull)
       if: always()
