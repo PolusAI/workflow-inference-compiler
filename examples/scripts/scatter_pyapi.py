@@ -1,4 +1,4 @@
-from wic.api.pythonapi import Step, Workflow
+from sophios.api.pythonapi import Step, Workflow
 
 
 def small_workflow() -> Workflow:

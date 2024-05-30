@@ -11,7 +11,7 @@ import yaml
 
 from . import python_cwl_adapter, utils, utils_cwl
 from .wic_types import Yaml, Tools, YamlTree, YamlForest, StepId, Tool
-from wic.utils_yaml import wic_loader
+from sophios.utils_yaml import wic_loader
 
 # NOTE: AST = Abstract Syntax Tree
 

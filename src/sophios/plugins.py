@@ -419,7 +419,7 @@ def blindly_execute_python_workflows() -> None:
     """
     # I hope u like Remote Code Execution vulnerabilities!
     # See https://en.wikipedia.org/wiki/Arithmetical_hierarchy
-    from wic.api import pythonapi  # pylint: disable=C0415:import-outside-toplevel
+    from sophios.api import pythonapi  # pylint: disable=C0415:import-outside-toplevel
     # Since this is completely different test path we have to copy
     # default .txt files to default global_config.json
     config_file = Path().home()/'wic'/'global_config.json'

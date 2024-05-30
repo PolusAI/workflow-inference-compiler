@@ -11,11 +11,11 @@ from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
-from wic import compiler, input_output, plugins, utils_cwl
-from wic import run_local as run_local_module
-from wic.cli import get_args
-from wic.utils_graphs import get_graph_reps
-from wic.wic_types import CompilerInfo, RoseTree, StepId, Tool, Tools, YamlTree
+from sophios import compiler, input_output, plugins, utils_cwl
+from sophios import run_local as run_local_module
+from sophios.cli import get_args
+from sophios.utils_graphs import get_graph_reps
+from sophios.wic_types import CompilerInfo, RoseTree, StepId, Tool, Tools, YamlTree
 
 from ._types import ScatterMethod
 

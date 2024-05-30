@@ -1,1 +1,1 @@
-src/wic/_version.py export-subst
+src/sophios/_version.py export-subst
