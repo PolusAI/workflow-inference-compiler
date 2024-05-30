@@ -1,4 +1,4 @@
-Workflow Inference Compiler documentation
+Sophios documentation
 =======================================================
 
 .. toctree::
