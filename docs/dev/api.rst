@@ -1,66 +1,66 @@
 Developer API
 ====================================
 
-wic.ast
+sophios.ast
 ------------------------------------
-.. automodule:: wic.ast
+.. automodule:: sophios.ast
 
-wic.cli
+sophios.cli
 ------------------------------------
-.. automodule:: wic.cli
+.. automodule:: sophios.cli
 
-wic.compiler
+sophios.compiler
 ------------------------------------
-.. automodule:: wic.compiler
+.. automodule:: sophios.compiler
 
-wic.cwl_subinterpreter
+sophios.cwl_subinterpreter
 ------------------------------------
-.. automodule:: wic.cwl_subinterpreter
+.. automodule:: sophios.cwl_subinterpreter
 
-wic.inference
+sophios.inference
 ------------------------------------
-.. automodule:: wic.inference
+.. automodule:: sophios.inference
 
-wic.inlineing
+sophios.inlineing
 ------------------------------------
-.. automodule:: wic.inlineing
+.. automodule:: sophios.inlineing
 
-wic.input_output
+sophios.input_output
 ------------------------------------
-.. automodule:: wic.input_output
+.. automodule:: sophios.input_output
 
-wic.main
+sophios.main
 ------------------------------------
-.. automodule:: wic.main
+.. automodule:: sophios.main
 
-wic.plugins
+sophios.plugins
 ------------------------------------
-.. automodule:: wic.plugins
+.. automodule:: sophios.plugins
 
-wic.python_cwl_adapter
+sophios.python_cwl_adapter
 ------------------------------------
-.. automodule:: wic.python_cwl_adapter
+.. automodule:: sophios.python_cwl_adapter
 
-wic.run_local
+sophios.run_local
 ------------------------------------
-.. automodule:: wic.run_local
+.. automodule:: sophios.run_local
 
-wic.schemas.wic_schema
+sophios.schemas.wic_schema
 ------------------------------------
-.. automodule:: wic.schemas.wic_schema
+.. automodule:: sophios.schemas.wic_schema
 
-wic.utils
+sophios.utils
 ------------------------------------
-.. automodule:: wic.utils
+.. automodule:: sophios.utils
 
-wic.utils_cwl
+sophios.utils_cwl
 ------------------------------------
-.. automodule:: wic.utils_cwl
+.. automodule:: sophios.utils_cwl
 
-wic.utils_graphs
+sophios.utils_graphs
 ------------------------------------
-.. automodule:: wic.utils_graphs
+.. automodule:: sophios.utils_graphs
 
-wic.wic_types
+sophios.wic_types
 ------------------------------------
-.. automodule:: wic.wic_types
+.. automodule:: sophios.wic_types
