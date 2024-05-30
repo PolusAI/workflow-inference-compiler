@@ -1,8 +1,6 @@
 # Based on https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [build-system]
 requires = ["setuptools>=42", "wheel", "versioneer[toml]==0.29", "tomli"]
-# NOTE: Use upper bound of <68 for setuptools due to 2to3 error.
-# See https://stackoverflow.com/questions/72414481/error-in-anyjson-setup-command-use-2to3-is-invalid
 
 build-backend = "setuptools.build_meta"
 
