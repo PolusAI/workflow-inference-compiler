@@ -413,7 +413,7 @@ def get_py_paths(config: Json) -> Dict[str, Dict[str, Path]]:
 def blindly_execute_python_workflows() -> None:
     """This function imports (read: blindly executes) all python files in 'search_paths_wic'
        The python files are assumed to have a top-level workflow() function
-       which returns a wic.api.pythonapi.Workflow object.
+       which returns a sophios.api.pythonapi.Workflow object.
        The python files should NOT call the .run() method!
        (from any code path that is automatically executed on import)
     """
