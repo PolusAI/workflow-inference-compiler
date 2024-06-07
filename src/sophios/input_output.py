@@ -203,7 +203,7 @@ def get_default_config() -> Json:
 
 
 def get_absolute_paths(sub_config: Json) -> Json:
-    """Makes the paths within the dirs_file file absolute and write them into sub_config object.
+    """Update the paths within the sub_config json object as absolute paths
 
     Args:
         sub_config (dict): The json (sub)object where filepaths are stored
