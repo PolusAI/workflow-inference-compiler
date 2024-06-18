@@ -11,8 +11,8 @@ def workflow() -> Workflow:
     echo.message = toString.output
     # add a when clause
     # alternate js syntax
-    # echo.when = '$(inputs["message"] < 27)'
-    echo.when = '$(inputs.message < 27)'
+    # echo.when = '$(inputs["message"] < "27")'
+    echo.when = '$(inputs.message < "27")'
     # since the condition is not met the echo step is skipped!
 
     # arrange steps
