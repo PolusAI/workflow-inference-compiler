@@ -6,7 +6,7 @@ import yaml
 
 from . import utils
 from .wic_types import (GraphReps, InternalOutputs, Namespaces, Tool, Tools,
-                        WorkflowOutputs, Yaml)
+                        WorkflowOutputs, Yaml, StepId)
 
 
 def maybe_add_requirements(yaml_tree: Yaml, steps_keys: List[str],
@@ -110,7 +110,8 @@ def get_workflow_outputs(args: argparse.Namespace,
                          vars_workflow_output_internal: InternalOutputs,
                          graph: GraphReps,
                          tools_lst: List[Tool],
-                         step_node_name: str) -> Dict[str, Dict[str, str]]:
+                         step_node_name: str,
+                         tools: Tools) -> Dict[str, Dict[str, str]]:
     """Chooses a subset of the CWL outputs: to actually output
 
     Args:
@@ -125,6 +126,7 @@ def get_workflow_outputs(args: argparse.Namespace,
         graph (GraphReps): A tuple of a GraphViz DiGraph and a networkx DiGraph
         tools_lst (List[Tool]): A list of the CWL CommandLineTools or compiled subworkflows for the current workflow.
         step_node_name (str): The namespaced name of the current step
+        tools (Tools): The CWL CommandLineTool definitions found using get_tools_cwl()
 
     Returns:
         Dict[str, Dict[str, str]]: The actual outputs to be specified in the generated CWL file
@@ -135,7 +137,9 @@ def get_workflow_outputs(args: argparse.Namespace,
     for i, step_key in enumerate(steps_keys):
         tool_i = tools_lst[i].cwl
         step_name_i = utils.step_name_str(yaml_stem, i, step_key)
+        step_id = StepId(Path(step_key).stem, 'global')
         step_name_or_key = step_name_i if step_key.endswith('.wic') \
+            or step_id in tools \
             or Path(step_key).stem == Path(tools_lst[i].run_path).stem else step_key
         # step_name_or_key = step_name_i if stepid in tools else step_key
         out_keys = steps[i]['out']
