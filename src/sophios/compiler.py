@@ -833,7 +833,8 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
     vars_workflow_output_internal = list(set(vars_workflow_output_internal))  # Get uniques
     # (Why are we getting uniques?)
     workflow_outputs = utils_cwl.get_workflow_outputs(args, namespaces, is_root, yaml_stem,
-                                                      steps, outputs_workflow, vars_workflow_output_internal, graph, tools_lst, step_node_name)
+                                                      steps, outputs_workflow, vars_workflow_output_internal,
+                                                      graph, tools_lst, step_node_name, tools)
     # Add the provided workflow outputs to the workflow outputs from each step
     outputs_combined = {**yaml_tree.get('outputs', {}), **workflow_outputs}
     yaml_tree.update({'outputs': outputs_combined})
