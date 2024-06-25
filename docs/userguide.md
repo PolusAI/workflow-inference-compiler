@@ -286,3 +286,13 @@ if __name__ == '__main__':
 ```
 Similar to `scatter`, `when` is a **special (and optional)** attribute to any step object in the Python API.
 The `when` attribute of a step object exposes the exact same js embedded syntax of `when` tag of the YAML/CWL syntax. One has to be careful about appropriate escaping in the string input of `when` in Python API. In the above case the comparison is between two strings so "" is around the literal 27 (i.e. value after `toString` step).
+## Partial Failures
+
+In running workflows at scale, sometimes it is the case that one of the workflow steps may crash due to a bug causing the entire workflow to crash. In this case can use `--partial_failure_enable` flag. For special cases when the exit status of a workflow step isn't 1, and a different error code is returned (for example 142), then the user can supply the error code to wic as a success code to prevent workflow from crashing with `--partial_failure_success_codes 0 1 142`. By default partial failure flag will consider only 0 and 1 as success codes. An example line snippet of the error code being printed is shown below.
+```
+[1;30mWARNING[0m [33m[job compare_extract_protein_pdbbind__step__4__topology_check] exited with status: 139[0m
+```
+
+## Parallelization
+
+In order to utilize scattering features in cwl, the user needs to provide the flag `--parallel`. Additionally cwltool has various issues regarding scattering features such as deadlocks and thus it is preferred to use toil in this case `--cwl_runner toil-cwl-runner`.

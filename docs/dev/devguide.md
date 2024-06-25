@@ -91,3 +91,72 @@ INFO [job test.cwl] completed success
 ```
 
 As can be seen from the output json blob the order returned is not the same as input order.
+
+
+## Partial Failures
+When the partial failures feature is enabled although the subprocess for the workflow step itself will pass, the post-processing javascript can potentially crash as seen below. The Sophios compiler only semantically understands Sophios/CWL. It is theoretically impossible to correct mistakes in the embedded JS of any arbitrary workflow. The corresponding cwl snippet is also shown.
+```
+outputs:
+
+  topology_changed:
+    type: boolean
+    outputBinding:
+      glob: valid.txt
+      loadContents: true
+      outputEval: |
+        ${
+          // Read the contents of the file
+          const lines = self[0].contents.split("\n");
+          // Read boolean value from the first line
+          const valid = lines[0].trim() === "True";
+          return valid;
+        }
+```
+```
+stdout was: ''
+stderr was: 'evalmachine.<anonymous>:45
+  const lines = self[0].contents.split("\n");
+                        ^
+TypeError: Cannot read properties of undefined (reading 'contents')
+```
+To fix this the developer needs to add a javascript snippet to check if the self object being globbed exists, shown below.
+```
+outputs:
+
+  topology_changed:
+    type: boolean
+    outputBinding:
+      glob: valid.txt
+      loadContents: true
+      outputEval: |
+        ${
+          // check if self[0] exists
+          if (!self[0]) {
+            return null;
+          }
+          // Read the contents of the file
+          const lines = self[0].contents.split("\n");
+          // Read boolean value from the first line
+          const valid = lines[0].trim() === "True";
+          return valid;
+        }
+```
+
+## Workflow Development
+When adding new .cwl or .wic files its best to remove the .wic folder containing paths to .cwl and .yml files
+```
+rm -r ~/wic
+```
+
+## Singularity
+When building images with Singularity its best to clean the cache to avoid potential errors with cwltool or cwl-docker-extract.
+```
+singularity cache clean
+```
+
+## Toil
+When working with toil be sure to clean the working state as well as the configuration file, otherwise if you change input flags the configuration file will not be updated.
+```
+toil clean
+rm -r ~/.toil
+```
