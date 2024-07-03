@@ -176,6 +176,11 @@ jobs:
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
       run: cd workflow-inference-compiler/ && pytest -k test_run_workflows_on_push --workers 8 --cwl_runner cwltool # --cov
 
+    - name: PyTest Run REST core Tests
+      if: always()
+      # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      run: cd workflow-inference-compiler/ && pytest -k test_rest_core --cwl_runner cwltool
+
     # NOTE: The steps below are for repository_dispatch only. For all other steps, please insert above
     # this comment.
 

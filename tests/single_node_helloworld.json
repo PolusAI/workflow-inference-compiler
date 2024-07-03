@@ -1,0 +1,40 @@
+{
+	"nodes": [
+		{
+			"id": 1,
+			"name": "PythonHelloWorld",
+			"pluginId": "",
+			"cwlScript": {
+				"steps": {
+					"one": {
+						"run": {
+							"baseCommand": [
+								"python",
+								"-c",
+								"print('hello world'); print('sqr of 7 : %.2f' % 7**2)"
+							],
+							"class": "CommandLineTool",
+							"cwlVersion": "v1.2",
+							"inputs": {},
+							"outputs": {
+								"pyout": {
+									"outputBinding": {
+										"glob": "output"
+									},
+									"type": "File"
+								}
+							},
+							"stdout": "output",
+							"requirements": {
+								"InlineJavascriptRequirement": {}
+							}
+						}
+					}
+				}
+			},
+			"settings": {},
+			"internal": false
+		}
+	],
+	"links": []
+}
