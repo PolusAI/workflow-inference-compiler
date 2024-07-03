@@ -35,8 +35,10 @@ dependencies:
 # Similarly, toil[cwl] depends on ruamel.yaml.clib for performance.
 # Install it with conda/mamba here.
   - ruamel.yaml.clib
-# Simiarly, cryptography needs to build binary wheels
+# Similarly, cryptography needs to build binary wheels
   - cryptography
 # Needs binary PyQt5 dependencies.
   - kubernetes-helm
   - zstandard
+# Needed for orjson wheels
+  - orjson
