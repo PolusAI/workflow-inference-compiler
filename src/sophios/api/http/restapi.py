@@ -13,7 +13,7 @@ from sophios.utils_yaml import wic_loader
 from sophios import utils_cwl
 from sophios.cli import get_args
 from sophios.wic_types import CompilerInfo, Json, Tool, Tools, StepId, YamlTree, Cwl
-# from sophios.api.utils import converter
+from sophios.api.utils import converter
 # from .auth.auth import authenticate
 
 
@@ -105,6 +105,8 @@ async def compile_wf(request: Request) -> Json:
     print('---------- Compile Workflow! ---------')
     # ========= PROCESS REQUEST OBJECT ==========
     req: Json = await request.json()
+    # clean up and convert the incoming object
+    req = converter.raw_wfb_to_lean_wfb(req)
     wkflw_name = "generic_workflow"
     args = get_args(wkflw_name)
 
