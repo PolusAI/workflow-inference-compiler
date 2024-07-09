@@ -92,7 +92,7 @@ You should now have the `wic` executable available in your terminal.
 To test your installation, you can run the example in README.md:
 
 ```
-wic --yaml ../workflow-inference-compiler/docs/tutorials/helloworld.wic --run_local --quiet
+sophios --yaml ../workflow-inference-compiler/docs/tutorials/helloworld.wic --run_local --quiet
 ```
 
 You can also run the automated test suite. Note that the tests are based on the workflows; if you have more workflows, the tests will take longer.
