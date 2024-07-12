@@ -156,7 +156,12 @@ def cwl_update_outputs_optional(cwl: Cwl) -> Cwl:
     # default value of cwl_mod['successCodes'] = 0 and 'partial_failure_success_codes' = [0,1]
     # take the Union of 0 and partial_failure_success_codes, the 'successCodes' might not be set
     # never discard 0 (actual success)
-    cwl_mod['successCodes'] = list(set([0] + args.partial_failure_success_codes))
+    failure_code_range = args.partial_failure_success_codes_range
+    codes_from_range = list(range(failure_code_range[0], failure_code_range[1]))
+    direct_failure_codes = args.partial_failure_success_codes
+    assert failure_code_range[0] <= failure_code_range[1], \
+        f"lower {failure_code_range[0]}  value can't be greater than higher {failure_code_range[1]} value"
+    cwl_mod['successCodes'] = list(set([0] + direct_failure_codes + codes_from_range))
     # Update outputs optional
     for out_key, out_val_dict in cwl_mod['outputs'].items():
         if isinstance(out_val_dict['type'], str) and out_val_dict['type'][-1] != '?':

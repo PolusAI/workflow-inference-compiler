@@ -64,6 +64,9 @@ parser.add_argument('--partial_failure_enable', default=False, action="store_tru
 parser.add_argument('--partial_failure_success_codes', nargs='*', type=int, default=[0, 1], required=False,
                     help='Let users add custom error codes to be treated as success')
 
+parser.add_argument('--partial_failure_success_codes_range', nargs=2, type=int, default=[0, 1], required=False,
+                    help='Let users add custom error code range to be treated as success')
+
 group_run = parser.add_mutually_exclusive_group()
 group_run.add_argument('--generate_run_script', default=False, action="store_true",
                        help='Just generates run.sh and exits. Does not actually invoke ./run.sh')
