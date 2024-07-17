@@ -104,7 +104,7 @@ jobs:
         with:
           # NOTE: temporarily hardcode sameeul & master because we can only
           # have up to 10 input parameters for workflow_dispatch...
-          repository: sameeul/biobb_adapters
+          repository: vjaganat90/biobb_adapters
           ref: master
           path: biobb_adapters
 
