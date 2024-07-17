@@ -7,7 +7,7 @@ then
     echo "Please install timeseriesplots manually."
     exit 1
 else
-    git clone https://github.com/jfennick/timeseriesplots.git
+    git clone https://github.com/sameeul/timeseriesplots.git
     cd timeseriesplots
     cd install
     ./install_system_deps.sh
