@@ -102,9 +102,9 @@ jobs:
         if: always()
         uses: actions/checkout@v3
         with:
-          # NOTE: temporarily hardcode jfennick & master because we can only
+          # NOTE: temporarily hardcode sameeul & master because we can only
           # have up to 10 input parameters for workflow_dispatch...
-          repository: jfennick/biobb_adapters
+          repository: sameeul/biobb_adapters
           ref: master
           path: biobb_adapters
 
