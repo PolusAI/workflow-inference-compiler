@@ -9,5 +9,5 @@ then
 else
     # NOTE: Do not use https://github.com/bioexcel/biobb_adapters
     # Our fork has a few changes from the upstream repo
-    git clone https://github.com/jfennick/biobb_adapters.git
+    git clone https://github.com/sameeul/biobb_adapters.git
 fi
