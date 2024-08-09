@@ -1,5 +1,6 @@
 import argparse
 import copy
+from shutil import copytree, ignore_patterns
 import json
 from pathlib import Path
 import sys
@@ -151,16 +152,26 @@ def get_config(config_file: Path, default_config_file: Path) -> Json:
         Json: The config json object with absolute filepaths
     """
     global_config: Json = {}
+    proj_root_dir = 'workflow-inference-compiler'
     if not config_file.exists():
-        if config_file == default_config_file:
-            global_config = get_default_config()
-            # write the default config object to the 'global_config.json' file in user's ~/wic directory
+        # check if sophios is run from  'project root' dir
+        if str(Path.cwd()).endswith(proj_root_dir):
+            if config_file == default_config_file:
+                global_config = get_default_config()
+                # write the default config object to the 'global_config.json' file in user's ~/wic directory
+                # for user to inspect and or modify the config json file
+                write_config_to_disk(global_config, default_config_file)
+                print(f'default config file : {default_config_file} generated')
+            else:
+                print(f"Error user specified config file {config_file} doesn't exist")
+                sys.exit()
+        else:
+            global_config = get_basic_config()
+            # write the basic config object to the 'global_config.json' file in user's ~/wic directory
             # for user to inspect and or modify the config json file
             write_config_to_disk(global_config, default_config_file)
+            move_adapters_and_examples(global_config)
             print(f'default config file : {default_config_file} generated')
-        else:
-            print(f"Error user specified config file {config_file} doesn't exist")
-            sys.exit()
     else:
         # reading user specified config file only if it exists
         # never overwrite user's config file or generate another file in user's non-default directory
@@ -169,7 +180,25 @@ def get_config(config_file: Path, default_config_file: Path) -> Json:
     return global_config
 
 
-def read_config_from_disk(config_file: Path) -> Json:
+def move_adapters_and_examples(config: Json) -> None:
+    """Copies all the adapters and examples into the given search paths
+
+    Args:
+        config (Json): Json containing search path information
+    """
+    adapters_dir = Path(__file__).parent.parent.parent / 'cwl_adapters'
+    examples_dir = Path(__file__).parent.parent.parent / 'docs' / 'tutorials'
+
+    extlist = ['*.png', '*.md', '*.rst', '*.pyc', '__pycache__', '*.json']
+    # the default search paths will be the first entry in the 'global' namespace
+    # but we also want to preserve the ability of the users to add more search paths
+    # so we keep the namespace tag as a list of paths rather than a single path
+    copytree(adapters_dir, Path(config['search_paths_cwl']['global'][0]))
+    copytree(examples_dir, Path(config['search_paths_wic']['global'][0]),
+             ignore=ignore_patterns(*extlist))
+
+
+def read_config_from_disk(config_file: Path, abspath: bool = True) -> Json:
     """Returns the config json object from config_file with absolute paths
 
     Args:
@@ -184,7 +213,10 @@ def read_config_from_disk(config_file: Path) -> Json:
         config = json.load(f)
     conf_tags = ['search_paths_cwl', 'search_paths_wic']
     for tag in conf_tags:
-        config[tag] = get_absolute_paths(config[tag])
+        if abspath:
+            config[tag] = get_absolute_paths(config[tag])
+        else:  # this is a hacky way to fix global paths wrt ~/home/wic/
+            config[tag] = get_home_paths(config[tag])
     return config
 
 
@@ -196,10 +228,24 @@ def get_default_config() -> Json:
     """
     src_dir = Path(__file__).parent
     default_config: Json = {}
-    # config.json can contain absolute or relative paths
     # read_config_from_disk handles converting them to absolute paths
     default_config = read_config_from_disk(src_dir/'config.json')
     return default_config
+
+
+def get_basic_config() -> Json:
+    """Returns the (default) basic config with absolute paths
+
+    Returns:
+        Json: The config json object with absolute filepaths
+    """
+    # basic config doesn't contain mm-workflows or other
+    # domain cwl or wic files search paths
+    src_dir = Path(__file__).parent
+    basic_config: Json = {}
+    # read_config_from_disk handles converting them to absolute paths
+    basic_config = read_config_from_disk(src_dir/'config_basic.json', False)
+    return basic_config
 
 
 def get_absolute_paths(sub_config: Json) -> Json:
@@ -214,6 +260,22 @@ def get_absolute_paths(sub_config: Json) -> Json:
     abs_sub_config = copy.deepcopy(sub_config)
     for ns in abs_sub_config:
         abs_paths = [str(Path(path).absolute()) for path in abs_sub_config[ns]]
+        abs_sub_config[ns] = abs_paths
+    return abs_sub_config
+
+
+def get_home_paths(sub_config: Json) -> Json:
+    """Update the paths within the sub_config json object as absolute paths
+
+    Args:
+        sub_config (dict): The json (sub)object where filepaths are stored
+
+    Returns:
+        Json: The json (sub)object with absolute filepaths
+    """
+    abs_sub_config = copy.deepcopy(sub_config)
+    for ns in abs_sub_config:
+        abs_paths = [str(Path.home() / path) for path in abs_sub_config[ns]]
         abs_sub_config[ns] = abs_paths
     return abs_sub_config
 

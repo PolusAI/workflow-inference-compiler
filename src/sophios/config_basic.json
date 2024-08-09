@@ -1,0 +1,25 @@
+{
+    "search_paths_cwl": {
+        "global": [
+            "wic/cwl_adapters"
+        ],
+        "gpu": [
+        ]
+    },
+    "search_paths_wic": {
+        "global": [
+            "wic/examples"
+        ]
+    },
+    "renaming_conventions": [
+        ["energy_", "edr_"],
+        ["structure_", "tpr_"],
+        ["traj_", "trr_"]
+    ],
+    "inference_rules": {
+        "edam:format_3881": "continue",
+        "edam:format_3987": "continue",
+        "edam:format_3878": "break",
+        "edam:format_2033": "break"
+    }
+}

@@ -19,6 +19,10 @@ jobs:
         with:
           python-version: 3.9
 
+      - name: Remove old global config
+        if: always()
+        run: rm -rf "/home/$(whoami)/wic/" && rm -rf "/home/$(whoami)/.toil/"
+
       - name: Install sophios 🔧
         run: |
           pip install .[test]
@@ -32,7 +36,7 @@ jobs:
           python -m pip install twine build
           python -m build --wheel
           python -m build --sdist
-    
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:
