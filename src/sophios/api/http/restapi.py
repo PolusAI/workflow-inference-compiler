@@ -1,6 +1,8 @@
 from pathlib import Path
 import argparse
+import copy
 import yaml
+
 
 import uvicorn
 from fastapi import FastAPI, Request, status
@@ -12,7 +14,7 @@ from sophios.utils_graphs import get_graph_reps
 from sophios.utils_yaml import wic_loader
 from sophios import utils_cwl
 from sophios.cli import get_args
-from sophios.wic_types import CompilerInfo, Json, Tool, Tools, StepId, YamlTree, Cwl
+from sophios.wic_types import CompilerInfo, Json, Tool, Tools, StepId, YamlTree, Cwl, NodeData
 from sophios.api.utils import converter
 # from .auth.auth import authenticate
 
@@ -139,7 +141,32 @@ async def compile_wf(request: Request) -> Json:
     print('---------- Run Workflow locally! ---------')
     retval = run_workflow(compiler_info, args)
 
+    # ======== OUTPUT PROCESSING ================
+    # ========= PROCESS COMPILED OBJECT =========
+    sub_node_data: NodeData = compiler_info.rose.data
+    yaml_stem = sub_node_data.name
+    cwl_tree = sub_node_data.compiled_cwl
+    yaml_inputs = sub_node_data.workflow_inputs_file
+    cwl_tree_no_dd = remove_dot_dollar(cwl_tree)
+    yaml_inputs_no_dd = remove_dot_dollar(yaml_inputs)
+
+    # Convert the compiled yaml file to json for labshare Compute.
+    cwl_tree_run = copy.deepcopy(cwl_tree_no_dd)
+    # for step_key in cwl_tree['steps']:
+    #     step_name_i = step_key
+    #     step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
+    #     # step_name = '__'.join(step_key.split('__')[3:])  # Remove prefix
+    #     # Get step CWL from templates
+    #     # run_val = next((tval['cwlScript']
+    #     #                for _, tval in ict_plugins.items() if step_name == tval['name']), None)
+    #     # cwl_tree_run['steps'][step_name_i]['run'] = run_val
+
     compute_workflow: Json = {}
+    compute_workflow = {
+        "name": yaml_stem,
+        "cwlJobInputs": yaml_inputs_no_dd,
+        **cwl_tree_run
+    }
     compute_workflow["retval"] = str(retval)
     return compute_workflow
 
