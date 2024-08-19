@@ -3,7 +3,6 @@ import argparse
 import copy
 import yaml
 
-
 import uvicorn
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +15,7 @@ from sophios import utils_cwl
 from sophios.cli import get_args
 from sophios.wic_types import CompilerInfo, Json, Tool, Tools, StepId, YamlTree, Cwl, NodeData
 from sophios.api.utils import converter
+
 # from .auth.auth import authenticate
 
 
@@ -109,6 +109,7 @@ async def compile_wf(request: Request) -> Json:
     req: Json = await request.json()
     # clean up and convert the incoming object
     req = converter.raw_wfb_to_lean_wfb(req)
+
     wkflw_name = "generic_workflow"
     args = get_args(wkflw_name)
 
@@ -167,6 +168,7 @@ async def compile_wf(request: Request) -> Json:
         "cwlJobInputs": yaml_inputs_no_dd,
         **cwl_tree_run
     }
+
     compute_workflow["retval"] = str(retval)
     return compute_workflow
 
