@@ -138,7 +138,7 @@ def write_config_to_disk(config: Json, config_file: Path) -> None:
     # make the full path if it doesn't exist
     config_dir.mkdir(parents=True, exist_ok=True)
     with open(config_file, 'w', encoding='utf-8') as f:
-        json.dump(config, f)
+        json.dump(config, f, indent=4, sort_keys=True)
 
 
 def get_config(config_file: Path, default_config_file: Path) -> Json:
