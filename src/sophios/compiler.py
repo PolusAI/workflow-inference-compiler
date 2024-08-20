@@ -319,7 +319,7 @@ def compile_workflow_once(yaml_tree_ast: YamlTree,
                 # Use auto-discovery mechanism (with run tag)
                 tool_i = tools[stepid_runtag]
             else:
-                msg = f'Error! Neither {stepid.stem} nor {stepid_runtag.stem} found!'
+                msg = f"Error! Neither {stepid.stem} nor {stepid_runtag.stem} found!, check your 'search_paths_cwl' in global_config.json"
                 raise Exception(msg)
             # Programmatically modify tool_i here
             graph_dummy = graph  # Just use anything here to satisfy mypy
