@@ -189,6 +189,9 @@ def cwl_update_inline_runtag(cwl: Cwl, path: Path, relative_run_path: bool) -> C
                 yml_path = Path(runtag_orig)  # Assume absolute path in the runtag
             with open(yml_path, mode='r', encoding='utf-8') as f:
                 runtag_raw = yaml.safe_load(f.read())
+                # local $namespace and $schema tag shouldn't be in inline cwl steps
+                runtag_raw.pop('$namespaces', None)
+                runtag_raw.pop('$schemas', None)
                 step['run'] = runtag_raw
         else:
             pass  # We only care if the runtag is a cwl filepath
