@@ -23,6 +23,15 @@ def main() -> None:
 
     # User may specify a different homedir
     default_config_file = Path(args.homedir)/'wic'/'global_config.json'
+    if args.generate_config:
+        if default_config_file.exists():
+            print(f'Config already exists. To overwrite delete {default_config_file.parent} directory. Exiting')
+        else:
+            basic_config = io.get_basic_config()
+            io.write_config_to_disk(basic_config, default_config_file)
+            io.move_adapters_and_examples(basic_config)
+            print('Finished generating config. Exiting.')
+        sys.exit(0)
     global_config: Json = io.get_config(Path(args.config_file), default_config_file)
 
     tools_cwl = plugins.get_tools_cwl(global_config,
