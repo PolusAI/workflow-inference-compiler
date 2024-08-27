@@ -186,15 +186,15 @@ def move_adapters_and_examples(config: Json) -> None:
     Args:
         config (Json): Json containing search path information
     """
-    # if the sophios installation is through pip package
-    pip_dir_name = 'sophios'
-    if str(Path(__file__).parent).endswith(pip_dir_name):
-        adapters_dir = Path(__file__).parent / 'cwl_adapters'
-        examples_dir = Path(__file__).parent / 'examples'
     # when using dev/git install
-    else:
+    paren_dir = 'src'
+    if str(Path(__file__).parent.parent).endswith(paren_dir):
         adapters_dir = Path(__file__).parent.parent.parent / 'cwl_adapters'
         examples_dir = Path(__file__).parent.parent.parent / 'docs' / 'tutorials'
+    # if the sophios installation is through pip package
+    else:
+        adapters_dir = Path(__file__).parent / 'cwl_adapters'
+        examples_dir = Path(__file__).parent / 'examples'
 
     extlist = ['*.png', '*.md', '*.rst', '*.pyc', '__pycache__', '*.json']
     # the default search paths will be the first entry in the 'global' namespace

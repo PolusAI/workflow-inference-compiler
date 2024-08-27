@@ -7,24 +7,33 @@ from . import _version
 __version__ = _version.get_versions()['version']
 
 parser = argparse.ArgumentParser(prog='main', description='Convert a high-level yaml workflow file to CWL.')
-parser.add_argument('--yaml', type=str, required=('--generate_schemas' not in sys.argv),
+
+parser.add_argument('--yaml', type=str,
+                    required=(not ('--generate_config' in sys.argv or '--generate_schemas' in sys.argv)),
                     help='Yaml workflow file')
+group_gen = parser.add_mutually_exclusive_group()
+group_gen.add_argument('--generate_schemas', default=False, action="store_true",
+                       help='Generate schemas for the files in config.json (search_paths_wic and search_paths_cwl)')
+group_gen.add_argument('--generate_config', default=False, action="store_true",
+                       help='''Generate default config in wic/global_config.json
+                       with default search_paths_wic and search_paths_cwl''')
 parser.add_argument('--inputs_file', type=str, required=False, default='',
                     help='Additional inputs Yaml file')
 parser.add_argument('--config_file', type=str, required=False, default=str(Path().home()/'wic'/'global_config.json'),
                     help='User provided (JSON) config file')
-# version action exits the parser Ref : https://github.com/python/cpython/blob/1f515e8a109204f7399d85b7fd806135166422d9/Lib/argparse.py#L1167
+# version action exits the parser
+# Ref : https://github.com/python/cpython/blob/1f515e8a109204f7399d85b7fd806135166422d9/Lib/argparse.py#L1167
 parser.add_argument('--version', action='version', version=__version__,
                     default='==SUPPRESS==', help='Current version of the Workflow Inference Compiler')
-parser.add_argument('--generate_schemas', default=False, action="store_true",
-                    help='Generate schemas for the files in config.json (search_paths_wic and search_paths_cwl)')
 parser.add_argument('--homedir', type=str, required=False, default=str(Path().home()),
-                    help='The users home directory. This is necessary because CWL clears environment variables (e.g. HOME)')
+                    help='''The users home directory.
+                    This is necessary because CWL clears environment variables (e.g. HOME)''')
 parser.add_argument('--insert_steps_automatically', default=False, action="store_true",
                     help='''Attempt to fix inference failures by speculatively
                     inserting workflow steps from a curated whitelist.''')
 parser.add_argument('--no_provenance', default=False, action="store_true",
-                    help='Do not use the --provenance feature of CWL. (You should only disable provenance if absolutely necessary.)')
+                    help='''Do not use the --provenance feature of CWL.
+                    (You should only disable provenance if absolutely necessary.)''')
 parser.add_argument('--copy_output_files', default=False, action="store_true",
                     help='Copies output files from the cachedir to outdir/ (automatically enabled with --run_local)')
 parser.add_argument('--inline_cwl_runtag', default=False, action="store_true",
