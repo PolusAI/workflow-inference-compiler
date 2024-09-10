@@ -1,0 +1,181 @@
+{
+	"nodes": [
+		{
+			"id": 7,
+			"x": 462,
+			"y": 206,
+			"z": 2,
+			"name": "touch",
+			"pluginId": "touch",
+			"height": 50,
+			"width": 250,
+			"settings": {
+				"inputs": {
+					"filename": "empty.txt"
+				},
+				"outputs": {
+					"file": "file_touch"
+				}
+			},
+			"run": {
+				"cwlVersion": "v1.0",
+				"class": "CommandLineTool",
+				"requirements": {
+					"DockerRequirement": {
+						"dockerPull": "docker.io/bash:4.4"
+					},
+					"InlineJavascriptRequirement": {}
+				},
+				"baseCommand": "touch",
+				"inputs": {
+					"filename": {
+						"type": "string",
+						"inputBinding": {
+							"position": 1
+						}
+					}
+				},
+				"outputs": {
+					"file": {
+						"type": "File",
+						"outputBinding": {
+							"glob": "$(inputs.filename)"
+						}
+					}
+				}
+			},
+			"internal": false
+		},
+		{
+			"id": 18,
+			"x": 155,
+			"y": 195,
+			"z": 1,
+			"name": "append",
+			"pluginId": "append",
+			"height": 50,
+			"width": 250,
+			"settings": {
+				"inputs": {
+					"str": "Hello",
+					"file": "file_touch"
+				},
+				"outputs": {
+					"file": "file_append1"
+				}
+			},
+			"run": {
+				"class": "CommandLineTool",
+				"cwlVersion": "v1.0",
+				"requirements": {
+					"ShellCommandRequirement": {},
+					"InlineJavascriptRequirement": {},
+					"InitialWorkDirRequirement": {
+						"listing": [
+							"$(inputs.file)"
+						]
+					}
+				},
+				"inputs": {
+					"str": {
+						"type": "string",
+						"inputBinding": {
+							"shellQuote": false,
+							"position": 1,
+							"prefix": "echo"
+						}
+					},
+					"file": {
+						"type": "File",
+						"inputBinding": {
+							"shellQuote": false,
+							"position": 2,
+							"prefix": ">>"
+						}
+					}
+				},
+				"outputs": {
+					"file": {
+						"type": "File",
+						"outputBinding": {
+							"glob": "$(inputs.file.basename)"
+						}
+					}
+				}
+			},
+			"internal": false
+		},
+		{
+			"id": 9,
+			"x": 790.3254637299812,
+			"y": 449.8103498684344,
+			"z": 5,
+			"name": "append",
+			"pluginId": "append",
+			"height": 50,
+			"width": 250,
+			"settings": {
+				"inputs": {
+					"str": "World!",
+					"file": "file_append1"
+				},
+				"outputs": {
+					"file": "file_append2"
+				}
+			},
+			"run": {
+				"class": "CommandLineTool",
+				"cwlVersion": "v1.0",
+				"requirements": {
+					"ShellCommandRequirement": {},
+					"InlineJavascriptRequirement": {},
+					"InitialWorkDirRequirement": {
+						"listing": [
+							"$(inputs.file)"
+						]
+					}
+				},
+				"inputs": {
+					"str": {
+						"type": "string",
+						"inputBinding": {
+							"shellQuote": false,
+							"position": 1,
+							"prefix": "echo"
+						}
+					},
+					"file": {
+						"type": "File",
+						"inputBinding": {
+							"shellQuote": false,
+							"position": 2,
+							"prefix": ">>"
+						}
+					}
+				},
+				"outputs": {
+					"file": {
+						"type": "File",
+						"outputBinding": {
+							"glob": "$(inputs.file.basename)"
+						}
+					}
+				}
+			},
+			"internal": false
+		}
+	],
+	"links": [
+		{
+			"sourceId": 7,
+			"targetId": 18,
+			"id": 1
+		},
+		{
+			"sourceId": 18,
+			"targetId": 9,
+			"id": 5
+		}
+	],
+	"selection": []
+}

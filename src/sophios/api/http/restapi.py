@@ -16,6 +16,7 @@ from sophios import utils_cwl
 from sophios.cli import get_args
 from sophios.wic_types import CompilerInfo, Json, Tool, Tools, StepId, YamlTree, Cwl, NodeData
 from sophios.api.utils import converter
+import sophios.plugins as plugins
 # from .auth.auth import authenticate
 
 
@@ -37,21 +38,6 @@ def remove_dot_dollar(tree: Cwl) -> Cwl:
         '$schemas', 'schemas').replace('.wic', '_wic')
     tree_no_dd: Cwl = yaml.load(tree_str_no_dd, Loader=wic_loader())  # This effectively copies tree
     return tree_no_dd
-
-
-def get_yaml_tree(req: Json) -> Json:
-    """
-    Get the Sophios yaml tree from incoming JSON
-    Args:
-        req (JSON): A raw JSON content of incoming JSON object
-    Returns:
-        Cwl: A Cwl document with . and $ removed from $namespaces and $schemas
-    """
-    wkflw_name = "generic_workflow"
-    # args = converter.get_args(wkflw_name)
-    # yaml_tree_json: Json = converter.wfb_to_wic(req)
-    yaml_tree_json: Json = {}
-    return yaml_tree_json
 
 
 def run_workflow(compiler_info: CompilerInfo, args: argparse.Namespace) -> int:
@@ -108,25 +94,31 @@ async def compile_wf(request: Request) -> Json:
     # ========= PROCESS REQUEST OBJECT ==========
     req: Json = await request.json()
     # clean up and convert the incoming object
+    # schema preserving
     req = converter.raw_wfb_to_lean_wfb(req)
+    # schema non-preserving
+    workflow_temp = converter.wfb_to_wic(req)
     wkflw_name = "generic_workflow"
-    args = get_args(wkflw_name)
+    args = get_args(wkflw_name, ['--inline_cwl_runtag'])
 
-    workflow_temp = {}
-    if req["links"] != []:
-        for node in req["nodes"]:
-            workflow_temp["id"] = node["id"]
-            workflow_temp["step"] = node["cwlScript"]  # Assume dict form
-    else:  # A single node workflow
-        node = req["nodes"][0]
-        workflow_temp = node["cwlScript"]
-
+    # Build canonical workflow object
     workflow_can = utils_cwl.desugar_into_canonical_normal_form(workflow_temp)
 
     # ========= BUILD WIC COMPILE INPUT =========
-    tools_cwl: Tools = {StepId(content["id"], "global"):
-                        Tool(".", content["run"]) for content in workflow_can["steps"]}
+    # Build a list of CLTs
+    # The default list
+    tools_cwl: Tools = {}
+    global_config = input_output.get_config(Path(args.config_file), Path(args.homedir)/'wic'/'global_config.json')
+    tools_cwl = plugins.get_tools_cwl(global_config,
+                                      args.validate_plugins,
+                                      not args.no_skip_dollar_schemas,
+                                      args.quiet)
+    # Add to the default list if the tool is 'inline' in run tag
     # run tag will have the actual CommandLineTool
+    for can_step in workflow_can["steps"]:
+        if can_step.get("run", None):
+            # add a new tool
+            tools_cwl[StepId(can_step["id"], "global")] = Tool(".", can_step["run"])
     wic_obj = {'wic': workflow_can.get('wic', {})}
     plugin_ns = wic_obj['wic'].get('namespace', 'global')
 
@@ -152,14 +144,6 @@ async def compile_wf(request: Request) -> Json:
 
     # Convert the compiled yaml file to json for labshare Compute.
     cwl_tree_run = copy.deepcopy(cwl_tree_no_dd)
-    # for step_key in cwl_tree['steps']:
-    #     step_name_i = step_key
-    #     step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
-    #     # step_name = '__'.join(step_key.split('__')[3:])  # Remove prefix
-    #     # Get step CWL from templates
-    #     # run_val = next((tval['cwlScript']
-    #     #                for _, tval in ict_plugins.items() if step_name == tval['name']), None)
-    #     # cwl_tree_run['steps'][step_name_i]['run'] = run_val
 
     compute_workflow: Json = {}
     compute_workflow = {
@@ -173,36 +157,3 @@ async def compile_wf(request: Request) -> Json:
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=3000)
-
-
-# # ========= PROCESS COMPILED OBJECT =========
-    # sub_node_data: NodeData = compiler_info.rose.data
-    # yaml_stem = sub_node_data.name
-    # cwl_tree = sub_node_data.compiled_cwl
-    # yaml_inputs = sub_node_data.workflow_inputs_file
-
-    # # ======== OUTPUT PROCESSING ================
-    # cwl_tree_no_dd = remove_dot_dollar(cwl_tree)
-    # yaml_inputs_no_dd = remove_dot_dollar(yaml_inputs)
-
-    # # Convert the compiled yaml file to json for labshare Compute.
-    # cwl_tree_run = copy.deepcopy(cwl_tree_no_dd)
-    # for step_key in cwl_tree['steps']:
-    #     step_name_i = step_key
-    #     step_name_i = step_name_i.replace('.yml', '_yml')  # Due to calling remove_dot_dollar above
-    #     step_name = '__'.join(step_key.split('__')[3:])  # Remove prefix
-
-    #     # Get step CWL from templates
-    #     run_val = next((tval['cwlScript']
-    #                    for _, tval in ict_plugins.items() if step_name == tval['name']), None)
-    #     cwl_tree_run['steps'][step_name_i]['run'] = run_val
-
-    # TODO: set name and driver in workflow builder ui
-    # compute_workflow: Json = {}
-    # compute_workflow = {
-    #     "name": yaml_stem,
-    #     "driver": "argo",
-    #     # "driver": "cwltool",
-    #     "cwlJobInputs": yaml_inputs_no_dd,
-    #     **cwl_tree_run
-    # }
