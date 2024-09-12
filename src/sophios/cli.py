@@ -117,6 +117,8 @@ parser.add_argument('--graph_dark_theme', default=False, action="store_true",
                     help='Changees the color of the fonts and edges from white to black.')
 parser.add_argument('--custom_net', type=str, required=False,
                     help='Passes --custom-net flag to cwltool.')
+parser.add_argument('--generate_cwl_workflow', required=False, default=False, action="store_true",
+                    help='Compile the workflow without pulling the docker image')
 
 
 def get_args(yaml_path: str = '', suppliedargs: list[str] = []) -> argparse.Namespace:
