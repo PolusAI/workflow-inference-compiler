@@ -83,6 +83,8 @@ group_run.add_argument('--generate_run_script', default=False, action="store_tru
                        help='Just generates run.sh and exits. Does not actually invoke ./run.sh')
 group_run.add_argument('--run_local', default=False, action="store_true",
                        help='After generating the cwl file(s), run it on your local machine.')
+group_run.add_argument('--generate_cwl_workflow', required=False, default=False, action="store_true",
+                       help='Compile the workflow without pulling the docker image')
 
 parser.add_argument('--cwl_inline_subworkflows', default=False, action="store_true",
                     help='Before generating the cwl file, inline all subworkflows.')
