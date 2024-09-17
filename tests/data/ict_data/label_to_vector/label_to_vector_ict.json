@@ -1,0 +1,69 @@
+{
+    "author": [
+        "Author One",
+        "Author Two"
+    ],
+    "contact": "test@test.com",
+    "container": "polusai/label-to-vector-tool:0.7.1-dev0",
+    "description": "Convert labelled masks to flow-field vectors.",
+    "entrypoint": "[python3, main.py]",
+    "inputs": [
+        {
+            "description": "Input image collection to be processed by this plugin",
+            "format": [
+                "genericData"
+            ],
+            "name": "inpDir",
+            "required": true,
+            "type": "path"
+        },
+        {
+            "description": "Image-name pattern to use when selecting images for processing.",
+            "format": [
+                "string"
+            ],
+            "name": "filePattern",
+            "required": false,
+            "type": "string"
+        },
+        {
+            "description": "Input image collection to be processed by this plugin",
+            "format": [
+                "genericData"
+            ],
+            "name": "outDir",
+            "required": true,
+            "type": "path"
+        }
+    ],
+    "name": "polusai/LabeltoVector",
+    "outputs": [
+        {
+            "description": "Output collection",
+            "format": [
+                "genericData"
+            ],
+            "name": "outDir",
+            "required": true,
+            "type": "path"
+        }
+    ],
+    "repository": "https://github.com/PolusAI/polus-plugins/tree/dev/formats/polus-vector-converter-plugins",
+    "specVersion": "1.0.0",
+    "title": "Label to Vector",
+    "ui": [
+        {
+            "description": "Input image collection to be processed by this plugin",
+            "key": "inputs.inpDir",
+            "title": "Input collection",
+            "type": "path"
+        },
+        {
+            "description": "Image-name pattern to use when selecting images for processing.",
+            "key": "inputs.filePattern",
+            "title": "File Pattern",
+            "type": "text"
+        }
+    ],
+    "version": "0.7.1-dev0"
+}

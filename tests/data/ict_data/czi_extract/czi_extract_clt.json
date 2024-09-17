@@ -1,0 +1,43 @@
+{
+    "baseCommand": "[python3, main.py]",
+    "class": "CommandLineTool",
+    "cwlVersion": "v1.2",
+    "doc": "None",
+    "inputs": {
+        "inpDir": {
+            "inputBinding": {
+                "prefix": "--inpDir"
+            },
+            "type": "Directory"
+        },
+        "outDir": {
+            "inputBinding": {
+                "prefix": "--outDir"
+            },
+            "type": "Directory"
+        }
+    },
+    "label": "Extract TIFFs From CZI",
+    "outputs": {
+        "outDir": {
+            "outputBinding": {
+                "glob": "$(inputs.outDir.basename)"
+            },
+            "type": "File"
+        }
+    },
+    "requirements": {
+        "DockerRequirement": {
+            "dockerPull": "polusai/czi-extract-plugin:1.1.1"
+        },
+        "InitialWorkDirRequirement": {
+            "listing": [
+                {
+                    "entry": "$(inputs.outDir)",
+                    "writable": true
+                }
+            ]
+        },
+        "InlineJavascriptRequirement": {}
+    }
+}

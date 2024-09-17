@@ -1,0 +1,89 @@
+{
+    "author": [
+        "Author One",
+        "Author Two"
+    ],
+    "contact": "test@test.com",
+    "container": "polusai/ome-converter-tool:0.3.2-dev0",
+    "description": "Convert Bioformats supported format to OME Zarr or OME TIF",
+    "entrypoint": "python3 -m polus.images.formats.ome_converter",
+    "inputs": [
+        {
+            "description": "Input generic data collection to be processed by this plugin",
+            "format": [
+                "genericData"
+            ],
+            "name": "inpDir",
+            "required": true,
+            "type": "path"
+        },
+        {
+            "description": "A filepattern, used to select data to be converted",
+            "format": [
+                "string"
+            ],
+            "name": "filePattern",
+            "required": true,
+            "type": "string"
+        },
+        {
+            "description": "Type of data conversion",
+            "format": [
+                "enum"
+            ],
+            "name": "fileExtension",
+            "required": true,
+            "type": "string"
+        },
+        {
+            "description": "Output collection",
+            "format": [
+                "genericData"
+            ],
+            "name": "outDir",
+            "required": true,
+            "type": "path"
+        }
+    ],
+    "name": "polusai/OMEConverter",
+    "outputs": [
+        {
+            "description": "Output collection",
+            "format": [
+                "genericData"
+            ],
+            "name": "outDir",
+            "required": true,
+            "type": "path"
+        }
+    ],
+    "repository": "https://github.com/PolusAI/polus-plugins",
+    "specVersion": "1.0.0",
+    "title": "OME Converter",
+    "ui": [
+        {
+            "description": "Input generic data collection to be processed by this plugin",
+            "key": "inputs.inpDir",
+            "title": "Input generic collection",
+            "type": "path"
+        },
+        {
+            "description": "A filepattern, used to select data for conversion",
+            "key": "inputs.filePattern",
+            "title": "Filepattern",
+            "type": "text"
+        },
+        {
+            "description": "Type of data conversion",
+            "fields": [
+                ".ome.tif",
+                ".ome.zarr",
+                "default"
+            ],
+            "key": "inputs.fileExtension",
+            "title": "fileExtension",
+            "type": "select"
+        }
+    ],
+    "version": "0.3.2-dev0"
+}
