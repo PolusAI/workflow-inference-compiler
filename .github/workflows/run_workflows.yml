@@ -181,6 +181,11 @@ jobs:
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
       run: cd workflow-inference-compiler/ && pytest tests/test_rest_core.py -k test_rest_core --cwl_runner cwltool
 
+    - name: PyTest Run ICT to CLT conversion Tests
+      if: always()
+      # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      run: cd workflow-inference-compiler/ && pytest tests/test_ict_to_clt_conversion.py -k test_ict_to_clt
+
     # NOTE: The steps below are for repository_dispatch only. For all other steps, please insert above
     # this comment.
 
