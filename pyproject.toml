@@ -141,7 +141,7 @@ namespaces = true
 
 [tool.setuptools.package-data]
 "*" = ["*.txt"]
-"sophios" = ["*.json"]
+"sophios" = ["**/*.json"]
 
 [tool.aliases]
 test = "pytest --workers 8"
