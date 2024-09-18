@@ -1,130 +1,17 @@
 import copy
+from pathlib import Path
 from typing import Any, Dict, List
+import json
 import yaml
 from jsonschema import Draft202012Validator
 from sophios.utils_yaml import wic_loader
 
 from sophios.wic_types import Json, Cwl
 
-SCHEMA: Json = {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "definitions": {
-        "Link": {
-            "properties": {
-                "id": {
-                    "type": "number"
-                },
-                "inletIndex": {
-                    "type": "number"
-                },
-                "outletIndex": {
-                    "type": "number"
-                },
-                "sourceId": {
-                    "type": "number"
-                },
-                "targetId": {
-                    "type": "number"
-                },
-                "x1": {
-                    "type": "number"
-                },
-                "x2": {
-                    "type": "number"
-                },
-                "y1": {
-                    "type": "number"
-                },
-                "y2": {
-                    "type": "number"
-                }
-            },
-            "type": "object",
-            "required": ["id", "sourceId", "targetId"]
-        },
-        "NodeSettings": {
-            "properties": {
-                "inputs": {
-                    "additionalProperties": {
-                        "$ref": "#/definitions/T"
-                    },
-                    "type": "object"
-                },
-                "outputs": {
-                    "additionalProperties": {
-                        "$ref": "#/definitions/T"
-                    },
-                    "type": "object"
-                }
-            },
-            "type": "object"
-        },
-        "NodeX": {
-            "properties": {
-                "expanded": {
-                    "type": "boolean"
-                },
-                "height": {
-                    "type": "number"
-                },
-                "id": {
-                    "type": "number"
-                },
-                "internal": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "pluginId": {
-                    "type": "string"
-                },
-                "settings": {
-                    "$ref": "#/definitions/NodeSettings"
-                },
-                "width": {
-                    "type": "number"
-                },
-                "x": {
-                    "type": "number"
-                },
-                "y": {
-                    "type": "number"
-                },
-                "z": {
-                    "type": "number"
-                },
-            },
-            "type": "object",
-            "required": ["id", "name", "pluginId", "settings", "internal"]
-        },
-        "T": {
-            "type": "object"
-        }
-    },
-    "properties": {
-        "links": {
-            "items": {
-                "$ref": "#/definitions/Link"
-            },
-            "type": "array"
-        },
-        "nodes": {
-            "items": {
-                "$ref": "#/definitions/NodeX"
-            },
-            "type": "array"
-        },
-        "selection": {
-            "items": {
-                "type": "number"
-            },
-            "type": "array"
-        }
-    },
-    "type": "object",
-    "required": ["links", "nodes"]
-}
+SCHEMA_FILE = Path(__file__).parent / "input_object_schema.json"
+SCHEMA: Json = {}
+with open(SCHEMA_FILE, 'r', encoding='utf-8') as f:
+    SCHEMA = json.load(f)
 
 
 def del_irrelevant_keys(ldict: List[Dict[Any, Any]], relevant_keys: List[Any]) -> None:
@@ -137,20 +24,36 @@ def del_irrelevant_keys(ldict: List[Dict[Any, Any]], relevant_keys: List[Any]) -
                 elem.pop(ek, None)
 
 
-def validate_schema_and_object(schema: Json, jobj: Json) -> None:
+def validate_schema_and_object(schema: Json, jobj: Json) -> bool:
     """Validate schema object"""
     Draft202012Validator.check_schema(schema)
     df2012 = Draft202012Validator(schema)
-    df2012.is_valid(jobj)
+    return df2012.is_valid(jobj)
+
+
+def extract_state(inp: Json) -> Json:
+    """Extract only the state information from the incoming wfb object.
+       It includes converting "ICT" nodes to "CLT" using "plugins" tag of the object.
+    """
+    inp_restrict: Json = {}
+    if not inp.get('plugins'):
+        inp_restrict = copy.deepcopy(inp['state'])
+    else:
+        inp_inter = copy.deepcopy(inp)
+        # Here goes the ICT to CLT extraction logic
+        inp_restrict = inp_inter['state']
+    return inp_restrict
 
 
 def raw_wfb_to_lean_wfb(inp: Json) -> Json:
-    """drop all the unnecessary info from incoming wfb object"""
-    inp_restrict = copy.deepcopy(inp)
-    keys = list(inp.keys())
+    """Drop all the unnecessary info from incoming wfb object"""
+    if validate_schema_and_object(SCHEMA, inp):
+        print('incoming object is valid against input object schema')
+    inp_restrict = extract_state(inp)
+    keys = list(inp_restrict.keys())
     # To avoid deserialization
     # required attributes from schema
-    prop_req = SCHEMA['required']
+    prop_req = SCHEMA['definitions']['State']['required']
     nodes_req = SCHEMA['definitions']['NodeX']['required']
     links_req = SCHEMA['definitions']['Link']['required']
     do_not_rem_nodes_prop = ['cwlScript', 'run']
@@ -170,12 +73,11 @@ def raw_wfb_to_lean_wfb(inp: Json) -> Json:
         else:
             pass
 
-    validate_schema_and_object(SCHEMA, inp_restrict)
     return inp_restrict
 
 
 def wfb_to_wic(inp: Json) -> Cwl:
-    """convert lean wfb json to compliant wic"""
+    """Convert lean wfb json to compliant wic"""
     # non-schema preserving changes
     inp_restrict = copy.deepcopy(inp)
 
