@@ -1,12 +1,15 @@
+
 import copy
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 import json
 import yaml
 from jsonschema import Draft202012Validator
 from sophios.utils_yaml import wic_loader
 
 from sophios.wic_types import Json, Cwl
+from sophios.api.utils.ict.ict_spec.model import ICT
+from sophios.api.utils.ict.ict_spec.cast import cast_to_ict
 
 SCHEMA_FILE = Path(__file__).parent / "input_object_schema.json"
 SCHEMA: Json = {}
@@ -141,3 +144,20 @@ def wfb_to_wic(inp: Json) -> Cwl:
         node = inp_restrict["nodes"][0]
         workflow_temp = node["cwlScript"]
     return workflow_temp
+
+
+def ict_to_clt(ict: Union[ICT, Path, str, dict], network_access: bool = False) -> dict:
+    """
+    Convert ICT to CWL CommandLineTool
+
+    Args:
+        ict (Union[ICT, Path, str, dict]): ICT to convert to CLT. ICT can be an ICT object,
+        a path to a yaml file, or a dictionary containing ICT
+
+    Returns:
+        dict: A dictionary containing the CLT
+    """
+
+    ict_local = ict if isinstance(ict, ICT) else cast_to_ict(ict)
+
+    return ict_local.to_clt(network_access=network_access)

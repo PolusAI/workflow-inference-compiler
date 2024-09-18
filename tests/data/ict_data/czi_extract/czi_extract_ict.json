@@ -1,0 +1,53 @@
+{
+    "author": [
+        "Author One"
+    ],
+    "contact": "test@test.com",
+    "container": "polusai/czi-extract-plugin:1.1.1",
+    "description": "Extracts individual fields of view from a CZI file. Saves as OME TIFF.",
+    "entrypoint": "[python3, main.py]",
+    "inputs": [
+        {
+            "description": "Input collection",
+            "format": [
+                "genericData"
+            ],
+            "name": "inpDir",
+            "required": true,
+            "type": "path"
+        },
+        {
+            "description": "Input collection",
+            "format": [
+                "genericData"
+            ],
+            "name": "outDir",
+            "required": true,
+            "type": "path"
+        }
+    ],
+    "name": "polusai/ExtractTIFFsFromCZI",
+    "outputs": [
+        {
+            "description": "Output data for the plugin",
+            "format": [
+                "collection"
+            ],
+            "name": "outDir",
+            "required": true,
+            "type": "path"
+        }
+    ],
+    "repository": "https://github.com/polusai/image-tools",
+    "specVersion": "1.0.0",
+    "title": "Extract TIFFs From CZI",
+    "ui": [
+        {
+            "description": "Collection name...",
+            "key": "inputs.inpDir",
+            "title": "Input collection: ",
+            "type": "path"
+        }
+    ],
+    "version": "1.1.1"
+}
