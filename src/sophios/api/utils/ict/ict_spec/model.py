@@ -39,14 +39,14 @@ class ICT(Metadata):
         inp_bool = [x in input_names for x in io_dict["inputs"]]
         out_bool = [x in output_names for x in io_dict["outputs"]]
 
-        if not all(inp_bool):
-            raise ValueError(
-                f"The ui keys must match the inputs and outputs keys. Unmatched: inputs.{set(io_dict['inputs'])-set(input_names)}"
-            )
-        if not all(out_bool):
-            raise ValueError(
-                f"The ui keys must match the inputs and outputs keys. Unmatched: outputs.{set(io_dict['outputs'])-set(output_names)}"
-            )
+        # if not all(inp_bool):
+        #     raise ValueError(
+        #         f"The ui keys must match the inputs and outputs keys. Unmatched: inputs.{set(io_dict['inputs'])-set(input_names)}"
+        #     )
+        # if not all(out_bool):
+        #     raise ValueError(
+        #         f"The ui keys must match the inputs and outputs keys. Unmatched: outputs.{set(io_dict['outputs'])-set(output_names)}"
+        #     )
         return self
 
     def to_clt(self, network_access: bool = False) -> dict:

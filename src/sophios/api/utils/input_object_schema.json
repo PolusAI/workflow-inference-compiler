@@ -223,7 +223,7 @@
         "PluginX": {
             "properties": {
                 "author": {
-                    "type": "string"
+                    "type": ["string", "array"]
                 },
                 "baseCommand": {
                     "items": {
@@ -318,6 +318,7 @@
             },
             "required": [
                 "id",
+                "pid",
                 "name",
                 "version",
                 "title",

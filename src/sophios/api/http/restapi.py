@@ -93,13 +93,15 @@ async def compile_wf(request: Request) -> Json:
     print('---------- Compile Workflow! ---------')
     # ========= PROCESS REQUEST OBJECT ==========
     req: Json = await request.json()
+    wfb_payload: Json = req['payload']
+    run_opt: str = req['run'] if req.get('run') else 'no'
     # clean up and convert the incoming object
     # schema preserving
-    req = converter.raw_wfb_to_lean_wfb(req)
+    wfb_payload = converter.raw_wfb_to_lean_wfb(wfb_payload)
     # schema non-preserving
-    workflow_temp = converter.wfb_to_wic(req)
+    workflow_temp = converter.wfb_to_wic(wfb_payload)
     wkflw_name = "generic_workflow"
-    args = get_args(wkflw_name, ['--inline_cwl_runtag'])
+    args = get_args(wkflw_name, ['--inline_cwl_runtag', '--generate_cwl_workflow'])
 
     # Build canonical workflow object
     workflow_can = utils_cwl.desugar_into_canonical_normal_form(workflow_temp)
@@ -130,8 +132,12 @@ async def compile_wf(request: Request) -> Json:
                                                             tools_cwl, True, relative_run_path=True, testing=False)
 
     # =========== OPTIONAL RUN ==============
-    print('---------- Run Workflow locally! ---------')
-    retval = run_workflow(compiler_info, args)
+    retval = -1
+    if run_opt == 'run':
+        print('---------- Run Workflow locally! ---------')
+        retval = run_workflow(compiler_info, args)
+    else:
+        retval = 0
 
     # ======== OUTPUT PROCESSING ================
     # ========= PROCESS COMPILED OBJECT =========

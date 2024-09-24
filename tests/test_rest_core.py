@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 import asyncio
@@ -24,7 +25,10 @@ def test_rest_core_single_node() -> None:
     scope['type'] = 'http'
 
     async def receive() -> Json:
-        inp_byte = json.dumps(inp).encode('utf-8')
+        inp_req: Json = {}
+        inp_req['payload'] = copy.deepcopy(inp)
+        inp_req['run'] = 'run'
+        inp_byte = json.dumps(inp_req).encode('utf-8')
         return {"type": "http.request", "body": inp_byte}
 
     # create a request object and pack it with our json payload
@@ -47,7 +51,10 @@ def test_rest_core_multi_node() -> None:
     scope['type'] = 'http'
 
     async def receive() -> Json:
-        inp_byte = json.dumps(inp).encode('utf-8')
+        inp_req: Json = {}
+        inp_req['payload'] = copy.deepcopy(inp)
+        inp_req['run'] = 'run'
+        inp_byte = json.dumps(inp_req).encode('utf-8')
         return {"type": "http.request", "body": inp_byte}
 
     # create a request object and pack it with our json payload
@@ -70,7 +77,10 @@ def test_rest_core_multi_node_inline_cwl() -> None:
     scope['type'] = 'http'
 
     async def receive() -> Json:
-        inp_byte = json.dumps(inp).encode('utf-8')
+        inp_req: Json = {}
+        inp_req['payload'] = copy.deepcopy(inp)
+        inp_req['run'] = 'run'
+        inp_byte = json.dumps(inp_req).encode('utf-8')
         return {"type": "http.request", "body": inp_byte}
 
     # create a request object and pack it with our json payload
