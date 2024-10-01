@@ -134,7 +134,13 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         cachedir_ = ['--cachedir', cachedir] if cachedir else []
         net = ['--custom-net', args.custom_net] if args.custom_net else []
         provenance = ['--provenance', f'provenance/{yaml_stem}'] if not args.no_provenance else []
-        docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
+        docker_cmd_: List[str] = []
+        if docker_cmd == 'docker':
+            docker_cmd_ = []
+        elif docker_cmd == 'singularity':
+            docker_cmd_ = ['--singularity']
+        else:
+            docker_cmd_ = ['--user-space-docker-cmd', docker_cmd]
         write_summary = ['--write-summary', f'output_{yaml_stem}.json']
         path_check = ['--relax-path-checks']
         # See https://github.com/common-workflow-language/cwltool/blob/5a645dfd4b00e0a704b928cc0bae135b0591cc1a/cwltool/command_line_tool.py#L94
@@ -205,7 +211,13 @@ def run_local(args: argparse.Namespace, rose_tree: RoseTree, cachedir: Optional[
         # NOTE: toil-cwl-runner always runs in parallel
         net = ['--custom-net', args.custom_net] if args.custom_net else []
         provenance = ['--provenance', f'provenance/{yaml_stem}'] if not args.no_provenance else []
-        docker_cmd_ = [] if docker_cmd == 'docker' else ['--user-space-docker-cmd', docker_cmd]
+        docker_cmd_ = []
+        if docker_cmd == 'docker':
+            docker_cmd_ = []
+        elif docker_cmd == 'singularity':
+            docker_cmd_ = ['--singularity']
+        else:
+            docker_cmd_ = ['--user-space-docker-cmd', docker_cmd]
         path_check = ['--relax-path-checks']
         # See https://github.com/common-workflow-language/cwltool/blob/5a645dfd4b00e0a704b928cc0bae135b0591cc1a/cwltool/command_line_tool.py#L94
         # https://github.com/DataBiosphere/toil/blob/6558c7f97fb37c6ef6f469c7ae614109050322f4/src/toil/options/cwl.py#L152
