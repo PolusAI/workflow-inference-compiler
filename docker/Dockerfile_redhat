@@ -6,12 +6,12 @@ FROM redhat/ubi9-minimal
 # Install conda / mamba
 RUN microdnf update -y && microdnf install -y wget
 
-RUN CONDA="Mambaforge-Linux-x86_64.sh" && \
+RUN CONDA="Miniforge-Linux-x86_64.sh" && \
     wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/$CONDA && \
     chmod +x $CONDA && \
-    ./$CONDA -b -p /mambaforge && \
+    ./$CONDA -b -p /miniforge && \
     rm -f $CONDA
-ENV PATH /mambaforge/bin:$PATH
+ENV PATH /miniforge/bin:$PATH
 
 # Install wic
 RUN microdnf install -y git

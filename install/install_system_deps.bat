@@ -1,6 +1,6 @@
 :: NOTE: mamba is a drop-in replacement for conda, just much faster.
 :: (i.e. You can replace mamba with conda below.)
-:: See https://github.com/conda-forge/miniforge#mambaforge-pypy3
+:: See https://github.com/conda-forge/miniforge#Miniforge-pypy3
 set CONDA=conda
 where /q mamba
 if not ERRORLEVEL 1 (set CONDA=mamba)

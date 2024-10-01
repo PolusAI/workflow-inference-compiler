@@ -80,15 +80,15 @@ jobs:
     #   if: runner.os != 'Windows'
     #   run: cd workflow-inference-compiler/install/ && echo "  - pypy" >> system_deps.yml
 
-    - name: Setup mamba (linux, macos)
+    - name: Setup miniforge (linux, macos)
       if: always()
       uses: conda-incubator/setup-miniconda@v3.0.1
       with:
-        miniforge-variant: Mambaforge  # NOT Mambaforge-pypy3
-        # Toil is (currently) incompatible with pypy. Mambaforge-pypy3
+        miniforge-variant: Miniforge  # NOT Miniforge-pypy3
+        # Toil is (currently) incompatible with pypy. Miniforge-pypy3
         # installs pypy in the base environment (only). Although we are using
         # another environment, better to avoid the problem altogether by
-        # not using Mambaforge-pypy3
+        # not using Miniforge-pypy3
         miniforge-version: latest
         environment-file: workflow-inference-compiler/install/system_deps.yml
         activate-environment: wic_github_actions
