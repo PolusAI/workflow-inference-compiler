@@ -67,11 +67,11 @@ jobs:
           ref: main
           path: image-workflows
 
-      - name: Setup mamba (linux, macos)
+      - name: Setup miniforge (linux, macos)
         if: runner.os != 'Windows'
         uses: conda-incubator/setup-miniconda@v2.2.0
         with:
-          miniforge-variant: Mambaforge-pypy3
+          miniforge-variant: Miniforge-pypy3
           miniforge-version: latest
           environment-file: workflow-inference-compiler/install/system_deps.yml
           activate-environment: wic
