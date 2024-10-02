@@ -111,22 +111,22 @@ jobs:
       if: runner.os != 'Windows'
       run: cd workflow-inference-compiler/install/ && echo "  - pypy" >> system_deps.yml
 
-    # - name: Remove old mamba environment
-    #   if: always()
-    #   run: rm -rf "/home/$(whoami)/miniconda3/envs/wic_github_actions/"
-    #   # For self-hosted runners, make sure we install into a new mamba environment
-    #   # NOTE: Every time the github self-hosted runner executes, it sets "set -e" in ~/.bash_profile
-    #   # So if we rm -rf the old mamba environment without also removing the mamba init code in ~/.bash_profile
-    #   # (or removing the file altogether), then unless we immediately re-create the environment,
-    #   # (i.e. if we try to run any other commands between removing and re-creating the environment)
-    #   # we will get "EnvironmentNameNotFound: Could not find conda environment: wic_github_actions"
-    #   # and (again, due to "set -e") the workflow step will fail.
+    - name: Remove old mamba environment
+      if: always()
+      run: rm -rf "/home/$(whoami)/miniconda3/envs/wic_github_actions/"
+      # For self-hosted runners, make sure we install into a new mamba environment
+      # NOTE: Every time the github self-hosted runner executes, it sets "set -e" in ~/.bash_profile
+      # So if we rm -rf the old mamba environment without also removing the mamba init code in ~/.bash_profile
+      # (or removing the file altogether), then unless we immediately re-create the environment,
+      # (i.e. if we try to run any other commands between removing and re-creating the environment)
+      # we will get "EnvironmentNameNotFound: Could not find conda environment: wic_github_actions"
+      # and (again, due to "set -e") the workflow step will fail.
 
-    - name: Setup miniforge (linux, macos)
+    - name: Setup mamba (linux, macos)
       if: always()
       uses: conda-incubator/setup-miniconda@v3.0.1
       with:
-        miniforge-variant: Miniforge-pypy3
+        miniforge-variant: Mambaforge-pypy3
         miniforge-version: latest
         environment-file: workflow-inference-compiler/install/system_deps.yml
         activate-environment: wic_github_actions
