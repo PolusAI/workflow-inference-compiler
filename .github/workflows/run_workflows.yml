@@ -122,7 +122,7 @@ jobs:
       # we will get "EnvironmentNameNotFound: Could not find conda environment: wic_github_actions"
       # and (again, due to "set -e") the workflow step will fail.
 
-    - name: Setup mamba (linux, macos)
+    - name: Setup miniforge (linux, macos)
       if: always()
       uses: conda-incubator/setup-miniconda@v3.0.1
       with:
