@@ -122,11 +122,11 @@ jobs:
       # we will get "EnvironmentNameNotFound: Could not find conda environment: wic_github_actions"
       # and (again, due to "set -e") the workflow step will fail.
 
-    - name: Setup mamba (linux, macos)
+    - name: Setup miniforge (linux, macos)
       if: always()
       uses: conda-incubator/setup-miniconda@v3.0.1
       with:
-        miniforge-variant: Mambaforge-pypy3
+        miniforge-variant: Miniforge-pypy3
         miniforge-version: latest
         environment-file: workflow-inference-compiler/install/system_deps.yml
         activate-environment: wic_github_actions
@@ -180,6 +180,11 @@ jobs:
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
       run: cd workflow-inference-compiler/ && pytest tests/test_rest_core.py -k test_rest_core --cwl_runner cwltool
+
+    - name: PyTest Run ICT to CLT conversion Tests
+      if: always()
+      # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      run: cd workflow-inference-compiler/ && pytest tests/test_ict_to_clt_conversion.py -k test_ict_to_clt
 
     # NOTE: The steps below are for repository_dispatch only. For all other steps, please insert above
     # this comment.

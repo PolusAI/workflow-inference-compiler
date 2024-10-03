@@ -28,6 +28,9 @@ parser.add_argument('--version', action='version', version=__version__,
 parser.add_argument('--homedir', type=str, required=False, default=str(Path().home()),
                     help='''The users home directory.
                     This is necessary because CWL clears environment variables (e.g. HOME)''')
+parser.add_argument('--singularity_pull_dir', type=str, required=False, default=str(Path().cwd()),
+                    help='''The user specified pull directory for singularity image pull.
+                    The default is the current working directory i.e. `pwd`''')
 parser.add_argument('--insert_steps_automatically', default=False, action="store_true",
                     help='''Attempt to fix inference failures by speculatively
                     inserting workflow steps from a curated whitelist.''')
@@ -84,8 +87,7 @@ group_run.add_argument('--generate_run_script', default=False, action="store_tru
 group_run.add_argument('--run_local', default=False, action="store_true",
                        help='After generating the cwl file(s), run it on your local machine.')
 group_run.add_argument('--generate_cwl_workflow', required=False, default=False, action="store_true",
-                    help='Compile the workflow without pulling the docker image')
-
+                       help='Compile the workflow without pulling the docker image')
 parser.add_argument('--cwl_inline_subworkflows', default=False, action="store_true",
                     help='Before generating the cwl file, inline all subworkflows.')
 parser.add_argument('--inference_disable', default=False, action="store_true",

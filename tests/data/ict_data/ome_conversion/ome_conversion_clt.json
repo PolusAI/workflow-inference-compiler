@@ -1,0 +1,55 @@
+{
+    "baseCommand": "python3 -m polus.images.formats.ome_converter",
+    "class": "CommandLineTool",
+    "cwlVersion": "v1.2",
+    "doc": "None",
+    "inputs": {
+        "fileExtension": {
+            "inputBinding": {
+                "prefix": "--fileExtension"
+            },
+            "type": "string"
+        },
+        "filePattern": {
+            "inputBinding": {
+                "prefix": "--filePattern"
+            },
+            "type": "string"
+        },
+        "inpDir": {
+            "inputBinding": {
+                "prefix": "--inpDir"
+            },
+            "type": "Directory"
+        },
+        "outDir": {
+            "inputBinding": {
+                "prefix": "--outDir"
+            },
+            "type": "Directory"
+        }
+    },
+    "label": "OME Converter",
+    "outputs": {
+        "outDir": {
+            "outputBinding": {
+                "glob": "$(inputs.outDir.basename)"
+            },
+            "type": "File"
+        }
+    },
+    "requirements": {
+        "DockerRequirement": {
+            "dockerPull": "polusai/ome-converter-tool:0.3.2-dev0"
+        },
+        "InitialWorkDirRequirement": {
+            "listing": [
+                {
+                    "entry": "$(inputs.outDir)",
+                    "writable": true
+                }
+            ]
+        },
+        "InlineJavascriptRequirement": {}
+    }
+}
