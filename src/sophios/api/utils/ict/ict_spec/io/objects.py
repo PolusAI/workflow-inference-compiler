@@ -144,5 +144,4 @@ class IO(BaseModel):
                     cwl_dict_["format"] = self.convert_uri_format(self.io_format["uri"])
                 return cwl_dict_
 
-            raise ValueError(f"Output {self.name} not found in inputs")
         raise NotImplementedError(f"Output not supported {self.name}")
