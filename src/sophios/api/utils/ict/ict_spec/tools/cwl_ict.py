@@ -32,7 +32,7 @@ def clt_dict(ict_: "ICT", network_access: bool) -> dict:
         },
         "outputs": {
             io.name: io._output_to_cwl(
-                [io.name for io in ict_.inputs]
+                [io.name for io in ict_.outputs]
             )  # pylint: disable=W0212
             for io in ict_.outputs
         },
