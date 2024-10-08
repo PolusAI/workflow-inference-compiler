@@ -191,6 +191,11 @@ jobs:
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
       run: cd workflow-inference-compiler/ && pytest tests/test_ict_to_clt_conversion.py -k test_ict_to_clt
 
+    - name: PyTest Run update wfb payload Tests
+      if: always()
+      # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      run: cd workflow-inference-compiler/ && pytest tests/test_fix_payload.py -k test_fix
+
     # NOTE: The steps below are for repository_dispatch only. For all other steps, please insert above
     # this comment.
 
