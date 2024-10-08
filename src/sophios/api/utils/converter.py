@@ -193,3 +193,56 @@ def ict_to_clt(ict: Union[ICT, Path, str, dict], network_access: bool = False) -
     ict_local = ict if isinstance(ict, ICT) else cast_to_ict(ict)
 
     return ict_local.to_clt(network_access=network_access)
+
+
+def update_payload_missing_inputs_outputs(wfb_data: dict) -> dict:
+    """Update payload with missing inputs and outputs using links"""
+
+    wfb_data_copy = copy.deepcopy(wfb_data)
+
+    links = wfb_data_copy["state"]["links"]
+    nodes = wfb_data_copy["state"]["nodes"]
+    plugins = wfb_data_copy["plugins"]
+
+    # hashmap of node id to nodes for fast node lookup
+    nodes_dict = {node['id']: node for node in nodes}
+
+    # hashmap of plugins id to nodes for fast plugin lookup
+    plugins_dict = {plugin['pid']: plugin for plugin in plugins}
+
+    # find links corresponding to the node
+    for link in links:
+
+        # link ids
+        target_id: int = link["targetId"]
+        source_id: int = link["sourceId"]
+
+        target_node = nodes_dict[target_id]
+        source_node = nodes_dict[source_id]
+
+        # plugins corresponding to the nodes
+        target_plugin = plugins_dict[target_node["pluginId"]]
+        source_plugin = plugins_dict[source_node["pluginId"]]
+
+        # filter inputs by to only be inlets (directories)
+        input_directories = [binding for binding in target_plugin["inputs"] if is_inlet(binding)]
+        output_directories = [binding for binding in source_plugin["outputs"] if is_inlet(binding)]
+
+        missing_input_key = input_directories[link["inletIndex"]]["name"]
+        missing_output_key = output_directories[link["outletIndex"]]["name"]
+
+        # add the missing input value to the node if needed
+        target_node["settings"]["inputs"][missing_input_key] = source_node["settings"]["outputs"][missing_output_key]
+
+    return wfb_data_copy
+
+
+def is_inlet(binding: dict) -> bool:
+    """Check if a wfb input is an inlet (directory)"""
+
+    return (
+        binding['type'] in ['directory', 'file', 'path', 'collection', 'csvCollection'] or
+        binding['name'].lower() == 'inpdir' or
+        binding['name'].lower().endswith('path') or
+        binding['name'].lower().endswith('dir')
+    )
