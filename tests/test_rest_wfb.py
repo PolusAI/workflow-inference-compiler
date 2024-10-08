@@ -24,10 +24,7 @@ def test_rest_multinode_wfb() -> None:
     scope['type'] = 'http'
 
     async def receive() -> Json:
-        inp_req: Json = {}
-        inp_req['payload'] = copy.deepcopy(inp)
-        inp_req['run'] = 'no'
-        inp_byte = json.dumps(inp_req).encode('utf-8')
+        inp_byte = json.dumps(inp).encode('utf-8')
         return {"type": "http.request", "body": inp_byte}
 
     # create a request object and pack it with our json payload

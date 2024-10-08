@@ -93,11 +93,9 @@ async def compile_wf(request: Request) -> Json:
     print('---------- Compile Workflow! ---------')
     # ========= PROCESS REQUEST OBJECT ==========
     req: Json = await request.json()
-    wfb_payload: Json = req['payload']
-    run_opt: str = req['run'] if req.get('run') else 'no'
     # clean up and convert the incoming object
     # schema preserving
-    wfb_payload = converter.raw_wfb_to_lean_wfb(wfb_payload)
+    wfb_payload = converter.raw_wfb_to_lean_wfb(req)
     # schema non-preserving
     workflow_temp = converter.wfb_to_wic(wfb_payload)
     wkflw_name = "generic_workflow"
@@ -128,16 +126,9 @@ async def compile_wf(request: Request) -> Json:
     yaml_tree: YamlTree = YamlTree(StepId(wkflw_name, plugin_ns), workflow_can)
 
     # ========= COMPILE WORKFLOW ================
+    args.ignore_dir_path = True
     compiler_info: CompilerInfo = compiler.compile_workflow(yaml_tree, args, [], [graph], {}, {}, {}, {},
                                                             tools_cwl, True, relative_run_path=True, testing=False)
-
-    # =========== OPTIONAL RUN ==============
-    retval = -1
-    if run_opt == 'run':
-        print('---------- Run Workflow locally! ---------')
-        retval = run_workflow(compiler_info, args)
-    else:
-        retval = 0
 
     # ======== OUTPUT PROCESSING ================
     # ========= PROCESS COMPILED OBJECT =========
@@ -157,7 +148,7 @@ async def compile_wf(request: Request) -> Json:
         "cwlJobInputs": yaml_inputs_no_dd,
         **cwl_tree_run
     }
-    compute_workflow["retval"] = str(retval)
+    compute_workflow["retval"] = str(0)
     return compute_workflow
 
 
