@@ -144,7 +144,7 @@ def test_rest_core_single_node() -> None:
 
 
 @pytest.mark.fast
-def test_rest_core_multi_node() -> None:
+def test_rest_core_multi_node_file() -> None:
     """A simple multi node sophios/restapi test"""
     inp_file = "multi_node.json"
     inp: Json = {}
