@@ -24,7 +24,7 @@ class ICT(Metadata):
 
     inputs: list[IO]
     outputs: list[IO]
-    ui: list[UIItem]
+    ui: Optional[list[UIItem]]
     hardware: Optional[HardwareRequirements] = None
 
     @model_validator(mode="after")
