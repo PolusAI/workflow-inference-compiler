@@ -13,6 +13,7 @@ def cast_to_ict(ict: Union[Path, str, dict]) -> ICT:
         ict = Path(ict)
 
     if isinstance(ict, Path):
+
         if str(ict).endswith(".yaml") or str(ict).endswith(".yml"):
             with open(ict, "r", encoding="utf-8") as f_o:
                 data = safe_load(f_o)
@@ -22,6 +23,10 @@ def cast_to_ict(ict: Union[Path, str, dict]) -> ICT:
         else:
             raise ValueError(f"File extension not supported: {ict}")
 
+        data.pop("ui", None)
+
         return ICT(**data)
+
+    ict.pop("ui", None)
 
     return ICT(**ict)
