@@ -489,6 +489,7 @@ class Workflow(BaseModel):
 
     steps: list  # list[Process]  # and cannot use Process defined after Workflow within a Workflow
     process_name: str
+    user_args: list[str]
     inputs: list[ProcessInput] = []
     outputs: list[ProcessOutput] = []
     _input_names: list[str] = PrivateAttr(default_factory=list)
@@ -499,10 +500,11 @@ class Workflow(BaseModel):
     # field(default=None, init=False, repr=False)
     # TypeError: 'ModelPrivateAttr' object is not iterable
 
-    def __init__(self, steps: list, workflow_name: str):
+    def __init__(self, steps: list, workflow_name: str, user_args: list[str] = []):
         data = {
             "process_name": workflow_name,
             "steps": steps,
+            "user_args": user_args
         }
         super().__init__(**data)
 
@@ -725,7 +727,7 @@ class Workflow(BaseModel):
         """
         global global_config
         self._validate()
-        args = get_args(self.process_name)  # Use mock CLI args
+        args = get_args(self.process_name, self.user_args)  # Use mock CLI args
 
         graph = get_graph_reps(self.process_name)
         yaml_tree = YamlTree(StepId(self.process_name, 'global'), self.yaml)
@@ -751,7 +753,7 @@ class Workflow(BaseModel):
         plugins.logging_filters()
         compiler_info = self.compile(write_to_disk=True)
 
-        args = get_args(self.process_name)  # Use mock CLI args
+        args = get_args(self.process_name, self.user_args)  # Use mock CLI args
         rose_tree: RoseTree = compiler_info.rose
 
         # cwl-docker-extract recursively `docker pull`s all images in all subworkflows.
