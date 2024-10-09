@@ -195,7 +195,7 @@ def ict_to_clt(ict: Union[ICT, Path, str, dict], network_access: bool = False) -
     return ict_local.to_clt(network_access=network_access)
 
 
-def update_payload_missing_inputs_outputs(wfb_data: dict) -> dict:
+def update_payload_missing_inputs_outputs(wfb_data: Json) -> Json:
     """Update payload with missing inputs and outputs using links"""
 
     wfb_data_copy = copy.deepcopy(wfb_data)
