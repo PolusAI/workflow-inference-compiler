@@ -217,6 +217,16 @@ def update_payload_missing_inputs_outputs(wfb_data: Json) -> Json:
         target_plugin = plugins_dict[target_node["pluginId"]]
         source_plugin = plugins_dict[source_node["pluginId"]]
 
+        def is_inlet(binding: Json) -> bool:
+            """Check if a wfb input is an inlet (directory)"""
+
+            return (
+                binding['type'] in ['directory', 'file', 'path', 'collection', 'csvCollection'] or
+                binding['name'].lower() == 'inpdir' or
+                binding['name'].lower().endswith('path') or
+                binding['name'].lower().endswith('dir')
+            )
+
         # filter inputs by to only be inlets (directories)
         input_directories = [binding for binding in target_plugin["inputs"] if is_inlet(binding)]
         output_directories = [binding for binding in source_plugin["outputs"] if is_inlet(binding)]
@@ -228,14 +238,3 @@ def update_payload_missing_inputs_outputs(wfb_data: Json) -> Json:
         target_node["settings"]["inputs"][missing_input_key] = source_node["settings"]["outputs"][missing_output_key]
 
     return wfb_data_copy
-
-
-def is_inlet(binding: dict) -> bool:
-    """Check if a wfb input is an inlet (directory)"""
-
-    return (
-        binding['type'] in ['directory', 'file', 'path', 'collection', 'csvCollection'] or
-        binding['name'].lower() == 'inpdir' or
-        binding['name'].lower().endswith('path') or
-        binding['name'].lower().endswith('dir')
-    )
