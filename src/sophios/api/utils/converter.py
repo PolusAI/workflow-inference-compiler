@@ -71,8 +71,6 @@ def extract_state(inp: Json) -> Json:
 
 def raw_wfb_to_lean_wfb(inp: Json) -> Json:
     """Drop all the unnecessary info from incoming wfb object"""
-    if validate_schema_and_object(SCHEMA, inp):
-        print('incoming object is valid against input object schema')
     inp_restrict = extract_state(inp)
     keys = list(inp_restrict.keys())
     # To avoid deserialization
@@ -191,6 +189,10 @@ def ict_to_clt(ict: Union[ICT, Path, str, dict], network_access: bool = False) -
 def update_payload_missing_inputs_outputs(wfb_data: Json) -> Json:
     """Update payload with missing inputs and outputs using links"""
 
+    # ensure the incoming wfb data is valid
+    if validate_schema_and_object(SCHEMA, wfb_data):
+        print('incoming object is valid against input object schema')
+
     wfb_data_copy = copy.deepcopy(wfb_data)
 
     links = wfb_data_copy["state"]["links"]
@@ -236,5 +238,8 @@ def update_payload_missing_inputs_outputs(wfb_data: Json) -> Json:
 
         # add the missing input value to the node if needed
         target_node["settings"]["inputs"][missing_input_key] = source_node["settings"]["outputs"][missing_output_key]
+
+    if validate_schema_and_object(SCHEMA, wfb_data_copy):
+        print('Updated object is valid against input object schema')
 
     return wfb_data_copy

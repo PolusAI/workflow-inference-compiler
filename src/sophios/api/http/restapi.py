@@ -95,8 +95,7 @@ async def compile_wf(request: Request) -> Json:
     req: Json = await request.json()
     # clean up and convert the incoming object
     # schema preserving
-    if req['plugins']:
-        req = converter.update_payload_missing_inputs_outputs(req)
+    req = converter.update_payload_missing_inputs_outputs(req)
     wfb_payload = converter.raw_wfb_to_lean_wfb(req)
     # schema non-preserving
     workflow_temp = converter.wfb_to_wic(wfb_payload)
