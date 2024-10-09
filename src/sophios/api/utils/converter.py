@@ -55,14 +55,7 @@ def extract_state(inp: Json) -> Json:
         inp_inter['state']['links'] = step_edges
         # massage the plugins
         plugins = inp_inter['plugins']
-        # drop incorrect/superfluous UI fields from plugins
-        # 'required' and 'format'
-        for ict_plugin in plugins:
-            for ui_elem in ict_plugin['ui']:
-                _, _ = ui_elem.pop('required', None), ui_elem.pop('format', None)
-            for out in ict_plugin['outputs']:
-                if out['name'] == 'outDir':
-                    ict_plugin['inputs'].append(out)
+
         # Here goes the ICT to CLT extraction logic
         for node in inp_inter['state']['nodes']:
             node_pid = node["pluginId"]
