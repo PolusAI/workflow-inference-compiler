@@ -193,6 +193,10 @@ def update_payload_missing_inputs_outputs(wfb_data: Json) -> Json:
     if validate_schema_and_object(SCHEMA, wfb_data):
         print('incoming object is valid against input object schema')
 
+    # return if no plugins are found in data
+    if not wfb_data['plugins']:
+        return wfb_data
+
     wfb_data_copy = copy.deepcopy(wfb_data)
 
     links = wfb_data_copy["state"]["links"]
