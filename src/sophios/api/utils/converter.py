@@ -43,7 +43,35 @@ def extract_state(inp: Json) -> Json:
         inp_restrict = copy.deepcopy(inp['state'])
     else:
         inp_inter = copy.deepcopy(inp)
+        # drop all 'internal' nodes and all edges with 'internal' nodes
+        step_nodes = [snode for snode in inp['state']['nodes'] if not snode['internal']]
+        step_node_ids = [step_node['id'] for step_node in step_nodes]
+        step_edges = [edg for edg in inp_inter['state']['links'] if edg['sourceId']
+                      in step_node_ids and edg['targetId'] in step_node_ids]
+        # overwrite 'links' and 'nodes'
+        inp_inter['state'].pop('nodes', None)
+        inp_inter['state'].pop('links', None)
+        inp_inter['state']['nodes'] = step_nodes
+        inp_inter['state']['links'] = step_edges
+        # massage the plugins
+        plugins = inp_inter['plugins']
+        # drop incorrect/superfluous UI fields from plugins
+        # 'required' and 'format'
+        for ict_plugin in plugins:
+            for ui_elem in ict_plugin['ui']:
+                _, _ = ui_elem.pop('required', None), ui_elem.pop('format', None)
+            for out in ict_plugin['outputs']:
+                if out['name'] == 'outDir':
+                    ict_plugin['inputs'].append(out)
         # Here goes the ICT to CLT extraction logic
+        for node in inp_inter['state']['nodes']:
+            node_pid = node["pluginId"]
+            plugin = next((ict for ict in plugins if ict['pid'] == node_pid), None)
+            clt: Json = {}
+            if plugin:
+                clt = ict_to_clt(plugin)
+                # just have the clt payload in run
+                node['run'] = clt
         inp_restrict = inp_inter['state']
     return inp_restrict
 
@@ -92,7 +120,7 @@ def wfb_to_wic(inp: Json) -> Cwl:
                                    ['outputs'].items())  # outputs always have to be list
             # remove these (now) superfluous keys
             node.pop('settings', None)
-            node.pop('pluginId', None)
+            node.pop('name', None)
             node.pop('internal', None)
 
     # setting the inputs of the non-sink nodes i.e. whose input doesn't depend on any other node's output
@@ -106,7 +134,7 @@ def wfb_to_wic(inp: Json) -> Cwl:
     for node in non_sink_nodes:
         if node.get('in'):
             for nkey in node['in']:
-                node['in'][nkey] = yaml.load('!ii ' + node['in'][nkey], Loader=wic_loader())
+                node['in'][nkey] = yaml.load('!ii ' + str(node['in'][nkey]), Loader=wic_loader())
 
     # After outs are set
     for edg in inp_restrict['links']:
@@ -124,16 +152,20 @@ def wfb_to_wic(inp: Json) -> Cwl:
             # we match the source output tag type to target input tag type
             # and connect them through '!* ' for input, all outputs are '!& ' before this
             for sk in src_out_keys:
-                tgt_node['in'][sk] = yaml.load('!* ' + tgt_node['in'][sk], Loader=wic_loader())
+                # It maybe possible that (explicit) outputs of src nodes might not have corresponding
+                # (explicit) inputs in target node
+                if tgt_node['in'].get(sk):
+                    tgt_node['in'][sk] = yaml.load('!* ' + tgt_node['in'][sk], Loader=wic_loader())
             # the inputs which aren't dependent on previous/other steps
             # they are by default inline input
             diff_keys = set(tgt_in_keys) - set(src_out_keys)
             for dfk in diff_keys:
-                tgt_node['in'][dfk] = yaml.load('!ii ' + tgt_node['in'][dfk], Loader=wic_loader())
+                tgt_node['in'][dfk] = yaml.load('!ii ' + str(tgt_node['in'][dfk]), Loader=wic_loader())
 
     for node in inp_restrict['nodes']:
-        node['id'] = node['name']  # just reuse name as node's id, wic id is same as wfb name
-        node.pop('name', None)
+        # just reuse name as node's pluginId, wic id is same as wfb name
+        node['id'] = node['pluginId'].split('@')[0].replace('/', '_')
+        node.pop('pluginId', None)
 
     workflow_temp: Cwl = {}
     if inp_restrict["links"] != []:
@@ -142,7 +174,7 @@ def wfb_to_wic(inp: Json) -> Cwl:
             workflow_temp["steps"].append(node)  # node["cwlScript"]  # Assume dict form
     else:  # A single node workflow
         node = inp_restrict["nodes"][0]
-        workflow_temp = node["cwlScript"]
+        workflow_temp = node["cwlScript"] if node.get("cwlScript") else node['run']
     return workflow_temp
 
 

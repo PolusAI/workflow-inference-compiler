@@ -181,6 +181,11 @@ jobs:
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
       run: cd workflow-inference-compiler/ && pytest tests/test_rest_core.py -k test_rest_core --cwl_runner cwltool
 
+    - name: PyTest Run REST WFB Tests
+      if: always()
+      # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
+      run: cd workflow-inference-compiler/ && pytest tests/test_rest_wfb.py -k test_rest_wfb --cwl_runner cwltool
+
     - name: PyTest Run ICT to CLT conversion Tests
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
