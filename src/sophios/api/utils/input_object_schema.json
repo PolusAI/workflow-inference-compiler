@@ -1,0 +1,378 @@
+{
+    "$ref": "#/definitions/WicPayload",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+        "Dictionary<string>": {
+            "additionalProperties": {
+                "type": "string"
+            },
+            "type": "object"
+        },
+        "Dictionary<unknown>": {
+            "additionalProperties": {},
+            "type": "object"
+        },
+        "Link": {
+            "properties": {
+                "id": {
+                    "type": "number"
+                },
+                "inletIndex": {
+                    "type": "number"
+                },
+                "outletIndex": {
+                    "type": "number"
+                },
+                "sourceId": {
+                    "type": "number"
+                },
+                "targetId": {
+                    "type": "number"
+                },
+                "x1": {
+                    "type": "number"
+                },
+                "x2": {
+                    "type": "number"
+                },
+                "y1": {
+                    "type": "number"
+                },
+                "y2": {
+                    "type": "number"
+                }
+            },
+            "required": [
+                "id",
+                "sourceId",
+                "targetId"
+            ],
+            "type": "object"
+        },
+        "NodeInput": {
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "format": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "options": {
+                    "$ref": "#/definitions/NodeInputOptions"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "type"
+            ],
+            "type": "object"
+        },
+        "NodeInputOptions": {
+            "properties": {
+                "values": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "required": [
+                "values"
+            ],
+            "type": "object"
+        },
+        "NodeInputUI": {
+            "properties": {
+                "condition": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "fields": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "format": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "placeholder": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "key",
+                "title",
+                "description",
+                "type"
+            ],
+            "type": "object"
+        },
+        "NodeOutput": {
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "format": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "type"
+            ],
+            "type": "object"
+        },
+        "NodeSettings": {
+            "properties": {
+                "inputs": {
+                    "$ref": "#/definitions/Dictionary%3Cunknown%3E"
+                },
+                "outputs": {
+                    "$ref": "#/definitions/Dictionary%3Cstring%3E"
+                }
+            },
+            "type": "object"
+        },
+        "NodeX": {
+            "properties": {
+                "expanded": {
+                    "type": "boolean"
+                },
+                "height": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "number"
+                },
+                "internal": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "pluginId": {
+                    "type": "string"
+                },
+                "settings": {
+                    "$ref": "#/definitions/NodeSettings"
+                },
+                "width": {
+                    "type": "number"
+                },
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                },
+                "z": {
+                    "type": "number"
+                }
+            },
+            "required": [
+                "id",
+                "name",
+                "pluginId",
+                "settings",
+                "internal"
+            ],
+            "type": "object"
+        },
+        "PluginX": {
+            "properties": {
+                "author": {
+                    "type": ["string", "array"]
+                },
+                "baseCommand": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "contact": {
+                    "type": "string"
+                },
+                "container": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "createdBy": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "documentation": {
+                    "type": "string"
+                },
+                "entrypoint": {
+                    "type": "string"
+                },
+                "hardware": {
+                    "type": "object"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "inputs": {
+                    "items": {
+                        "$ref": "#/definitions/NodeInput"
+                    },
+                    "type": "array"
+                },
+                "institution": {
+                    "type": "string"
+                },
+                "internal": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "outputs": {
+                    "items": {
+                        "$ref": "#/definitions/NodeOutput"
+                    },
+                    "type": "array"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "pid": {
+                    "type": "string"
+                },
+                "repository": {
+                    "type": "string"
+                },
+                "specVersion": {
+                    "type": "string"
+                },
+                "tags": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "ui": {
+                    "items": {
+                        "$ref": "#/definitions/NodeInputUI"
+                    },
+                    "type": "array"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "updatedBy": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "id",
+                "pid",
+                "name",
+                "version",
+                "title",
+                "description",
+                "inputs",
+                "outputs",
+                "ui"
+            ],
+            "type": "object"
+        },
+        "State": {
+            "properties": {
+                "links": {
+                    "items": {
+                        "$ref": "#/definitions/Link"
+                    },
+                    "type": "array"
+                },
+                "nodes": {
+                    "items": {
+                        "$ref": "#/definitions/NodeX"
+                    },
+                    "type": "array"
+                },
+                "selection": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                }
+            },
+            "required": [
+                "links",
+                "nodes"
+            ],
+            "type": "object"
+        },
+        "WicPayload": {
+            "properties": {
+                "plugins": {
+                    "items": {
+                        "$ref": "#/definitions/PluginX"
+                    },
+                    "type": "array"
+                },
+                "state": {
+                    "$ref": "#/definitions/State"
+                }
+            },
+            "required": [
+                "state",
+                "plugins"
+            ],
+            "type": "object"
+        }
+    }
+}

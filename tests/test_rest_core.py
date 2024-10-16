@@ -1,156 +1,129 @@
 import json
-# import subprocess as sub
+import copy
 from pathlib import Path
-# import signal
-# import sys
-# from typing import List
-# import argparse
 import asyncio
-from jsonschema import Draft202012Validator
+import subprocess as sub
+import sys
+import traceback
+import yaml
+
 
 from fastapi import Request
 
 import pytest
-from sophios.wic_types import Json
+from sophios.wic_types import Json, List
 
 
 from sophios.api.http import restapi
 
-SCHEMA = {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "definitions": {
-        "Link": {
-            "properties": {
-                "id": {
-                    "type": "number"
-                },
-                "inletIndex": {
-                    "type": "number"
-                },
-                "outletIndex": {
-                    "type": "number"
-                },
-                "sourceId": {
-                    "type": "number"
-                },
-                "targetId": {
-                    "type": "number"
-                },
-                "x1": {
-                    "type": "number"
-                },
-                "x2": {
-                    "type": "number"
-                },
-                "y1": {
-                    "type": "number"
-                },
-                "y2": {
-                    "type": "number"
-                }
-            },
-            "type": "object",
-            "required": ["id", "inletIndex", "outletIndex", "sourceId", "targetId"]
-        },
-        "NodeSettings": {
-            "properties": {
-                "inputs": {
-                    "additionalProperties": {
-                        "$ref": "#/definitions/T"
-                    },
-                    "type": "object"
-                },
-                "outputs": {
-                    "additionalProperties": {
-                        "$ref": "#/definitions/T"
-                    },
-                    "type": "object"
-                }
-            },
-            "type": "object"
-        },
-        "NodeX": {
-            "properties": {
-                "expanded": {
-                    "type": "boolean"
-                },
-                "height": {
-                    "type": "number"
-                },
-                "id": {
-                    "type": "number"
-                },
-                "internal": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "pluginId": {
-                    "type": "string"
-                },
-                "settings": {
-                    "$ref": "#/definitions/NodeSettings"
-                },
-                "width": {
-                    "type": "number"
-                },
-                "x": {
-                    "type": "number"
-                },
-                "y": {
-                    "type": "number"
-                },
-                "z": {
-                    "type": "number"
-                },
-            },
-            "type": "object",
-            "required": ["id", "name", "pluginId", "settings", "internal"]
-        },
-        "T": {
-            "type": "object"
-        }
-    },
-    "properties": {
-        "links": {
-            "items": {
-                "$ref": "#/definitions/Link"
-            },
-            "type": "array"
-        },
-        "nodes": {
-            "items": {
-                "$ref": "#/definitions/NodeX"
-            },
-            "type": "array"
-        },
-        "selection": {
-            "items": {
-                "type": "number"
-            },
-            "type": "array"
-        }
-    },
-    "type": "object",
-    "required": ["links", "nodes"]
-}
+try:
+    import cwltool.main
+    import toil.cwl.cwltoil  # transitively imports cwltool
+except ImportError as exc:
+    print('Could not import cwltool.main and/or toil.cwl.cwltoil')
+    # (pwd is imported transitively in cwltool.provenance)
+    print(exc)
+    if exc.msg == "No module named 'pwd'":
+        print('Windows does not have a pwd module')
+        print('If you want to run on windows, you need to install')
+        print('Windows Subsystem for Linux')
+        print('See https://pypi.org/project/cwltool/#ms-windows-users')
+    else:
+        raise exc
+
+
+def run_cwl_local(workflow_name: str, cwl_runner: str, docker_cmd: str, use_subprocess: bool) -> int:
+    """A helper function to run the compiled cwl output"""
+    quiet = ['--quiet']
+    skip_schemas = ['--skip-schemas']
+    provenance = ['--provenance', f'provenance/{workflow_name}']
+    docker_cmd_: List[str] = []
+    if docker_cmd == 'docker':
+        docker_cmd_ = []
+    elif docker_cmd == 'singularity':
+        docker_cmd_ = ['--singularity']
+    else:
+        docker_cmd_ = ['--user-space-docker-cmd', docker_cmd]
+    write_summary = ['--write-summary', f'output_{workflow_name}.json']
+    path_check = ['--relax-path-checks']
+    # See https://github.com/common-workflow-language/cwltool/blob/5a645dfd4b00e0a704b928cc0bae135b0591cc1a/cwltool/command_line_tool.py#L94
+    # NOTE: Using --leave-outputs to disable --outdir
+    # See https://github.com/dnanexus/dx-cwl/issues/20
+    # --outdir has one or more bugs which will cause workflows to fail!!!
+    docker_pull = ['--disable-pull']  # Use cwl-docker-extract to pull images
+    script = 'cwltool_filterlog' if cwl_runner == 'cwltool' else cwl_runner
+    cmd = [script] + docker_pull + quiet + provenance + \
+        docker_cmd_ + write_summary + skip_schemas + path_check
+    if cwl_runner == 'cwltool':
+        cmd += ['--leave-outputs',
+                f'autogenerated/{workflow_name}.cwl', f'autogenerated/{workflow_name}_inputs.yml']
+    elif cwl_runner == 'toil-cwl-runner':
+        cmd += ['--outdir', 'outdir_toil',
+                '--jobStore', f'file:./jobStore_{workflow_name}',  # NOTE: This is the equivalent of --cachedir
+                '--clean', 'always',  # This effectively disables caching, but is reproducible
+                f'autogenerated/{workflow_name}.cwl', f'autogenerated/{workflow_name}_inputs.yml']
+    else:
+        pass
+    cmdline = ' '.join(cmd)
+
+    retval = 1  # overwrite on success
+    print('Running ' + cmdline)
+    if use_subprocess:
+        # To run in parallel (i.e. pytest ... --workers 8 ...), we need to
+        # use separate processes. Otherwise:
+        # "signal only works in main thread or with __pypy__.thread.enable_signals()"
+        proc = sub.run(cmd, check=False)
+        retval = proc.returncode
+    else:
+        print('via cwltool.main.main python API')
+        try:
+            if cwl_runner == 'cwltool':
+                retval = cwltool.main.main(cmd[1:])
+            elif cwl_runner == 'toil-cwl-runner':
+                retval = toil.cwl.cwltoil.main(cmd[1:])
+            else:
+                raise Exception("Invalid cwl_runner!")
+
+            print(f'Final output json metadata blob is in output_{workflow_name}.json')
+        except Exception as e:
+            print('Failed to execute', workflow_name)
+            print(f'See error_{workflow_name}.txt for detailed technical information.')
+            # Do not display a nasty stack trace to the user; hide it in a file.
+            with open(f'error_{workflow_name}.txt', mode='w', encoding='utf-8') as f:
+                # https://mypy.readthedocs.io/en/stable/common_issues.html#python-version-and-system-platform-checks
+                if sys.version_info >= (3, 10):
+                    traceback.print_exception(type(e), value=e, tb=None, file=f)
+            print(e)  # we are always running this on CI
+    return retval
+
+
+def write_out_to_disk(res: Json, workflow_name: str) -> None:
+    "write compiled output to before running through cwl_runner entrypoints"
+    res_cwl = copy.deepcopy(res)
+    res_cwl.pop('retval', None)
+    res_cwl.pop('cwlJobInputs', None)
+    res_cwl.pop('name', None)
+    # Add back the dollar for tags like 'namespaces' and 'schemas'
+    res_cwl['$namespaces'] = res_cwl.pop('namespaces', None)
+    res_cwl['$schemas'] = res_cwl.pop('schemas', None)
+    compiled_cwl = workflow_name + '.cwl'
+    inputs_yml = workflow_name + '_inputs.yml'
+    # write compiled .cwl file
+    with open(Path.cwd() / 'autogenerated' / compiled_cwl, 'w', encoding='utf-8') as f:
+        yaml.dump(res_cwl, f)
+    # write _input.yml file
+    with open(Path.cwd() / 'autogenerated' / inputs_yml, 'w', encoding='utf-8') as f:
+        yaml.dump(res['cwlJobInputs'], f)
 
 
 @pytest.mark.fast
 def test_rest_core_single_node() -> None:
-    """A simple single node 'hello world' test"""
-    # validate schema
-    Draft202012Validator.check_schema(SCHEMA)
-    df2012 = Draft202012Validator(SCHEMA)
-    inp_file = "single_node_helloworld.json"
+    """A simple single node sophios/restapi test"""
+    inp_file = "single_node.json"
     inp: Json = {}
-    yaml_path = "workflow.json"
-    inp_path = Path(__file__).with_name(inp_file)
+    inp_path = Path(__file__).parent / 'rest_wfb_objects' / inp_file
     with open(inp_path, 'r', encoding='utf-8') as f:
         inp = json.load(f)
-    # check if object is conformant with our schema
-    df2012.is_valid(inp)
     print('----------- from rest api ----------- \n\n')
     scope = {}
     scope['type'] = 'http'
@@ -163,4 +136,62 @@ def test_rest_core_single_node() -> None:
     req: Request = Request(scope)
     req._receive = receive
     res: Json = asyncio.run(restapi.compile_wf(req))  # call to rest api
-    assert int(res['retval']) == 0
+    workflow_name = inp_file.split('.', maxsplit=1)[0]
+    # write compiled_cwl and inputs_yml
+    write_out_to_disk(res, workflow_name)
+    retval = run_cwl_local(workflow_name, 'cwltool', 'docker', False)
+    assert retval == 0
+
+
+@pytest.mark.fast
+def test_rest_core_multi_node_file() -> None:
+    """A simple multi node sophios/restapi test"""
+    inp_file = "multi_node.json"
+    inp: Json = {}
+    inp_path = Path(__file__).parent / 'rest_wfb_objects' / inp_file
+    with open(inp_path, 'r', encoding='utf-8') as f:
+        inp = json.load(f)
+    print('----------- from rest api ----------- \n\n')
+    scope = {}
+    scope['type'] = 'http'
+
+    async def receive() -> Json:
+        inp_byte = json.dumps(inp).encode('utf-8')
+        return {"type": "http.request", "body": inp_byte}
+
+    # create a request object and pack it with our json payload
+    req: Request = Request(scope)
+    req._receive = receive
+    res: Json = asyncio.run(restapi.compile_wf(req))  # call to rest api
+    workflow_name = inp_file.split('.', maxsplit=1)[0]
+    # write compiled_cwl and inputs_yml
+    write_out_to_disk(res, workflow_name)
+    retval = run_cwl_local(workflow_name, 'cwltool', 'docker', False)
+    assert retval == 0
+
+
+@pytest.mark.fast
+def test_rest_core_multi_node_inline_cwl() -> None:
+    """A simple multi node (inline cwl) sophios/restapi test"""
+    inp_file = "multi_node_inline_cwl.json"
+    inp: Json = {}
+    inp_path = Path(__file__).parent / 'rest_wfb_objects' / inp_file
+    with open(inp_path, 'r', encoding='utf-8') as f:
+        inp = json.load(f)
+    print('----------- from rest api ----------- \n\n')
+    scope = {}
+    scope['type'] = 'http'
+
+    async def receive() -> Json:
+        inp_byte = json.dumps(inp).encode('utf-8')
+        return {"type": "http.request", "body": inp_byte}
+
+    # create a request object and pack it with our json payload
+    req: Request = Request(scope)
+    req._receive = receive
+    res: Json = asyncio.run(restapi.compile_wf(req))  # call to rest api
+    workflow_name = inp_file.split('.', maxsplit=1)[0]
+    # write compiled_cwl and inputs_yml
+    write_out_to_disk(res, workflow_name)
+    retval = run_cwl_local(workflow_name, 'cwltool', 'docker', False)
+    assert retval == 0

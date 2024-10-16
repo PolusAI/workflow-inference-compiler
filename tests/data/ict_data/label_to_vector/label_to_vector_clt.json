@@ -1,0 +1,49 @@
+{
+    "baseCommand": "[python3, main.py]",
+    "class": "CommandLineTool",
+    "cwlVersion": "v1.2",
+    "doc": "None",
+    "inputs": {
+        "filePattern": {
+            "inputBinding": {
+                "prefix": "--filePattern"
+            },
+            "type": "string?"
+        },
+        "inpDir": {
+            "inputBinding": {
+                "prefix": "--inpDir"
+            },
+            "type": "Directory"
+        },
+        "outDir": {
+            "inputBinding": {
+                "prefix": "--outDir"
+            },
+            "type": "Directory"
+        }
+    },
+    "label": "Label to Vector",
+    "outputs": {
+        "outDir": {
+            "outputBinding": {
+                "glob": "$(inputs.outDir.basename)"
+            },
+            "type": "File"
+        }
+    },
+    "requirements": {
+        "DockerRequirement": {
+            "dockerPull": "polusai/label-to-vector-tool:0.7.1-dev0"
+        },
+        "InitialWorkDirRequirement": {
+            "listing": [
+                {
+                    "entry": "$(inputs.outDir)",
+                    "writable": true
+                }
+            ]
+        },
+        "InlineJavascriptRequirement": {}
+    }
+}
