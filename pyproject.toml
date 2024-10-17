@@ -22,7 +22,7 @@ dependencies = [
     # This 'graphviz' is equivalent to `conda install python-graphviz` or
     # `sudo apt install python3-graphviz` ONLY.
     "graphviz",
-    "jsonschema<4.18", # temporarily downgrade due to severe performance regression
+    "jsonschema",
     "pyyaml",
     "requests",
     "mergedeep",
