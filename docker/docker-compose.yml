@@ -1,0 +1,9 @@
+version: '0.0.1'
+services:
+  fastapi-app:
+    image: vjaganat90/sophios-rest-api:0.0.1
+    ports:
+      - "3000:3000"
+    environment:
+      - PATH=/miniforge/bin:$PATH
+    command: ["uvicorn", "sophios.api.http.restapi:app", "--host", "0.0.0.0", "--port", "3000"]
