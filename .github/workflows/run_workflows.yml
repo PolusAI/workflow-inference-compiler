@@ -99,6 +99,7 @@ jobs:
     - name: Delete workflows in mm-workflows
       if: always()
       run: |
+        sed -i '/^\/\//d' mm-workflows/examples/config_ci.json
         for file in $(jq -r '.run_blacklist[]' mm-workflows/examples/config_ci.json); do
           echo "Deleting $file.wic"
     
