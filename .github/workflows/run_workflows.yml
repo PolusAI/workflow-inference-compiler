@@ -94,7 +94,7 @@ jobs:
         path: mm-workflows
 
     - name: Set up jq
-      run: sudo apt-get install jq
+      run: sudo apt-get install -y jq
 
     - name: Delete workflows in mm-workflows
       if: always()
