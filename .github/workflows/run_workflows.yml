@@ -93,6 +93,16 @@ jobs:
         ref: ${{ inputs.mm-workflows_ref }}
         path: mm-workflows
 
+    - name: Set up jq
+      run: sudo apt-get install jq
+
+    - name: Delete workflows in mm-workflows
+      if: always()
+      run: |
+        for file in $(jq -r '.run_blacklist[]' ./mm_workflows/examples/config_ci.json); do
+          echo "Deleting $file.wic"
+    
+        done
     - name: Checkout image-workflows
       if: always()
       uses: actions/checkout@v3
