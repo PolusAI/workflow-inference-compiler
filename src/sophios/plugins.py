@@ -279,13 +279,13 @@ def cwl_update_inline_runtag_rosetree(rose_tree: RoseTree, path: Path, relative_
     """
     n_d: NodeData = rose_tree.data
     if n_d.compiled_cwl['class'] == 'Workflow':
-        outputs_inline_cwl_runtag = cwl_update_inline_runtag(n_d.compiled_cwl, path, relative_run_path)
+        outputs_cwl_inline_runtag = cwl_update_inline_runtag(n_d.compiled_cwl, path, relative_run_path)
     else:
-        outputs_inline_cwl_runtag = n_d.compiled_cwl
+        outputs_cwl_inline_runtag = n_d.compiled_cwl
 
     sub_trees_path = [cwl_update_inline_runtag_rosetree(sub_rose_tree, path, relative_run_path) for
                       sub_rose_tree in rose_tree.sub_trees]
-    node_data_path = NodeData(n_d.namespaces, n_d.name, n_d.yml, outputs_inline_cwl_runtag, n_d.tool,
+    node_data_path = NodeData(n_d.namespaces, n_d.name, n_d.yml, outputs_cwl_inline_runtag, n_d.tool,
                               n_d.workflow_inputs_file, n_d.explicit_edge_defs, n_d.explicit_edge_calls,
                               n_d.graph, n_d.inputs_workflow, n_d.step_name_1)
     return RoseTree(node_data_path, sub_trees_path)
