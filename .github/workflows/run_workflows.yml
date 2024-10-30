@@ -104,6 +104,7 @@ jobs:
           echo "Deleting $file.wic"
           rm -f "$file.wic"
         done
+        ls mm-workflows/examples/*.wic
     - name: Checkout image-workflows
       if: always()
       uses: actions/checkout@v3
