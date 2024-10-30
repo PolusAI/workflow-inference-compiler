@@ -100,9 +100,9 @@ jobs:
       if: always()
       run: |
         sed -i '\/\//d' mm-workflows/examples/config_ci.json
-        for file in $(jq -r '.run_blacklist[]' mm-workflows/examples/config_ci.json); do
+        for file in $(jq -r '.skip_schema_generation[]' mm-workflows/examples/config_ci.json); do
           echo "Deleting $file.wic"
-    
+          rm -f "$file.wic"
         done
     - name: Checkout image-workflows
       if: always()
