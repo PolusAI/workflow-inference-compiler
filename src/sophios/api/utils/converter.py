@@ -62,7 +62,9 @@ def extract_state(inp: Json) -> Json:
             plugin = next((ict for ict in plugins if ict['pid'] == node_pid), None)
             clt: Json = {}
             if plugin:
-                clt = ict_to_clt(plugin)
+                # by default have network access true
+                # so we don't get runtime error for docker/container pull
+                clt = ict_to_clt(plugin, True)
                 # just have the clt payload in run
                 node['run'] = clt
         inp_restrict = inp_inter['state']
@@ -165,7 +167,11 @@ def wfb_to_wic(inp: Json) -> Cwl:
             workflow_temp["steps"].append(node)  # node["cwlScript"]  # Assume dict form
     else:  # A single node workflow
         node = inp_restrict["nodes"][0]
-        workflow_temp = node["cwlScript"] if node.get("cwlScript") else node['run']
+        if node.get("cwlScript"):
+            workflow_temp = node["cwlScript"]
+        else:
+            workflow_temp["steps"] = []
+            workflow_temp["steps"].append(node)
     return workflow_temp
 
 
