@@ -128,6 +128,12 @@ class IO(BaseModel):
                     == "file"  # pylint: disable=unsubscriptable-object
                 ):
                     cwl_type = "File"
+                elif (
+                    isinstance(self.io_format, list)
+                    and len(self.io_format) == 1
+                    and self.io_format[0].lower() == 'directory'
+                ):
+                    cwl_type = "Directory"
                 else:
                     cwl_type = "File"
 
