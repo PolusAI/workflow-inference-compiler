@@ -20,6 +20,12 @@ def requirements(ict_: "ICT", network_access: bool) -> dict:
     return reqs
 
 
+def split_entrypoint_string(enrtypoint: str) -> list[str]:
+    """Fix str to list of str for entrypoint/baseCommand"""
+    list_of_str_entry = enrtypoint.split(' ')
+    return list_of_str_entry
+
+
 def clt_dict(ict_: "ICT", network_access: bool) -> dict:
     """Return a dict of a CommandLineTool from an ICT object."""
 
