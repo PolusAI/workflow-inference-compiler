@@ -127,7 +127,7 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3.0.1
       with:
         miniforge-variant: Miniforge-pypy3
-        miniforge-version: latest
+        miniforge-version: 24.7.1-0
         environment-file: workflow-inference-compiler/install/system_deps.yml
         activate-environment: wic_github_actions
         channels: conda-forge
