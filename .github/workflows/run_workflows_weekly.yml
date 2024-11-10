@@ -89,7 +89,7 @@ jobs:
         # installs pypy in the base environment (only). Although we are using
         # another environment, better to avoid the problem altogether by
         # not using Miniforge-pypy3
-        miniforge-version: latest
+        miniforge-version: 24.7.1-0
         environment-file: workflow-inference-compiler/install/system_deps.yml
         activate-environment: wic_github_actions
         use-mamba: true
