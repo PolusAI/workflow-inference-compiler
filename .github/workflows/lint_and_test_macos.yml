@@ -72,7 +72,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-variant: Miniforge-pypy3
-          miniforge-version: latest
+          miniforge-version: 24.7.1-0
           environment-file: workflow-inference-compiler/install/system_deps.yml
           activate-environment: wic
           use-mamba: true
