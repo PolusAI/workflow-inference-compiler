@@ -42,7 +42,8 @@ dependencies = [
     "toil[cwl]",
     "fastapi",
     "python-jose",
-    "uvicorn"
+    "uvicorn",
+    "referencing"
 ]
 
 [project.readme]
