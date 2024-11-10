@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 import networkx as nx
 import graphviz
 from jsonschema import Draft202012Validator
-from referencing import Registry
+from referencing import Registry, Resource
 import yaml
 
 import sophios
@@ -697,7 +697,9 @@ def get_validator(tools_cwl: Tools, yml_stems: List[str], schema_store: Dict[str
     # The $ref tag refers to URIs defined in $id tags, NOT relative paths on
     # the local filesystem! We need to create a global mapping between ids and schemas
     # i.e. schema_store.
-    registry: Registry = Registry(retrieve=lambda uri: schema_store.get(uri))
+    resource: Resource = Resource.from_contents(schema_store)
+    initial_registry: Registry = Registry()
+    registry: Registry = resource @ initial_registry
     """ Use check_schema to 'first verify that the provided schema is
     itself valid, since not doing so can lead to less obvious error
     messages and fail in less obvious or consistent ways.'
