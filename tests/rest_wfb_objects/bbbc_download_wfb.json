@@ -1,0 +1,85 @@
+{
+    "state": {
+        "nodes": [
+            {
+                "id": 1,
+                "x": 259,
+                "y": 209,
+                "z": 1,
+                "name": "BBBC Download",
+                "expanded": true,
+                "pluginId": "polusai/bbbc-download-plugin@0.1.0-dev1",
+                "height": 50,
+                "width": 250,
+                "settings": {
+                    "inputs": {
+                        "name": "BBBC001",
+                        "outDir": "bbbcdownload.outDir"
+                    }
+                },
+                "internal": false
+            }
+        ],
+        "links": [],
+        "selection": []
+    },
+    "plugins": [
+        {
+            "name": "polusai/bbbc-download-plugin:0.1.0-dev1",
+            "version": "0.1.0-dev1",
+            "title": "BBBC Download",
+            "description": "Downloads the datasets on the Broad Bioimage Benchmark Collection website",
+            "createdBy": "Serebryakov, Artem (NIH/NCATS) [C]",
+            "updatedBy": "Serebryakov, Artem (NIH/NCATS) [C]",
+            "author": [
+                "Hamdah Abbasi"
+            ],
+            "contact": "hamdahshafqat.abbasi@nih.gov",
+            "container": "polusai/bbbc-download-plugin:0.1.0-dev1",
+            "entrypoint": "",
+            "inputs": [
+                {
+                    "description": "The name of the dataset(s) to be downloaded (separate the datasets with a comma. eg BBBC001,BBBC002,BBBC003)",
+                    "format": [
+                        "collection"
+                    ],
+                    "name": "name",
+                    "required": true,
+                    "type": "string"
+                }
+            ],
+            "outputs": [
+                {
+                    "description": "Output collection",
+                    "name": "outDir",
+                    "format": [
+                        "directory"
+                    ],
+                    "required": true,
+                    "type": "path"
+                }
+            ],
+            "repository": "https://github.com/LabShare/polus-plugins",
+            "specVersion": "1.0.0",
+            "ui": [
+                {
+                    "description": "The name of the dataset(s) to be downloaded (separate the datasets with a comma. eg BBBC001,BBBC002,BBBC003)",
+                    "format": [
+                        "collection"
+                    ],
+                    "name": "name",
+                    "required": true,
+                    "type": "string"
+                }
+            ],
+            "path": "visualization",
+            "tags": [
+                "bbbc-download"
+            ],
+            "createdAt": "2024-10-29T18:59:55.843Z",
+            "updatedAt": "2024-10-29T20:01:42.463Z",
+            "id": "672130abad801ccee7f5eaad",
+            "pid": "polusai/bbbc-download-plugin@0.1.0-dev1"
+        }
+    ]
+}

@@ -2,7 +2,6 @@
 """CLT utilities."""
 import logging
 from pathlib import Path
-import subprocess as sub
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser

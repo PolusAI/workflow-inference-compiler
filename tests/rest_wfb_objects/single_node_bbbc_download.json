@@ -1,0 +1,74 @@
+{
+	"state": {
+		"nodes": [
+			{
+				"id": 1,
+				"name": "bbbcdownload",
+				"pluginId": "",
+				"run": {
+					"baseCommand": [],
+					"class": "CommandLineTool",
+					"cwlVersion": "v1.2",
+					"inputs": {
+						"name": {
+							"label": "The name of the dataset(s) to be downloaded (separate the datasets with a comma. eg BBBC001,BBBC002,BBBC003)",
+							"doc": "The name of the dataset(s) to be downloaded (separate the datasets with a comma. eg BBBC001,BBBC002,BBBC003)",
+							"inputBinding": {
+								"prefix": "--name"
+							},
+							"type": "string"
+						},
+						"outDir": {
+							"label": "Output collection",
+							"doc": "Output collection",
+							"inputBinding": {
+								"prefix": "--outDir"
+							},
+							"type": "Directory"
+						}
+					},
+					"outputs": {
+						"outDir": {
+							"label": "Output collection",
+							"doc": "Output collection",
+							"type": "Directory",
+							"outputBinding": {
+								"glob": "$(inputs.outDir.basename)"
+							}
+						}
+					},
+					"stdout": "output",
+					"requirements": {
+						"DockerRequirement": {
+							"dockerPull": "polusai/bbbc-download-plugin:0.1.0-dev1"
+						},
+						"InitialWorkDirRequirement": {
+							"listing": [
+								{
+									"entry": "$(inputs.outDir)",
+									"writable": true
+								}
+							]
+						},
+						"InlineJavascriptRequirement": {},
+						"NetworkAccess": {
+							"networkAccess": true
+						}
+					}
+				},
+				"settings": {
+					"inputs": {
+						"name": "BBBC001",
+						"outDir": "bbbcdownload.outDir"
+					},
+					"outputs": {
+						"outDir": "bbbcdownload.outDir"
+					}
+				},
+				"internal": false
+			}
+		],
+		"links": []
+	},
+	"plugins": []
+}
