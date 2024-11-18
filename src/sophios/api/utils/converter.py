@@ -215,6 +215,8 @@ def wfb_to_wic(inp: Json) -> Cwl:
                 workflow_temp["steps"].append(node)
     else:  # A single node workflow
         node = inp_restrict["nodes"][0]
+        node['id'] = node['pluginId'].split('@')[0].replace('/', '_')
+        node.pop('pluginId', None)
         if node.get("cwlScript"):
             workflow_temp = node["cwlScript"]
         else:
