@@ -100,6 +100,53 @@ def raw_wfb_to_lean_wfb(inp: Json) -> Json:
     return inp_restrict
 
 
+def get_topological_order(links: list[dict[str, str]]) -> list[str]:
+    """Get topological order of the nodes from links"""
+    # Create adjacency list representation
+    graph: dict[str, list[str]] = {}
+    in_degree: dict[str, int] = {}
+
+    # Initialize all nodes with 0 in-degree
+    for link in links:
+        source = link['sourceId']
+        target = link['targetId']
+        if source not in graph:
+            graph[source] = []
+        if target not in graph:
+            graph[target] = []
+        if source not in in_degree:
+            in_degree[source] = 0
+        if target not in in_degree:
+            in_degree[target] = 0
+
+    # Build the graph and count in-degrees
+    for link in links:
+        source = link['sourceId']
+        target = link['targetId']
+        graph[source].append(target)
+        in_degree[target] += 1
+
+    # Initialize queue with nodes that have 0 in-degree
+    queue: list[str] = []
+    for node in in_degree:
+        if in_degree[node] == 0:
+            queue.append(node)
+
+    # Process the queue
+    result: list[str] = []
+    while queue:
+        node = queue.pop(0)
+        result.append(node)
+
+        # Reduce in-degree of neighbors
+        for neighbor in graph[node]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    return result
+
+
 def wfb_to_wic(inp: Json) -> Cwl:
     """Convert lean wfb json to compliant wic"""
     # non-schema preserving changes
@@ -155,18 +202,21 @@ def wfb_to_wic(inp: Json) -> Cwl:
             for dfk in diff_keys:
                 tgt_node['in'][dfk] = yaml.load('!ii ' + str(tgt_node['in'][dfk]), Loader=wic_loader())
 
-    for node in inp_restrict['nodes']:
-        # just reuse name as node's pluginId, wic id is same as wfb name
-        node['id'] = node['pluginId'].split('@')[0].replace('/', '_')
-        node.pop('pluginId', None)
-
     workflow_temp: Cwl = {}
     if inp_restrict["links"] != []:
+        node_order = get_topological_order(inp_restrict["links"])
         workflow_temp["steps"] = []
-        for node in inp_restrict["nodes"]:
-            workflow_temp["steps"].append(node)  # node["cwlScript"]  # Assume dict form
+        for id in node_order:
+            node = next((n for n in inp_restrict["nodes"] if n["id"] == id), None)
+            if node:
+                # just reuse name as node's pluginId, wic id is same as wfb name
+                node['id'] = node['pluginId'].split('@')[0].replace('/', '_')
+                node.pop('pluginId', None)
+                workflow_temp["steps"].append(node)
     else:  # A single node workflow
         node = inp_restrict["nodes"][0]
+        node['id'] = node['pluginId'].split('@')[0].replace('/', '_')
+        node.pop('pluginId', None)
         if node.get("cwlScript"):
             workflow_temp = node["cwlScript"]
         else:
