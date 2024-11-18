@@ -1,0 +1,19 @@
+FROM ubuntu:jammy
+
+RUN apt update && \
+    apt install software-properties-common -y && \
+    apt install curl -y && \
+    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3 get-pip.py && \
+    apt autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY . /workflow-inference-compiler
+WORKDIR /workflow-inference-compiler
+
+RUN pip3 install /workflow-inference-compiler --no-cache-dir
+
+# Then run the sophios REST API through port 3000
+EXPOSE 3000
+
+CMD ["uvicorn", "sophios.api.http.restapi:app", "--host", "0.0.0.0", "--port", "3000"]
