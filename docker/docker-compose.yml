@@ -5,5 +5,5 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - PATH=/miniforge/bin:$PATH
+      - PATH=$PATH
     command: ["uvicorn", "sophios.api.http.restapi:app", "--host", "0.0.0.0", "--port", "3000"]
