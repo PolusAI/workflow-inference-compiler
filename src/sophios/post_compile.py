@@ -21,7 +21,10 @@ def find_output_dirs(data: Union[RoseTree, Dict, list]) -> list:
     results = []
     if isinstance(data, Dict):
         if "class" in data and data["class"] == "Directory" and "location" in data:
-            results.append(data["location"])
+            if isinstance(data["location"], dict) and "wic_inline_input" in data["location"]:
+                results.append(data["location"]["wic_inline_input"])
+            else:
+                results.append(data["location"])
         for value in data.values():
             results.extend(find_output_dirs(value))
     elif isinstance(data, list):
