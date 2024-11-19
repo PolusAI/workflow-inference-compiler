@@ -34,15 +34,6 @@
             "name": "fileExtension",
             "required": true,
             "type": "string"
-        },
-        {
-            "description": "Output collection",
-            "format": [
-                "genericData"
-            ],
-            "name": "outDir",
-            "required": true,
-            "type": "path"
         }
     ],
     "name": "polusai/OMEConverter",
