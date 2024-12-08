@@ -1,5 +1,6 @@
 """CWL generation for ICT objects.""" ""
 from typing import Union, Dict, Any, TYPE_CHECKING
+from sophios.api.utils.wfb_util import is_directory
 
 if TYPE_CHECKING:
     from sophios.api.utils.ict.ict_spec.model import ICT
@@ -70,8 +71,12 @@ def input_output_dict(ict_: "ICT") -> Union[dict, str]:
             "description": prop.description,  # type: ignore
             "defaultValue": prop.defaultValue,  # type: ignore
             "required": prop.required,  # type: ignore
-            "format": prop.io_format,  # type: ignore
         }
+
+        if is_directory(prop.name):
+            io_dict[prop.format] = "Directory"
+        else:
+            io_dict[prop.format] = "File"
     # recursively remove keys with None values
     return remove_none(io_dict)
 

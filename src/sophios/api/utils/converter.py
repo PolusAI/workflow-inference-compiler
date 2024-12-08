@@ -10,6 +10,8 @@ from sophios.utils_yaml import wic_loader
 from sophios.wic_types import Json, Cwl
 from sophios.api.utils.ict.ict_spec.model import ICT
 from sophios.api.utils.ict.ict_spec.cast import cast_to_ict
+from sophios.api.utils.wfb_util import node_ui_mapper
+
 
 SCHEMA_FILE = Path(__file__).parent / "input_object_schema.json"
 SCHEMA: Json = {}
@@ -147,10 +149,11 @@ def get_topological_order(links: list[dict[str, str]]) -> list[str]:
     return result
 
 
-def wfb_to_wic(inp: Json) -> Cwl:
+def wfb_to_wic(inp: Json, plugins) -> Cwl:
     """Convert lean wfb json to compliant wic"""
     # non-schema preserving changes
     inp_restrict = copy.deepcopy(inp)
+    plugin_ui_map = node_ui_mapper(plugins)
 
     for node in inp_restrict['nodes']:
         if node.get('settings'):
@@ -160,7 +163,7 @@ def wfb_to_wic(inp: Json) -> Cwl:
                                    ['outputs'].items())  # outputs always have to be list
             # remove these (now) superfluous keys
             node.pop('settings', None)
-            node.pop('name', None)
+            # node.pop('name', None)
             node.pop('internal', None)
 
     # setting the inputs of the non-sink nodes i.e. whose input doesn't depend on any other node's output
@@ -176,31 +179,68 @@ def wfb_to_wic(inp: Json) -> Cwl:
             for nkey in node['in']:
                 node['in'][nkey] = yaml.load('!ii ' + str(node['in'][nkey]), Loader=wic_loader())
 
+
+    # keep track of all the args that processed through links
+
+    node_arg_map = {}
     # After outs are set
     for edg in inp_restrict['links']:
         # links = edge. nodes and edges is the correct terminology!
         src_id = edg['sourceId']
         tgt_id = edg['targetId']
+
+        if src_id not in node_arg_map:
+            node_arg_map[src_id] = set()
+
+        if tgt_id not in node_arg_map:
+            node_arg_map[tgt_id] = set()
+
         src_node = next((node for node in inp_restrict['nodes'] if node['id'] == src_id), None)
         tgt_node = next((node for node in inp_restrict['nodes'] if node['id'] == tgt_id), None)
         assert src_node, f'output(s) of source node of edge{edg} must exist!'
         assert tgt_node, f'input(s) of target node of edge{edg} must exist!'
-        # flattened list of keys
-        if src_node.get('out') and tgt_node.get('in'):
-            src_out_keys = [sk for sout in src_node['out'] for sk in sout.keys()]
-            tgt_in_keys = tgt_node['in'].keys()
-            # we match the source output tag type to target input tag type
-            # and connect them through '!* ' for input, all outputs are '!& ' before this
-            for sk in src_out_keys:
-                # It maybe possible that (explicit) outputs of src nodes might not have corresponding
-                # (explicit) inputs in target node
-                if tgt_node['in'].get(sk):
-                    tgt_node['in'][sk] = yaml.load('!* ' + tgt_node['in'][sk], Loader=wic_loader())
-            # the inputs which aren't dependent on previous/other steps
-            # they are by default inline input
-            diff_keys = set(tgt_in_keys) - set(src_out_keys)
-            for dfk in diff_keys:
-                tgt_node['in'][dfk] = yaml.load('!ii ' + str(tgt_node['in'][dfk]), Loader=wic_loader())
+        src_node_ui_config = plugin_ui_map[src_node['pluginId']]
+        tgt_node_ui_config = plugin_ui_map[tgt_node['pluginId']]
+        inlet_index = edg['inletIndex']
+        outlet_index = edg['outletIndex']
+
+        src_node_out_arg = src_node_ui_config['outputs'][outlet_index]["name"]
+        tgt_node_in_arg = tgt_node_ui_config['inputs'][inlet_index]["name"]
+        print(f"Connecting {src_node['pluginId']}:{src_node_out_arg} to {tgt_node['pluginId']}:{tgt_node_in_arg}")         
+        if tgt_node.get('in'):
+            source_output = src_node['out'][0][src_node_out_arg]
+            if isinstance(source_output, dict) and 'wic_anchor' in source_output:
+                source_output = source_output["wic_anchor"]
+            tgt_node['in'][tgt_node_in_arg] = yaml.load('!* ' + source_output, Loader=wic_loader())
+            node_arg_map[tgt_id].add(tgt_node_in_arg)
+
+        # # flattened list of keys
+        # if src_node.get('out') and tgt_node.get('in'):
+        #     src_out_keys = [sk for sout in src_node['out'] for sk in sout.keys()]
+        #     tgt_in_keys = tgt_node['in'].keys()
+        #     # we match the source output tag type to target input tag type
+        #     # and connect them through '!* ' for input, all outputs are '!& ' before this
+        #     print("we are here")
+        #     print(src_out_keys)
+        #     for sk in src_out_keys:
+        #         # It maybe possible that (explicit) outputs of src nodes might not have corresponding
+        #         # (explicit) inputs in target node
+        #         if tgt_node['in'].get(sk):
+        #             print(sk)
+        #             tgt_node['in'][sk] = yaml.load('!* ' + tgt_node['in'][sk], Loader=wic_loader())
+        #     # the inputs which aren't dependent on previous/other steps
+        #     # they are by default inline input
+        #     diff_keys = set(tgt_in_keys) - set(src_out_keys)
+        #     print(diff_keys)
+        #     for dfk in diff_keys:
+        #         tgt_node['in'][dfk] = yaml.load('!ii ' + str(tgt_node['in'][dfk]), Loader=wic_loader())
+
+    for node in inp_restrict['nodes']:
+        node_id = node['id']
+        node_args = set(node['in'].keys())
+        unprocessed_args = node_args - node_arg_map[node_id]
+        for arg in unprocessed_args:
+            node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
 
     workflow_temp: Cwl = {}
     if inp_restrict["links"] != []:
