@@ -64,12 +64,16 @@
 		"links": [
 			{
 				"sourceId": 7,
+				"outletIndex": 0,
 				"targetId": 18,
+				"inletIndex": 1,
 				"id": 1
 			},
 			{
 				"sourceId": 18,
+				"outletIndex": 0,
 				"targetId": 9,
+				"inletIndex": 1,
 				"id": 5
 			}
 		],
