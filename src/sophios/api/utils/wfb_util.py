@@ -17,25 +17,7 @@ def is_directory(input_dict: dict) -> bool:
            or input_dict.get("name", "").lower().endswith("dir")
 
 
-def node_ui_mapper(plugin_list: list[dict]) -> dict[str, dict]:
-    """Map the UI configuration for a list of plugins.
-
-    Args:
-        plugin_list (list[dict]): A list of plugin dictionaries.
-
-    Returns:
-        dict[str, dict]: A mapping of plugin IDs to their UI configurations.
-    """
-    config_map = {}
-    for plugin in plugin_list:
-        pid = plugin.get("pid", "")
-        if pid == "":
-            continue
-        config_map[pid] = get_node_ui_config(plugin)
-    return config_map
-
-
-def get_node_ui_config(plugin: dict) -> dict:
+def get_node_config(plugin: dict) -> dict:
     """Get the UI configuration for a specific plugin.
 
     Args:

@@ -145,8 +145,6 @@ class IO(BaseModel):
                 #     cwl_type = "Directory"
                 # else:
                 #     cwl_type = "File"
-        #     # cwl_type = "File"
-        #     # c
 
                 cwl_dict_ = {
                     "outputBinding": {"glob": f"$(inputs.{self.name}.basename)"},
