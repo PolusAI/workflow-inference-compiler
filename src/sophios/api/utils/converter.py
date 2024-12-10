@@ -201,26 +201,30 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, dict]]) -> Cwl:
         tgt_node = next((node for node in inp_restrict['nodes'] if node['id'] == tgt_id), None)
         assert src_node, f'output(s) of source node of edge{edg} must exist!'
         assert tgt_node, f'input(s) of target node of edge{edg} must exist!'
-        src_node_ui_config = plugin_config_map[src_node['pluginId']]
-        tgt_node_ui_config = plugin_config_map[tgt_node['pluginId']]
-        inlet_index = edg['inletIndex']
-        outlet_index = edg['outletIndex']
+        src_node_ui_config = plugin_config_map.get(src_node['pluginId'], None)
+        tgt_node_ui_config = plugin_config_map.get(tgt_node['pluginId'], None)
+        if src_node_ui_config and tgt_node_ui_config:
+            inlet_index = edg['inletIndex']
+            outlet_index = edg['outletIndex']
 
-        src_node_out_arg = src_node_ui_config['outputs'][outlet_index]["name"]
-        tgt_node_in_arg = tgt_node_ui_config['inputs'][inlet_index]["name"]
+            src_node_out_arg = src_node_ui_config['outputs'][outlet_index]["name"]
+            tgt_node_in_arg = tgt_node_ui_config['inputs'][inlet_index]["name"]
 
-        if tgt_node.get('in'):
-            source_output = src_node['out'][0][src_node_out_arg]
-            if isinstance(source_output, dict) and 'wic_anchor' in source_output:
-                source_output = source_output["wic_anchor"]
-            tgt_node['in'][tgt_node_in_arg] = yaml.load('!* ' + str(source_output), Loader=wic_loader())
-            node_arg_map[tgt_id].add(tgt_node_in_arg)
+            if tgt_node.get('in'):
+                source_output = src_node['out'][0][src_node_out_arg]
+                if isinstance(source_output, dict) and 'wic_anchor' in source_output:
+                    source_output = source_output["wic_anchor"]
+                tgt_node['in'][tgt_node_in_arg] = yaml.load('!* ' + str(source_output), Loader=wic_loader())
+                node_arg_map[tgt_id].add(tgt_node_in_arg)
 
     for node in inp_restrict['nodes']:
         node_id = node['id']
-        unprocessed_args = set(node['in'].keys()) - node_arg_map[node_id]
-        for arg in unprocessed_args:
-            node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
+        if "in" in node:
+            unprocessed_args = set(node['in'].keys())
+            if node_id in  node_arg_map:
+                unprocessed_args = unprocessed_args.difference(node_arg_map[node_id])
+            for arg in unprocessed_args:
+                node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
 
     workflow_temp: Cwl = {}
     if inp_restrict["links"] != []:

@@ -7,14 +7,16 @@ def is_directory(input_dict: dict) -> bool:
     Returns:
         bool: True if the input represents a directory, False otherwise.
     """
-    return input_dict.get("type", "") == "directory" \
-           or input_dict.get("type", "") == "file" \
-           or input_dict.get("type", "") == "path" \
-           or input_dict.get("type", "") == "collection" \
-           or input_dict.get("type", "") == "csvCollection" \
-           or input_dict.get("name", "").lower() == "file" \
-           or input_dict.get("name", "").lower().endswith("path") \
-           or input_dict.get("name", "").lower().endswith("dir")
+    return (
+        input_dict.get("type", "") == "directory"
+        or input_dict.get("type", "") == "file"
+        or input_dict.get("type", "") == "path"
+        or input_dict.get("type", "") == "collection"
+        or input_dict.get("type", "") == "csvCollection"
+        or input_dict.get("name", "").lower() == "file"
+        or input_dict.get("name", "").lower().endswith("path")
+        or input_dict.get("name", "").lower().endswith("dir")
+    )
 
 
 def get_node_config(plugin: dict) -> dict:
@@ -37,7 +39,10 @@ def get_node_config(plugin: dict) -> dict:
         input = plugin_inputs[i]
 
         # find the UI element that corresponds to this input
-        ui_input = next((x for x in uis if x['key'] == 'inputs.' + input['name']), None)
+        ui_input = next(
+            (x for x in uis if "key" in x and x["key"] == "inputs." + input["name"]),
+            None,
+        )
         is_dir = is_directory(input)
 
         # if input is a directory - move it to the non-UI section
@@ -48,18 +53,18 @@ def get_node_config(plugin: dict) -> dict:
         # but only if it's not a directory
         if not ui_input and not is_dir:
             calculated_ui_input = {
-                'key': 'inputs.' + input['name'],
-                'type': input['type'],
-                'title': input['name'],
-                'required': input['required'],
-                'format': input['format'],
+                "key": "inputs." + input["name"],
+                "type": input["type"],
+                "title": input["name"],
+                "required": input["required"],
+                "format": input["format"],
             }
 
             ui_inputs.append(calculated_ui_input)
 
         if ui_input and not is_dir:
-            ui_input['required'] = input['required']
-            ui_input['format'] = input['format']
+            ui_input["required"] = input["required"]
+            ui_input["format"] = input["format"]
             ui_inputs.append(ui_input)
 
     outputs = plugin.get("outputs", [])
@@ -67,9 +72,12 @@ def get_node_config(plugin: dict) -> dict:
     # if output has UI - move it to the UI section
     # this is mostly for internal nodes such as Input Data Directory
     for output in outputs:
-        ui_output = next((x for x in uis if x['key'] == 'outputs.' + output['name']), None)
+        ui_output = next(
+            (x for x in uis if "key" in x and x["key"] == "outputs." + output["name"]),
+            None,
+        )
         if ui_output:
             ui_inputs.append(ui_output)
 
-    result = {'ui': ui_inputs, 'inputs': non_ui_inputs, 'outputs': outputs}
+    result = {"ui": ui_inputs, "inputs": non_ui_inputs, "outputs": outputs}
     return result

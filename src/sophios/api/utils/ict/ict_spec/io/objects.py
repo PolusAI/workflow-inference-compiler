@@ -118,13 +118,13 @@ class IO(BaseModel):
         if self.io_type == "path":
             if self.name in inputs:
                 if is_directory(dict(self)):
-                    cwl_type = "Directory" 
+                    cwl_type = "Directory"
                 else:
                     cwl_type = "File"
 
                 # the logic here is probably wrong
                 # let's not go here until we have a better idea of io_format in ICT Spec
-                
+
                 # if (
                 #     not isinstance(self.io_format, list)
                 #     and self.io_format["term"].lower()
