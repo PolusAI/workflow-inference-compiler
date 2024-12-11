@@ -183,26 +183,23 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, Any]]) -> Cwl:
             for nkey in node['in']:
                 node['in'][nkey] = yaml.load('!ii ' + str(node['in'][nkey]), Loader=wic_loader())
 
-    # keep track of all the args that processed through links
-    node_arg_map: dict[int, set] = {}
-    # After outs are set
-    for edg in inp_restrict['links']:
-        # links = edge. nodes and edges is the correct terminology!
-        src_id = edg['sourceId']
-        tgt_id = edg['targetId']
+    if plugins != []:  # use the look up logic similar to WFB
+        # keep track of all the args that processed through links
+        node_arg_map: dict[int, set] = {}
+        for edg in inp_restrict['links']:
+            # links = edge. nodes and edges is the correct terminology!
+            src_id = edg['sourceId']
+            tgt_id = edg['targetId']
+            src_node = next((node for node in inp_restrict['nodes'] if node['id'] == src_id), None)
+            tgt_node = next((node for node in inp_restrict['nodes'] if node['id'] == tgt_id), None)
+            assert src_node, f'output(s) of source node of edge{edg} must exist!'
+            assert tgt_node, f'input(s) of target node of edge{edg} must exist!'
+            if src_id not in node_arg_map:
+                node_arg_map[src_id] = set()
 
-        if src_id not in node_arg_map:
-            node_arg_map[src_id] = set()
+            if tgt_id not in node_arg_map:
+                node_arg_map[tgt_id] = set()
 
-        if tgt_id not in node_arg_map:
-            node_arg_map[tgt_id] = set()
-
-        src_node = next((node for node in inp_restrict['nodes'] if node['id'] == src_id), None)
-        tgt_node = next((node for node in inp_restrict['nodes'] if node['id'] == tgt_id), None)
-        assert src_node, f'output(s) of source node of edge{edg} must exist!'
-        assert tgt_node, f'input(s) of target node of edge{edg} must exist!'
-        if plugins != []:
-            # use the look up logic similar to WFB
             src_node_ui_config = plugin_config_map.get(src_node['pluginId'], None)
             tgt_node_ui_config = plugin_config_map.get(tgt_node['pluginId'], None)
             if src_node_ui_config and tgt_node_ui_config:
@@ -227,8 +224,17 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, Any]]) -> Cwl:
                         unprocessed_args = unprocessed_args.difference(node_arg_map[node_id])
                     for arg in unprocessed_args:
                         node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
-        else:
-            # No plugins, use the old logic
+    else:
+        # No plugins, use the old logic
+        for edg in inp_restrict['links']:
+            # links = edge. nodes and edges is the correct terminology!
+            src_id = edg['sourceId']
+            tgt_id = edg['targetId']
+            src_node = next((node for node in inp_restrict['nodes'] if node['id'] == src_id), None)
+            tgt_node = next((node for node in inp_restrict['nodes'] if node['id'] == tgt_id), None)
+            assert src_node, f'output(s) of source node of edge{edg} must exist!'
+            assert tgt_node, f'input(s) of target node of edge{edg} must exist!'
+            # flattened list of keys
             if src_node.get('out') and tgt_node.get('in'):
                 src_out_keys = [sk for sout in src_node['out'] for sk in sout.keys()]
                 tgt_in_keys = tgt_node['in'].keys()
