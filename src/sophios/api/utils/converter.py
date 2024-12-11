@@ -201,30 +201,49 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, Any]]) -> Cwl:
         tgt_node = next((node for node in inp_restrict['nodes'] if node['id'] == tgt_id), None)
         assert src_node, f'output(s) of source node of edge{edg} must exist!'
         assert tgt_node, f'input(s) of target node of edge{edg} must exist!'
-        src_node_ui_config = plugin_config_map.get(src_node['pluginId'], None)
-        tgt_node_ui_config = plugin_config_map.get(tgt_node['pluginId'], None)
-        if src_node_ui_config and tgt_node_ui_config:
-            inlet_index = edg['inletIndex']
-            outlet_index = edg['outletIndex']
+        if plugins != []:
+            # use the look up logic similar to WFB
+            src_node_ui_config = plugin_config_map.get(src_node['pluginId'], None)
+            tgt_node_ui_config = plugin_config_map.get(tgt_node['pluginId'], None)
+            if src_node_ui_config and tgt_node_ui_config:
+                inlet_index = edg['inletIndex']
+                outlet_index = edg['outletIndex']
 
-            src_node_out_arg = src_node_ui_config['outputs'][outlet_index]["name"]
-            tgt_node_in_arg = tgt_node_ui_config['inputs'][inlet_index]["name"]
+                src_node_out_arg = src_node_ui_config['outputs'][outlet_index]["name"]
+                tgt_node_in_arg = tgt_node_ui_config['inputs'][inlet_index]["name"]
 
-            if tgt_node.get('in'):
-                source_output = src_node['out'][0][src_node_out_arg]
-                if isinstance(source_output, dict) and 'wic_anchor' in source_output:
-                    source_output = source_output["wic_anchor"]
-                tgt_node['in'][tgt_node_in_arg] = yaml.load('!* ' + str(source_output), Loader=wic_loader())
-                node_arg_map[tgt_id].add(tgt_node_in_arg)
+                if tgt_node.get('in'):
+                    source_output = src_node['out'][0][src_node_out_arg]
+                    if isinstance(source_output, dict) and 'wic_anchor' in source_output:
+                        source_output = source_output["wic_anchor"]
+                    tgt_node['in'][tgt_node_in_arg] = yaml.load('!* ' + str(source_output), Loader=wic_loader())
+                    node_arg_map[tgt_id].add(tgt_node_in_arg)
 
-    for node in inp_restrict['nodes']:
-        node_id = node['id']
-        if "in" in node:
-            unprocessed_args = set(node['in'].keys())
-            if node_id in node_arg_map:
-                unprocessed_args = unprocessed_args.difference(node_arg_map[node_id])
-            for arg in unprocessed_args:
-                node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
+            for node in inp_restrict['nodes']:
+                node_id = node['id']
+                if "in" in node:
+                    unprocessed_args = set(node['in'].keys())
+                    if node_id in node_arg_map:
+                        unprocessed_args = unprocessed_args.difference(node_arg_map[node_id])
+                    for arg in unprocessed_args:
+                        node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
+        else:
+            # No plugins, use the old logic
+            if src_node.get('out') and tgt_node.get('in'):
+                src_out_keys = [sk for sout in src_node['out'] for sk in sout.keys()]
+                tgt_in_keys = tgt_node['in'].keys()
+                # we match the source output tag type to target input tag type
+                # and connect them through '!* ' for input, all outputs are '!& ' before this
+                for sk in src_out_keys:
+                    # It maybe possible that (explicit) outputs of src nodes might not have corresponding
+                    # (explicit) inputs in target node
+                    if tgt_node['in'].get(sk):
+                        tgt_node['in'][sk] = yaml.load('!* ' + tgt_node['in'][sk], Loader=wic_loader())
+                # the inputs which aren't dependent on previous/other steps
+                # they are by default inline input
+                diff_keys = set(tgt_in_keys) - set(src_out_keys)
+                for dfk in diff_keys:
+                    tgt_node['in'][dfk] = yaml.load('!ii ' + str(tgt_node['in'][dfk]), Loader=wic_loader())
 
     workflow_temp: Cwl = {}
     if inp_restrict["links"] != []:
