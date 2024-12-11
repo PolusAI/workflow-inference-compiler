@@ -7,16 +7,17 @@ def is_directory(input_dict: dict) -> bool:
     Returns:
         bool: True if the input represents a directory, False otherwise.
     """
-    return (
-        input_dict.get("type", "") == "directory"
-        or input_dict.get("type", "") == "file"
-        or input_dict.get("type", "") == "path"
-        or input_dict.get("type", "") == "collection"
-        or input_dict.get("type", "") == "csvCollection"
-        or input_dict.get("name", "").lower() == "file"
-        or input_dict.get("name", "").lower().endswith("path")
+
+    is_dir: bool = input_dict.get("type", "") == "directory" \
+        or input_dict.get("type", "") == "file" \
+        or input_dict.get("type", "") == "path" \
+        or input_dict.get("type", "") == "collection" \
+        or input_dict.get("type", "") == "csvCollection" \
+        or input_dict.get("name", "").lower() == "file" \
+        or input_dict.get("name", "").lower().endswith("path") \
         or input_dict.get("name", "").lower().endswith("dir")
-    )
+
+    return is_dir
 
 
 def get_node_config(plugin: dict) -> dict:

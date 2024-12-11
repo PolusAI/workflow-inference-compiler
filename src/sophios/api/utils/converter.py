@@ -148,13 +148,13 @@ def get_topological_order(links: list[dict[str, str]]) -> list[str]:
     return result
 
 
-def wfb_to_wic(inp: Json, plugins: List[dict[str, dict]]) -> Cwl:
+def wfb_to_wic(inp: Json, plugins: List[dict[str, Any]]) -> Cwl:
     """Convert lean wfb json to compliant wic"""
     # non-schema preserving changes
     inp_restrict = copy.deepcopy(inp)
     plugin_config_map: dict[str, dict] = {}
     for plugin in plugins:
-        pid = plugin.get("pid", "")
+        pid: str = plugin.get("pid", "")
         if pid == "":
             continue
         plugin_config_map[pid] = get_node_config(plugin)
@@ -184,7 +184,7 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, dict]]) -> Cwl:
                 node['in'][nkey] = yaml.load('!ii ' + str(node['in'][nkey]), Loader=wic_loader())
 
     # keep track of all the args that processed through links
-    node_arg_map = {}
+    node_arg_map: dict[int, set] = {}
     # After outs are set
     for edg in inp_restrict['links']:
         # links = edge. nodes and edges is the correct terminology!
@@ -221,7 +221,7 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, dict]]) -> Cwl:
         node_id = node['id']
         if "in" in node:
             unprocessed_args = set(node['in'].keys())
-            if node_id in  node_arg_map:
+            if node_id in node_arg_map:
                 unprocessed_args = unprocessed_args.difference(node_arg_map[node_id])
             for arg in unprocessed_args:
                 node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
