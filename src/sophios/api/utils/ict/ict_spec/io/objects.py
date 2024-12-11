@@ -4,6 +4,7 @@ import enum
 from typing import Optional, Union, Any
 
 from pydantic import BaseModel, Field
+from sophios.api.utils.wfb_util import is_directory
 
 
 CWL_IO_DICT: dict[str, str] = {
@@ -116,26 +117,34 @@ class IO(BaseModel):
         """Convert outputs to CWL."""
         if self.io_type == "path":
             if self.name in inputs:
-                if (
-                    not isinstance(self.io_format, list)
-                    and self.io_format["term"].lower()
-                    == "directory"  # pylint: disable=unsubscriptable-object
-                ):
-                    cwl_type = "Directory"
-                elif (
-                    not isinstance(self.io_format, list)
-                    and self.io_format["term"].lower()
-                    == "file"  # pylint: disable=unsubscriptable-object
-                ):
-                    cwl_type = "File"
-                elif (
-                    isinstance(self.io_format, list)
-                    and len(self.io_format) == 1
-                    and self.io_format[0].lower() == 'directory'
-                ):
+                if is_directory(dict(self)):
                     cwl_type = "Directory"
                 else:
                     cwl_type = "File"
+
+                # the logic here is probably wrong
+                # let's not go here until we have a better idea of io_format in ICT Spec
+
+                # if (
+                #     not isinstance(self.io_format, list)
+                #     and self.io_format["term"].lower()
+                #     == "directory"  # pylint: disable=unsubscriptable-object
+                # ):
+                #     cwl_type = "Directory"
+                # elif (
+                #     not isinstance(self.io_format, list)
+                #     and self.io_format["term"].lower()
+                #     == "file"  # pylint: disable=unsubscriptable-object
+                # ):
+                #     cwl_type = "File"
+                # elif (
+                #     isinstance(self.io_format, list)
+                #     and len(self.io_format) == 1
+                #     and self.io_format[0].lower() == 'directory'
+                # ):
+                #     cwl_type = "Directory"
+                # else:
+                #     cwl_type = "File"
 
                 cwl_dict_ = {
                     "outputBinding": {"glob": f"$(inputs.{self.name}.basename)"},

@@ -29,7 +29,7 @@
             "outputBinding": {
                 "glob": "$(inputs.outDir.basename)"
             },
-            "type": "File"
+            "type": "Directory"
         }
     },
     "requirements": {
