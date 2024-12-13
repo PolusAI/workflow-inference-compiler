@@ -1,5 +1,5 @@
 {
-    "baseCommand": "[python3, main.py]",
+    "baseCommand": [],
     "class": "CommandLineTool",
     "cwlVersion": "v1.2",
     "doc": "None",

@@ -1,5 +1,5 @@
 {
-    "baseCommand": "python3 -m polus.images.formats.ome_converter",
+    "baseCommand": [],
     "class": "CommandLineTool",
     "cwlVersion": "v1.2",
     "doc": "None",
