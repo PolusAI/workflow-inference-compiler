@@ -161,21 +161,21 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, Any]]) -> Cwl:
 
     for node in inp_restrict['nodes']:
         if node.get('settings'):
-            node['in'] = {**node['settings'].get('inputs', {}), **node['settings'].get('outputs', {})}
+            node['in'] = node['settings'].get('inputs')
             if node['settings'].get('outputs'):
                 node['out'] = list({k: yaml.load('!& ' + v, Loader=wic_loader())} for k, v in node['settings']
                                    ['outputs'].items())  # outputs always have to be list
             # remove these (now) superfluous keys
-            node.pop('settings', None)
             node.pop('name', None)
             node.pop('internal', None)
-    # keep track of all the args that processed
-    node_arg_map: dict[int, set] = {}
+
     # setting the inputs of the non-sink nodes i.e. whose input doesn't depend on any other node's output
     # first get all target node ids
     target_node_ids = []
     for edg in inp_restrict['links']:
         target_node_ids.append(edg['targetId'])
+    # keep track of all the args that processed
+    node_arg_map: dict[int, set] = {}
     # now set inputs on non-sink nodes as inline input '!ii '
     # if inputs exist
     non_sink_nodes = [node for node in inp_restrict['nodes'] if node['id'] not in target_node_ids]
@@ -220,15 +220,25 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, Any]]) -> Cwl:
                     node_arg_map[tgt_id].add(tgt_node_in_arg)
 
         for node in inp_restrict['nodes']:
-            node_id = node['id']
+            output_dict = node['settings'].get('outputs', {})
+            for key in output_dict:
+                if str(output_dict[key]) != "":
+                    node['in'][key] = yaml.load('!ii ' + str(output_dict[key]), Loader=wic_loader())
+                    node_arg_map[node['id']].add(key)
+            node.pop('settings', None)
+
             if "in" in node:
                 unprocessed_args = set(node['in'].keys())
-                if node_id in node_arg_map:
-                    unprocessed_args = unprocessed_args.difference(node_arg_map[node_id])
+                if node['id'] in node_arg_map:
+                    unprocessed_args = unprocessed_args.difference(node_arg_map[node['id']])
                 for arg in unprocessed_args:
                     node['in'][arg] = yaml.load('!ii ' + str(node['in'][arg]), Loader=wic_loader())
-    else:
-        # No plugins, use the old logic
+    else:  # No plugins, use the old logic
+        # this logic is most likely not correct and need to be scrubbed
+        # along with updating the non_wfb dummy tests
+        for node in inp_restrict['nodes']:
+            node.pop('settings', None)
+
         for edg in inp_restrict['links']:
             # links = edge. nodes and edges is the correct terminology!
             src_id = edg['sourceId']
@@ -247,7 +257,13 @@ def wfb_to_wic(inp: Json, plugins: List[dict[str, Any]]) -> Cwl:
                     # It maybe possible that (explicit) outputs of src nodes might not have corresponding
                     # (explicit) inputs in target node
                     if tgt_node['in'].get(sk):
-                        tgt_node['in'][sk] = yaml.load('!* ' + tgt_node['in'][sk], Loader=wic_loader())
+                        # if the output is a dict, it is a wic_anchor, so we need to get the anchor
+                        # and use that as the input
+                        src_node_out_arg = src_node['out'][0][sk]
+                        source_output = src_node['out'][0][sk]
+                        if isinstance(source_output, dict) and 'wic_anchor' in source_output:
+                            source_output = source_output["wic_anchor"]
+                        tgt_node['in'][sk] = yaml.load('!* ' + str(source_output), Loader=wic_loader())
                 # the inputs which aren't dependent on previous/other steps
                 # they are by default inline input
                 diff_keys = set(tgt_in_keys) - set(src_out_keys)
