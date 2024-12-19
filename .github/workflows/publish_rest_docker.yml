@@ -19,7 +19,7 @@ jobs:
         uses: docker/setup-buildx-action@v1
 
       - id: Get Tag
-        run: erun: echo "tag=${{ github.ref_name }}" >> $GITHUB_ENV
+        run: echo "tag=${{ github.ref_name }}" >> $GITHUB_ENV
 
       - run: echo "Publishing with tag ${{ env.tag }}"
 
