@@ -36,5 +36,5 @@ jobs:
           context: .
           file: ./docker/Dockerfile_ubuntu_REST
           push: true
-          tags: polusai/sophios:${{ env.tag }}
+          tags: polusai/sophios-rest-api:${{ env.tag }}
 
