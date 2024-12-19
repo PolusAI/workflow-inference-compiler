@@ -43,7 +43,7 @@ def clt_dict(ict_: "ICT", network_access: bool) -> dict:
             for io in ict_.outputs
         },
         "requirements": requirements(ict_, network_access),
-        "baseCommand": ict_.entrypoint,
+        "baseCommand": [],
         "label": ict_.title,
         "doc": str(ict_.documentation),
     }

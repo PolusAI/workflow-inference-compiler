@@ -1,5 +1,5 @@
 {
-    "baseCommand": "[python3, main.py]",
+    "baseCommand": [],
     "class": "CommandLineTool",
     "cwlVersion": "v1.2",
     "doc": "None",
@@ -29,7 +29,7 @@
             "outputBinding": {
                 "glob": "$(inputs.outDir.basename)"
             },
-            "type": "File"
+            "type": "Directory"
         }
     },
     "requirements": {
