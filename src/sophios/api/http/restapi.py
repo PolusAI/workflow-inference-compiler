@@ -101,8 +101,8 @@ async def compile_wf(request: Request) -> Json:
     req = converter.update_payload_missing_inputs_outputs(req)
     wfb_payload = converter.raw_wfb_to_lean_wfb(req)
     # schema non-preserving
-    workflow_temp = converter.wfb_to_wic(wfb_payload)
-    wkflw_name = "generic_workflow_" + str(uuid.uuid4())
+    workflow_temp = converter.wfb_to_wic(wfb_payload, req["plugins"])
+    wkflw_name = "workflow_"
     args = get_args(wkflw_name, suppliedargs)
 
     # Build canonical workflow object
@@ -161,6 +161,13 @@ async def compile_wf(request: Request) -> Json:
     cwl_tree_run.pop('steps', None)
     cwl_tree_run['steps'] = cwl_tree_run.pop('steps_dict', None)
 
+    # currently there is a compiler bug where the output variables are duplicated
+    # this is a workaround to remove the duplicates till the compiler is fixed
+    for step in cwl_tree_run['steps']:
+
+        out_vars = cwl_tree_run['steps'][step]['out']
+        out_vars_unique = list(set(out_vars))
+        cwl_tree_run['steps'][step]['out'] = out_vars_unique
     compute_workflow: Json = {}
     compute_workflow = {
         "name": yaml_stem,

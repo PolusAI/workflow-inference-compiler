@@ -25,7 +25,10 @@ def inlineinput_constructor(loader: yaml.SafeLoader, node: yaml.nodes.Node) -> D
     if isinstance(node, yaml.nodes.ScalarNode):
         try:
             # loader.construct_scalar always returns a string, whereas
-            val = yaml.safe_load(node.value)
+            if node.value == "":
+                val = ""
+            else:
+                val = yaml.safe_load(node.value)
             # yaml.safe_load returns the correct primitive types
         except Exception:
             # but fallback to a string if it is not actually a primitive type.

@@ -45,7 +45,9 @@
             "required": [
                 "id",
                 "sourceId",
-                "targetId"
+                "targetId",
+                "inletIndex",
+                "outletIndex"
             ],
             "type": "object"
         },
