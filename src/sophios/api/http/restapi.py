@@ -102,7 +102,7 @@ async def compile_wf(request: Request) -> Json:
     wfb_payload = converter.raw_wfb_to_lean_wfb(req)
     # schema non-preserving
     workflow_temp = converter.wfb_to_wic(wfb_payload, req["plugins"])
-    wkflw_name = "generic_workflow_" + str(uuid.uuid4())
+    wkflw_name = "workflow_"
     args = get_args(wkflw_name, suppliedargs)
 
     # Build canonical workflow object
