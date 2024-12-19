@@ -2,7 +2,6 @@
 """CLT utilities."""
 import logging
 from pathlib import Path
-import subprocess as sub
 from typing import Any, ClassVar, Optional, TypeVar, Union
 
 import cwl_utils.parser as cu_parser
@@ -757,8 +756,8 @@ class Workflow(BaseModel):
         rose_tree: RoseTree = compiler_info.rose
 
         post_compile.cwl_docker_extract(args, self.process_name)
-        post_compile.remove_entrypoints(args, rose_tree)
-
+        rose_tree = post_compile.remove_entrypoints(args, rose_tree)
+        post_compile.find_and_create_output_dirs(rose_tree)
         # Do NOT capture stdout and/or stderr and pipe warnings and errors into a black hole.
         retval = run_local_module.run_local(args, rose_tree, args.cachedir, args.cwl_runner, True)
 
