@@ -1,4 +1,4 @@
-name: Docker
+name: Publish REST API Docker
 
 on:
   workflow_dispatch:
@@ -36,5 +36,5 @@ jobs:
           context: .
           file: ./docker/Dockerfile_ubuntu_REST
           push: true
-          tags: polusai/sophios:${{ github.ref }}
+          tags: polusai/sophios:${{ env.tag }}
 
