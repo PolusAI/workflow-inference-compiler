@@ -65,9 +65,9 @@ class AuthoredNamesFilter(logging.Filter):
         super().__init__()
         authored: dict[str, str] = {}
         for emitted, entry in names.get('steps', {}).items():
-            for spelled in (emitted, entry.get('id', emitted)):
-                authored[spelled] = (f"inserted step '{entry['name']}'" if entry['inserted']
-                                     else f"step {entry['index']} '{entry['name']}'")
+            for known in (emitted, entry.get('id', emitted)):
+                authored[known] = (f"inserted step '{entry['name']}'" if entry['inserted']
+                                   else f"step {entry['index']} '{entry['name']}'")
         for emitted, entry in names.get('ports', {}).items():
             if entry['steps']:
                 authored[emitted] = '/'.join([*entry['steps'], entry['port']])
@@ -79,11 +79,15 @@ class AuthoredNamesFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if self._pattern is not None:
-            record.msg = self._pattern.sub(self._spelled, record.getMessage())
+            record.msg = self.spelled(record.getMessage())
             record.args = ()
         return True
 
-    def _spelled(self, found: re.Match[str]) -> str:
+    def spelled(self, text: str) -> str:
+        """`text` with each emitted id written as `authored (emitted)`."""
+        return self._pattern.sub(self._one, text) if self._pattern is not None else text
+
+    def _one(self, found: re.Match[str]) -> str:
         return f"{self._authored[found['id']]} ({found['id']}{found['job'] or ''})"
 
 
