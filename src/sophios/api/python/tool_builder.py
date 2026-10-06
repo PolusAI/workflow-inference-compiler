@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from cwl_utils.parser import cwl_v1_2 as _cwl
-import yaml
+from sophios.input_output import dump_wic_yaml
 from sophios.wic_types import Tools
 
 from ._tool_builder_step_bridge import _command_line_tool_to_step
@@ -978,7 +978,7 @@ class CommandLineTool:
         Returns:
             str: The YAML text.
         """
-        return yaml.safe_dump(self.to_cwl_document(), sort_keys=False, line_break="\n")
+        return dump_wic_yaml(self.to_cwl_document())
 
     def write_cwl(self, path: str | Path, *, validate: bool = False, skip_schemas: bool = False) -> Path:
         """Write the tool as a `.cwl` file, creating its parent directories.
