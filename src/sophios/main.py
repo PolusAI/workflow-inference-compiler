@@ -196,7 +196,8 @@ def _run_settings(args: argparse.Namespace) -> preflight.RunSettings:
     writes = ((Path(args.outdir), "the run's outputs", 'give --outdir a directory you can write to'),) \
         if args.outdir else ()
     return preflight.RunSettings(args.container_engine, args.pull_dir, ignore_install=args.ignore_docker_install,
-                                 ignore_processes=args.ignore_docker_processes, writes=writes)
+                                 ignore_processes=args.ignore_docker_processes, runner=args.cwl_runner,
+                                 run_script=args.generate_run_script, writes=writes)
 
 
 def _run(args: argparse.Namespace, unknown_args: list[str], workflow_name: str,

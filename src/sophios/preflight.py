@@ -11,6 +11,7 @@ problem at once, each on one line: what is wrong, then what to do.
 """
 import json
 import os
+import shutil
 import subprocess as sub
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -22,6 +23,7 @@ from urllib.parse import unquote, urlparse
 import cwl_utils.parser as cwl
 from cwl_utils.docker_extract import traverse
 
+from . import run_local
 from .input_output import input_paths, names_map_path
 from .lang.diagnostics import Diagnostic, Severity, SophiosError
 from .lang.error_codes import SophiosErrorCode
@@ -53,6 +55,10 @@ class RunSettings:
     pull_dir: str
     ignore_install: bool = False
     ignore_processes: bool = False
+    #: The CWL runner the run uses: `cwltool` or `toil-cwl-runner`.
+    runner: str = 'cwltool'
+    #: Whether the run only writes `run.sh`, which calls the runner as a program.
+    run_script: bool = False
     #: Each directory the run writes into: the path, what it holds, what to do instead (see `unwritable`).
     writes: tuple[tuple[Path, str, str], ...] = ()
 
@@ -85,6 +91,7 @@ def check(found: Needs, settings: RunSettings) -> None:
     problems = _path_problems(found)
     problems += [problem for directory, holds, remedy in settings.writes
                  if (problem := unwritable(directory, holds, remedy)) is not None]
+    problems += _program_problems(found, settings)
     if found.containers:
         problems += _engine_problems(found, settings)
     if problems:
@@ -199,6 +206,34 @@ def _spellings(root: Path) -> Callable[[str], str]:
         entry = ports.get(name)
         return '/'.join([*entry['steps'], entry['port']]) if entry and entry['steps'] else name
     return spelled
+
+
+#: How to install each program a run may call.
+_INSTALL: Final = {
+    'cwltool_filterlog': 'install Sophios in this environment (pip install sophios), which provides it',
+    'toil-cwl-runner': 'install Toil (pip install "toil[cwl]")',
+    'cwl-docker-extract': 'install cwl-utils (pip install cwl-utils)',
+}
+
+
+def _program_problems(found: Needs, settings: RunSettings) -> list[Diagnostic]:
+    """A program the run calls that is not here, or a runner that cannot run on this platform."""
+    problems = []
+    if settings.run_script:
+        script = 'cwltool_filterlog' if settings.runner == 'cwltool' else settings.runner
+        if shutil.which(script) is None:
+            problems.append(_missing(f'run.sh calls {script}, which is not on PATH: {_INSTALL[script]}'))
+    elif run_local.RUNNER_UNAVAILABLE is not None:
+        problems.append(_missing(f'{settings.runner} cannot run here ({run_local.RUNNER_UNAVAILABLE}): run '
+                                 'Sophios inside WSL (https://learn.microsoft.com/windows/wsl/install)'))
+    if found.containers and shutil.which('cwl-docker-extract') is None:
+        problems.append(_missing(f'pulling the images for {settings.container_engine} needs cwl-docker-extract, '
+                                 f"which is not on PATH: {_INSTALL['cwl-docker-extract']}"))
+    return problems
+
+
+def _missing(message: str) -> Diagnostic:
+    return Diagnostic(Severity.ERROR, SophiosErrorCode.PROGRAM_MISSING, f'{message}.')
 
 
 def _engine_problems(found: Needs, settings: RunSettings) -> list[Diagnostic]:

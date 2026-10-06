@@ -6,7 +6,7 @@ without importing the reporting plumbing.
 
 Two ranges, one enum: `wic0NN` is a document (it said something the language
 does not accept) or what running it needs from the machine (kind `machine`,
-such as wic015, wic016 and wic021); `api0NN` is the Python API (the document is
+such as wic015, wic016, wic021 and wic029); `api0NN` is the Python API (the document is
 fine, the call was not). One type so a caller matches on one `except`;
 separate ranges so an API code does not point at the language guide.
 
@@ -58,6 +58,8 @@ class SophiosErrorCode(StrEnum):
     #: A step naming a port its resolved process does not have, on either
     #: side, for either a CommandLineTool or a subworkflow.
     UNDECLARED_PORT = 'wic028'
+    #: A program the run calls that is not installed here, or cannot run on this platform.
+    PROGRAM_MISSING = 'wic029'
     RECURSIVE_ALIAS = 'wic030'
     #: Two different things the emitted document would spell the same way:
     #: ports, e.g. an authored name equal to one the compiler derives, or the
@@ -261,6 +263,10 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         Kind.DOCUMENT,
         "An input or output name the step's process does not declare.",
         'Use a port the tool or subworkflow declares.'),
+    SophiosErrorCode.PROGRAM_MISSING: Explanation(
+        Kind.MACHINE,
+        'A program the run calls is not installed, or cannot run on this platform.',
+        'Install the program the message names, as it says; on Windows, run Sophios inside WSL.'),
     SophiosErrorCode.RECURSIVE_ALIAS: Explanation(
         Kind.DOCUMENT,
         'A YAML alias that contains itself.',

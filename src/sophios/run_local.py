@@ -14,27 +14,22 @@ from typing import Iterator, Mapping
 from sophios.ir.names import Names
 from sophios.ir.types import DerivedName, WorkflowGraph
 from sophios.wic_types import Json
+from . import auto_gen_header, realtime
+from . import utils  # , utils_graphs
 from .compute_request import ComputeRequest
 from .input_output import names_map_path
+from .plugins import AuthoredNamesFilter, logging_filters
 
+#: Why cwltool and Toil cannot run in this process, or None. Windows has no `pwd`, which they import
+#: (transitively, in cwltool.provenance); the pre-flight says so when a run is asked for.
+RUNNER_UNAVAILABLE: str | None = None
 try:
     import cwltool.main
     import toil.cwl.cwltoil  # transitively imports cwltool
-except ImportError as exc:
-    print('Could not import cwltool.main and/or toil.cwl.cwltoil')
-    # (pwd is imported transitively in cwltool.provenance)
-    print(exc)
-    if exc.msg == "No module named 'pwd'":
-        print('Windows does not have a pwd module')
-        print('If you want to run on windows, you need to install')
-        print('Windows Subsystem for Linux')
-        print('See https://pypi.org/project/cwltool/#ms-windows-users')
-    else:
-        raise exc
-
-from . import auto_gen_header, realtime
-from . import utils  # , utils_graphs
-from .plugins import AuthoredNamesFilter, logging_filters
+except ModuleNotFoundError as exc:
+    if exc.name != 'pwd':
+        raise
+    RUNNER_UNAVAILABLE = 'cwltool and Toil need the pwd module, which Windows does not have'
 
 
 @dataclass(frozen=True, slots=True)

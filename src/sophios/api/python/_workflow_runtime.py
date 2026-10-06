@@ -536,7 +536,9 @@ def run_workflow(
                           "inputs_file"),) if inputs_file else ()
     preflight.prepare(
         [Path(basepath) / f"{workflow.process_name}.cwl", *realtime.documents(analyses, Path(basepath))],
-        preflight.RunSettings(resolved_run_args["container_engine"], resolved_run_args["pull_dir"], writes=writes),
+        preflight.RunSettings(resolved_run_args["container_engine"], resolved_run_args["pull_dir"],
+                              runner=resolved_run_args["cwl_runner"],
+                              run_script=_enabled(resolved_run_args.get("generate_run_script", "no")), writes=writes),
         jobs)
     if _enabled(resolved_run_args.get("docker_remove_entrypoints")):
         artifact = pc.remove_artifact_entrypoints(

@@ -8,7 +8,7 @@ when Sophios knows them. A note reports a choice Sophios made and does not stop 
 `.wic` file or the Python workflow), `call` (the Python API call), `machine` (what is installed, running,
 readable or writable here) or `run` (nothing in Sophios: a tool failed while it ran).
 
-`wic029`, `wic037`, `wic040` and `wic041` are not assigned.
+`wic037`, `wic040` and `wic041` are not assigned.
 
 | Code | Kind | Meaning | Fix |
 |---|---|---|---|
@@ -40,6 +40,7 @@ readable or writable here) or `run` (nothing in Sophios: a tool failed while it 
 | `wic026` | document | An edge name defined twice. | Give each `!&` its own name. |
 | `wic027` | document | An input, `out:` entry or edge with an empty name. | Write the name. |
 | `wic028` | document | An input or output name the step's process does not declare. | Use a port the tool or subworkflow declares. |
+| `wic029` | machine | A program the run calls is not installed, or cannot run on this platform. | Install the program the message names, as it says; on Windows, run Sophios inside WSL. |
 | `wic030` | document | A YAML alias that contains itself. | Remove the alias that refers back to its own anchor. |
 | `wic031` | document | Two ports the compiled CWL would spell the same way, or a namespace prefix bound to two URIs. | Rename one of the two ports, or bind the prefix to one URI (language guide §5.2). |
 | `wic032` | document | A `scatter:` entry that is not an input of its step. | Scatter over an input the step declares and binds (language guide §6.1). |

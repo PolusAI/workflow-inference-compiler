@@ -456,3 +456,18 @@ def _provoke_realtime_declaration() -> None:
 
 
 COMPILED.update({SophiosErrorCode.REALTIME_DECLARATION: _provoke_realtime_declaration})
+
+
+def _provoke_program_missing() -> None:
+    import tempfile  # pylint: disable=import-outside-toplevel
+    from pathlib import Path  # pylint: disable=import-outside-toplevel
+    from unittest import mock  # pylint: disable=import-outside-toplevel
+
+    from sophios import preflight  # pylint: disable=import-outside-toplevel
+
+    with tempfile.TemporaryDirectory() as root, mock.patch.object(preflight.shutil, 'which', return_value=None):
+        preflight.check(preflight.Needs((Path(root) / 'none.cwl',), ()),
+                        preflight.RunSettings('docker', root, run_script=True))
+
+
+COMPILED.update({SophiosErrorCode.PROGRAM_MISSING: _provoke_program_missing})
