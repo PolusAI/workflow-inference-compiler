@@ -73,6 +73,12 @@ no intermediate tree left to inspect.
 
 Useful flags:
 
+- `--check`: compile the workflow and check that this machine can run it, then stop. It runs the
+  checks a local run makes (the container engine when a step runs in a container, the input paths,
+  the directories Sophios writes, the programs it calls) and pulls and runs nothing.
+  `--generate_run_script` keeps its own meaning: it writes `run.sh` and the compiled output, after the
+  same checks and the image pulls. Only local runs are checked: a compute submission never looks at this
+  machine's engine, paths or programs.
 - `--graphviz`: write Graphviz sources and rendered diagrams when `dot` is available.
 - `--inputs_file <file>`: merge extra job inputs into generated CWL inputs. A relative `location` or
   `path` of a File or Directory in it, at any depth, is read from the inputs file's own directory.

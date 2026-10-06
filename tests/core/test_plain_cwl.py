@@ -199,6 +199,26 @@ def test_run_sh_gives_the_runner_the_workflow_and_the_job_as_they_are(sophios: C
 
 
 @pytest.mark.fast
+def test_check_stops_after_the_pre_flight_of_a_plain_cwl_workflow(
+        sophios: Callable[..., Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    sophios(PLAIN, '--allow_raw_cwl', '--check', '--inputs_file', str(tmp_path / 'jobs' / 'job.yml'))
+    assert 'Checked ' in capsys.readouterr().out
+    assert not Path('run.sh').exists()
+
+
+@pytest.mark.fast
+def test_check_names_a_missing_input_of_a_plain_cwl_workflow(
+        sophios: Callable[..., Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    job = tmp_path / 'jobs' / 'missing.yml'
+    job.write_text('message: hello\nfile: {class: File, location: nope.txt}\n', encoding='utf-8')
+    with pytest.raises(SystemExit) as caught:
+        sophios(PLAIN, '--allow_raw_cwl', '--check', '--inputs_file', str(job))
+    assert caught.value.code == 1
+    assert (f"input 'file' (from --inputs_file, whose relative paths are read from {job.parent}) names 'nope.txt'"
+            in capsys.readouterr().err)
+
+
+@pytest.mark.fast
 def test_without_inputs_file_the_runner_gets_no_job_file(sophios: Callable[..., Path]) -> None:
     """The workflow's own defaults apply; the runner names any required input left unset."""
     workflow = sophios(PLAIN, '--allow_raw_cwl', '--generate_run_script')
