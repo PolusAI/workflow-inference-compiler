@@ -7,6 +7,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.nodes import ScalarNode
 
 from . import auto_gen_header
 from .runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
@@ -24,9 +26,28 @@ from .wic_types import Yaml, Json
 # See https://ttl255.com/yaml-anchors-and-aliases-and-how-to-disable-them/#override
 
 
+# cwltool reads job files and documents with ruamel (YAML 1.2 rules), PyYAML
+# writes them with YAML 1.1 rules, and the two disagree on what is a number:
+# PyYAML leaves `1e3`, `0o17` and `._5` plain, which ruamel reads as a float, an
+# int and a float (`._` as a float it then cannot convert). Every string is
+# written quoted when either reader would type it as anything else.
+_YAML12_RESOLVER = YAML(typ='rt').resolver
+_STR_TAG = 'tag:yaml.org,2002:str'
+
+
 class NoAliasDumper(yaml.SafeDumper):
     def ignore_aliases(self, data: Any) -> bool:
         return True
+
+
+def _represent_str(dumper: yaml.SafeDumper, data: str) -> yaml.ScalarNode:
+    plain = dumper.represent_str(data)
+    if plain.style is None and _YAML12_RESOLVER.resolve(ScalarNode, data, (True, False)) != _STR_TAG:
+        return dumper.represent_scalar(_STR_TAG, data, style="'")
+    return plain
+
+
+NoAliasDumper.add_representer(str, _represent_str)
 
 
 def dump_wic_yaml(document: Json) -> str:
