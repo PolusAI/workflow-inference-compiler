@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess as sub
 import sys
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ from urllib.parse import urldefrag, urlparse
 from urllib.request import url2pathname
 
 import cwl_utils.parser as cwl
+import requests
 
 from . import run_local
 from .input_output import input_paths, names_map_path
@@ -132,7 +134,11 @@ def check(found: Needs, settings: RunSettings) -> None:
 
 
 def pull(found: Needs, settings: RunSettings) -> None:
-    """Make every image the run uses available."""
+    """Make every image the run uses available: pulled, and for docker and podman also loaded or imported.
+
+    Raises:
+        SophiosError: `wic037` for the first pull, load or import that failed.
+    """
     if not found.containers:
         return
     # cwl-docker-extract recursively `docker pull`s all images in all subworkflows.
@@ -140,12 +146,71 @@ def pull(found: Needs, settings: RunSettings) -> None:
     # workflows, and if there is a local image available,
     # `docker run` will NOT query the remote repository for the latest image!
     # cwltool has a --force-docker-pull option, but this may cause multiple pulls in parallel.
+    engine = settings.container_engine
     for document in found.documents:
-        if settings.container_engine == 'singularity':
+        if engine == 'singularity':
             cmd = ['cwl-docker-extract', '-s', '--dir', settings.pull_dir, str(document)]
         else:
-            cmd = ['cwl-docker-extract', '--force-download', str(document)]
-        sub.run(cmd, check=True)
+            cmd = ['cwl-docker-extract', '--force-download', '--container-engine', engine, str(document)]
+        _fetch(cmd, f'pull {_images(found)}', engine)
+    if engine != 'singularity':
+        _load_and_import(found, engine)
+
+
+def _load_and_import(found: Needs, engine: str) -> None:
+    """Load each `dockerLoad` and import each `dockerImport` image, as cwltool does when it forces a pull.
+
+    cwl-docker-extract skips both forms, and the run's `--disable-pull` stops cwltool doing
+    them. As in cwltool, `dockerPull` wins when a requirement has it, and `dockerFile` is
+    left to cwltool, which builds it at run time even with `--disable-pull`.
+    """
+    shipped = dict.fromkeys((req.dockerLoad, req.dockerImport, req.dockerImageId)
+                            for req in found.containers if req.dockerPull is None)
+    for load, import_source, image_id in shipped:
+        if load is not None:
+            _load_archive(engine, load)
+        elif import_source is not None:
+            if image_id is None:
+                raise SophiosError([_unavailable(f'a dockerImport requirement of {import_source} names no '
+                                                 'dockerImageId to import it as')])
+            _fetch([engine, 'import', str(import_source), str(image_id)],
+                   f'import {image_id} from {import_source}', engine)
+
+
+def _load_archive(engine: str, source: str) -> None:
+    """`<engine> load -i <source>`; a `source` that is not a file is an http(s) URL, fetched first (as cwltool does)."""
+    if os.path.exists(source):
+        _fetch([engine, 'load', '-i', source], f'load {source}', engine)
+    elif urlparse(source).scheme in ('http', 'https'):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / 'image.tar'
+            try:
+                with requests.get(source, stream=True, timeout=60) as response, archive.open('wb') as out:
+                    response.raise_for_status()
+                    for chunk in response.iter_content(1024 * 1024):
+                        out.write(chunk)
+            except requests.RequestException as error:
+                raise SophiosError([_unavailable(f'could not download {source}, which a dockerLoad requirement '
+                                                 f'names ({error})')]) from error
+            _fetch([engine, 'load', '-i', str(archive)], f'load {source}', engine)
+    else:
+        raise SophiosError([_unavailable(f'a dockerLoad requirement names {source}, which is neither a file '
+                                         'nor an http(s) URL')])
+
+
+def _fetch(cmd: list[str], doing: str, engine: str) -> None:
+    """Run `cmd`, which `doing` describes; when it exits non-zero, quote the last line it wrote to stderr."""
+    proc = sub.run(cmd, check=False, stderr=sub.PIPE, text=True, errors='replace')
+    if proc.returncode != 0:
+        said = next((text.strip() for text in reversed(proc.stderr.splitlines()) if text.strip()), 'it said nothing')
+        raise SophiosError([_unavailable(f'{engine} could not {doing} ({cmd[0]} exited with status '
+                                         f'{proc.returncode}: {said})')])
+
+
+def _unavailable(message: str) -> Diagnostic:
+    return Diagnostic(Severity.ERROR, SophiosErrorCode.IMAGE_UNAVAILABLE,
+                      f'{message}: check the image name or source, the network and your registry login, '
+                      'then run again.')
 
 
 def prepare(documents: Sequence[Path], settings: RunSettings, jobs: Sequence[Job] = ()) -> None:

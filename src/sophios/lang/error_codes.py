@@ -78,6 +78,8 @@ class SophiosErrorCode(StrEnum):
     UNSUPPORTED_CWL_VERSION = 'wic035'
     #: An authored workflow output with no `type` and no producer to take one from.
     UNTYPED_OUTPUT = 'wic036'
+    #: An image the run needs that the engine could not pull, load or import before the run.
+    IMAGE_UNAVAILABLE = 'wic037'
     #: CWL's WorkflowStepInput written where Sophios does not read it: an
     #: untagged mapping in `in:` carrying `source`, `default`, `linkMerge`,
     #: ..., a `!cwl {...}` record carrying a key or a `source` it may not, or
@@ -298,6 +300,11 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         'A workflow output with no `type:` and no producer to take it from.',
         'Give the output a `type:`, or an `outputSource:` naming the step output it comes from (language guide '
         '§5.2).'),
+    SophiosErrorCode.IMAGE_UNAVAILABLE: Explanation(
+        Kind.MACHINE,
+        'An image the run needs could not be pulled, loaded or imported before the run; the message quotes the '
+        "engine's last line.",
+        'Check the image name or source, the network and your registry login, then run again.'),
     SophiosErrorCode.STEP_INPUT_RECORD: Explanation(
         Kind.DOCUMENT,
         "CWL's step input written where Sophios does not read it: an untagged mapping of step-input fields, a "
