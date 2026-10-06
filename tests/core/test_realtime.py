@@ -115,9 +115,8 @@ def test_a_malformed_declaration_is_wic044_at_its_step(port: str, overrides: Yam
 
 def _analyses(document: Yaml, yml_paths: dict[str, dict[str, Path]] | None = None) -> tuple[Analysis, ...]:
     """Compile `document` and then the analyses it declares, as the CLI does."""
-    options, graph_settings = default_compilation_settings()
     return realtime.compile_analyses(compile_hermetic(document, tools=TOOLS).realtime, yml_paths or {}, TOOLS,
-                                     options, graph_settings)
+                                     default_compilation_settings())
 
 
 def _only_analysis(document: Yaml, yml_paths: dict[str, dict[str, Path]] | None = None) -> Analysis:
