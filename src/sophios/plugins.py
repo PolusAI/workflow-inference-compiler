@@ -91,6 +91,36 @@ class AuthoredNamesFilter(logging.Filter):
         return f"{self._authored[found['id']]} ({found['id']}{found['job'] or ''})"
 
 
+class FailedJobs(logging.Filter):
+    """Collect each job an in-process cwltool run reports as not successful.
+
+    Reads cwltool's own record, whose first argument is the job's emitted name,
+    so it is installed before `AuthoredNamesFilter` rewrites the text. `failed`
+    maps each failed job to its exit status, the signal that ended it, or None
+    when cwltool gave neither, in the order the jobs failed.
+    """
+    # pylint:disable=too-few-public-methods
+
+    #: cwltool's messages for a job that did not succeed (cwltool/job.py).
+    EXITED: Final = '[job %s] exited with status: %d'
+    SIGNALLED: Final = '[job %s] was terminated by signal: %s'
+    COMPLETED: Final = '[job %s] completed %s'
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._ended: dict[str, int | str] = {}
+        self.failed: dict[str, int | str | None] = {}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) == 2:
+            job, detail = str(record.args[0]), record.args[1]
+            if record.msg in (self.EXITED, self.SIGNALLED) and isinstance(detail, (int, str)):
+                self._ended[job] = detail
+            elif record.msg == self.COMPLETED and detail != 'success':
+                self.failed[job] = self._ended.get(job)
+        return True
+
+
 def logging_filters(allow_pf: bool = False) -> None:
     """Install logging filters that silence known-noisy cwltool/salad log messages.
 
