@@ -98,6 +98,9 @@ podman --version
 For Docker, Docker Desktop is the usual path on macOS and Windows. On Linux,
 install Docker or Podman through your distribution package manager.
 
+Before a local run, Sophios checks the engine only when a step runs in a
+container, and says whether it is missing, stopped or not yours to use.
+
 ### Node.js
 
 Install Node.js when workflows use CWL JavaScript expressions such as

@@ -203,9 +203,10 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         'Bind exactly the inputs the script declares.'),
     SophiosErrorCode.CONTAINER_ENGINE_UNAVAILABLE: Explanation(
         Kind.MACHINE,
-        'The container engine (`docker` by default) is not installed or not working.',
-        'Install or start the engine as the message says; `--container_engine` names another engine, and '
-        '`--ignore_docker_install` skips the check.'),
+        'The container engine cannot be used: not installed, not running, not yours to use, or overloaded. '
+        'Checked only when a step runs in a container.',
+        'Do what the message says: install the engine, start it, or give your user access to it; '
+        '`--container_engine` names another engine, and `--ignore_docker_install` skips the check.'),
     SophiosErrorCode.MISSING_INPUT_FILE: Explanation(
         Kind.MACHINE,
         'An input file named in the inputs does not exist.',

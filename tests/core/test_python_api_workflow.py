@@ -28,6 +28,7 @@ import sophios.compiler
 import sophios.compute_request as compute_request_module
 import sophios.plugins
 from sophios import input_output as io
+from sophios import preflight
 from sophios import run_local
 from sophios import run_local_async
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
@@ -1200,8 +1201,7 @@ def _api_run_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, run_args: 
     touch.inputs.filename = "empty.txt"
     workflow = Workflow([touch], "quiet_demo")
     cmdlines: list[str] = []
-    monkeypatch.setattr(python_runtime.pc, "verify_container_engine_config", lambda container, ignore: None)
-    monkeypatch.setattr(python_runtime.pc, "cwl_docker_extract", lambda container, pull_dir, cwl_path: None)
+    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings: None)
     monkeypatch.setattr(python_runtime.rl, "generate_run_script", cmdlines.append)
     workflow.run(basepath=str(tmp_path), run_args_dict={"generate_run_script": "yes", **run_args})
     return cmdlines[0].split()
@@ -1282,21 +1282,15 @@ def test_run_compute_does_not_apply_local_env(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.fast
-def test_workflow_run_uses_basepath_for_docker_extract(
+def test_workflow_run_prepares_the_cwl_in_its_basepath(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Container extraction is pointed at the basepath, not at the current directory."""
+    """The pre-flight is given the CWL in the basepath, not one in the current directory."""
     example_path = REPO_ROOT / "examples" / "scripts" / "tool_builder_workflow.py"
     module = import_python_file(example_path.stem, example_path.resolve())
     workflow = module.build_workflow("hello from test")
-    calls: dict[str, list[tuple[Any, ...]]] = {"verify": [], "extract": []}
-
-    def fake_verify(container_engine: str, ignore_install: bool) -> None:
-        calls["verify"].append((container_engine, ignore_install))
-
-    def fake_extract(container_engine: str, pull_dir: str, cwl_path: Path) -> None:
-        calls["extract"].append((container_engine, pull_dir, cwl_path))
+    prepared: list[tuple[list[Path], preflight.RunSettings]] = []
 
     def fake_run_local(
         run_args_dict: dict[str, str],
@@ -1312,16 +1306,17 @@ def test_workflow_run_uses_basepath_for_docker_extract(
         del realtime_plans
         return 0
 
-    monkeypatch.setattr(python_runtime.pc,
-                        "verify_container_engine_config", fake_verify)
-    monkeypatch.setattr(python_runtime.pc, "cwl_docker_extract", fake_extract)
+    monkeypatch.setattr(python_runtime.preflight, "prepare",
+                        lambda documents, settings: prepared.append((documents, settings)))
     monkeypatch.setattr(python_runtime.rl, "run_local", fake_run_local)
 
     workflow.run(basepath=str(tmp_path))
 
-    assert calls["verify"] == [("docker", False)]
-    assert calls["extract"] == [
-        ("docker", str(Path.cwd()), tmp_path / "tool_builder_workflow_demo.cwl")]
+    (documents, settings), = prepared
+    assert documents == [tmp_path / "tool_builder_workflow_demo.cwl"]
+    assert settings.container_engine == "docker"
+    assert settings.pull_dir == str(Path.cwd())
+    assert not settings.ignore_install
 
 
 @pytest.mark.fast
@@ -1336,16 +1331,7 @@ def test_workflow_run_does_not_forward_python_run_flags_to_runner(
 
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(
-        python_runtime.pc,
-        "verify_container_engine_config",
-        lambda container, ignore: None,
-    )
-    monkeypatch.setattr(
-        python_runtime.pc,
-        "cwl_docker_extract",
-        lambda container, pull_dir, cwl_path: None,
-    )
+    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings: None)
 
     def fake_run_local(
         run_args_dict: dict[str, str],
@@ -1395,8 +1381,7 @@ def test_workflow_run_writes_virtual_output_directories_without_orphans(
     step.inputs.outDir = Path("result.outDir")
     workflow = Workflow([step], "virtual_run_demo")
 
-    monkeypatch.setattr(python_runtime.pc, "verify_container_engine_config", lambda container, ignore: None)
-    monkeypatch.setattr(python_runtime.pc, "cwl_docker_extract", lambda container, pull_dir, cwl_path: None)
+    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings: None)
     monkeypatch.setattr(
         python_runtime.rl,
         "run_local",
@@ -1571,8 +1556,7 @@ def test_an_api_failure_carries_an_api_code_not_a_language_one(error: type[ApiEr
 
 def _detach_run_from_the_container_engine(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep a `Workflow.run()` call off the container engine and the disk."""
-    monkeypatch.setattr(python_runtime.pc, 'verify_container_engine_config', lambda *_a, **_k: None)
-    monkeypatch.setattr(python_runtime.pc, 'cwl_docker_extract', lambda *_a, **_k: None)
+    monkeypatch.setattr(python_runtime.preflight, 'prepare', lambda *_a, **_k: None)
     monkeypatch.setattr(python_runtime.input_output, 'write_artifacts_to_disk', lambda *_a, **_k: None)
 
 

@@ -105,12 +105,19 @@ def _provoke_script_argument_mismatch() -> None:
 
 
 def _provoke_container_engine_unavailable() -> None:
+    import tempfile  # pylint: disable=import-outside-toplevel
+    from pathlib import Path  # pylint: disable=import-outside-toplevel
     from unittest import mock  # pylint: disable=import-outside-toplevel
 
-    from sophios import post_compile  # pylint: disable=import-outside-toplevel
+    from sophios import preflight  # pylint: disable=import-outside-toplevel
 
-    with mock.patch.object(post_compile.sub, 'run', side_effect=FileNotFoundError('docker')):
-        post_compile.verify_container_engine_config('docker', False)
+    with tempfile.TemporaryDirectory() as root:
+        tool = Path(root) / 'tool.cwl'
+        tool.write_text('cwlVersion: v1.2\nclass: CommandLineTool\nrequirements:\n  DockerRequirement:\n'
+                        '    dockerPull: docker.io/bash:4.4\nbaseCommand: [echo]\ninputs: {}\noutputs: {}\n',
+                        encoding='utf-8')
+        with mock.patch.object(preflight.sub, 'run', side_effect=FileNotFoundError('docker')):
+            preflight.check(preflight.needs([tool]), preflight.RunSettings('docker', root))
 
 
 def _provoke_missing_input_file() -> None:
@@ -343,8 +350,7 @@ def _provoke_workflow_run_failed() -> None:
 
     echo = Step(clt_path=Path(__file__).resolve().parents[2] / 'cwl_adapters' / 'echo.cwl')
     echo.inputs.message = 'hello'
-    with mock.patch.object(runtime.pc, 'verify_container_engine_config'), \
-            mock.patch.object(runtime.pc, 'cwl_docker_extract'), \
+    with mock.patch.object(runtime.preflight, 'prepare'), \
             mock.patch.object(runtime.input_output, 'write_artifacts_to_disk'), \
             mock.patch.object(runtime.rl, 'run_local', return_value=1):
         Workflow([echo], 'provoke').run()

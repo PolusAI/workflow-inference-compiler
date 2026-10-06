@@ -18,6 +18,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -27,7 +28,7 @@ from types import ModuleType
 import pytest
 
 from sophios import main as cli
-from sophios import post_compile
+from sophios import post_compile, preflight
 from sophios.ir.complete import coerce_job_value
 from sophios.ir.declarations import port_declaration
 from sophios.ir.types import AuthoredName
@@ -246,65 +247,6 @@ def test_a_float_the_literal_cannot_hold_exactly_says_so() -> None:
     assert 'cannot hold exactly' in caught.value.diagnostics[0].message
 
 
-@pytest.mark.fast
-def test_missing_container_engine_reports(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The docker check reports the same installation advice it printed."""
-    def command_not_found(*_args: object, **_kwargs: object) -> object:
-        raise FileNotFoundError('docker')
-
-    monkeypatch.setattr(post_compile.sub, 'run', command_not_found)
-
-    with pytest.raises(SophiosError) as caught:
-        post_compile.verify_container_engine_config('docker', False)
-
-    assert caught.value.diagnostics[0].code is SophiosErrorCode.CONTAINER_ENGINE_UNAVAILABLE
-    assert any('--ignore_docker_install' in d.message for d in caught.value.diagnostics)
-
-
-@pytest.mark.fast
-def test_ignored_container_check_stays_silent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The escape hatch still works: --ignore_docker_install means no report."""
-    def command_not_found(*_args: object, **_kwargs: object) -> object:
-        raise FileNotFoundError('docker')
-
-    monkeypatch.setattr(post_compile.sub, 'run', command_not_found)
-    post_compile.verify_container_engine_config('docker', True)  # must not raise
-
-
-def _docker_with_processes(monkeypatch: pytest.MonkeyPatch, count: int) -> None:
-    """A working docker engine that reports `count` running docker processes."""
-    def probe(cmd: str | list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        if isinstance(cmd, list):
-            return subprocess.CompletedProcess(cmd, 0, stdout=b'Hello from Docker!')
-        return subprocess.CompletedProcess(cmd, 0, stdout=f'{count}\n'.encode())
-
-    monkeypatch.setattr(post_compile.sub, 'run', probe)
-    monkeypatch.setattr(post_compile.sys, 'platform', 'linux')
-
-
-@pytest.mark.fast
-def test_too_many_docker_processes_reports(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The process-count check fires unless --ignore_docker_processes is given."""
-    _docker_with_processes(monkeypatch, 1001)
-
-    with pytest.raises(SophiosError) as caught:
-        post_compile.verify_container_engine_config('docker', False, ignore_container_processes=False)
-
-    assert caught.value.diagnostics[0].code is SophiosErrorCode.CONTAINER_ENGINE_UNAVAILABLE
-    assert any('--ignore_docker_processes' in d.message for d in caught.value.diagnostics)
-
-
-@pytest.mark.fast
-def test_ignored_docker_process_check_stays_silent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """--ignore_docker_processes alone silences the process-count check, and
-    --ignore_docker_install does not."""
-    _docker_with_processes(monkeypatch, 1001)
-    post_compile.verify_container_engine_config('docker', False, ignore_container_processes=True)  # must not raise
-
-    with pytest.raises(SophiosError):
-        post_compile.verify_container_engine_config('docker', True, ignore_container_processes=False)
-
-
 # --------------------------------------------------------------------------
 # The CLI still speaks exit codes
 # --------------------------------------------------------------------------
@@ -465,8 +407,7 @@ def _cli_on_helloworld(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Calla
     exit code are the CLI's own.
     """
     import sophios.post_compile as pc
-    monkeypatch.setattr(pc, 'verify_container_engine_config', lambda *_a, **_k: None)
-    monkeypatch.setattr(pc, 'cwl_docker_extract', lambda *_a, **_k: None)
+    monkeypatch.setattr(preflight, 'prepare', lambda *_a, **_k: None)
     monkeypatch.setattr(pc, 'stage_input_files', lambda *_a, **_k: None)
     monkeypatch.chdir(tmp_path)
     workflow = Path(__file__).resolve().parents[2] / 'docs' / 'tutorials' / 'helloworld.wic'
@@ -630,23 +571,6 @@ def test_an_unresolved_input_error_does_not_call_itself_a_warning() -> None:
     assert first.message == 'Did you forget to use !ii before x?'
 
 
-@pytest.mark.fast
-def test_a_container_engine_error_does_not_call_itself_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An error report states the problem; `Warning!` is for the stderr lines that do not stop the compile."""
-    _docker_with_processes(monkeypatch, 1001)
-    with pytest.raises(SophiosError) as caught:
-        post_compile.verify_container_engine_config('docker', False, ignore_container_processes=False)
-    assert caught.value.diagnostics[0].message == 'There are 1001 running docker processes.'
-
-    def command_not_found(*_args: object, **_kwargs: object) -> object:
-        raise FileNotFoundError('docker')
-
-    monkeypatch.setattr(post_compile.sub, 'run', command_not_found)
-    with pytest.raises(SophiosError) as caught:
-        post_compile.verify_container_engine_config('docker', False)
-    assert caught.value.diagnostics[0].message == 'The docker command does not appear to be installed.'
-
-
 # --------------------------------------------------------------------------
 # Every code says what it means and what to do
 # --------------------------------------------------------------------------
@@ -786,3 +710,154 @@ def test_a_directory_sophios_cannot_write_is_wic021(monkeypatch: pytest.MonkeyPa
     printed = capsys.readouterr().err
     assert 'error [wic021] Sophios writes the compiled workflow to' in printed
     assert 'run Sophios from a directory you can write to' in printed
+
+
+# --------------------------------------------------------------------------
+# The container engine is checked when a step runs in a container, and the line says why it cannot be used
+# --------------------------------------------------------------------------
+
+_TOUCH = 'steps:\n- id: touch\n  in:\n    filename: !ii a.txt\n'   # touch.cwl runs in docker.io/bash:4.4
+
+
+@pytest.fixture(name='machine')
+def _machine(monkeypatch: pytest.MonkeyPatch) -> Callable[..., list[object]]:
+    """Replace `subprocess.run` with a machine whose `docker` is 'running', 'missing' or answers an exit status,
+    with `processes` Docker Desktop processes. Returns the list of commands it was given."""
+    def install(engine: str = 'running', processes: int = 0, said: bytes = b'') -> list[object]:
+        calls: list[object] = []
+
+        def run(cmd: list[str], *_args: object, **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+            calls.append(cmd)
+            if cmd[0] == 'pgrep':
+                return subprocess.CompletedProcess(cmd, 0, stdout=b'1\n' * processes, stderr=b'')
+            if cmd[0] == 'docker' and engine == 'missing':
+                raise FileNotFoundError('docker')
+            if cmd[0] == 'docker' and engine == 'fails':
+                return subprocess.CompletedProcess(cmd, 1, stdout=b'', stderr=said)
+            return subprocess.CompletedProcess(cmd, 0, stdout=b'', stderr=b'')
+        monkeypatch.setattr(subprocess, 'run', run)
+        monkeypatch.setattr(sys, 'platform', 'linux')
+        return calls
+    return install
+
+
+def _pulled(calls: list[object]) -> bool:
+    return any(isinstance(cmd, list) and cmd[0] == 'cwl-docker-extract' for cmd in calls)
+
+
+def _cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, source: str | None, *flags: str) -> None:
+    """`sophios --yaml <source> --generate_run_script <flags>` from tmp_path; helloworld when source is None."""
+    if source is None:
+        workflow = Path(__file__).resolve().parents[2] / 'docs' / 'tutorials' / 'helloworld.wic'
+    else:
+        workflow = tmp_path / 'w.wic'
+        workflow.write_text(source, encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr('sys.argv', ['sophios', '--yaml', str(workflow), '--generate_run_script', *flags])
+    cli.main()
+
+
+def _wic015(err: str) -> list[str]:
+    return [line for line in err.splitlines() if '[wic015]' in line]
+
+
+@pytest.mark.fast
+def test_a_workflow_without_containers_needs_no_engine(machine: Callable[..., list[object]],
+                                                       monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = machine('missing')
+    _cli(monkeypatch, tmp_path, None)          # returning is the assertion: helloworld runs echo on the host
+    assert (tmp_path / 'run.sh').exists()
+    assert ['docker', 'info'] not in calls
+
+
+@pytest.mark.fast
+def test_a_missing_engine_names_the_image_that_needs_it(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    calls = machine('missing')
+    with pytest.raises(SystemExit) as caught:
+        _cli(monkeypatch, tmp_path, _TOUCH)
+    assert caught.value.code == 1
+    line, = _wic015(capsys.readouterr().err)
+    assert ('docker is not installed (it is not on PATH), and this workflow runs tools in containers '
+            '(docker.io/bash:4.4): install docker') in line
+    assert not _pulled(calls)
+
+
+@pytest.mark.fast
+def test_an_engine_whose_socket_is_missing_says_so_and_quotes_the_engine(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    calls = machine('fails', said=b'failed to connect to the docker API\nsecond line')
+    monkeypatch.setenv('DOCKER_HOST', 'unix:///nonexistent/sophios.sock')
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, tmp_path, _TOUCH)
+    line, = _wic015(capsys.readouterr().err)
+    assert 'its engine is not reachable: the socket /nonexistent/sophios.sock does not exist ' in line
+    assert '(failed to connect to the docker API): start the engine' in line
+    assert not _pulled(calls)
+
+
+@pytest.mark.fast
+@pytest.mark.skipif(sys.platform == 'win32' or os.geteuid() == 0, reason='file modes do not stop Windows or root')
+def test_an_engine_whose_socket_is_not_yours_says_so(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    machine('fails', said=b'denied')
+    socket = tmp_path / 'docker.sock'
+    socket.write_text('', encoding='utf-8')
+    socket.chmod(0)
+    monkeypatch.setenv('DOCKER_HOST', f'unix://{socket}')
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, tmp_path, _TOUCH)
+    line, = _wic015(capsys.readouterr().err)
+    assert f'you may not use its socket {socket} (denied): add your user to the docker group' in line
+
+
+@pytest.mark.fast
+def test_an_engine_that_fails_for_another_reason_is_quoted_with_its_status(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    machine('fails', said=b'  whatever the engine said\n')
+    monkeypatch.setenv('DOCKER_HOST', 'tcp://engine.invalid:2375')
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, tmp_path, _TOUCH)
+    line, = _wic015(capsys.readouterr().err)
+    assert '`docker info` exited with status 1 (whatever the engine said): run `docker info` to see why' in line
+
+
+@pytest.mark.fast
+def test_too_many_docker_processes_is_one_line_unless_ignored(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    machine('running', processes=1001)
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, tmp_path, _TOUCH)
+    line, = _wic015(capsys.readouterr().err)
+    assert '1001 docker processes are running' in line and '--ignore_docker_processes' in line
+    assert 'Warning' not in line
+    _cli(monkeypatch, tmp_path, _TOUCH, '--ignore_docker_processes')   # returns
+
+
+@pytest.mark.fast
+def test_ignore_docker_install_skips_the_engine_check_and_still_pulls(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = machine('fails', said=b'stopped')
+    monkeypatch.setenv('DOCKER_HOST', 'tcp://engine.invalid:2375')
+    _cli(monkeypatch, tmp_path, _TOUCH, '--ignore_docker_install')    # returns
+    assert _pulled(calls)
+
+
+@pytest.mark.skipif(shutil.which('docker') is None, reason='needs the docker CLI')
+def test_the_docker_cli_with_no_daemon_is_named_not_reachable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    tool = tmp_path / 'tool.cwl'
+    tool.write_text('cwlVersion: v1.2\nclass: CommandLineTool\nrequirements:\n  DockerRequirement:\n'
+                    '    dockerPull: docker.io/bash:4.4\nbaseCommand: [echo]\ninputs: {}\noutputs: {}\n',
+                    encoding='utf-8')
+    # short: socket paths max out near 100 bytes
+    monkeypatch.setenv('DOCKER_HOST', 'unix:///nonexistent/no-daemon.sock')
+    with pytest.raises(SophiosError) as caught:
+        preflight.check(preflight.needs([tool]), preflight.RunSettings('docker', str(tmp_path), ignore_processes=True))
+    found, = caught.value.diagnostics
+    assert found.code is SophiosErrorCode.CONTAINER_ENGINE_UNAVAILABLE
+    assert 'the socket /nonexistent/no-daemon.sock does not exist' in found.message

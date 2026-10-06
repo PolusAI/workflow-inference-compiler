@@ -18,11 +18,11 @@ import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 
-from sophios import compiler, input_output, plugins, post_compile as pc, realtime, run_local as rl
+from sophios import compiler, input_output, plugins, post_compile as pc, preflight, realtime, run_local as rl
 from sophios.ir.artifacts import CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.resolve import RegistrySnapshot
-from sophios.lang import Diagnostics, Document, ParseResult, render
+from sophios.lang import Diagnostics, Document, ParseResult, SophiosError, render
 from sophios.cli import default_compilation_settings, get_known_and_unknown_args
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils import convert_args_dict_to_args_list
@@ -519,7 +519,11 @@ def run_workflow(
         result.realtime, {namespace: dict(paths) for namespace, paths in (workflow_paths or {}).items()},
         _merged_known_tools(workflow, tool_registry), compiler_options, graph_settings)
     artifact = pc.inline_artifact_runs(result.artifact)
-    pc.verify_container_engine_config(resolved_run_args["container_engine"], False)
+    if (problem := preflight.unwritable(Path(basepath), "the workflow and its run",
+                                        "pass run() a basepath you can write to")) is not None:
+        raise SophiosError([problem])
+    outdir = resolved_run_args.get("outdir")
+    writes = ((Path(outdir), "the run's outputs", "give run() an outdir you can write to"),) if outdir else ()
     input_output.write_artifacts_to_disk(
         artifact,
         Path(basepath),
@@ -527,9 +531,9 @@ def run_workflow(
         resolved_run_args.get("inputs_file", ""),
     )
     plans = realtime.write(analyses, Path(basepath), workflow.process_name, Path.cwd())
-    for document in (Path(basepath) / f"{workflow.process_name}.cwl",
-                     *realtime.documents(analyses, Path(basepath))):
-        pc.cwl_docker_extract(resolved_run_args["container_engine"], resolved_run_args["pull_dir"], document)
+    preflight.prepare(
+        [Path(basepath) / f"{workflow.process_name}.cwl", *realtime.documents(analyses, Path(basepath))],
+        preflight.RunSettings(resolved_run_args["container_engine"], resolved_run_args["pull_dir"], writes=writes))
     if _enabled(resolved_run_args.get("docker_remove_entrypoints")):
         artifact = pc.remove_artifact_entrypoints(
             resolved_run_args["container_engine"], artifact)

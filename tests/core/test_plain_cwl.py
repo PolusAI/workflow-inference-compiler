@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 import sophios.main as cli
-import sophios.post_compile as pc
+from sophios import preflight
 
 #: Twelve plain Workflows of the CWL v1.2 conformance suite; see its README.md.
 CONFORMANCE = Path(__file__).resolve().parent / 'data' / 'cwl-v1.2'
@@ -127,9 +127,8 @@ def _sophios(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[..., P
 
     What would reach for a container engine is recorded instead.
     """
-    monkeypatch.setattr(pc, 'verify_container_engine_config', lambda *_a, **_k: None)
     extracted: list[Path] = []
-    monkeypatch.setattr(pc, 'cwl_docker_extract', lambda _engine, _pull, path: extracted.append(Path(path)))
+    monkeypatch.setattr(preflight, 'prepare', lambda documents, _settings: extracted.extend(documents))
     (tmp_path / 'wf').mkdir()
     (tmp_path / 'wf' / 'say.cwl').write_text(SAY, encoding='utf-8')
     (tmp_path / 'wf' / 'copy.cwl').write_text(COPY, encoding='utf-8')
