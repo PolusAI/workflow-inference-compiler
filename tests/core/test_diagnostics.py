@@ -1041,3 +1041,14 @@ def test_generate_run_script_still_writes_run_sh_after_the_same_checks(
     calls = machine('running')
     _cli(monkeypatch, tmp_path, _TOUCH)
     assert (tmp_path / 'run.sh').exists() and _pulled(calls)
+
+
+@pytest.mark.fast
+def test_graphviz_without_dot_is_a_note(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    machine(missing=('dot',))
+    _cli(monkeypatch, tmp_path, None, '--graphviz', mode='--generate_cwl_workflow')
+    captured = capsys.readouterr()
+    assert 'note [wic029] --graphviz needs the dot program' in captured.err
+    assert 'Warning: Cannot generate graphviz' not in captured.out
