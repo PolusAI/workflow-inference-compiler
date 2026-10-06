@@ -33,7 +33,6 @@ dependencies = [
     "ruamel.yaml",
     "requests",
     "mergedeep",
-    "networkx",
     "cwl-utils>=0.32",
     # CommandInputParameter attr changed from `type_` to `type` and back to `type_`
     # between versions 0.30, 0.31, 0.32
@@ -69,6 +68,7 @@ Homepage = "https://github.com/PolusAI/sophios"
 [project.optional-dependencies]
 
 test = [
+    "networkx",
     "pre-commit",
     "py", # See https://github.com/kevlened/pytest-parallel/pull/119
     "pytest",
