@@ -639,12 +639,15 @@ def _stale_key_reason(key: StepKey, ids: Sequence[str]) -> str | None:
     return f'step {key.index} is {actual!r}; write ({key.index}, {actual})'
 
 
-def ranksame(sidecar: WicSidecar | None) -> tuple[StepKey, ...]:
-    """The steps `sidecar`'s `graphviz: ranksame:` list names, each as the key it is written as."""
+def graphviz_entry(sidecar: WicSidecar | None) -> dict[str, Any]:
+    """`sidecar`'s `graphviz:` entry, or nothing."""
     drawn = dict(sidecar.entries).get('graphviz') if sidecar is not None else None
-    entries = drawn.get('ranksame') if isinstance(drawn, dict) else None
-    keys = (step_key(str(entry)) for entry in entries) if isinstance(entries, list) else ()
-    return tuple(key for key in keys if key is not None)
+    return drawn if isinstance(drawn, dict) else {}
+
+
+def ranksame(sidecar: WicSidecar | None) -> tuple[StepKey, ...]:
+    """The steps `sidecar`'s `graphviz: ranksame:` list names; the parser checked each is a step key."""
+    return tuple(key for key in map(step_key, graphviz_entry(sidecar).get('ranksame', ())) if key is not None)
 
 
 def _report_stale_keys(sidecar: WicSidecar | None, document: Document, name: str,
