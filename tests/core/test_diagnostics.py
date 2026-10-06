@@ -21,7 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
 
@@ -732,7 +732,7 @@ def _machine(monkeypatch: pytest.MonkeyPatch) -> Callable[..., list[object]]:
     return install
 
 
-def _pulled(calls: list[object]) -> bool:
+def _pulled(calls: Sequence[object]) -> bool:
     return any(isinstance(cmd, list) and cmd[0] == 'cwl-docker-extract' for cmd in calls)
 
 
@@ -1099,3 +1099,146 @@ def test_graphviz_without_dot_is_a_note(
     captured = capsys.readouterr()
     assert 'note [wic029] --graphviz needs the dot program' in captured.err
     assert 'Warning: Cannot generate graphviz' not in captured.out
+
+
+# --------------------------------------------------------------------------
+# The upfront image fetch is complete: podman pulls with podman, loaded and imported images are fetched,
+# and a failure is one wic037
+# --------------------------------------------------------------------------
+
+
+def _tool(directory: Path, docker: dict[str, str]) -> Path:
+    """A CWL tool in `directory` whose DockerRequirement is `docker`."""
+    path = directory / 'tool.cwl'
+    path.write_text(json.dumps({'cwlVersion': 'v1.2', 'class': 'CommandLineTool', 'baseCommand': 'true',
+                                'inputs': [], 'outputs': [], 'requirements': {'DockerRequirement': docker}}),
+                    encoding='utf-8')
+    return path
+
+
+@pytest.fixture(name='engine')
+def _engine(monkeypatch: pytest.MonkeyPatch) -> Callable[..., list[list[str]]]:
+    """A machine on which every command succeeds, except those starting with `failing`, which exit 1 and say
+    `said` on stderr. Returns the list of commands it was given."""
+    def install(failing: tuple[str, ...] = (), said: str = '') -> list[list[str]]:
+        calls: list[list[str]] = []
+
+        def run(cmd: list[str], *_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(cmd)
+            if failing and tuple(cmd[:len(failing)]) == failing:
+                return subprocess.CompletedProcess(cmd, 1, stdout='', stderr=said)
+            return subprocess.CompletedProcess(cmd, 0, stdout='', stderr='')
+        monkeypatch.setattr(subprocess, 'run', run)
+        monkeypatch.setattr(sys, 'platform', 'linux')
+        monkeypatch.setattr(shutil, 'which', lambda name, *a, **k: f'/bin/{name}')
+        return calls
+    return install
+
+
+def _prepare(tool: Path, tmp_path: Path, engine: str = 'docker') -> None:
+    """The pre-flight a local run makes: check, then fetch."""
+    preflight.prepare([tool], preflight.RunSettings(engine, str(tmp_path)))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('engine_name', ['docker', 'podman'])
+def test_images_are_pulled_with_the_chosen_engine(engine: Callable[..., list[list[str]]], tmp_path: Path,
+                                                  engine_name: str) -> None:
+    """Podman pulls with podman: the engine reaches cwl-docker-extract."""
+    calls = engine()
+    tool = _tool(tmp_path, {'dockerPull': 'docker.io/bash:4.4'})
+    _prepare(tool, tmp_path, engine_name)
+    assert ['cwl-docker-extract', '--force-download', '--container-engine', engine_name, str(tool)] in calls
+    assert not [cmd for cmd in calls if cmd[:2] in ([engine_name, 'load'], [engine_name, 'import'])]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('engine_name', ['docker', 'podman'])
+def test_a_docker_load_image_is_loaded_before_the_run(engine: Callable[..., list[list[str]]], tmp_path: Path,
+                                                      engine_name: str) -> None:
+    """A dockerLoad file is loaded with the chosen engine."""
+    calls = engine()
+    archive = tmp_path / 'image.tar'
+    archive.write_bytes(b'')
+    _prepare(_tool(tmp_path, {'dockerLoad': str(archive)}), tmp_path, engine_name)
+    assert [engine_name, 'load', '-i', str(archive)] in calls
+
+
+@pytest.mark.fast
+def test_a_docker_import_image_is_imported_under_its_image_id(engine: Callable[..., list[list[str]]],
+                                                              tmp_path: Path) -> None:
+    """A dockerImport is imported as its dockerImageId."""
+    calls = engine()
+    _prepare(_tool(tmp_path, {'dockerImport': 'https://example.org/rootfs.tar', 'dockerImageId': 'rootfs:1'}),
+             tmp_path, 'podman')
+    assert ['podman', 'import', 'https://example.org/rootfs.tar', 'rootfs:1'] in calls
+
+
+@pytest.mark.fast
+def test_a_docker_load_url_is_downloaded_then_loaded(engine: Callable[..., list[list[str]]],
+                                                     monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A dockerLoad URL is downloaded, then loaded from the file."""
+    calls = engine()
+
+    class Response:
+        def __enter__(self) -> 'Response':
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            """A successful response."""
+            return None
+
+        def iter_content(self, _size: int) -> list[bytes]:
+            """The body in one chunk."""
+            return [b'image']
+
+    monkeypatch.setattr(preflight.requests, 'get', lambda *_a, **_k: Response())
+    _prepare(_tool(tmp_path, {'dockerLoad': 'https://example.org/image.tar'}), tmp_path)
+    loads = [cmd for cmd in calls if cmd[:3] == ['docker', 'load', '-i']]
+    assert len(loads) == 1
+
+
+@pytest.mark.fast
+def test_a_requirement_with_only_a_docker_pull_loads_and_imports_nothing(
+        engine: Callable[..., list[list[str]]], tmp_path: Path) -> None:
+    """A dockerPull needs the pull and nothing else."""
+    calls = engine()
+    _prepare(_tool(tmp_path, {'dockerPull': 'docker.io/bash:4.4', 'dockerImageId': 'bash:4.4'}), tmp_path)
+    assert not [cmd for cmd in calls if len(cmd) > 1 and cmd[1] in ('load', 'import')]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('docker, failing, doing', [
+    ({'dockerPull': 'docker.io/nope:1'}, ('cwl-docker-extract',), 'pull docker.io/nope:1'),
+    ({'dockerLoad': '{archive}'}, ('docker', 'load'), 'load {archive}'),
+    ({'dockerImport': 'rootfs.tar', 'dockerImageId': 'rootfs:1'}, ('docker', 'import'),
+     'import rootfs:1 from rootfs.tar'),
+])
+def test_a_failed_pull_load_or_import_is_one_wic037_quoting_the_engine(
+        engine: Callable[..., list[list[str]]], tmp_path: Path, docker: dict[str, str], failing: tuple[str, ...],
+        doing: str) -> None:
+    """One wic037 names what failed and quotes the last stderr line."""
+    archive = tmp_path / 'image.tar'
+    archive.write_bytes(b'')
+    docker = {key: value.format(archive=archive) for key, value in docker.items()}
+    engine(failing, said='first line\nError: pull access denied\n')
+    tool = _tool(tmp_path, docker)
+    with pytest.raises(SophiosError) as raised:
+        _prepare(tool, tmp_path)
+    [diagnostic] = raised.value.diagnostics
+    assert diagnostic.code is SophiosErrorCode.IMAGE_UNAVAILABLE
+    assert doing.format(archive=archive) in diagnostic.message
+    assert 'Error: pull access denied' in diagnostic.message and 'first line' not in diagnostic.message
+
+
+@pytest.mark.fast
+def test_check_loads_and_imports_nothing(engine: Callable[..., list[list[str]]], tmp_path: Path) -> None:
+    """--check checks and fetches nothing."""
+    calls = engine()
+    tool = _tool(tmp_path, {'dockerLoad': str(tmp_path / 'image.tar'), 'dockerImageId': 'x:1'})
+    preflight.check(preflight.needs([tool]), preflight.RunSettings('docker', str(tmp_path)))
+    assert not [cmd for cmd in calls if len(cmd) > 1 and cmd[1] in ('load', 'import')]
+    assert not _pulled(calls)

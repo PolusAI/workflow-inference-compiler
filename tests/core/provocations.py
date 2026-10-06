@@ -468,3 +468,21 @@ def _provoke_program_missing() -> None:
 
 
 COMPILED.update({SophiosErrorCode.PROGRAM_MISSING: _provoke_program_missing})
+
+
+def _provoke_image_unavailable() -> None:
+    import subprocess  # pylint: disable=import-outside-toplevel
+    from pathlib import Path  # pylint: disable=import-outside-toplevel
+    from unittest import mock  # pylint: disable=import-outside-toplevel
+
+    from cwl_utils.parser.cwl_v1_2 import DockerRequirement  # pylint: disable=import-outside-toplevel
+
+    from sophios import preflight  # pylint: disable=import-outside-toplevel
+
+    failed = subprocess.CompletedProcess([], 1, stderr='pull access denied')
+    with mock.patch.object(preflight.sub, 'run', return_value=failed):
+        preflight.pull(preflight.Needs((Path('w.cwl'),), (DockerRequirement(dockerPull='x/y:1'),)),
+                       preflight.RunSettings('docker', '.'))
+
+
+COMPILED.update({SophiosErrorCode.IMAGE_UNAVAILABLE: _provoke_image_unavailable})

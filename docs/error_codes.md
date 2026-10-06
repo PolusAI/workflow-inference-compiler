@@ -8,7 +8,7 @@ when Sophios knows them. A note reports a choice Sophios made and does not stop 
 `.wic` file or the Python workflow), `call` (the Python API call), `machine` (what is installed, running,
 readable or writable here) or `run` (nothing in Sophios: a tool failed while it ran).
 
-`wic037`, `wic040` and `wic041` are not assigned.
+`wic040` and `wic041` are not assigned.
 
 | Code | Kind | Meaning | Fix |
 |---|---|---|---|
@@ -48,6 +48,7 @@ readable or writable here) or `run` (nothing in Sophios: a tool failed while it 
 | `wic034` | document | A `wic:` value of the wrong shape. | Write the value in the shape language guide §7 gives for its key. |
 | `wic035` | document | A `cwlVersion` other than `v1.0`, `v1.1` or `v1.2`. | Declare `cwlVersion: v1.2`. |
 | `wic036` | document | A workflow output with no `type:` and no producer to take it from. | Give the output a `type:`, or an `outputSource:` naming the step output it comes from (language guide §5.2). |
+| `wic037` | machine | An image the run needs could not be pulled, loaded or imported before the run; the message quotes the engine's last line. | Check the image name or source, the network and your registry login, then run again. |
 | `wic038` | document | CWL's step input written where Sophios does not read it: an untagged mapping of step-input fields, a malformed `!cwl {...}` record, or a list `outputSource`, `linkMerge` or `pickValue` on a workflow output. | Write step-input fields as a `!cwl {...}` record (language guide §3.5); a workflow output names one step output. |
 | `wic039` | document | A positional `(index, name)` `outputSource` that names the wrong step. | Use the index and id of the step the output comes from, or write `step/port` (language guide §5.2). |
 | `wic042` | document | Note: one step offered several matching outputs and inference took the last. | Pin the choice the note shows, with `!&` on the output and `!*` on the input (language guide §8); `--inference_strict` makes this an error. |

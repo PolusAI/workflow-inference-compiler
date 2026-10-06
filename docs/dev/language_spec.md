@@ -404,10 +404,10 @@ Codes are contract: a caller matches on `SophiosErrorCode`, suppresses a code, o
 reads it out of a log, while message wording is free to improve. The enum is
 `sophios.lang.error_codes.SophiosErrorCode`, in two ranges: `wic0NN` for a
 document (it said something the language does not accept) or what running it needs from the machine (kind
-`machine`, such as `wic015`, `wic016`, `wic021` and `wic029`) and `api0NN` for
+`machine`, such as `wic015`, `wic016`, `wic021`, `wic029` and `wic037`) and `api0NN` for
 the Python API (the document is fine, the call was not). A code is never renumbered,
 and a code that shipped in a release is never reused; a number that never shipped is
-free. `wic037`, `wic040` and `wic041` are unassigned. `wic042` and `wic043` are notes, which report without failing the
+free. `wic040` and `wic041` are unassigned. `wic042` and `wic043` are notes, which report without failing the
 compile, and errors under `--inference_strict`.
 
 Every member is provoked in `tests/core/provocations.py`, in one of two tiers:
@@ -458,6 +458,7 @@ every member has an `Explanation` in `EXPLANATIONS` (kind, meaning, fix);
 | `wic034` | `MALFORMED_WIC_VALUE` | `PARSE` |
 | `wic035` | `UNSUPPORTED_CWL_VERSION` | `PARSE` |
 | `wic036` | `UNTYPED_OUTPUT` | `COMPILED` |
+| `wic037` | `IMAGE_UNAVAILABLE` | `COMPILED` |
 | `wic038` | `STEP_INPUT_RECORD` | `PARSE` |
 | `wic039` | `POSITIONAL_OUTPUT_SOURCE` | `COMPILED` |
 | `wic042` | `INFERENCE_TIE` | `COMPILED` |
