@@ -15,7 +15,7 @@ from sophios.ir.names import Names
 from sophios.ir.types import DerivedName, WorkflowGraph
 from sophios.wic_types import Json
 from . import auto_gen_header, realtime
-from . import utils  # , utils_graphs
+from . import utils
 from .compute_request import ComputeRequest
 from .input_output import names_map_path
 from .plugins import AuthoredNamesFilter, FailedJobs, logging_filters

@@ -43,7 +43,6 @@ from sophios.ir.frontdoor import bundle_from_disk
 from sophios.post_compile import inline_artifact_runs
 from sophios.python_cwl_adapter import import_python_file
 from sophios.runtime_inputs import normalize_artifact_cwl
-from sophios.utils_graphs import get_graph_reps
 from sophios.utils_yaml import wic_loader
 from sophios.wic_types import Json, Tools
 
@@ -2083,10 +2082,8 @@ def test_the_written_bundle_of_a_nested_workflow_compiles_to_the_same_cwl(tmp_pa
     assert parse(root.read_text(encoding='utf-8'), root.name).ok
     bundle = bundle_from_disk(root, {'global': {path.stem: path for path in tmp_path.glob('*.wic')}},
                               sophios.plugins.get_tools_cwl({'search_paths_cwl': {'global': [str(tmp_path)]}}))
-    options, graph_settings = default_compilation_settings()
-    result = sophios.compiler.compile_source(bundle, options, graph_settings,
-                                             relative_run_path=True, testing=True,
-                                             graph_target=get_graph_reps('outer'))
+    result = sophios.compiler.compile_source(bundle, default_compilation_settings(),
+                                             relative_run_path=True, testing=True)
     assert normalize_artifact_cwl(inline_artifact_runs(result.artifact)) == direct
 
 
@@ -2185,10 +2182,8 @@ def test_the_chained_scatter_agrees_with_the_dsl(tmp_path: Path) -> None:
     assert parse(root.read_text(encoding='utf-8'), root.name).ok
     bundle = bundle_from_disk(root, {'global': {path.stem: path for path in tmp_path.glob('*.wic')}},
                               sophios.plugins.get_tools_cwl({'search_paths_cwl': {'global': [str(tmp_path)]}}))
-    options, graph_settings = default_compilation_settings()
-    result = sophios.compiler.compile_source(bundle, options, graph_settings,
-                                             relative_run_path=True, testing=True,
-                                             graph_target=get_graph_reps('chain'))
+    result = sophios.compiler.compile_source(bundle, default_compilation_settings(),
+                                             relative_run_path=True, testing=True)
     assert normalize_artifact_cwl(inline_artifact_runs(result.artifact)) == direct
 
 
@@ -2299,10 +2294,8 @@ def test_step_input_round_trips_through_write_wic(tmp_path: Path) -> None:
     assert isinstance(parsed.document.steps[2].input('files'), CwlRecord)
     bundle = bundle_from_disk(root, {'global': {path.stem: path for path in tmp_path.glob('*.wic')}},
                               sophios.plugins.get_tools_cwl({'search_paths_cwl': {'global': [str(tmp_path)]}}))
-    options, graph_settings = default_compilation_settings()
-    result = sophios.compiler.compile_source(bundle, options, graph_settings,
-                                             relative_run_path=True, testing=True,
-                                             graph_target=get_graph_reps('merge'))
+    result = sophios.compiler.compile_source(bundle, default_compilation_settings(),
+                                             relative_run_path=True, testing=True)
     assert normalize_artifact_cwl(inline_artifact_runs(result.artifact)) == direct
 
 

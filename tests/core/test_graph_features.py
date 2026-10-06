@@ -1,8 +1,7 @@
 """The graph Sophios draws: what each graph setting and the CLI's `--graphviz` do to it.
 
-The drawing is a by-product of compiling, so these compile in memory and read the
-graph back as data (`graph_view.graphdata`, and the DOT source of `graph_view.graphviz`),
-or run the CLI and read the `.gv` it writes. None of them renders an image.
+These compile in memory and read the DOT source `drawing.draw` makes of the result, or
+run the CLI and read the `.gv` it writes. None of them renders an image.
 """
 import re
 import sys
@@ -12,10 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from sophios import compiler, main, preflight
-from sophios.cli import default_compilation_settings
-from sophios.utils_graphs import get_graph_reps
-from sophios.wic_types import GraphData, GraphReps, Yaml
+from sophios import compiler, drawing, main, preflight
+from sophios.cli import default_compilation_settings, get_args, get_dicts_for_compilation
+from sophios.wic_types import Yaml
 
 from .hermetic import bundle, subworkflow_step
 from .synthetic_tools import SYNTHETIC_TOOLS
@@ -33,35 +31,54 @@ _DOCUMENT: Yaml = {'steps': [
 ]}
 
 
-def _draw(*, label_edges: bool = False, label_stepname: bool = False,
-          inline_depth: int = sys.maxsize) -> GraphReps:
-    """`_DOCUMENT` compiled with the given graph settings; its graph, as the compiler built it."""
-    compiler_options, graph_settings = default_compilation_settings()
-    graph_settings['graph_label_edges'] = label_edges
-    graph_settings['graph_label_stepname'] = label_stepname
-    graph_settings['graph_inline_depth'] = inline_depth
-    return compiler.compile_source(
-        bundle(_DOCUMENT, 'oracle', SYNTHETIC_TOOLS), compiler_options, graph_settings,
-        relative_run_path=True, testing=True, graph_target=get_graph_reps('oracle')).artifact.graph_view
+def _draw(document: Yaml = _DOCUMENT, *, label_edges: bool = False, label_stepname: bool = False,
+          inline_depth: int = sys.maxsize, dark_theme: bool = False) -> str:
+    """`document` compiled, then drawn with the given graph settings: the DOT source."""
+    source = bundle(document, 'oracle', SYNTHETIC_TOOLS)
+    compiled = compiler.compile_source(source, default_compilation_settings(), relative_run_path=True, testing=True)
+    _options, settings = get_dicts_for_compilation(get_args())
+    settings['graph_label_edges'] = label_edges
+    settings['graph_label_stepname'] = label_stepname
+    settings['graph_inline_depth'] = inline_depth
+    settings['graph_dark_theme'] = dark_theme
+    dot: str = drawing.draw(compiled, source, settings, 'oracle').source
+    return dot
 
 
-def _every_edge(graph: GraphData) -> list[tuple[str, str, dict]]:
-    return graph.edges + [edge for child in graph.subgraphs for edge in _every_edge(child)]
+#: A node or edge name in DOT: quoted, or a bare word.
+_ID = r'"[^"]*"|\w+'
+#: A node or edge statement: its node or its two ends, and its attributes.
+_STATEMENT = re.compile(rf'^\s*({_ID})(?: -> ({_ID}))? \[(.*)\]$', re.MULTILINE)
+_ATTRIBUTE = re.compile(r'(\w+)=("(?:[^"\\]|\\.)*"|[^\s"]+)')
 
 
-def _every_node(graph: GraphData) -> list[tuple[str, dict]]:
-    return graph.nodes + [node for child in graph.subgraphs for node in _every_node(child)]
+def _unquoted(text: str) -> str:
+    return text[1:-1] if text.startswith('"') else text
+
+
+def _statements(dot: str) -> list[tuple[str, str, dict[str, str]]]:
+    """Each node (with an empty sink) and each edge `dot` draws, with its attributes."""
+    return [(_unquoted(name), _unquoted(sink), {key: _unquoted(value) for key, value in _ATTRIBUTE.findall(attrs)})
+            for name, sink, attrs in _STATEMENT.findall(dot)]
+
+
+def _nodes(dot: str) -> dict[str, dict[str, str]]:
+    return {name: attrs for name, sink, attrs in _statements(dot) if not sink}
+
+
+def _edges(dot: str) -> list[tuple[str, str, dict[str, str]]]:
+    return [statement for statement in _statements(dot) if statement[1]]
 
 
 @pytest.mark.fast
 @pytest.mark.parametrize(('labelled', 'expected'), [(True, 'file'), (False, None)])
 def test_graph_label_edges_names_the_output_each_edge_carries(labelled: bool, expected: str | None) -> None:
-    """With `--graph_label_edges` an edge is labelled with the output it carries, in the graph data and in the drawing."""
-    reps = _draw(label_edges=labelled)
-    edges = _every_edge(reps.graphdata)
+    """With `--graph_label_edges` an edge is labelled with the output it carries."""
+    dot = _draw(label_edges=labelled)
+    edges = _edges(dot)
     assert len(edges) == 2
     assert [attrs.get('label') for _source, _sink, attrs in edges] == [expected] * 2
-    assert ('label=file' in reps.graphviz.source) is labelled
+    assert ('label=file' in dot) is labelled
 
 
 @pytest.mark.fast
@@ -73,28 +90,49 @@ def test_graph_label_edges_names_the_output_each_edge_carries(labelled: bool, ex
 def test_graph_label_stepname_labels_a_node_with_the_generated_step_name(qualified: bool, labels: set[str]) -> None:
     """A node is labelled with the id the document wrote; with `--graph_label_stepname` it is the generated
     step name instead, which a subworkflow's steps carry relative to the subworkflow."""
-    nodes = _every_node(_draw(label_stepname=qualified).graphdata)
-    assert {attrs['label'] for _name, attrs in nodes} == labels
+    assert {attrs['label'] for attrs in _nodes(_draw(label_stepname=qualified)).values()} == labels
 
 
 @pytest.mark.fast
 @pytest.mark.parametrize(('depth', 'clusters'), [
-    (0, set()),
-    (1, {'cluster_sub'}),
-    (2, {'cluster_sub', 'cluster_inner'}),
+    (0, {'cluster_oracle'}),
+    (1, {'cluster_oracle', 'cluster_sub'}),
+    (2, {'cluster_oracle', 'cluster_sub', 'cluster_inner'}),
 ])
 def test_graph_inline_depth_draws_that_many_levels_of_subworkflow(depth: int, clusters: set[str]) -> None:
     """`--graph_inline_depth N` draws the subworkflows N levels down as clusters and leaves the steps of the
-    deeper ones out of the drawing; the graph data, which the compiler keeps whole, does not change."""
-    reps = _draw(inline_depth=depth)
-    assert set(re.findall(r'subgraph (cluster_\w+)', reps.graphviz.source)) == clusters
-    drawn = re.findall(r'^\s*"?(\S+?)"? \[label=', reps.graphviz.source, re.MULTILINE)
+    deeper ones out of the drawing."""
+    dot = _draw(inline_depth=depth)
+    assert set(re.findall(r'subgraph (cluster_\w+)', dot)) == clusters
+    drawn = _nodes(dot)
     assert ('oracle__step__2__sub.wic___sub__step__2__count' in drawn) is (depth >= 1)
     assert ('oracle__step__2__sub.wic___sub__step__3__inner.wic___inner__step__1__mk_text' in drawn) is (depth >= 2)
-    (sub,) = reps.graphdata.subgraphs
-    (inner,) = sub.subgraphs
-    assert [name for name, _attrs in inner.nodes] == [
-        'oracle__step__2__sub.wic___sub__step__3__inner.wic___inner__step__1__mk_text']
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(('dark_theme', 'font_colour'), [(False, 'white'), (True, 'black')])
+def test_the_graph_draws_inferred_edges_in_the_font_colour_and_the_rest_in_blue(
+        dark_theme: bool, font_colour: str) -> None:
+    """An edge the document wrote is blue, whether it joins two steps of one
+    document or reaches into a subworkflow; an edge the compiler inferred takes
+    the theme's font colour, which is black on a dark theme and white otherwise.
+    """
+    document: Yaml = {'steps': [
+        {'id': 'mk_file', 'in': {'name': {'wic_inline_input': 'a'}}, 'out': [{'file': {'wic_anchor': 'f'}}]},
+        {'id': 'xform', 'in': {'file': {'wic_alias': 'f'}, 'name': {'wic_inline_input': 'b'}}},
+        subworkflow_step('sub.wic', {'steps': [
+            {'id': 'xform', 'in': {'file': {'wic_alias': 'f'}, 'name': {'wic_inline_input': 'c'}}},
+            {'id': 'count'},                                       # file inferred from xform
+        ]}),
+    ]}
+    colours = {(source, sink): attrs.get('color')
+               for source, sink, attrs in _edges(_draw(document, dark_theme=dark_theme))}
+    assert colours == {
+        ('oracle__step__1__mk_file', 'oracle__step__2__xform'): 'blue',
+        ('oracle__step__1__mk_file', 'oracle__step__3__sub.wic___sub__step__1__xform'): 'blue',
+        ('oracle__step__3__sub.wic___sub__step__1__xform',
+         'oracle__step__3__sub.wic___sub__step__2__count'): font_colour,
+    }
 
 
 @pytest.fixture(name='cli_graph')

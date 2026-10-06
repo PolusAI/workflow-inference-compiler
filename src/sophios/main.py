@@ -10,7 +10,6 @@ from collections.abc import Iterable
 from typing import Final, Iterator
 
 import graphviz
-import networkx as nx
 import yaml
 
 from sophios.lang import wic_schema
@@ -20,10 +19,10 @@ from sophios.ir.artifacts import CompilationResult
 from sophios.runtime_inputs import normalize_artifact_job_inputs
 from . import input_output as io
 from . import post_compile as pc
-from . import cli, compiler, plugins, preflight, realtime, run_local
+from . import cli, compiler, drawing, plugins, preflight, realtime, run_local
 from .ir import frontdoor
 from .ir.frontdoor import SourceBundle
-from .wic_types import CompilerOptions, GraphData, GraphReps, GraphSettings, Json, Tools
+from .wic_types import CompilerOptions, Json, Tools
 
 #: Where `--generate_schemas` writes, relative to the working directory, and
 #: where editors are pointed at it (see `.vscode/settings.json`).
@@ -62,57 +61,26 @@ def _load_source_bundle(args: argparse.Namespace,
 
 def _compile_loaded_document(yaml_path: str, bundle: SourceBundle,
                              yml_paths: dict[str, dict[str, Path]], tools_cwl: Tools,
-                             compiler_options: CompilerOptions, graph_settings: GraphSettings
-                             ) -> tuple[graphviz.Digraph, CompilationResult, tuple[realtime.Analysis, ...]]:
-    """Build the root graph view and compile to a graph-derived result, and each real-time analysis it declares."""
-    rootgraph = graphviz.Digraph(name=yaml_path)
-    # newrank='True' ranks nodes globally (rather than per-cluster), which is
-    # required for GraphData.ranksame constraints to work across subgraphs/clusters.
-    rootgraph.attr(newrank='True')
-    rootgraph.attr(bgcolor="transparent")  # Useful for making slides
-    font_edge_color = 'black' if graph_settings['graph_dark_theme'] else 'white'
-    rootgraph.attr(fontcolor=font_edge_color)
-
-    # This can be used to visually 'inline' all subworkflows (but NOT the CWL).
-    # rootgraph.attr(style='invis')
-    # Note that since invisible objects still affect the graphviz layout (by design),
-    # this can be used to control the layout of the individual nodes, even if
-    # you don't necessarily want subworkflows.
-
-    # rootgraph.attr(rankdir='LR') # When --graph_inline_depth 1, this usually looks better.
-    with rootgraph.subgraph(name=f'cluster_{yaml_path}') as subgraph_gv:
-        # get the label (if any) from the workflow
-        # The root's own `wic: graphviz:` label, read from the document that
-        # is compiled.
-        root = bundle.parsed.document
-        drawn = dict(root.sidecar.entries).get('graphviz') if root and root.sidecar else None
-        label = drawn.get('label', yaml_path) if isinstance(drawn, dict) else yaml_path
-        subgraph_gv.attr(label=label)
-        subgraph_gv.attr(color='lightblue')  # color of cluster subgraph outline
-        subgraph_nx = nx.DiGraph()
-        graphdata = GraphData(yaml_path)
-        subgraph = GraphReps(subgraph_gv, subgraph_nx, graphdata)
-
-        try:
-            result = compiler.compile_source(
-                bundle, compiler_options, graph_settings,
-                relative_run_path=True, testing=False, graph_target=subgraph)
-            analyses = realtime.compile_analyses(result.realtime, yml_paths, tools_cwl,
-                                                 compiler_options, graph_settings)
-        except SophiosError:
-            # The library reports; only this adapter is allowed to exit. The
-            # banner has to stay: this arm intercepts failures that used to
-            # reach the handler below, and a message naming neither the
-            # workflow nor the file is a worse error than the one it replaced.
-            # `main()` prints the diagnostics, in the form asked for. No
-            # traceback file, though: a reported failure is not a crash.
-            print('Failed to compile', yaml_path, file=sys.stderr)
-            raise
-        # The resolved language version is reported on every compile, not
-        # only on failure — nobody should have to guess which language their
-        # file was read as.
-        print('Sophios lang_version:', result.lang_version)
-    return rootgraph, result, analyses
+                             compiler_options: CompilerOptions
+                             ) -> tuple[CompilationResult, tuple[realtime.Analysis, ...]]:
+    """Compile to a graph-derived result, and each real-time analysis it declares."""
+    try:
+        result = compiler.compile_source(bundle, compiler_options, relative_run_path=True, testing=False)
+        analyses = realtime.compile_analyses(result.realtime, yml_paths, tools_cwl, compiler_options)
+    except SophiosError:
+        # The library reports; only this adapter is allowed to exit. The
+        # banner has to stay: this arm intercepts failures that used to
+        # reach the handler below, and a message naming neither the
+        # workflow nor the file is a worse error than the one it replaced.
+        # `main()` prints the diagnostics, in the form asked for. No
+        # traceback file, though: a reported failure is not a crash.
+        print('Failed to compile', yaml_path, file=sys.stderr)
+        raise
+    # The resolved language version is reported on every compile, not
+    # only on failure — nobody should have to guess which language their
+    # file was read as.
+    print('Sophios lang_version:', result.lang_version)
+    return result, analyses
 
 
 #: Flags that rewrite the CWL Sophios compiled. A plain CWL workflow is not
@@ -391,9 +359,7 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
     compiler_options, graph_settings = cli.get_dicts_for_compilation(args)
     compiler_options['inference_rules'] = global_config.get('inference_rules', {})
     compiler_options['renaming_conventions'] = global_config.get('renaming_conventions', [])
-    rootgraph, compilation, analyses = _compile_loaded_document(
-        yaml_path, bundle, yml_paths, tools_cwl,
-        compiler_options, graph_settings)
+    compilation, analyses = _compile_loaded_document(yaml_path, bundle, yml_paths, tools_cwl, compiler_options)
     _report(compilation.diagnostics, args.diagnostics)
     root_dir = Path(args.yaml).parent.absolute()
     artifact = compilation.artifact
@@ -411,7 +377,8 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
                                        runtag=args.cwl_inline_runtag)
 
     if args.graphviz:
-        _report(_draw(rootgraph, f'autogenerated/{yaml_stem}.cwl', yaml_stem), args.diagnostics)
+        _report(_draw(drawing.draw(compilation, bundle, graph_settings, yaml_path),
+                      f'autogenerated/{yaml_stem}.cwl', yaml_stem), args.diagnostics)
 
     if _is_local_run(args):
         # The pre-flight reads the CWL the runner will get, so it is written first.
