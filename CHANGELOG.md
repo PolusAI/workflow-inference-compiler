@@ -121,6 +121,11 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
 - The container engine is checked only when a step runs in a container, with
   `<engine> info` rather than a hello-world container. A workflow with no
   container runs without an engine.
+- Before a local run, a podman run pulls its images with podman; it used to pull
+  them with docker. A tool whose image comes from `dockerLoad` or `dockerImport`
+  now has it loaded before the run; the run never loaded it before. An image
+  that cannot be pulled, loaded or imported is reported (wic037) instead of
+  ending in a traceback.
 - `--write_intermediate_wic` is gone.
 - `--ignore_validation_errors` is still accepted but does nothing beyond a
   warning: there is no separate validation pass left to ignore. Remove it.
