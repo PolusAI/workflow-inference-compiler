@@ -234,5 +234,6 @@ These print on stderr and change no output; nothing needs to change.
   producer also matched. `--inference_strict` makes both errors; pin the edge
   with `!&`/`!*` to choose explicitly.
 - A generated step name in `outputSource`, a `when:` that reads a generated or
-  undeclared input, a `wic: steps:` key that addresses no step, and a call
-  left nested by `--cwl_inline_subworkflows` are each named on stderr.
+  undeclared input, a `wic: steps:` key or a `wic: graphviz: ranksame` entry
+  that addresses no step, and a call left nested by `--cwl_inline_subworkflows`
+  are each named on stderr.
