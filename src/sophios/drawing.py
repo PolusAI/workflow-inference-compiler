@@ -5,14 +5,13 @@ compiled graph gives the steps and the edges between them, and the `wic: graphvi
 block of each document it was compiled from, read as Resolve reads that document's
 `wic:` block, the labels, styles and rank=same groups. Nothing in the compiler reads a drawing.
 """
-from typing import Any
 
 import graphviz
 
 from .ir.artifacts import CompilationResult
 from .ir.frontdoor import SourceBundle
 from .ir.names import Names
-from .ir.resolve import RegistrySnapshot, called_document, ranksame, step_sidecar
+from .ir.resolve import RegistrySnapshot, called_document, graphviz_entry, ranksame, step_sidecar
 from .ir.types import EdgeOrigin, Namespace, StepNode, WorkflowGraph
 from .lang import StepKey, WicSidecar
 from .wic_types import GraphSettings
@@ -70,18 +69,12 @@ def _entry(graph: WorkflowGraph, sidecar: WicSidecar | None, step: StepNode) -> 
     return step_sidecar(sidecar, step.id.index, step.id.name, occurrences)
 
 
-def _graphviz(sidecar: WicSidecar | None) -> dict[str, Any]:
-    """`sidecar`'s `graphviz:` entry, or nothing."""
-    drawn = dict(sidecar.entries).get('graphviz') if sidecar is not None else None
-    return drawn if isinstance(drawn, dict) else {}
-
-
 def _cluster(graph: WorkflowGraph, sidecars: _Sidecars, names: Names, settings: GraphSettings,
              title: str) -> graphviz.Digraph:
     """`graph` as a cluster, titled `title` unless its `wic: graphviz:` says otherwise, and each
     workflow it calls as a cluster of its own, down to `--graph_inline_depth`."""
     sidecar = sidecars[graph.namespace]
-    look = _graphviz(sidecar)
+    look = graphviz_entry(sidecar)
     cluster = graphviz.Digraph(name=f'cluster_{graph.name}')
     cluster.attr(label=look.get('label', title))
     cluster.attr(color='lightblue')  # color of cluster subgraph outline
@@ -108,11 +101,11 @@ def _box(graph: WorkflowGraph, step: StepNode, sidecars: _Sidecars, names: Names
     The box of a call to a subworkflow styled `invis` is hidden with it."""
     label = names.step(step.id) if settings['graph_label_stepname'] else step.id.name
     style = 'rounded, filled'
-    called = graph.namespace.child(step.id)
-    if called in sidecars:
-        style += ', invis' if 'invis' in _graphviz(sidecars[called]).get('style', '') else ''
+    if step.run is not None and step.run.child is not None:
+        called = graphviz_entry(sidecars[graph.namespace.child(step.id)])
+        style += ', invis' if 'invis' in called.get('style', '') else ''
     else:
-        look = _graphviz(_entry(graph, sidecars[graph.namespace], step))
+        look = graphviz_entry(_entry(graph, sidecars[graph.namespace], step))
         label = label if settings['graph_label_stepname'] else look.get('label', label)
         style += f", {look['style']}" if 'style' in look else ''
     return {'label': label, 'shape': 'box', 'style': style, 'fillcolor': 'lightblue'}
