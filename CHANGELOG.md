@@ -101,6 +101,19 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   be accepted and ignored, and its default, `cachedir`, is now unset: a run
   caches only when you ask, or in `cachedir/` when it runs a real-time
   analysis. Give `--cachedir cachedir` to keep the old directory.
+- A relative `location` or `path` of a File or Directory in `--inputs_file`
+  is read from the directory of the inputs file, at any depth, as CWL v1.2
+  section 5.1.5 says. Only a top-level `location` was rewritten before, and it
+  was read from the working directory, so a job file that sat elsewhere
+  worked. If you keep an inputs file outside the directory you run from and
+  wrote its paths relative to that directory, make them relative to the file,
+  or absolute.
+- Before a run, Sophios checks that each File and Directory a job names
+  exists, is the right kind and is readable (wic016). An inputs file that is
+  not a mapping of input names to values is reported (wic002).
+- The container engine is checked only when a step runs in a container, with
+  `<engine> info` rather than a hello-world container. A workflow with no
+  container runs without an engine.
 - `--write_intermediate_wic` is gone.
 - `--ignore_validation_errors` is still accepted but does nothing beyond a
   warning: there is no separate validation pass left to ignore. Remove it.

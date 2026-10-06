@@ -128,7 +128,7 @@ def _sophios(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[..., P
     What would reach for a container engine is recorded instead.
     """
     extracted: list[Path] = []
-    monkeypatch.setattr(preflight, 'prepare', lambda documents, _settings: extracted.extend(documents))
+    monkeypatch.setattr(preflight, 'prepare', lambda documents, _settings, _jobs=(): extracted.extend(documents))
     (tmp_path / 'wf').mkdir()
     (tmp_path / 'wf' / 'say.cwl').write_text(SAY, encoding='utf-8')
     (tmp_path / 'wf' / 'copy.cwl').write_text(COPY, encoding='utf-8')

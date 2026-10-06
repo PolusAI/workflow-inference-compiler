@@ -293,7 +293,8 @@ def run_workflows(
         preflight.prepare([root_cwl], settings)
         return
     # The run lane does not pull again.
-    preflight.check(preflight.needs([root_cwl]), settings)
+    job = preflight.Job(artifact.job_inputs, Path(args.yaml).parent.absolute(), 'the workflow')
+    preflight.check(preflight.needs([root_cwl], [job]), settings)
 
     if args.docker_remove_entrypoints:
         artifact = remove_artifact_entrypoints(args.container_engine, artifact)

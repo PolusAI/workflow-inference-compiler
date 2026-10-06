@@ -15,6 +15,7 @@ from sophios.ir.names import Names
 from sophios.ir.types import DerivedName, WorkflowGraph
 from sophios.wic_types import Json
 from .compute_request import ComputeRequest
+from .input_output import names_map_path
 
 try:
     import cwltool.main
@@ -217,7 +218,7 @@ def _execute_inprocess(cmd: list[str], cwl_runner: str, workflow_name: str,
     """
     retval = 1
     logger = logging.getLogger('cwltool')
-    names_path = _names_map_path(yaml_path.parent, workflow_name)
+    names_path = names_map_path(yaml_path.parent, workflow_name)
     authored_names = (AuthoredNamesFilter(json.loads(names_path.read_text(encoding='utf-8')))
                       if names_path.exists() else None)
     if authored_names is not None:
@@ -273,11 +274,6 @@ def _runnable(plans: tuple[realtime.Plan, ...], run_args_dict: dict[str, str]) -
     return plans
 
 
-def _names_map_path(basepath: Path, workflow_name: str) -> Path:
-    """Where the compile wrote the map from emitted ids to authored names."""
-    return basepath / f'{workflow_name}.names.json'
-
-
 def _report_outcome(retval: int | None, cmd: list[str], basepath: str, workflow_name: str) -> None:
     """Print the success/failure summary message after execution."""
     if retval == 0:
@@ -286,7 +282,7 @@ def _report_outcome(retval: int | None, cmd: list[str], basepath: str, workflow_
     else:
         print('Failure! Please scroll up and find the FIRST error message.')
         print('(You may have to scroll up A LOT.)')
-        names_path = _names_map_path(Path(basepath), workflow_name)
+        names_path = names_map_path(Path(basepath), workflow_name)
         if names_path.exists():
             print(f'Emitted ids are mapped to authored names in {names_path}')
 

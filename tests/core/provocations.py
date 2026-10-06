@@ -124,11 +124,11 @@ def _provoke_missing_input_file() -> None:
     import tempfile  # pylint: disable=import-outside-toplevel
     from pathlib import Path  # pylint: disable=import-outside-toplevel
 
-    from sophios import post_compile  # pylint: disable=import-outside-toplevel
+    from sophios import preflight  # pylint: disable=import-outside-toplevel
 
     with tempfile.TemporaryDirectory() as root:
-        post_compile.stage_input_files({'f': {'class': 'File', 'location': 'definitely_absent.txt'}},
-                                       Path(root), root, throw=True)
+        job = preflight.Job({'f': {'class': 'File', 'location': 'definitely_absent.txt'}}, Path(root), 'the workflow')
+        preflight.check(preflight.Needs((Path(root) / 'none.cwl',), (), (job,)), preflight.RunSettings('docker', root))
 
 
 COMPILED.update({

@@ -9,19 +9,23 @@ is its payload (the document compiles, the inputs are well formed).
 Each check returns diagnostics rather than raising, so a caller reports every
 problem at once, each on one line: what is wrong, then what to do.
 """
+import json
 import os
 import subprocess as sub
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
+from urllib.parse import unquote, urlparse
 
 import cwl_utils.parser as cwl
 from cwl_utils.docker_extract import traverse
 
+from .input_output import input_paths, names_map_path
 from .lang.diagnostics import Diagnostic, Severity, SophiosError
 from .lang.error_codes import SophiosErrorCode
+from .wic_types import Yaml
 
 #: Engines `<engine> info` reaches: it needs the engine's daemon or machine, and no container or network.
 DOCKER_LIKE: Final = ('docker', 'podman')
@@ -29,6 +33,16 @@ DOCKER_LIKE: Final = ('docker', 'podman')
 MAX_DOCKER_PROCESSES: Final = 1000
 #: Where the docker CLI looks for its daemon when `DOCKER_HOST` does not say.
 DEFAULT_DOCKER_SOCKET: Final = Path('/var/run/docker.sock')
+
+
+@dataclass(frozen=True, slots=True)
+class Job:
+    """Input values, and the directory their relative paths are read from."""
+
+    values: Yaml
+    base: Path
+    #: How a message names where the values came from: 'the workflow', '--inputs_file'.
+    origin: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,13 +65,15 @@ class Needs:
     documents: tuple[Path, ...]
     #: Every DockerRequirement, as a requirement or a hint, of every process the documents run.
     containers: tuple[cwl.DockerRequirement, ...]
+    #: The values the run is given, each with where its relative paths are read from.
+    jobs: tuple[Job, ...] = ()
 
 
-def needs(documents: Sequence[Path]) -> Needs:
-    """Read what running `documents` needs, as cwl-docker-extract reads it (no `$schemas` are fetched)."""
+def needs(documents: Sequence[Path], jobs: Sequence[Job] = ()) -> Needs:
+    """Read what running `documents` with `jobs` needs, as cwl-docker-extract reads it (no `$schemas` are fetched)."""
     containers = [requirement for document in documents
                   for requirement in traverse(cwl.load_document_by_uri(str(document)))]
-    return Needs(tuple(documents), tuple(containers))
+    return Needs(tuple(documents), tuple(containers), tuple(jobs))
 
 
 def check(found: Needs, settings: RunSettings) -> None:
@@ -66,8 +82,9 @@ def check(found: Needs, settings: RunSettings) -> None:
     Raises:
         SophiosError: One diagnostic per problem.
     """
-    problems = [problem for directory, holds, remedy in settings.writes
-                if (problem := unwritable(directory, holds, remedy)) is not None]
+    problems = _path_problems(found)
+    problems += [problem for directory, holds, remedy in settings.writes
+                 if (problem := unwritable(directory, holds, remedy)) is not None]
     if found.containers:
         problems += _engine_problems(found, settings)
     if problems:
@@ -91,8 +108,8 @@ def pull(found: Needs, settings: RunSettings) -> None:
         sub.run(cmd, check=True)
 
 
-def prepare(documents: Sequence[Path], settings: RunSettings) -> None:
-    """Check what running `documents` needs from this machine, then pull their images.
+def prepare(documents: Sequence[Path], settings: RunSettings, jobs: Sequence[Job] = ()) -> None:
+    """Check what running `documents` with `jobs` needs from this machine, then pull their images.
 
     The one call every local run makes before it starts: the CLI's compiled and
     plain-CWL runs and `Workflow.run()`.
@@ -100,7 +117,7 @@ def prepare(documents: Sequence[Path], settings: RunSettings) -> None:
     Raises:
         SophiosError: Every problem found, before anything is pulled.
     """
-    found = needs(documents)
+    found = needs(documents, jobs)
     check(found, settings)
     pull(found, settings)
 
@@ -126,6 +143,62 @@ def unwritable(directory: Path, holds: str, remedy: str) -> Diagnostic | None:
     why = 'is not writable by you' if existing.is_dir() else 'is a file'
     return Diagnostic(Severity.ERROR, SophiosErrorCode.DIRECTORY_NOT_WRITABLE,
                       f'Sophios writes {holds} to {target}, but {existing} {why}: {remedy}.')
+
+
+def _path_problems(found: Needs) -> list[Diagnostic]:
+    """One `wic016` for each File or Directory a job names that the run could not use."""
+    spelled = _spellings(found.documents[0])
+    problems = []
+    for job in found.jobs:
+        for name, value in input_paths(job.values):
+            written = _written_path(value)
+            if written is None:
+                continue
+            resolved = Path(written) if Path(written).is_absolute() else job.base / written
+            if (why := _unusable(resolved, value['class'])) is not None:
+                problems.append(Diagnostic(
+                    Severity.ERROR, SophiosErrorCode.MISSING_INPUT_FILE,
+                    f"input '{spelled(name)}' (from {job.origin}, whose relative paths are read from "
+                    f"{job.base}) names {written!r}, which {why}."))
+    return problems
+
+
+def _unusable(path: Path, kind: str) -> str | None:
+    """Why a run cannot use `path` as a File or Directory, and what to do; None when it can."""
+    if not path.exists():
+        return f"does not exist at {path}: correct the path, or create the {'file' if kind == 'File' else 'directory'}"
+    if kind == 'File' and path.is_dir():
+        return f'is a directory ({path}): bind a file, or declare the input a Directory'
+    if kind == 'Directory' and not path.is_dir():
+        return f'is a file ({path}): bind a directory, or declare the input a File'
+    mode, letters = (os.R_OK | os.X_OK, 'rx') if kind == 'Directory' else (os.R_OK, 'r')
+    if not os.access(path, mode):
+        return f'you may not read ({path}): give yourself access (chmod u+{letters} {path})'
+    return None
+
+
+def _written_path(value: Mapping[str, Any]) -> str | None:
+    """The local path a File or Directory names: its `location` or `path`, without `file://`;
+    None for a literal (`contents`, `listing`) or a remote URL."""
+    written = value.get('location', value.get('path'))
+    if not isinstance(written, str):
+        return None
+    parsed = urlparse(written)
+    if parsed.scheme == 'file':
+        return unquote(parsed.path)
+    return None if len(parsed.scheme) > 1 else written   # one letter is a Windows drive
+
+
+def _spellings(root: Path) -> Callable[[str], str]:
+    """How a message spells a job input: as authored (`cat/file`), from the names map the compile wrote
+    beside `root`; as it is when there is no map (a plain CWL workflow)."""
+    path = names_map_path(root.parent, root.stem)
+    ports = json.loads(path.read_text(encoding='utf-8')).get('ports', {}) if path.exists() else {}
+
+    def spelled(name: str) -> str:
+        entry = ports.get(name)
+        return '/'.join([*entry['steps'], entry['port']]) if entry and entry['steps'] else name
+    return spelled
 
 
 def _engine_problems(found: Needs, settings: RunSettings) -> list[Diagnostic]:

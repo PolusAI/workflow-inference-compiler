@@ -74,7 +74,10 @@ no intermediate tree left to inspect.
 Useful flags:
 
 - `--graphviz`: write Graphviz sources and rendered diagrams when `dot` is available.
-- `--inputs_file <file>`: merge extra job inputs into generated CWL inputs.
+- `--inputs_file <file>`: merge extra job inputs into generated CWL inputs. A relative `location` or
+  `path` of a File or Directory in it, at any depth, is read from the inputs file's own directory.
+  Before a run, every such path and every `!ii` File or Directory is checked, and one that is missing,
+  of the other kind or unreadable is a `wic016` line naming the input.
 - `--allow_raw_cwl`: with a `--yaml` file that is a plain CWL workflow (its top level has
   `cwlVersion` and `class: Workflow`, or a packed `$graph` whose `main` is a Workflow, and it uses
   no Sophios syntax: no `!ii`, `!&`, `!*`, `!cwl` and no `wic:`), Sophios does not compile it.

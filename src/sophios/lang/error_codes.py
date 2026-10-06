@@ -209,8 +209,8 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         '`--container_engine` names another engine, and `--ignore_docker_install` skips the check.'),
     SophiosErrorCode.MISSING_INPUT_FILE: Explanation(
         Kind.MACHINE,
-        'An input file named in the inputs does not exist.',
-        'Correct the path or create the file; a relative path is read beside the workflow file.'),
+        'An input file or directory cannot be used: it does not exist, it is the other kind, or you may not read it.',
+        'Correct the path, create it, or make it readable; the message says where Sophios looked.'),
     SophiosErrorCode.UNKNOWN_LANG_VERSION: Explanation(
         Kind.DOCUMENT,
         'An unknown `lang_version`.',

@@ -563,7 +563,8 @@ def test_the_analysis_runs_beside_the_workflow_and_never_changes_its_outcome(
     config.write_text(json.dumps({'search_paths_cwl': {'global': [str(tools), str(ADAPTER_PATH.parent)]},
                                   'search_paths_wic': {'global': [str(tmp_path)]}}), encoding='utf-8')
     extracted: list[Path] = []
-    monkeypatch.setattr(sophios.preflight, 'prepare', lambda documents, _settings: extracted.extend(documents))
+    monkeypatch.setattr(sophios.preflight, 'prepare', lambda documents,
+                        _settings, _jobs=(): extracted.extend(documents))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr('sys.argv', ['sophios', '--yaml', 'live.wic', '--run_local', '--config_file', str(config)])
 
@@ -676,7 +677,8 @@ def test_the_python_api_declares_an_analysis_and_run_prepares_it(monkeypatch: py
     declaration.inputs.config = {'in': {'filename': 'again.txt'}}
     workflow = Workflow([touch, declaration], 'py_live')
     extracted: list[Path] = []
-    monkeypatch.setattr(sophios.preflight, 'prepare', lambda documents, _settings: extracted.extend(documents))
+    monkeypatch.setattr(sophios.preflight, 'prepare', lambda documents,
+                        _settings, _jobs=(): extracted.extend(documents))
     monkeypatch.chdir(tmp_path)
 
     assert [step['id'] for step in workflow.compile().cwl_workflow['steps']] == ['py_live__step__1__touch']

@@ -1201,7 +1201,7 @@ def _api_run_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, run_args: 
     touch.inputs.filename = "empty.txt"
     workflow = Workflow([touch], "quiet_demo")
     cmdlines: list[str] = []
-    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings: None)
+    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings, jobs=(): None)
     monkeypatch.setattr(python_runtime.rl, "generate_run_script", cmdlines.append)
     workflow.run(basepath=str(tmp_path), run_args_dict={"generate_run_script": "yes", **run_args})
     return cmdlines[0].split()
@@ -1307,7 +1307,7 @@ def test_workflow_run_prepares_the_cwl_in_its_basepath(
         return 0
 
     monkeypatch.setattr(python_runtime.preflight, "prepare",
-                        lambda documents, settings: prepared.append((documents, settings)))
+                        lambda documents, settings, jobs=(): prepared.append((documents, settings)))
     monkeypatch.setattr(python_runtime.rl, "run_local", fake_run_local)
 
     workflow.run(basepath=str(tmp_path))
@@ -1331,7 +1331,7 @@ def test_workflow_run_does_not_forward_python_run_flags_to_runner(
 
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings: None)
+    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings, jobs=(): None)
 
     def fake_run_local(
         run_args_dict: dict[str, str],
@@ -1381,7 +1381,7 @@ def test_workflow_run_writes_virtual_output_directories_without_orphans(
     step.inputs.outDir = Path("result.outDir")
     workflow = Workflow([step], "virtual_run_demo")
 
-    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings: None)
+    monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings, jobs=(): None)
     monkeypatch.setattr(
         python_runtime.rl,
         "run_local",
