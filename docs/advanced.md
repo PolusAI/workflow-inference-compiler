@@ -107,7 +107,8 @@ Useful flags:
   tools and subworkflows alike, and the shape of the workflow is unchanged. A tool written for
   CWL v1.0 keeps the network access and directory listing it had as a file.
 - `--cwl_runner toil-cwl-runner`: run locally with Toil instead of `cwltool`.
-- `--container_engine podman`: use Podman instead of Docker.
+- `--container_engine podman`: use Podman instead of Docker. Before the run, podman pulls the images
+  with podman, and images a tool ships (`dockerLoad`, `dockerImport`) are loaded into it.
 - `--inference_use_naming_conventions`: refine edge inference with naming rules.
 - `--insert_steps_automatically`: attempt limited automatic insertion when inference fails.
 - `--passthrough_flags yes`: send arguments Sophios does not recognise (for example `--debug`) to the CWL runner,

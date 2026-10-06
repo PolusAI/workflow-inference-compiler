@@ -170,6 +170,8 @@ when a step runs in a container, the input paths, the directories it writes and
 the programs it calls. Each problem is one line saying what to install or fix.
 To check a machine without running anything, compile a workflow with `--check`:
 it does every check a run does, then stops, pulling and running nothing.
+Before a run, the engine you chose pulls every image, and loads or imports the ones a tool ships
+(`dockerLoad`, `dockerImport`); a failure there is `wic037`.
 `--generate_run_script` does the same checks and the image pulls, then writes
 `run.sh` instead of running. Compute submissions are not checked against this
 machine, since they run elsewhere.
