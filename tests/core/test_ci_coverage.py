@@ -309,6 +309,10 @@ WINDOWS_EXCLUDED: Final = frozenset({
     # seconds. The watcher's own tests use a stand-in for cwltool and run on
     # every leg.
     'tests/core/test_realtime.py::test_the_analysis_runs_beside_the_workflow_and_never_changes_its_outcome',
+    # One real cwltool run of a failing one-line tool, under a second. It pins the
+    # wording of cwltool's job-failure record, which the summary reads; the other
+    # tests of the summary use a stand-in for cwltool and run on every leg.
+    'tests/core/test_python_api_workflow.py::test_a_real_failed_step_is_named_with_its_status',
 })
 
 
