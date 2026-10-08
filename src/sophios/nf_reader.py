@@ -48,7 +48,7 @@ _PORT = re.compile(
     # consumed here rather than stored: re-rendering recomputes it. The
     # option order mirrors the renderer's.
     r"^(?P<qualifier>path|val|tuple|env|stdin)\s+(?P<target>.+?)"
-    r"(?:,\s*glob:\s*false)?"
+    r"(?P<literal>,\s*glob:\s*false)?"
     r"(?:,\s*arity:\s*'(?P<arity>1)')?"
     r"(?:,\s*emit:\s*(?P<emit>\S+))?$"
 )
@@ -273,7 +273,8 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
                 match["qualifier"],
                 emit or port_name,
                 _unquote(target),
-                "single" if match["arity"] else None,
+                # Only a single capture renders both; a pattern output has arity alone.
+                "single" if match["arity"] and match["literal"] else None,
             ))
             continue
         if stripped.startswith("container "):

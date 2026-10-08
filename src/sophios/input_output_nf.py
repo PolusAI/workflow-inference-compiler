@@ -241,9 +241,14 @@ def _process_output(port: NfPort, *, tuple_element: bool = False) -> str:
         else ""
     )
     # A "single" capture marker is the CWL author's own cardinality
-    # declaration, so it is stated in the generated pipeline rather than
-    # dropped: arity: '1' emits one path value and fails on no match.
-    arity = ", arity: '1'" if port.capture == "single" else ""
+    # declaration, and a scalar output whose pattern can match several files
+    # names one file as cwltool enforces: either way arity: '1' emits one
+    # path value and fails on no match or on several.
+    pattern = not literal and any(
+        not isinstance(segment, NfLiteral) or _GLOB_METACHARACTERS & set(segment.value)
+        for segment in port.glob.segments
+    )
+    arity = ", arity: '1'" if port.capture == "single" or pattern else ""
     if tuple_element:
         # A multi-input-scattered process re-emits the hidden invocation
         # index alongside every output, one tuple line per output port
@@ -755,14 +760,14 @@ def _parameter_expression(workflow: ExecutableNextflowWorkflow, name: str) -> st
             return (
                 f"Channel.value(params.{name}.collect {{ entry -> file("
                 f"entry instanceof Map ? entry.path : entry, "
-                f"checkIfExists: true, type: '{path_type}') }})"
+                f"checkIfExists: true, type: '{path_type}', glob: false) }})"
             )
         if feeds_scattered_process:
             # A one-element queue pairs with only the first scatter task. A
             # value channel broadcasts the same staged path to every task.
             return (
                 f"Channel.value(file(params.{name} instanceof Map ? params.{name}.path : "
-                f"params.{name}, checkIfExists: true, type: '{path_type}'))"
+                f"params.{name}, checkIfExists: true, type: '{path_type}', glob: false))"
             )
         return (
             f"Channel.fromPath(params.{name} instanceof Map ? params.{name}.path : "

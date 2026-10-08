@@ -339,7 +339,7 @@ def _binding_tokens(prefix: Any, value: NfTemplate, *, separate: Any = True) -> 
                 raise ValueError("CWL separate cannot be specified without a prefix")
             return (value,)
         case str() as text:
-            prefix_template = _template(text, context="CWL command prefix")
+            prefix_template = NfTemplate((NfLiteral(text),))
             if separate is not False:
                 return prefix_template, value
             return (NfTemplate((*prefix_template.segments, *value.segments)),)
@@ -415,12 +415,29 @@ def _computed_value(value_from: Any, *, tool: Mapping[str, Any], field: str, int
     return NfComputed(expression, f"{tool.get('id', 'tool')} {field} {authored}", integral)
 
 
+def _boolean_value_from(value_from: Any, tool: Mapping[str, Any]) -> str | None:
+    """The boolean input a valueFrom restates whole as ``$(inputs.<name>)``, else None."""
+    match = _INPUT_EXPRESSION.fullmatch(value_from.strip()) if isinstance(value_from, str) else None
+    if match is None or match["suffix"]:
+        return None
+    inputs = _as_mapping(tool.get("inputs", {}), error="CommandLineTool inputs must be a mapping")
+    definition = inputs.get(match["name"])
+    if isinstance(definition, Mapping) and _required_type(definition.get("type")) == "boolean":
+        return _identifier(match["name"], context="input reference")
+    return None
+
+
+def _flag_tokens(name: str, prefix: Any) -> tuple[NfCommandToken, ...]:
+    """CWL's boolean binding: the prefix when true, nothing when false or without a prefix."""
+    return () if prefix is None else (NfFlag(name, prefix),)
+
+
 def _computed_tokens(prefix: Any, value: NfComputed, *, separate: Any = True) -> tuple[NfCommandToken, ...]:
     match prefix:
         case None:
             return (value,)
         case str() as text if separate is not False:
-            return _template(text, context="CWL command prefix"), value
+            return NfTemplate((NfLiteral(text),)), value
         case str():
             raise ValueError("separate: false beside a computed valueFrom is not supported")
         case _:
@@ -442,6 +459,8 @@ def _argument_items(
                     tokens: tuple[NfCommandToken, ...] = (
                         _shell_literal_value(f"arguments[{index}]", argument, shell_mode=shell_mode),
                     )
+                elif flag := _boolean_value_from(value_from, tool):
+                    tokens = _flag_tokens(flag, argument.get("prefix"))
                 elif computed := _computed_value(
                     value_from, tool=tool, field=f"arguments[{index}].valueFrom", integral=False
                 ):
@@ -770,6 +789,12 @@ def _input_binding_items(
                     continue
                 case _:
                     raise ValueError(f"CWL command prefix for {raw_name!r} must be a non-empty string")
+        if flag := _boolean_value_from(value_from, tool):
+            if _is_optional(input_definition.get("type")):
+                # CWL omits the whole binding for an absent input; a flag renders whatever it is.
+                raise ValueError(f"a boolean valueFrom on optional input {raw_name!r} is not supported")
+            items.append(((position, 1, str(raw_name)), _flag_tokens(flag, binding.get("prefix"))))
+            continue
         computed = _computed_value(
             value_from,
             tool=tool,
@@ -813,12 +838,12 @@ def _command(tool: Mapping[str, Any]) -> NfCommand:
     tokens: list[NfCommandToken] = []
     match base_command:
         case str() as command if command:
-            tokens.append(_template(command, context="CWL baseCommand"))
+            tokens.append(NfTemplate((NfLiteral(command),)))
         case list() as command:
             for token in command:
                 match token:
                     case str():
-                        tokens.append(_template(token, context="CWL baseCommand"))
+                        tokens.append(NfTemplate((NfLiteral(token),)))
                     case _:
                         raise ValueError("CommandLineTool baseCommand must be a string or list of strings")
         case None:
@@ -1336,16 +1361,6 @@ def _template_positions(
 ) -> list[tuple[Any, str]]:
     """Pair every templated tool value with the CWL path it was written at."""
     positions: list[tuple[Any, str]] = []
-    match tool.get("baseCommand"):
-        case str() as command:
-            positions.append((command, f"{path}.run.baseCommand"))
-        case list() as commands:
-            positions.extend(
-                (token, f"{path}.run.baseCommand[{index}]")
-                for index, token in enumerate(commands)
-            )
-        case _:
-            pass
     match tool.get("arguments"):
         case list() as arguments:
             for index, argument in enumerate(arguments):
@@ -1367,10 +1382,8 @@ def _template_positions(
                 binding = definition.get("inputBinding")
                 if not isinstance(binding, Mapping):
                     continue
-                binding_path = f"{path}.run.inputs.{raw_name}.inputBinding"
-                for field_name in ("prefix", "valueFrom"):
-                    if binding.get(field_name) is not None:
-                        positions.append((binding[field_name], f"{binding_path}.{field_name}"))
+                if binding.get("valueFrom") is not None:
+                    positions.append((binding["valueFrom"], f"{path}.run.inputs.{raw_name}.inputBinding.valueFrom"))
         case _:
             pass
     for stream in ("stdin", "stdout", "stderr"):
