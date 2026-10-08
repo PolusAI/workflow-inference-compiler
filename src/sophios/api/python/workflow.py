@@ -1066,6 +1066,9 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         A real-time analysis that is a ``.wic`` file comes from ``workflow_paths``,
         shaped ``{namespace: {stem: path}}`` like ``sophios.plugins.get_yml_paths``.
 
+        A relative File or Directory path bound in Python is read from the working
+        directory, as Python reads one.
+
         Args:
             run_args_dict (dict[str, str] | None): Runtime CLI options for local execution.
             user_env_vars (dict[str, str] | None): Environment variables to expose to the run.

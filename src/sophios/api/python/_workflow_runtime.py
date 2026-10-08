@@ -11,6 +11,7 @@ Python-facing workflow authoring.
 
 import logging
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
@@ -524,6 +525,9 @@ def run_workflow(
         raise SophiosError([problem])
     outdir = resolved_run_args.get("outdir")
     writes = ((Path(outdir), "the run's outputs", "give run() an outdir you can write to"),) if outdir else ()
+    # The values as the runner gets them, in which an output-target Directory is a name for the run to create.
+    bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
+    artifact = replace(artifact, job_inputs=input_output.absolute_paths(bound, Path.cwd()))
     input_output.write_artifacts_to_disk(
         artifact,
         Path(basepath),

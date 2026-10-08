@@ -102,22 +102,27 @@ def input_paths(values: Yaml) -> Iterator[tuple[str, dict[str, Any]]]:
                     stack.extend(reversed(list(record.values())))
 
 
+def absolute_paths(values: Yaml, base: Path) -> Yaml:
+    """A copy of `values` in which each relative `location` or `path` of a File or Directory, at any
+    depth, is resolved against `base` and written absolute, so it names the same place wherever the
+    run reads it from."""
+    absolute = copy.deepcopy(values)
+    for _name, found in input_paths(absolute):
+        for key in ('location', 'path'):
+            if (written := relative_local_path(found.get(key))) is not None:
+                found[key] = str(base / written)
+    return absolute
+
+
 def write_artifacts_to_disk(artifact: CompilationArtifact, path: Path,
                             relative_run_path: bool, inputs_file: str = '') -> None:
     """Write a graph-derived artifact tree and its job-input documents.
 
     A relative `location` or `path` of a File or Directory in `inputs_file`, at any depth, is
     resolved against the inputs file's own directory (CWL v1.2 section 5.1.5: the base IRI of the
-    document) and written absolute, so it names the same place wherever the run reads it from.
+    document) and written absolute.
     """
-    inputs: Yaml = {}
-    if inputs_file:
-        inputs = read_inputs_file(inputs_file)
-        base = Path(inputs_file).absolute().parent
-        for _name, found in input_paths(inputs):
-            for key in ('location', 'path'):
-                if (written := relative_local_path(found.get(key))) is not None:
-                    found[key] = str(base / written)
+    inputs = absolute_paths(read_inputs_file(inputs_file), Path(inputs_file).absolute().parent) if inputs_file else {}
     _write_artifacts_to_disk(artifact, path, relative_run_path, inputs)
 
 
