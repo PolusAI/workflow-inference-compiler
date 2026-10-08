@@ -88,15 +88,6 @@ def serialize_value(value: Any) -> Any:
             return value
 
 
-def _infer_fs_object_type(path: Path) -> str:
-    """Infer whether a `Path` literal denotes a CWL `File` or `Directory`."""
-    if path.exists():
-        return CWLAtomicType.DIRECTORY.value if path.is_dir() else CWLAtomicType.FILE.value
-    if path.suffix:
-        return CWLAtomicType.FILE.value
-    return CWLAtomicType.DIRECTORY.value
-
-
 def _infer_array_parameter_type(items: Sequence[Any]) -> Any:
     """Infer a CWL array type from a homogeneous list/tuple literal, or `None` if it isn't one."""
     if not items:
@@ -119,6 +110,9 @@ def _infer_array_parameter_type(items: Sequence[Any]) -> Any:
 def infer_literal_parameter_type(value: Any) -> Any:  # pylint: disable=too-many-return-statements
     """Infer a CWL type expression from a Python literal when practical.
 
+    Not from a `Path`: whether it names a File or a Directory is for the input's declared type to say,
+    not the disk this runs on.
+
     One `return` per atomic CWL type keeps this dispatch table-like and easy
     to scan; collapsing cases to reduce the count would hurt readability.
     """
@@ -133,8 +127,6 @@ def infer_literal_parameter_type(value: Any) -> Any:  # pylint: disable=too-many
             return CWLAtomicType.FLOAT.value
         case str():
             return CWLAtomicType.STRING.value
-        case Path() as path:
-            return _infer_fs_object_type(path)
         case list() | tuple() as items:
             return _infer_array_parameter_type(items)
         case {"class": "File" | "Directory" as class_name}:

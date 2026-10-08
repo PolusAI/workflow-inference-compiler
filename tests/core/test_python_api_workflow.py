@@ -2043,6 +2043,18 @@ def test_a_subworkflows_output_is_not_lifted() -> None:
 
 
 @pytest.mark.fast
+def test_binding_a_path_reads_nothing_from_the_disk(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A path is bound as written; it may name a place on another machine, such as a cluster."""
+    monkeypatch.chdir(tmp_path)
+    Path('images.ome.zarr').mkdir()
+    here, elsewhere = _cat(), _cat()
+    local, remote = here.inputs.f, elsewhere.inputs.f
+    here.inputs.f = Path('images.ome.zarr')
+    elsewhere.inputs.f = Path('/cluster/images.ome.zarr')
+    assert local.effective_source_type() == remote.effective_source_type()  # pylint: disable=no-member
+
+
+@pytest.mark.fast
 def test_a_scatter_inside_a_subworkflow_lifts_its_output(tmp_path: Path) -> None:
     """A subworkflow output typed at bind time stayed `File` once its step was scattered,
     so a sibling could neither scatter over it nor consume it unscattered."""
