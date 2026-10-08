@@ -21,7 +21,6 @@ from typing import Any, Final
 from urllib.parse import unquote, urlparse
 
 import cwl_utils.parser as cwl
-from cwl_utils.docker_extract import traverse
 
 from . import run_local
 from .input_output import input_paths, names_map_path
@@ -78,8 +77,29 @@ class Needs:
 def needs(documents: Sequence[Path], jobs: Sequence[Job] = ()) -> Needs:
     """Read what running `documents` with `jobs` needs, as cwl-docker-extract reads it (no `$schemas` are fetched)."""
     containers = [requirement for document in documents
-                  for requirement in traverse(cwl.load_document_by_uri(str(document)))]
+                  for requirement in _containers(cwl.load_document_by_uri(str(document)))]
     return Needs(tuple(documents), tuple(containers), tuple(jobs))
+
+
+def _containers(process: Any) -> list[cwl.DockerRequirement]:
+    """Every DockerRequirement `process` declares, then each step's own and its process's, in order.
+
+    The traversal of `cwl_utils.docker_extract`, which is not imported: importing it imports
+    `cwl_utils.image_puller`, which puts a handler on the root logger, and cwltool's in-process
+    run then fails setting up its own.
+    """
+    found = _declared(process)
+    if isinstance(process, cwl.WorkflowTypes):
+        for step in process.steps:
+            run = cwl.load_document_by_uri(step.run) if isinstance(step.run, str) else step.run
+            found += _declared(step) + _containers(run)
+    return found
+
+
+def _declared(node: Any) -> list[cwl.DockerRequirement]:
+    """The DockerRequirements a process or step declares itself: its requirements, then its hints."""
+    return [requirement for requirement in (*(node.requirements or ()), *(node.hints or ()))
+            if isinstance(requirement, cwl.DockerRequirementTypes)]
 
 
 def check(found: Needs, settings: RunSettings) -> None:
