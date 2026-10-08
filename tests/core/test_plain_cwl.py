@@ -207,6 +207,19 @@ def test_check_stops_after_the_pre_flight_of_a_plain_cwl_workflow(
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize('workflow', [PLAIN, PACKED.replace('{main}', 'main')], ids=['steps-in-files', 'packed'])
+def test_check_reads_a_plain_cwl_workflow_in_a_directory_whose_name_is_not_a_url(
+        sophios: Callable[..., Path], workflow: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A '#' or a '+' in a path is a character of the name, as a drive letter is on Windows."""
+    directory = tmp_path / 'run #1 c++'
+    directory.mkdir()
+    for name, text in (('plain.cwl', workflow), ('say.cwl', SAY), ('copy.cwl', COPY)):
+        (directory / name).write_text(text, encoding='utf-8')
+    sophios(directory / 'plain.cwl', '--allow_raw_cwl', '--check')
+    assert 'Checked ' in capsys.readouterr().out
+
+
+@pytest.mark.fast
 def test_check_names_a_missing_input_of_a_plain_cwl_workflow(
         sophios: Callable[..., Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     job = tmp_path / 'jobs' / 'missing.yml'

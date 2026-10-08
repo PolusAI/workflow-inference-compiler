@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urldefrag, urlparse
 
 import cwl_utils.parser as cwl
 
@@ -77,8 +77,20 @@ class Needs:
 def needs(documents: Sequence[Path], jobs: Sequence[Job] = ()) -> Needs:
     """Read what running `documents` with `jobs` needs, as cwl-docker-extract reads it (no `$schemas` are fetched)."""
     containers = [requirement for document in documents
-                  for requirement in _containers(cwl.load_document_by_uri(str(document)))]
+                  for requirement in _containers(_load(document.absolute().as_uri()))]
     return Needs(tuple(documents), tuple(containers), tuple(jobs))
+
+
+def _load(uri: str) -> Any:
+    """The process at `uri`; a fragment names one process of a packed document.
+
+    Not `cwl.load_document_by_uri`: it turns a `file:` URI back into a path with
+    `Path(unquote_plus(...))`, which reads a '+' as a space and, on Windows, `/C:/...` as a
+    path on the current drive. schema_salad's fetcher reads a `file:` URI on every platform.
+    """
+    document, fragment = urldefrag(uri)
+    text = cwl.cwl_v1_2.LoadingOptions().fetcher.fetch_text(document)
+    return cwl.load_document_by_string(text, document, id_=fragment or None)
 
 
 def _containers(process: Any) -> list[cwl.DockerRequirement]:
@@ -91,7 +103,7 @@ def _containers(process: Any) -> list[cwl.DockerRequirement]:
     found = _declared(process)
     if isinstance(process, cwl.WorkflowTypes):
         for step in process.steps:
-            run = cwl.load_document_by_uri(step.run) if isinstance(step.run, str) else step.run
+            run = _load(step.run) if isinstance(step.run, str) else step.run
             found += _declared(step) + _containers(run)
     return found
 
