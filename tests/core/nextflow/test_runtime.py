@@ -1592,3 +1592,28 @@ def test_an_input_named_like_a_script_name_prints_its_value(tmp_path: Path) -> N
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     [text] = [path.read_text(encoding="utf-8") for path in (tmp_path / "work").rglob("out.txt")]
     assert text.split("|")[:-1] == [f"value of {name}" for name in names]
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+@pytest.mark.parametrize(
+    ("command_line", "observed"),
+    [(["true"], "[]"), (["touch", "maybe.txt"], "maybe.txt")],
+    ids=["absent", "present"],
+)
+def test_an_optional_output_is_null_when_nothing_matches(command_line: list[str], observed: str, tmp_path: Path) -> None:
+    """CWL reports an optional File output that matched nothing as null, the [] sentinel."""
+    maybe = (
+        CommandLineTool("maybe", Inputs(), Outputs(o=Output("File?", glob="maybe.txt")))
+        .base_command(*command_line)
+    )
+    step = Step(maybe, step_name="maybe")
+    workflow = Workflow([step], "optional_output")
+    workflow.outputs.o = step.outputs.o
+    workflow.to_nextflow(tmp_path)
+    script = tmp_path / "workflow.nf"
+    sink = "\n    optional_output.out.o.subscribe { new File('o.sink').text = it instanceof Path ? it.name : it }\n}\n"
+    script.write_text(script.read_text(encoding="utf-8")[:-2] + sink, encoding="utf-8")
+    result = execute_nextflow(tmp_path)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    assert (tmp_path / "o.sink").read_text(encoding="utf-8") == observed
