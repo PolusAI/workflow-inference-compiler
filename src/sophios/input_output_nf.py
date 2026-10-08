@@ -30,6 +30,7 @@ from .nf_types import (
     NfProcessConnection,
     NfShellLiteral,
     NfComputed,
+    NfTemplate,
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
     process_dependencies,
@@ -180,7 +181,9 @@ def render_number(value: int | float) -> str:
     return format(Decimal(str(value)), "f")
 
 
-_GLOB_METACHARACTERS = frozenset("*?[]{}")
+# CWL glob metacharacters; a CWL glob has no brace expansion, so a brace is escaped for Nextflow.
+_GLOB_METACHARACTERS = frozenset("*?[]")
+_BRACE_ESCAPES = str.maketrans({"{": "\\{", "}": "\\}"})
 
 
 def _glob_names_one_file(template: Any) -> bool:
@@ -249,13 +252,17 @@ def _process_output(port: NfPort, *, tuple_element: bool = False) -> str:
         for segment in port.glob.segments
     )
     arity = ", arity: '1'" if port.capture == "single" or pattern else ""
+    glob = port.glob if literal else NfTemplate(tuple(
+        NfLiteral(segment.value.translate(_BRACE_ESCAPES)) if isinstance(segment, NfLiteral) else segment
+        for segment in port.glob.segments
+    ))
     if tuple_element:
         # A multi-input-scattered process re-emits the hidden invocation
         # index alongside every output, one tuple line per output port
         # (design §6, Topology), so the "path ..." spelling used inside a
         # standalone output line becomes a parenthesized tuple element here.
-        return f"path({_render_glob(port.glob)}{literal}{arity})"
-    return f"path {_render_glob(port.glob)}{literal}{arity}, emit: {emit}"
+        return f"path({_render_glob(glob)}{literal}{arity})"
+    return f"path {_render_glob(glob)}{literal}{arity}, emit: {emit}"
 
 
 def _path_input(port: NfPort, stage_as: str | None) -> str:

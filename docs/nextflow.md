@@ -144,8 +144,9 @@ naming only the input itself compiles cleanly and then fails at run time with
 `Missing output file(s)`.
 
 A glob built only from basename references is matched literally, so a staged
-name containing `*`, `?`, `[`, `{` or `}` still finds the file. A metacharacter
-written into the literal part of a glob stays a pattern.
+name containing `*`, `?`, `[`, `{` or `}` still finds the file. A `*`, `?` or
+`[` written into the literal part of a glob stays a pattern; a brace is matched
+literally, since a CWL glob has no brace expansion.
 
 ## Array-typed inputs
 
