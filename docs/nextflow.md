@@ -99,6 +99,11 @@ A `valueFrom` on a boolean binding is supported only as a bare
 but legal CWL form that lowers to the same flag. Any other `valueFrom` shape
 on a boolean binding is rejected.
 
+The same rule applies wherever a `valueFrom` is exactly `$(inputs.<name>)` of a
+boolean input — an `arguments` entry or another input's binding: the flag uses
+that entry's prefix. On an optional input's binding it is rejected, since CWL
+omits the whole binding when that input is absent.
+
 ## Absent optional values
 
 An absent optional `val` input (string/int/float/boolean) lowers to a
@@ -347,7 +352,9 @@ outputs:
 
 It renders as `path 'out.txt', glob: false, arity: '1'`, so the generated pipeline states
 the declaration instead of dropping it, emits a single path, and fails the
-task when nothing matches.
+task when nothing matches. A `File` or `Directory` output whose glob is a
+pattern renders `arity: '1'` as well, so several matches fail the task as
+they fail in cwltool.
 
 The paired `glob` must be one literal with no `*`, `?`, or `[` and no
 `$(inputs...)` reference. `self[0]` is the first of the matched list, which is

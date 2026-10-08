@@ -526,6 +526,16 @@ def _captured_workflow() -> ExecutableNextflowWorkflow:
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize(("glob", "capture"), [("out.txt", "single"), ("*.txt", None)])
+def test_text_read_tells_a_single_capture_from_a_pattern_output(glob: str, capture: str | None) -> None:
+    workflow = _captured_workflow()
+    port = NfPort("result", "path", "result", NfTemplate((NfLiteral(glob),)), capture=capture)
+    process = replace(workflow.processes[0], outputs=(port,))
+    parsed = parse_nf_text(render_nextflow(replace(workflow, processes=(process,))), params={"message": "hi"})
+    assert parsed.processes[0].outputs[0].capture == capture
+
+
+@pytest.mark.fast
 def test_capture_marker_artifacts_parse_and_promote(tmp_path: Path) -> None:
     """A new output option must round-trip or promotion silently stops working."""
     expected = _captured_workflow()
