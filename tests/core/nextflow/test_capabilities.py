@@ -2626,3 +2626,99 @@ def test_a_captured_value_cannot_feed_another_process() -> None:
         "a workflow output, because the executable graph has no qualifier agreement "
         "check for process edges"
     ]
+
+
+@pytest.mark.fast
+def test_lowering_rejections_aggregate_with_every_other_finding_by_step() -> None:
+    gated = tool("GATED", inputs={"a": {"type": "int"}}, baseCommand="true")
+    unsupported = tool("UNSUPPORTED", requirements={"NetworkAccess": {"networkAccess": True}})
+    rose = synthetic_source(
+        workflow_doc(
+            [
+                step("GATED", **{"in": {"a": "a"}, "when": "$(inputs.a ** 2 > 1)"}),
+                step("GATED", **{"in": {"a": "a"}, "when": "$(inputs.a + 1)"}),
+                step("UNSUPPORTED"),
+            ],
+            inputs={"a": "int"},
+        ),
+        [gated, gated, unsupported],
+        workflow_inputs={"a": 1},
+    )
+    findings = _findings(rose)
+    assert [finding.split(":", 1)[0] for finding in findings] == [
+        "steps[0]", "steps[1]", "steps[2].run.requirements.NetworkAccess",
+    ]
+    assert "must compute a boolean" in findings[1]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("inputs", "message"), [
+    ({"b": {"type": "boolean", "inputBinding": {"prefix": ""}}}, "prefix for 'b' must be a non-empty string"),
+    ({"s": {"type": "string", "inputBinding": {"separate": False}}}, "separate cannot be specified without a prefix"),
+    ({"xs": {"type": {"type": "array", "items": "string"}, "inputBinding": {"valueFrom": "$(self)"}}}, "valueFrom"),
+], ids=["empty-boolean-prefix", "separate-without-prefix", "array-valuefrom"])
+def test_a_lowering_only_rejection_is_a_finding_at_its_step(inputs: Any, message: str) -> None:
+    values = {"b": True, "s": "x", "xs": ["x"]}
+    rose = synthetic_source(
+        workflow_doc(
+            [step("REJECTED", **{"in": {name: name for name in inputs}})],
+            inputs={name: {"type": definition["type"]} for name, definition in inputs.items()},
+        ),
+        [tool("REJECTED", inputs=inputs)],
+        workflow_inputs={name: values[name] for name in inputs},
+    )
+    [finding] = _findings(rose)
+    assert finding.startswith("steps[0]: ") and message in finding
+
+
+@pytest.mark.fast
+def test_a_workflow_output_forwarding_an_input_is_a_workflow_finding() -> None:
+    rose = synthetic_source(
+        workflow_doc(
+            [step("ECHO")],
+            inputs={"a": "string"},
+            outputs={"a_out": {"type": "string", "outputSource": "a"}},
+        ),
+        [tool("ECHO")],
+        workflow_inputs={"a": "x"},
+    )
+    assert _findings(rose) == [
+        "workflow: workflow output 'a_out' directly forwards a workflow input; "
+        "boundary passthrough is not executable on the Nextflow target"
+    ]
+
+
+@pytest.mark.fast
+def test_a_command_error_is_reported_instead_of_a_wrong_cause_absence_finding() -> None:
+    produce = tool(
+        "PRODUCE",
+        inputs={"x": {"type": "int"}},
+        baseCommand="echo",
+        stdout="out.txt",
+        outputs={"r": {"type": "string", "outputBinding": {
+            "glob": "out.txt", "loadContents": True, "outputEval": "$(self[0].contents)"}}},
+    )
+    consume = tool("CONSUME", inputs={"v": {"type": "string?"}}, arguments=["$(runtime.cores)"])
+    rose = synthetic_source(
+        workflow_doc(
+            [
+                step("PRODUCE", **{"in": {"x": "x"}, "out": ["r"], "when": "$(inputs.x > 1)"}),
+                step("CONSUME", **{"in": {"v": "PRODUCE/r"}}),
+            ],
+            inputs={"x": "int"},
+        ),
+        [produce, consume],
+        workflow_inputs={"x": 2},
+    )
+    [finding] = _findings(rose)
+    assert finding.startswith("steps[1]: CWL argument contains an unsupported CWL expression")
+
+
+@pytest.mark.fast
+def test_a_command_error_is_reported_instead_of_an_absent_optional_finding() -> None:
+    rose = synthetic_source(
+        workflow_doc([step("ABSENT", **{"in": {"v": "v"}})], inputs={"v": "string?"}),
+        [tool("ABSENT", inputs={"v": {"type": "string?", "inputBinding": {}}}, arguments=["$(runtime.cores)"])],
+    )
+    [finding] = _findings(rose)
+    assert finding.startswith("steps[0]: CWL argument contains an unsupported CWL expression")

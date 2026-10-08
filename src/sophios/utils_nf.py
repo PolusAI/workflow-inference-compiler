@@ -2301,7 +2301,7 @@ def _safe_absence_names(tool: Mapping[str, Any]) -> set[str] | None:
     not own a shell-literal binding that CWL would omit, or it is referenced
     solely as the boolean-flag token it drives (a flag tests its value, never
     calls ``.toString()`` on it). Returns None when the tool's command or
-    outputs cannot be analyzed — absence is then never treated as safe.
+    outputs cannot be analyzed; lowering reports why, so absence is not judged.
     """
     try:
         command = _command(tool)
@@ -2362,6 +2362,8 @@ def _absent_optional_findings(
         if not isinstance(tool_inputs, Mapping) or not isinstance(step_inputs, Mapping):
             continue
         safe_names = _safe_absence_names(tool)
+        if safe_names is None:
+            continue
         for raw_name, raw_definition in tool_inputs.items():
             if not isinstance(raw_definition, Mapping):
                 continue
@@ -2395,7 +2397,7 @@ def _absent_optional_findings(
                     qualifier = cwl_type_to_nf_qualifier(raw_definition.get("type"))
                 except ValueError:
                     name, qualifier = None, None
-                if safe_names is not None and qualifier == "val" and name in safe_names:
+                if qualifier == "val" and name in safe_names:
                     continue
                 detail = (
                     "absent optional values are supported only for a val input "
@@ -2489,11 +2491,13 @@ def _conditional_consumer_findings(
                 )
                 continue
             safe_names = _safe_absence_names(tool)
+            if safe_names is None:
+                continue
             try:
                 name = _identifier(raw_name, context="input reference")
             except ValueError:
                 name = None
-            if safe_names is None or name not in safe_names:
+            if name not in safe_names:
                 findings.append(
                     f"{path}: this input's use of a possibly-null conditional step "
                     "output is not one the absent-optional lowering admits"
@@ -2668,10 +2672,14 @@ def _text_capture_sink_findings(
     return findings
 
 
+def _capability_error(findings: list[str]) -> ValueError:
+    details = "\n".join(f"- {finding}" for finding in findings)
+    return ValueError(f"Nextflow capability analysis failed:\n{details}")
+
+
 def _raise_capability_findings(findings: list[str]) -> None:
     if findings:
-        details = "\n".join(f"- {finding}" for finding in findings)
-        raise ValueError(f"Nextflow capability analysis failed:\n{details}")
+        raise _capability_error(findings)
 
 
 def _condition_value(step: Mapping[str, Any], tool: Mapping[str, Any]) -> Expr:
@@ -3000,8 +3008,9 @@ def compiled_source_to_nextflow(
 ) -> ExecutableNextflowWorkflow:
     """Lower a completed Sophios compilation without repeating core semantics.
 
-    Runs closed-world capability analysis first; every unsupported source
-    semantic is aggregated and rejected before any lowering happens.
+    Every unsupported source semantic, including one that only lowering or
+    model validation detects, is reported with its source path and
+    aggregated with the rest before the workflow is assembled.
 
     Args:
         source (CompilationResult | CompiledNextflowSource): The production
@@ -3031,14 +3040,16 @@ def compiled_source_to_nextflow(
     workflow = compiled.workflow
     tools = compiled.tools
     steps = _workflow_steps(workflow, child_count=len(tools))
-    findings = [
-        *nested_findings,
-        *(
-            finding
-            for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True))
-            for finding in _tool_capability_findings(step, tool, step_index=step_index)
-        ),
-    ]
+    findings = list(nested_findings)
+    processes: list[NfProcess] = []
+    for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True)):
+        if step_findings := _tool_capability_findings(step, tool, step_index=step_index):
+            findings.extend(step_findings)
+            continue
+        try:
+            processes.append(_process(step, tool))
+        except ValueError as error:  # lowering and the model reject what no source pass can see
+            findings.append(f"steps[{step_index}]: {error}")
     findings.extend(_workflow_capability_findings(workflow, compiled.params, steps))
     findings.extend(_absent_optional_findings(workflow, compiled.params, steps, tools))
     findings.extend(_conditional_consumer_findings(list(steps), tools))
@@ -3047,21 +3058,20 @@ def compiled_source_to_nextflow(
     findings.extend(_text_capture_sink_findings(steps, tools))
     findings.extend(_container_policy_findings(tools))
     _raise_capability_findings(findings)
-    processes = [
-        _process(step, tool)
-        for step, tool in zip(steps, tools, strict=True)
-    ]
-    default_connections, default_params = _default_bindings(steps, tools, processes)
-    params = _workflow_params(workflow, compiled.params)
-    if collisions := sorted(set(params) & set(default_params)):
-        raise ValueError(
-            "lowered workflow parameter names collide: "
-            f"{', '.join(collisions)}"
+    try:
+        default_connections, default_params = _default_bindings(steps, tools, processes)
+        params = _workflow_params(workflow, compiled.params)
+        if collisions := sorted(set(params) & set(default_params)):
+            raise ValueError(
+                "lowered workflow parameter names collide: "
+                f"{', '.join(collisions)}"
+            )
+        params.update(default_params)
+        return ExecutableNextflowWorkflow(
+            name=_identifier(compiled.name, context="workflow name"),
+            processes=processes,
+            connections=[*_connections(workflow, list(steps), processes), *default_connections],
+            params=_apply_absent_sentinel(params),
         )
-    params.update(default_params)
-    return ExecutableNextflowWorkflow(
-        name=_identifier(compiled.name, context="workflow name"),
-        processes=processes,
-        connections=[*_connections(workflow, list(steps), processes), *default_connections],
-        params=_apply_absent_sentinel(params),
-    )
+    except ValueError as error:
+        raise _capability_error([f"workflow: {error}"]) from None
