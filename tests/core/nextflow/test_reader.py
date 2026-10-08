@@ -345,8 +345,8 @@ def test_a_generated_pair_with_crlf_line_endings_verifies(tmp_path: Path) -> Non
 
 
 @pytest.mark.fast
-def test_reader_decodes_generated_literal_glob_escapes() -> None:
-    target = "out$name`\\'s.txt"
+@pytest.mark.parametrize("target", ["out$name`\\'s.txt", "a{b,c}.txt"], ids=["quotes", "braces"])
+def test_reader_decodes_generated_literal_glob_escapes(target: str) -> None:
     workflow = ExecutableNextflowWorkflow(
         "PIPELINE",
         [NfProcess("TASK", [], [output_port("result", target)], command("touch", target))],

@@ -139,13 +139,14 @@ def test_interpolated_glob_literals_use_only_valid_gstring_escapes(value: str) -
 @given(st.text(alphabet=st.characters(blacklist_categories=SURROGATE_CATEGORIES)).filter(str.strip))
 def test_every_single_quoted_groovy_position_uses_the_one_escaper(value: str) -> None:
     staged = value.translate(str.maketrans("/*?\x00", "____"))  # a stageAs name is one literal component
+    spoken = "".join(char for char in value if " " <= char <= "~" and char != "\\")  # a when literal's alphabet
     process = NfProcess(
         "TASK",
         [NfPort("n", "val"), NfPort("s", "val"), NfPort("src", "path", stage_as=staged)],
         [],
         NfCommand((NfComputed(parse("$(inputs.n * 2)"), value),)),
         container=value,
-        condition=Expr("==", (Expr("ref", (), "s"), Expr("string", (), value))),
+        condition=Expr("==", (Expr("ref", (), "s"), Expr("string", (), spoken))),
     )
     rendered = render_nextflow(ExecutableNextflowWorkflow(
         "PIPELINE",
@@ -153,7 +154,7 @@ def test_every_single_quoted_groovy_position_uses_the_one_escaper(value: str) ->
         [NfWorkflowInputConnection(name, "TASK", name) for name in ("n", "s", "src")],
         {"n": 1, "s": "x", "src": "in.txt"},
     ))
-    for literal in (groovy_literal(value), groovy_literal(staged)):
+    for literal in (groovy_literal(value), groovy_literal(staged), groovy_literal(spoken)):
         assert literal in rendered
     assert not any(ord(char) < 32 and char != "\n" or ord(char) == 127 for char in rendered)
 

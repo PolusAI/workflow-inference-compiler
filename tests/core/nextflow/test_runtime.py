@@ -1545,3 +1545,22 @@ def test_a_scatter_over_a_gathered_array_broadcasts_a_file_workflow_input(tmp_pa
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     outputs = sorted(path.read_text(encoding="utf-8") for path in (tmp_path / "run" / "work").rglob("b.txt"))
     assert outputs == ["1\nREF\n", "2\nREF\n", "3\nREF\n"]
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+def test_a_brace_in_an_output_glob_is_literal(tmp_path: Path) -> None:
+    """A CWL glob has no brace expansion: `a{b,c}.txt` names one file, not the decoy `ab.txt`."""
+    produce = NfProcess(
+        "PRODUCE",
+        [],
+        [output_port("result", "a{b,c}.txt")],
+        command("sh", "-c", "echo literal > 'a{b,c}.txt'; echo decoy > ab.txt"),
+    )
+    write_nextflow_artifacts(single_process_workflow(produce, params={}, output_port_name="result"), tmp_path)
+    script = tmp_path / "workflow.nf"
+    sink = "\n    PIPELINE.out.result.subscribe { new File('result.sink').text = it.text }\n}\n"
+    script.write_text(script.read_text(encoding="utf-8")[:-2] + sink, encoding="utf-8")
+    result = execute_nextflow(tmp_path)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    assert (tmp_path / "result.sink").read_text(encoding="utf-8") == "literal\n"
