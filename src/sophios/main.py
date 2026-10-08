@@ -17,6 +17,7 @@ from sophios.lang import wic_schema
 from sophios.lang.diagnostics import Diagnostic, Diagnostics, SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
 from sophios.ir.artifacts import CompilationResult
+from sophios.runtime_inputs import normalize_artifact_job_inputs
 from . import input_output as io
 from . import post_compile as pc
 from . import cli, compiler, plugins, preflight, realtime, run_local
@@ -419,8 +420,10 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         plans = realtime.write(analyses, Path(basepath), artifact.name, root_dir)
         # Check the machine, then pull the container images, the real-time analyses' too: they run with --disable-pull
         extra = io.read_inputs_file(args.inputs_file) if args.inputs_file else {}
+        # As the runner gets them, in which an output-target Directory is a name for the run to create.
+        bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
         # --inputs_file wins over a `!ii` value of the same input when the job is written.
-        jobs = (preflight.Job({key: value for key, value in artifact.job_inputs.items() if key not in extra},
+        jobs = (preflight.Job({key: value for key, value in bound.items() if key not in extra},
                               root_dir, 'the workflow'),
                 *((preflight.Job(extra, Path(args.inputs_file).parent.absolute(), '--inputs_file'),)
                   if args.inputs_file else ()))

@@ -913,6 +913,24 @@ def test_a_relative_path_in_the_inputs_file_is_read_beside_the_inputs_file(
 
 
 @pytest.mark.fast
+def test_an_output_target_directory_is_not_a_missing_input(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The runner gets it as the name of a directory the step creates, which does not exist yet."""
+    machine('running')
+    (tmp_path / 'write_dir.cwl').write_text(
+        'cwlVersion: v1.2\nclass: CommandLineTool\nrequirements:\n  InitialWorkDirRequirement:\n'
+        '    listing:\n    - entry: $(inputs.outDir)\n      writable: true\n  InlineJavascriptRequirement: {}\n'
+        'baseCommand: [mkdir]\ninputs:\n  outDir: Directory\n'
+        'outputs:\n  outDir:\n    type: Directory\n    outputBinding:\n      glob: $(inputs.outDir.basename)\n',
+        encoding='utf-8')
+    (tmp_path / 'config.json').write_text(json.dumps({'search_paths_cwl': {'global': [str(tmp_path)], 'gpu': []},
+                                                      'search_paths_wic': {'global': [str(tmp_path)]}}),
+                                          encoding='utf-8')
+    _cli(monkeypatch, tmp_path, 'steps:\n- id: write_dir\n  in:\n    outDir: !ii result.outDir\n',
+         '--config_file', str(tmp_path / 'config.json'))   # returns: nothing missing
+
+
+@pytest.mark.fast
 def test_an_inputs_file_that_is_not_a_mapping_is_one_clear_error(
         machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
         capsys: pytest.CaptureFixture[str]) -> None:
