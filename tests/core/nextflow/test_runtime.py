@@ -1564,3 +1564,31 @@ def test_a_brace_in_an_output_glob_is_literal(tmp_path: Path) -> None:
     result = execute_nextflow(tmp_path)
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert (tmp_path / "result.sink").read_text(encoding="utf-8") == "literal\n"
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+def test_an_input_named_like_a_script_name_prints_its_value(tmp_path: Path) -> None:
+    """`task`, `log`, `channel` and capitalized names resolve to something else unless renamed."""
+    names = ["task", "log", "channel", "Math", "String", "Map", "plain"]
+    show = (
+        CommandLineTool(
+            "show",
+            Inputs(**{name: Input(cwl.string, position=index + 2) for index, name in enumerate(names)}),
+            Outputs(out=Output(cwl.file, glob="out.txt")),
+        )
+        .base_command("printf")
+        .argument("%s|" * len(names), position=1)
+        .stdout("out.txt")
+    )
+    step = Step(show, step_name="show")
+    for name in names:
+        setattr(step.inputs, name, f"value of {name}")
+    workflow = Workflow([step], "script_names")
+    workflow.outputs.out = step.outputs.out
+
+    workflow.to_nextflow(tmp_path)
+    result = execute_nextflow(tmp_path)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    [text] = [path.read_text(encoding="utf-8") for path in (tmp_path / "work").rglob("out.txt")]
+    assert text.split("|")[:-1] == [f"value of {name}" for name in names]

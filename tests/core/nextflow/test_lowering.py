@@ -500,9 +500,9 @@ def test_applies_unwired_scalar_default_before_lowering() -> None:
         [default_tool],
     )
     workflow = compiled_source_to_nextflow(rose)
-    assert workflow.params == {"DEFAULT___message": "hello default"}
-    assert NfWorkflowInputConnection("DEFAULT___message", "DEFAULT", "message") in workflow.connections
-    assert "Channel.value(params.DEFAULT___message)" in render_nextflow(workflow)
+    assert workflow.params == {"_DEFAULT___message": "hello default"}
+    assert NfWorkflowInputConnection("_DEFAULT___message", "DEFAULT", "message") in workflow.connections
+    assert "Channel.value(params._DEFAULT___message)" in render_nextflow(workflow)
 
 
 @pytest.mark.fast
@@ -527,7 +527,7 @@ def test_rejects_collisions_between_source_and_default_params() -> None:
     )
     with pytest.raises(
         ValueError,
-        match="lowered workflow parameter names collide: DEFAULT___message",
+        match="lowered workflow parameter names collide: _DEFAULT___message",
     ):
         compiled_source_to_nextflow(rose)
 
