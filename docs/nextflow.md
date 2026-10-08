@@ -129,6 +129,10 @@ input under its original file name, so the staged name is exactly the CWL
 `basename`. `$(inputs.<name>.path)` is the same reference as `$(inputs.<name>)`
 and is likewise admitted only on a `File` or `Directory` input.
 
+A string holding a `$(…)` reference is interpolated as cwltool does: it is
+stripped of surrounding whitespace, `\$(` writes a literal `$(`, and `\\`
+writes one backslash. A string with no reference is used exactly as written.
+
 The `.copy` suffix above is load-bearing: a basename glob must derive a **new**
 name. A Nextflow output declaration does not capture staged inputs, so a glob
 naming only the input itself compiles cleanly and then fails at run time with

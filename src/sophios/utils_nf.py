@@ -276,8 +276,10 @@ def _ports(
 
 
 _INPUT_EXPRESSION = re.compile(
-    r"\$\(\s*inputs\.([A-Za-z_][A-Za-z0-9_]*)(?:\.(path|basename))?\s*\)"
+    r"\$\(\s*inputs\.(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\.(?P<suffix>path|basename))?\s*\)"
 )
+# One token of a string CWL interpolates: an escape it rewrites (`\$(`, `\${`, `\\`), or a reference.
+_INTERPOLATION = re.compile(rf"\\(?P<escaped>\$[({{]|\\)|{_INPUT_EXPRESSION.pattern}")
 
 
 def _template(value: Any, *, context: str) -> NfTemplate:
@@ -290,25 +292,26 @@ def _template(value: Any, *, context: str) -> NfTemplate:
             pass
         case _:
             raise ValueError(f"unsupported CWL command value {value!r}")
+    interpolated = "$(" in text or "${" in text  # cwltool interpolates only these, and strips them
+    if interpolated:
+        text = text.strip()
     segments: list[NfTemplateSegment] = []
     offset = 0
-    for match in _INPUT_EXPRESSION.finditer(text):
-        if match.start() > offset:
-            segments.append(NfLiteral(text[offset:match.start()]))
-        name = _identifier(match.group(1), context="input reference")
-        segments.append(
-            NfBasenameReference(name) if match.group(2) == "basename" else NfInputReference(name)
-        )
+    for match in _INTERPOLATION.finditer(text) if interpolated else ():
+        segments.append(NfLiteral(text[offset:match.start()]))
+        if match["escaped"]:
+            segments.append(NfLiteral(match["escaped"]))
+        else:
+            name = _identifier(match["name"], context="input reference")
+            segments.append(NfBasenameReference(name) if match["suffix"] == "basename" else NfInputReference(name))
         offset = match.end()
-    if offset < len(text):
-        segments.append(NfLiteral(text[offset:]))
-    residual = _INPUT_EXPRESSION.sub("", text)
-    if "$" in residual:
+    segments.append(NfLiteral(text[offset:]))
+    if "$" in (_INTERPOLATION.sub("", text) if interpolated else text):
         raise ValueError(
             f"{context} contains an unsupported CWL expression; the supported forms are $(inputs.<name>) "
             "and, on a File or Directory input, $(inputs.<name>.path) and $(inputs.<name>.basename)"
         )
-    return NfTemplate(tuple(segments or [NfLiteral(text)]))
+    return NfTemplate(tuple(segments))
 
 
 def _position(value: Any, *, default: int) -> int:
@@ -1404,7 +1407,8 @@ def _path_suffix_findings(tool: Mapping[str, Any], *, path: str) -> list[str]:
         return []
     findings: list[str] = []
     for value, position in _template_positions(tool, path=path):
-        for name, suffix in dict.fromkeys(match.groups() for match in _INPUT_EXPRESSION.finditer(str(value))):
+        references = (match.group("name", "suffix") for match in _INTERPOLATION.finditer(str(value)))
+        for name, suffix in dict.fromkeys(reference for reference in references if reference[0]):
             definition = inputs.get(name)
             if suffix is None or not isinstance(definition, Mapping):
                 continue
