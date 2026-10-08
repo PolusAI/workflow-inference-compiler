@@ -393,7 +393,7 @@ class Step(_ProcessBase):
     def __init__(
         self,
         source: StrPath,
-        config_path: StrPath | None = None,
+        step_inputs_file: StrPath | None = None,
         *,
         clt_path: None = None,
         step_name: str | None = None,
@@ -405,7 +405,7 @@ class Step(_ProcessBase):
     def __init__(
         self,
         source: None = None,
-        config_path: StrPath | None = None,
+        step_inputs_file: StrPath | None = None,
         *,
         clt_path: StrPath,
         step_name: str | None = None,
@@ -417,7 +417,7 @@ class Step(_ProcessBase):
     def __init__(
         self,
         source: Any,
-        config_path: None = None,
+        step_inputs_file: None = None,
         *,
         clt_path: None = None,
         step_name: str | None = None,
@@ -428,7 +428,7 @@ class Step(_ProcessBase):
     def __init__(
         self,
         source: Any | None = None,
-        config_path: StrPath | None = None,
+        step_inputs_file: StrPath | None = None,
         *,
         clt_path: StrPath | None = None,
         step_name: str | None = None,
@@ -441,8 +441,10 @@ class Step(_ProcessBase):
                 CWL path retained for compatibility.
             clt_path (StrPath | None): Explicit path to a CWL tool definition.
                 This is the preferred file-backed constructor spelling.
-            config_path (StrPath | None): Optional YAML config used to pre-bind
-                file-backed step inputs.
+            step_inputs_file (StrPath | None): A YAML file that maps this step's input
+                names to values, each bound as it is written. For a local run, a
+                relative path in it is read from the working directory, as a path
+                bound in Python is.
             step_name (str | None): Optional workflow step name override.
             tool_registry (Tools | None): Optional fallback registry for known tools.
                 CommandLineTool-like objects must expose ``name`` and
@@ -450,7 +452,7 @@ class Step(_ProcessBase):
                 ``tool_builder.CommandLineTool``.
 
         Raises:
-            TypeError: If the source or config uses an unsupported type.
+            TypeError: If the source or step_inputs_file uses an unsupported type.
             InvalidCLTError: If the CWL tool cannot be loaded from disk or the registry.
 
         Returns:
@@ -465,10 +467,10 @@ class Step(_ProcessBase):
         match source:
             case str() | Path() as path:
                 clt_path_ = _coerce_path(path, field_name="clt_path")
-                config_path_ = _coerce_path(config_path, field_name="config_path", allow_none=True)
+                step_inputs_file_ = _coerce_path(step_inputs_file, field_name="step_inputs_file", allow_none=True)
                 assert clt_path_ is not None
                 clt, yaml_file = _load_clt(clt_path_, resolved_registry)
-                cfg_yaml = _load_yaml(config_path_) if config_path_ is not None else {}
+                cfg_yaml = _load_yaml(step_inputs_file_) if step_inputs_file_ is not None else {}
 
                 self._initialize_loaded_tool(
                     clt=clt,
@@ -479,8 +481,8 @@ class Step(_ProcessBase):
                     process_name=step_name,
                 )
             case _ if (tool_name := _tool_builder_source_name(source)) is not None:
-                if config_path is not None:
-                    raise TypeError("config_path is only supported when Step is created from a CWL file path")
+                if step_inputs_file is not None:
+                    raise TypeError("step_inputs_file is only supported when Step is created from a CWL file path")
                 assert source is not None
                 resolved_name = step_name or tool_name
                 run_path = Path(f"{resolved_name}.cwl")

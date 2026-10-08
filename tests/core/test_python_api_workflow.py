@@ -319,11 +319,11 @@ def test_step_constructor_accepts_tool_builder_command_line_tool() -> None:
 
 
 @pytest.mark.fast
-def test_step_constructor_rejects_config_path_for_in_memory_tool() -> None:
-    """`config_path` belongs to a tool on disk; an in-memory tool has no file to configure."""
+def test_step_constructor_rejects_a_step_inputs_file_for_in_memory_tool() -> None:
+    """`step_inputs_file` belongs to a tool on disk; an in-memory tool has no file to configure."""
     tool = cast(Any, _emit_text_tool())
-    with pytest.raises(TypeError, match="config_path is only supported"):
-        Step(tool, "config.yml")
+    with pytest.raises(TypeError, match="step_inputs_file is only supported"):
+        Step(tool, step_inputs_file="inputs.yml")
 
 
 @pytest.mark.fast
@@ -841,7 +841,7 @@ def test_a_step_inputs_file_binds_each_value_as_written(tmp_path: Path) -> None:
     config.write_text(
         yaml.safe_dump({"file": {"class": "File", "location": "/cluster/project/in.txt"}, "str": "Hello"}),
         encoding="utf-8")
-    append = Step(clt_path=_adapter("append"), config_path=config)
+    append = Step(clt_path=_adapter("append"), step_inputs_file=config)
     file = append._as_workflow_step().input("file")
     assert isinstance(file, InlineLiteral)
     assert file.value == {"class": "File", "location": "/cluster/project/in.txt"}
@@ -1715,7 +1715,7 @@ def test_a_missing_path_in_a_step_inputs_file_is_named_before_the_run(monkeypatc
     """The step is built; the pre-flight of the local run names the path."""
     monkeypatch.chdir(tmp_path)
     Path('cat.yml').write_text('f: {class: File, location: gone.txt}\n', encoding='utf-8')
-    cat = Step(clt_path=_cat_tool(tmp_path), config_path='cat.yml')
+    cat = Step(clt_path=_cat_tool(tmp_path), step_inputs_file='cat.yml')
     line, = _missing_paths(monkeypatch, Workflow([cat], 'wf'))
     assert "input 'cat/f' (from the workflow, " in line and "names 'gone.txt'" in line
 
@@ -1728,7 +1728,7 @@ def test_a_relative_path_in_a_step_inputs_file_is_read_from_the_working_director
     Path('data.txt').write_text('hello\n', encoding='utf-8')
     Path('inputs').mkdir()
     Path('inputs/cat.yml').write_text('f: {class: File, location: data.txt}\n', encoding='utf-8')
-    cat = Step(clt_path=_cat_tool(tmp_path), config_path='inputs/cat.yml')
+    cat = Step(clt_path=_cat_tool(tmp_path), step_inputs_file='inputs/cat.yml')
     job = _job_written_by_run(monkeypatch, Workflow([cat], 'wf'))
     assert job['wf__step__1__cat___f'] == {'class': 'File', 'location': str(Path.cwd() / 'data.txt')}
 

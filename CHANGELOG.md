@@ -182,6 +182,11 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   anywhere inside a bound list or mapping, raises `InvalidInputValueError`
   where it is bound; it used to reach the compiler as a literal and fail with
   wic020. Wrap the ports in `StepInput(source=[...])`.
+- `Step(path, config_path=...)` is `Step(path, step_inputs_file=...)`. Its
+  values are bound as written: a File or Directory in it is no longer checked
+  when the step is built (api001), and a local run reports a missing one
+  before it starts (wic016), reading a relative path from the working
+  directory.
 - `Workflow.run(user_env_vars=...)` passes each value to the runner exactly as
   given; `$`, `!`, `&`, quotes, parentheses and newlines used to be stripped
   from it. Write a value as the runner should see it. A key that is not an
