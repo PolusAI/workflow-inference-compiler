@@ -181,40 +181,8 @@ def render_number(value: int | float) -> str:
     return format(Decimal(str(value)), "f")
 
 
-# CWL glob metacharacters; a CWL glob has no brace expansion, so a brace is escaped for Nextflow.
-_GLOB_METACHARACTERS = frozenset("*?[]")
+# A CWL glob has no brace expansion, so a brace is escaped for Nextflow.
 _BRACE_ESCAPES = str.maketrans({"{": "\\{", "}": "\\}"})
-
-
-def _glob_names_one_file(template: Any) -> bool:
-    """True when an assembled output name is meant literally, not as a pattern.
-
-    Nextflow pattern-matches an output ``path`` name, so a name assembled
-    from a staged file's own name is matched against whatever metacharacters
-    that name happens to carry: a staged ``a[1].txt`` yields the pattern
-    ``a[1].txt``, whose ``[1]`` is a character class that cannot match the
-    file the process wrote.
-
-    Only a basename reference makes the name literal by construction -- it
-    is some real file's name, never a pattern. A plain input reference
-    carries arbitrary data, and a glob *is* a legitimate thing to pass as
-    an input (``glob: $(inputs.pattern)`` with ``pattern="*.txt")``, so
-    turning globbing off there would break a pattern that is meant to
-    match. Which reference kind is present is decidable here, at compile
-    time, where the assembled value is not; so the rule keys on the kind.
-
-    A metacharacter written into a literal part is the author asking for a
-    pattern and is left alone, and an all-literal name is unchanged.
-    """
-    references = [segment for segment in template.segments if not isinstance(segment, NfLiteral)]
-    if not references:
-        return False
-    if not all(isinstance(segment, NfBasenameReference) for segment in references):
-        return False
-    return not any(
-        isinstance(segment, NfLiteral) and _GLOB_METACHARACTERS & set(segment.value)
-        for segment in template.segments
-    )
 
 
 def _capture_literal(port: NfPort) -> str:
@@ -235,23 +203,10 @@ def _process_output(port: NfPort, *, tuple_element: bool = False) -> str:
         read = f"{NF_LOAD_CONTENTS_HELPER}(task.workDir.resolve({_capture_literal(port)}))"
         body = f"val({read})"
         return body if tuple_element else f"{body}, emit: {emit}"
-    # The two options are independent: one says how the name is matched, the
-    # other how many matches the author declared. A text capture returns
-    # above, so neither reaches a val declaration.
-    literal = (
-        ", glob: false"
-        if port.capture == "single" or _glob_names_one_file(port.glob)
-        else ""
-    )
-    # A "single" capture marker is the CWL author's own cardinality
-    # declaration, and a scalar output whose pattern can match several files
-    # names one file as cwltool enforces: either way arity: '1' emits one
-    # path value and fails on no match or on several.
-    pattern = not literal and any(
-        not isinstance(segment, NfLiteral) or _GLOB_METACHARACTERS & set(segment.value)
-        for segment in port.glob.segments
-    )
-    arity = ", arity: '1'" if port.capture == "single" or pattern else ""
+    # A text capture returns above, so neither option reaches a val declaration.
+    literal = ", glob: false" if port.literal_glob else ""
+    arity = ", arity: '1'" if port.one_file else ""
+    arity += ", optional: true" if port.optional else ""
     glob = port.glob if literal else NfTemplate(tuple(
         NfLiteral(segment.value.translate(_BRACE_ESCAPES)) if isinstance(segment, NfLiteral) else segment
         for segment in port.glob.segments
@@ -714,6 +669,9 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
                     f".combine({_shape_channel(connection.from_process)})"
                     f".flatMap {{ flat, shape -> {NF_NEST_HELPER}(flat, shape) }}"
                 )
+            elif any(port.optional for port in processes[connection.from_process].outputs if port.name == connection.from_port):
+                # An optional output that matched nothing emits nothing: report CWL null.
+                expression = f"{expression}.ifEmpty([])"
             elif connection.from_process in multi_input_process_names:
                 # Sort by the hidden invocation index before stripping it, so
                 # the gathered workflow output never depends on task

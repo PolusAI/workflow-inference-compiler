@@ -268,6 +268,7 @@ def _ports(
                         is_array=is_array,
                         stage_as=None if outputs or stage_as is None else stage_as.get(name),
                         capture=_output_capture(raw_name, raw_definition) if outputs else None,
+                        optional=outputs and qualifier == "path" and _is_optional(cwl_type),
                     )
                 )
             case _:
