@@ -1,15 +1,13 @@
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 import sys
 import copy
 from dataclasses import dataclass, replace
-import shutil
 from typing import Any, Final
 import docker
 import podman
 from podman.domain.images_build import BuildMixin
 from . import plugins
 from .wic_types import Cwl, Yaml
-from .input_output import input_paths, relative_local_path
 from .ir.artifacts import CompilationArtifact
 from .ir.names import NAMESPACE_SEPARATOR
 from .lang.cwl import CwlVersion
@@ -472,35 +470,3 @@ def remove_artifact_entrypoints(container_engine: str,
         with podman.PodmanClient(base_url=uri) as client:
             plugins.remove_entrypoints(client, BuildMixin())
     return plugins.dockerPull_append_noentrypoint_artifact(artifact)
-
-
-def stage_input_files(yml_inputs: Yaml,
-                      root_yml_dir_abs: Path,
-                      basepath: str,
-                      use_subdirs_cwl: bool = True) -> None:
-    """Copies each File and Directory the job names by a relative path to the run's directory,
-    where the job's relative paths are read.
-
-    One that does not exist is skipped: the pre-flight reports it before the run.
-
-    Args:
-        yml_inputs (Yaml): The yml inputs file for the root workflow.
-        root_yml_dir_abs (Path): The absolute path of the root workflow yml file.
-        basepath (str): The path at which the workflow to be executed
-        use_subdirs_cwl (bool): Controls whether to use subdirectories or
-        just one directory when writing the compiled CWL files to disk
-    """
-    relroot = Path(basepath) if use_subdirs_cwl else Path(".")
-    for _name, found in input_paths(yml_inputs):
-        written = relative_local_path(found.get("location", found.get("path")))
-        if written is None:
-            continue
-        src_path, dst_path = root_yml_dir_abs / written, relroot / written
-        # Avoid unnecessary copy
-        if not src_path.exists() or src_path.resolve() == dst_path.resolve():
-            continue
-        dst_path.parent.mkdir(parents=True, exist_ok=True)
-        if src_path.is_dir():
-            shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
-        else:
-            shutil.copy2(src_path, dst_path)

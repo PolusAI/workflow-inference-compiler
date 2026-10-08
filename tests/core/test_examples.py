@@ -6,6 +6,7 @@ from pathlib import Path
 import signal
 import sys
 import argparse
+from dataclasses import replace
 from typing import Any, Final
 
 import pytest
@@ -23,8 +24,8 @@ from sophios import post_compile, preflight, realtime
 from sophios import auto_gen_header
 from sophios.cli import get_args
 from sophios.utils_yaml import Key, wic_loader
-from sophios.post_compile import (apply_inline_options, inline_artifact_runs,
-                                  remove_artifact_entrypoints, stage_input_files)
+from sophios.post_compile import apply_inline_options, inline_artifact_runs, remove_artifact_entrypoints
+from sophios.runtime_inputs import normalize_artifact_job_inputs
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
 from sophios.ir.artifacts import CompilationArtifact
@@ -283,6 +284,9 @@ def run_workflows(
     yaml_stem = artifact.name
 
     artifact = sophios.plugins.cwl_prepend_dockerFile_include_path_artifact(artifact)
+    # As the CLI writes them: a relative path is read beside the workflow.
+    artifact = replace(artifact, job_inputs=sophios.input_output.absolute_paths(
+        normalize_artifact_job_inputs(artifact, artifact.job_inputs), Path(args.yaml).parent.absolute()))
     sophios.input_output.write_artifacts_to_disk(
         artifact, Path(basepath), True, args.inputs_file)
 
@@ -308,8 +312,6 @@ def run_workflows(
         sophios.input_output.write_artifacts_to_disk(
             artifact, Path(basepath), True, args.inputs_file)
     # NOTE: Do not use --cachedir; we want to actually test everything.
-    # stage input files for run
-    stage_input_files(artifact.job_inputs, Path(args.yaml).parent.absolute(), basepath)
     run_args_dict = {}
     run_args_dict['container_engine'] = args.container_engine
     run_args_dict['cwl_runner'] = cwl_runner
