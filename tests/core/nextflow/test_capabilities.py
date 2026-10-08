@@ -2722,3 +2722,27 @@ def test_a_command_error_is_reported_instead_of_an_absent_optional_finding() -> 
     )
     [finding] = _findings(rose)
     assert finding.startswith("steps[0]: CWL argument contains an unsupported CWL expression")
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("argument", "admitted"), [
+    ("--input=$(inputs.f)", False),
+    ("$(inputs.f)", True),
+    ("--input=$(inputs.f.path)", True),
+    ("--input=$(inputs.f.basename)", True),
+    ("--name=$(inputs.s)", True),
+], ids=["embedded-file", "whole-file", "embedded-path", "embedded-basename", "embedded-string"])
+def test_a_file_reference_embedded_in_text_is_rejected(argument: str, admitted: bool) -> None:
+    embedded = tool("EMBEDDED", inputs={"f": {"type": "File"}, "s": {"type": "string"}}, arguments=[argument])
+    rose = synthetic_source(
+        workflow_doc([step("EMBEDDED", **{"in": {"f": "f", "s": "s"}})], inputs={"f": "File", "s": "string"}),
+        [embedded],
+        workflow_inputs={"f": {"class": "File", "path": "in.txt"}, "s": "x"},
+    )
+    if admitted:
+        compiled_source_to_nextflow(rose)
+        return
+    assert _findings(rose) == [
+        "steps[0].run.arguments[0]: $(inputs.f) embedded in other text renders a File object as JSON in CWL; "
+        "use $(inputs.f.path) or $(inputs.f.basename), or the reference alone"
+    ]

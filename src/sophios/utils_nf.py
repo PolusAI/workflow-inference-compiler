@@ -74,8 +74,8 @@ class CompiledNextflowSource:
 ABSENT_VAL_SENTINEL: list[Any] = []
 
 
-def _identifier(value: Any, *, context: str) -> str:
-    """Normalize a CWL identifier into a stable Nextflow identifier."""
+def _identifier(value: Any, *, context: str, variable: bool = True) -> str:
+    """Normalize a CWL identifier into a stable Nextflow identifier (see normalize_nextflow_identifier)."""
     match value:
         case str() if value:
             pass
@@ -84,7 +84,7 @@ def _identifier(value: Any, *, context: str) -> str:
     local = value.rsplit("#", maxsplit=1)[-1]
     if not local:
         raise ValueError(f"{context} cannot be normalized to a Nextflow identifier")
-    identifier = normalize_nextflow_identifier(local)
+    identifier = normalize_nextflow_identifier(local, variable=variable)
     while identifier in NF_INTERNAL_IDENTIFIERS:
         identifier = f"_{identifier}"
     return identifier
@@ -1409,31 +1409,40 @@ def _template_positions(
     return positions
 
 
-def _path_suffix_findings(tool: Mapping[str, Any], *, path: str) -> list[str]:
-    """Require a File or Directory input for every ``.path`` and ``.basename`` reference (design §6).
+def _path_reference_findings(tool: Mapping[str, Any], *, path: str) -> list[str]:
+    """Check every input reference against the type it reads (design §6).
 
-    Read from the authored text, because ``_template`` lowers ``.path`` to a
-    plain reference and the model could no longer tell the two apart.
+    ``.path`` and ``.basename`` need a File or Directory input. A bare File or
+    Directory reference must be the whole value: embedded in other text, CWL
+    renders the File object as JSON where the backend would render its staged
+    name. Read from the authored text, because ``_template`` lowers ``.path``
+    to a plain reference and the model could no longer tell the two apart.
     """
     inputs = tool.get("inputs", {})
     if not isinstance(inputs, Mapping):
         return []
     findings: list[str] = []
     for value, position in _template_positions(tool, path=path):
+        whole = isinstance(value, str) and _INPUT_EXPRESSION.fullmatch(value.strip()) is not None
         references = (match.group("name", "suffix") for match in _INTERPOLATION.finditer(str(value)))
         for name, suffix in dict.fromkeys(reference for reference in references if reference[0]):
             definition = inputs.get(name)
-            if suffix is None or not isinstance(definition, Mapping):
+            if not isinstance(definition, Mapping):
                 continue
             try:
-                if cwl_type_to_nf_qualifier(definition.get("type")) == "path":
-                    continue
+                is_path = cwl_type_to_nf_qualifier(definition.get("type")) == "path"
             except ValueError:
                 continue  # the input pass reports a type the backend does not lower
-            findings.append(
-                f"{position}: $(inputs.{name}.{suffix}) requires a File or Directory input, "
-                f"and {name} is declared {definition.get('type')!r}"
-            )
+            if suffix is not None and not is_path:
+                findings.append(
+                    f"{position}: $(inputs.{name}.{suffix}) requires a File or Directory input, "
+                    f"and {name} is declared {definition.get('type')!r}"
+                )
+            elif suffix is None and is_path and not whole:
+                findings.append(
+                    f"{position}: $(inputs.{name}) embedded in other text renders a File object as JSON in "
+                    f"CWL; use $(inputs.{name}.path) or $(inputs.{name}.basename), or the reference alone"
+                )
     return findings
 
 
@@ -1743,7 +1752,7 @@ def _tool_capability_findings(
             path=f"{path}.run",
         )
     )
-    findings.extend(_path_suffix_findings(tool, path=path))
+    findings.extend(_path_reference_findings(tool, path=path))
 
     for section_name in ("requirements", "hints"):
         section = tool.get(section_name)
@@ -2740,7 +2749,7 @@ def _process(step: Mapping[str, Any], tool: Mapping[str, Any]) -> NfProcess:
             raise ValueError(f"unsupported compiled step class {unsupported_class!r}")
     when = step.get("when")
     return NfProcess(
-        name=_identifier(step.get("id"), context="workflow step id"),
+        name=_identifier(step.get("id"), context="workflow step id", variable=False),
         inputs=_ports(tool.get("inputs", {}), outputs=False, stage_as=_iwdr_stage_as(tool)),
         outputs=_ports(tool.get("outputs", {}), outputs=True),
         command=_command(tool),
@@ -3085,7 +3094,7 @@ def compiled_source_to_nextflow(
             )
         params.update(default_params)
         return ExecutableNextflowWorkflow(
-            name=_identifier(compiled.name, context="workflow name"),
+            name=_identifier(compiled.name, context="workflow name", variable=False),
             processes=processes,
             connections=[*_connections(workflow, list(steps), processes), *default_connections],
             params=_apply_absent_sentinel(params),

@@ -132,7 +132,10 @@ outputs:
 The reference must target a `File` or `Directory` input. Nextflow stages an
 input under its original file name, so the staged name is exactly the CWL
 `basename`. `$(inputs.<name>.path)` is the same reference as `$(inputs.<name>)`
-and is likewise admitted only on a `File` or `Directory` input.
+and is likewise admitted only on a `File` or `Directory` input. A bare
+`$(inputs.<name>)` of a `File` or `Directory` input must be the whole value:
+embedded in other text, such as `--input=$(inputs.f)`, CWL renders the File
+object as JSON, so it is rejected; write `$(inputs.f.path)` there instead.
 
 A string holding a `$(…)` reference is interpolated as cwltool does: it is
 stripped of surrounding whitespace, `\$(` writes a literal `$(`, and `\\`

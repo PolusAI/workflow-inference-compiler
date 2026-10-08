@@ -9,7 +9,7 @@ from typing import Any, cast
 import pytest
 
 from sophios.nf_expr import parse
-from sophios.nf_symbols import is_nextflow_identifier, normalize_nextflow_identifier
+from sophios.nf_symbols import NEXTFLOW_SCRIPT_NAMES, is_nextflow_identifier, normalize_nextflow_identifier
 from sophios.nf_types import (
     ExecutableNextflowWorkflow,
     NfArrayBinding,
@@ -1300,3 +1300,10 @@ def test_hydration_refuses_a_malformed_condition_or_port(field: str, value: Any)
     target[field] = value
     with pytest.raises((ValueError, TypeError, KeyError)):
         ExecutableNextflowWorkflow.from_json(json.dumps(payload))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("name", sorted(NEXTFLOW_SCRIPT_NAMES) + ["Math", "Élan"])
+def test_a_script_variable_never_takes_a_name_the_script_resolves(name: str) -> None:
+    assert normalize_nextflow_identifier(name) == f"_{name}"
+    assert normalize_nextflow_identifier(name, variable=False) == name
