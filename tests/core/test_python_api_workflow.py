@@ -1679,6 +1679,69 @@ def test_a_relative_path_bound_in_python_is_read_from_the_working_directory(
     assert job['wf__step__1__cat___f'] == {'class': 'File', 'location': str(Path.cwd() / 'data.txt')}
 
 
+def _missing_paths(monkeypatch: pytest.MonkeyPatch, workflow: Workflow) -> list[str]:
+    """The `wic016` lines `workflow.run()` raises, which it must raise before the runner starts."""
+    ran: list[bool] = []
+
+    def runner(*_args: Any, **_kwargs: Any) -> int:
+        ran.append(True)
+        return 0
+    monkeypatch.setattr(python_runtime.rl, 'run_local', runner)
+    with pytest.raises(SophiosError) as caught:
+        workflow.run()
+    assert not ran
+    return [str(diagnostic) for diagnostic in caught.value.diagnostics
+            if diagnostic.code is SophiosErrorCode.MISSING_INPUT_FILE]
+
+
+@pytest.mark.fast
+def test_a_missing_path_bound_in_python_is_named_before_the_run(monkeypatch: pytest.MonkeyPatch,
+                                                                tmp_path: Path) -> None:
+    """The pre-flight checks the values bound in Python, as it checks an inputs file's."""
+    monkeypatch.chdir(tmp_path)
+    cat = _cat()
+    cat.inputs.f = str(tmp_path / 'gone.txt')
+    line, = _missing_paths(monkeypatch, Workflow([cat], 'wf'))
+    assert line.startswith("error [wic016] input 'cat/f' (from the workflow, ")
+    assert f"names {str(tmp_path / 'gone.txt')!r}, which does not exist" in line
+
+
+@pytest.mark.fast
+def test_a_missing_relative_path_bound_in_python_says_where_it_was_looked_for(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """It was looked for in the working directory, where the run reads it from."""
+    monkeypatch.chdir(tmp_path)
+    cat = _cat()
+    cat.inputs.f = 'gone.txt'
+    line, = _missing_paths(monkeypatch, Workflow([cat], 'wf'))
+    assert f"whose relative paths are read from {Path.cwd()}) names 'gone.txt'" in line
+    assert f"does not exist at {Path.cwd() / 'gone.txt'}" in line
+
+
+@pytest.mark.fast
+def test_an_inputs_file_value_is_checked_instead_of_the_one_bound_in_python(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The inputs file's value is the one the runner gets, so the one it replaces is not checked."""
+    monkeypatch.chdir(tmp_path)
+    Path('data.txt').write_text('hello\n', encoding='utf-8')
+    Path('in.yml').write_text('wf__step__1__cat___f: {class: File, location: data.txt}\n', encoding='utf-8')
+    cat = _cat()
+    cat.inputs.f = 'gone.txt'
+    monkeypatch.setattr(python_runtime.rl, 'run_local', lambda *_a, **_k: 0)
+    Workflow([cat], 'wf').run(run_args_dict={'inputs_file': 'in.yml'})
+
+
+@pytest.mark.fast
+def test_an_output_target_directory_bound_in_python_is_not_looked_for(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The runner gets it as the name of a directory the step creates, which does not exist yet."""
+    monkeypatch.chdir(tmp_path)
+    step = Step(clt_path=_output_directory_tool(tmp_path / 'write_dir.cwl'))
+    step.inputs.outDir = Path('result.outDir')
+    monkeypatch.setattr(python_runtime.rl, 'run_local', lambda *_a, **_k: 0)
+    Workflow([step], 'wf').run()
+
+
 def _interrupted(_args: list[str]) -> int:
     """Stands in for a runner's `main` that the user stopped with Ctrl-C."""
     raise KeyboardInterrupt
