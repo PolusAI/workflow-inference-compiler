@@ -325,7 +325,7 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
     SophiosErrorCode.INVALID_INPUT_VALUE: Explanation(
         Kind.CALL,
         'A value bound to a step input that the input cannot take.',
-        "Bind a value of the input's type; a File or Directory value must name a path that exists."),
+        "Bind a port object directly, or several with `StepInput(source=[...])`; a string never names a port."),
     SophiosErrorCode.INVALID_STEP: Explanation(
         Kind.CALL,
         'A step the workflow cannot place: a repeated step name, a link to a step outside the workflow or later in '

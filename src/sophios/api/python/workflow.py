@@ -39,7 +39,6 @@ from ._ports import (
 )
 from ._utils import (
     caller_span as _caller_span,
-    get_value_from_cfg as _get_value_from_cfg,
     load_yaml as _load_yaml,
     serialize_value as _serialize_value,
 )
@@ -696,8 +695,9 @@ class Step(_ProcessBase):
         return _lookup_parameter(self._outputs, name, owner_name=self.process_name, kind="output")
 
     def _set_from_io_cfg(self) -> None:
+        """Bind each value as it is written: whatever runs the workflow checks the paths it names."""
         for name, value in self.cfg_yaml.items():
-            setattr(self, name, _get_value_from_cfg(value))
+            setattr(self, name, value)
 
     def _validate(self) -> None:
         """Validate step-local settings before compilation.

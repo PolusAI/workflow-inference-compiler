@@ -14,7 +14,6 @@ import yaml
 from sophios import utils_cwl
 from sophios.lang.spans import SourceSpan
 
-from ._errors import InvalidInputValueError
 from ._types import CWLAtomicType
 
 _PACKAGE_ROOT: Final = Path(__file__).resolve().parents[2]
@@ -142,48 +141,6 @@ def infer_literal_parameter_type(value: Any) -> Any:  # pylint: disable=too-many
             return class_name
         case _:
             return None
-
-
-def _validate_fs_object(path_value: Path, *, class_name: str) -> Path:
-    if class_name == "Directory":
-        if not path_value.is_dir():
-            raise InvalidInputValueError(f"{str(path_value)} is not a directory")
-        return path_value
-    if class_name == "File":
-        if not path_value.is_file():
-            raise InvalidInputValueError(f"{str(path_value)} is not a file")
-        return path_value
-    raise InvalidInputValueError(f"Unsupported CWL object class {class_name!r}")
-
-
-def get_value_from_cfg(value: Any) -> Any:
-    """Normalize config values into Python values accepted by the DSL.
-
-    This supports the common CWL input-object shapes users put in YAML config
-    files, notably `File`, `Directory`, and arrays/records containing them.
-    """
-    match value:
-        case list() as items:
-            return [get_value_from_cfg(item) for item in items]
-        case tuple() as items:
-            return [get_value_from_cfg(item) for item in items]
-        case dict() as data if data.get("class") in {"Directory", "File"}:
-            path_text = data.get("location", data.get("path"))
-            if path_text is None:
-                raise InvalidInputValueError(
-                    f"{data['class']} value has no location or path"
-                )
-            try:
-                path_value = Path(path_text)
-            except (TypeError, ValueError) as exc:
-                raise InvalidInputValueError(
-                    f"{data['class']} path must be a string or path-like value: {path_text!r}"
-                ) from exc
-            return _validate_fs_object(path_value, class_name=str(data["class"]))
-        case dict() as data:
-            return {key: get_value_from_cfg(item) for key, item in data.items()}
-        case _:
-            return value
 
 
 def load_yaml(path: Path) -> dict[str, Any]:

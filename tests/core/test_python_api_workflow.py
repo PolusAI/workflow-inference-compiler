@@ -835,58 +835,16 @@ def test_workflow_outputs_are_serialized_with_type_and_source(tmp_path: Path) ->
 
 
 @pytest.mark.fast
-def test_config_yaml_normalizes_cwl_file_and_directory_objects(tmp_path: Path) -> None:
-    """A `File` or `Directory` given as a config object reaches the step as its path."""
-    input_dir = tmp_path / "input-dir"
-    input_dir.mkdir()
-    input_file = tmp_path / "input.txt"
-    input_file.write_text("hello", encoding="utf-8")
-
-    subdirectory_cfg = tmp_path / "subdirectory.yml"
-    subdirectory_cfg.write_text(
-        yaml.safe_dump(
-            {
-                "directory": {"class": "Directory", "location": str(input_dir)},
-                "glob_pattern": ".",
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    subdirectory = Step(clt_path=_adapter("subdirectory"), config_path=subdirectory_cfg)
-    directory = subdirectory._as_workflow_step().input("directory")
-    assert isinstance(directory, InlineLiteral) and directory.value == str(input_dir)
-
-    append_cfg = tmp_path / "append.yml"
-    append_cfg.write_text(
-        yaml.safe_dump(
-            {
-                "file": {"class": "File", "location": str(input_file)},
-                "str": "Hello",
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    append = Step(clt_path=_adapter("append"), config_path=append_cfg)
-    file = append._as_workflow_step().input("file")
-    assert isinstance(file, InlineLiteral) and file.value == str(input_file)
-
-
-@pytest.mark.fast
-def test_config_file_without_location_is_a_structured_api_failure(tmp_path: Path) -> None:
-    """A malformed CWL file value stays inside the one structured error family."""
+def test_a_step_inputs_file_binds_each_value_as_written(tmp_path: Path) -> None:
+    """Nothing is checked when the step is built: a path may name a file on the machine that runs it."""
     config = tmp_path / "append.yml"
-    config.write_text("file:\n  class: File\n", encoding="utf-8")
-
-    with pytest.raises(SophiosError) as caught:
-        Step(clt_path=_adapter("append"), config_path=config)
-
-    assert isinstance(caught.value, InvalidInputValueError)
-    assert [diagnostic.code for diagnostic in caught.value.diagnostics] == [
-        SophiosErrorCode.INVALID_INPUT_VALUE
-    ]
-    assert caught.value.diagnostics[0].message == "File value has no location or path"
+    config.write_text(
+        yaml.safe_dump({"file": {"class": "File", "location": "/cluster/project/in.txt"}, "str": "Hello"}),
+        encoding="utf-8")
+    append = Step(clt_path=_adapter("append"), config_path=config)
+    file = append._as_workflow_step().input("file")
+    assert isinstance(file, InlineLiteral)
+    assert file.value == {"class": "File", "location": "/cluster/project/in.txt"}
 
 
 @pytest.mark.fast
@@ -1651,11 +1609,20 @@ print(Path(next(iter(summary.values()))["path"]).read_text(encoding="utf-8"), en
     assert run.stdout.endswith('hello\n')
 
 
+#: A tool that reads one File, and runs in no container.
+_CAT_TOOL = {'cwlVersion': 'v1.2', 'class': 'CommandLineTool', 'baseCommand': 'cat',
+             'inputs': {'f': {'type': 'File', 'inputBinding': {'position': 1}}}, 'outputs': {'out': 'stdout'}}
+
+
 def _cat() -> Step:
-    """A step whose tool reads one File, and runs in no container."""
-    return Step.from_cwl_document({'cwlVersion': 'v1.2', 'class': 'CommandLineTool', 'baseCommand': 'cat',
-                                   'inputs': {'f': {'type': 'File', 'inputBinding': {'position': 1}}},
-                                   'outputs': {'out': 'stdout'}}, process_name='cat')
+    return Step.from_cwl_document(_CAT_TOOL, process_name='cat')
+
+
+def _cat_tool(directory: Path) -> Path:
+    """`_CAT_TOOL`, written to `directory`, for a step built from a file."""
+    path = directory / 'cat.cwl'
+    path.write_text(yaml.safe_dump(_CAT_TOOL), encoding='utf-8')
+    return path
 
 
 def _job_written_by_run(monkeypatch: pytest.MonkeyPatch, workflow: Workflow) -> dict[str, Any]:
@@ -1740,6 +1707,30 @@ def test_an_output_target_directory_bound_in_python_is_not_looked_for(
     step.inputs.outDir = Path('result.outDir')
     monkeypatch.setattr(python_runtime.rl, 'run_local', lambda *_a, **_k: 0)
     Workflow([step], 'wf').run()
+
+
+@pytest.mark.fast
+def test_a_missing_path_in_a_step_inputs_file_is_named_before_the_run(monkeypatch: pytest.MonkeyPatch,
+                                                                      tmp_path: Path) -> None:
+    """The step is built; the pre-flight of the local run names the path."""
+    monkeypatch.chdir(tmp_path)
+    Path('cat.yml').write_text('f: {class: File, location: gone.txt}\n', encoding='utf-8')
+    cat = Step(clt_path=_cat_tool(tmp_path), config_path='cat.yml')
+    line, = _missing_paths(monkeypatch, Workflow([cat], 'wf'))
+    assert "input 'cat/f' (from the workflow, " in line and "names 'gone.txt'" in line
+
+
+@pytest.mark.fast
+def test_a_relative_path_in_a_step_inputs_file_is_read_from_the_working_directory(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """As a path bound in Python is, not from the file's directory: the file binds values as written."""
+    monkeypatch.chdir(tmp_path)
+    Path('data.txt').write_text('hello\n', encoding='utf-8')
+    Path('inputs').mkdir()
+    Path('inputs/cat.yml').write_text('f: {class: File, location: data.txt}\n', encoding='utf-8')
+    cat = Step(clt_path=_cat_tool(tmp_path), config_path='inputs/cat.yml')
+    job = _job_written_by_run(monkeypatch, Workflow([cat], 'wf'))
+    assert job['wf__step__1__cat___f'] == {'class': 'File', 'location': str(Path.cwd() / 'data.txt')}
 
 
 def _interrupted(_args: list[str]) -> int:

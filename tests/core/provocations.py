@@ -270,17 +270,14 @@ def _provoke_undeclared_port() -> None:
 
 
 def _provoke_invalid_input_value() -> None:
-    """Load a config `File` value that names neither a location nor a path."""
+    """Bind a list holding a step output, which is a port and never a literal."""
     from pathlib import Path  # pylint: disable=import-outside-toplevel
-    from tempfile import TemporaryDirectory  # pylint: disable=import-outside-toplevel
 
     from sophios.api.python.workflow import Step  # pylint: disable=import-outside-toplevel
 
-    adapter = Path(__file__).resolve().parents[2] / 'cwl_adapters' / 'append.cwl'
-    with TemporaryDirectory() as directory:
-        config = Path(directory) / 'inputs.yml'
-        config.write_text('file:\n  class: File\n', encoding='utf-8')
-        Step(clt_path=adapter, config_path=config)
+    adapters = Path(__file__).resolve().parents[2] / 'cwl_adapters'
+    touch = Step(clt_path=adapters / 'touch.cwl')
+    Step(clt_path=adapters / 'append.cwl').inputs.file = [touch.outputs.file]
 
 
 def _provoke_invalid_step() -> None:
