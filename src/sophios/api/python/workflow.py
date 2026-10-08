@@ -512,7 +512,7 @@ class Step(_ProcessBase):
         *,
         process_name: str | None = None,
         run_path: StrPath | None = None,
-        config: Mapping[str, Any] | None = None,
+        step_inputs: Mapping[str, Any] | None = None,
         tool_registry: Tools | None = None,
     ) -> "Step":
         # pylint: disable=too-many-arguments
@@ -522,7 +522,8 @@ class Step(_ProcessBase):
             document (Mapping[str, Any]): Parsed CWL CommandLineTool fields.
             process_name (str | None): Optional step name override.
             run_path (StrPath | None): Optional virtual ``.cwl`` path for compiler bookkeeping.
-            config (Mapping[str, Any] | None): Optional input values to pre-bind.
+            step_inputs (Mapping[str, Any] | None): Input values to bind on the step, by input
+                name, as written.
             tool_registry (Tools | None): Optional tool registry retained on the step.
 
         Raises:
@@ -544,7 +545,7 @@ class Step(_ProcessBase):
             clt=clt,
             yaml_file=yaml_file,
             clt_path=clt_path,
-            cfg_yaml=dict(config or {}),
+            cfg_yaml=dict(step_inputs or {}),
             tool_registry=resolved_registry,
             process_name=process_name,
         )
@@ -561,7 +562,7 @@ class Step(_ProcessBase):
         process_name: str | None = None,
     ) -> None:
         # pylint: disable=too-many-arguments
-        """Populate a step from an already parsed CLT and optional config."""
+        """Populate a step from an already parsed CLT and optional step inputs."""
         resolved_name = process_name or clt_path.stem
 
         self.clt = clt

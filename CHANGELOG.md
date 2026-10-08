@@ -186,7 +186,9 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   values are bound as written: a File or Directory in it is no longer checked
   when the step is built (api001), and a local run reports a missing one
   before it starts (wic016), reading a relative path from the working
-  directory.
+  directory. `Step.from_cwl_document(config=...)` and
+  `CommandLineTool.to_step(config=...)` are `step_inputs=...`, bound the same
+  way.
 - `Workflow.run(user_env_vars=...)` passes each value to the runner exactly as
   given; `$`, `!`, `&`, quotes, parentheses and newlines used to be stripped
   from it. Write a value as the runner should see it. A key that is not an

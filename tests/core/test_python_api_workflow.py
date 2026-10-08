@@ -250,6 +250,24 @@ def test_in_memory_cwl_step_compiles_through_workflow_api() -> None:
 
 
 @pytest.mark.fast
+def test_step_inputs_bind_values_on_a_tool_given_in_memory() -> None:
+    """`step_inputs=` binds input values by name, on a document and on a built tool alike; `config=` is gone."""
+    tool = (
+        CommandLineTool("echo_tool", Inputs(message=Input(cwl.string, position=1)), Outputs(out=Output.stdout()))
+        .base_command("echo")
+        .stdout("stdout.txt")
+    )
+
+    from_document = Step.from_cwl_document(tool.to_cwl_document(), process_name="say", step_inputs={"message": "hi"})
+    from_tool = tool.to_step(step_name="say", step_inputs={"message": "hi"})
+
+    for step in (from_document, from_tool):
+        assert Workflow([step], "wf").compile().cwl_job_inputs == {"wf__step__1__say___message": "hi"}
+    with pytest.raises(TypeError, match="config"):
+        tool.to_step(config={"message": "hi"})  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
+
+
+@pytest.mark.fast
 def test_a_numpy_float_reaches_the_job_as_a_plain_float() -> None:
     """numpy's float64 is a float, and a job file holds plain numbers."""
     numpy = pytest.importorskip("numpy")
