@@ -735,18 +735,6 @@ def _workflow_input_sink(
 
 def _parameter_expression(workflow: ExecutableNextflowWorkflow, name: str) -> str:
     connection, port = _workflow_input_sink(workflow, name)
-    scattered_processes = {
-        candidate.to_process
-        for candidate in workflow.connections
-        if isinstance(candidate, NfWorkflowInputConnection)
-        and candidate.adapter in ("scatter", *MULTI_INPUT_ADAPTERS)
-    }
-    feeds_scattered_process = any(
-        isinstance(candidate, NfWorkflowInputConnection)
-        and candidate.from_port == name
-        and candidate.to_process in scattered_processes
-        for candidate in workflow.connections
-    )
     # A scatter- or multi-input-adapted parameter carries the whole source
     # array; the graph validator keeps every sink of one parameter in
     # agreement, so one sink decides the construction for all of them.
@@ -762,16 +750,11 @@ def _parameter_expression(workflow: ExecutableNextflowWorkflow, name: str) -> st
                 f"entry instanceof Map ? entry.path : entry, "
                 f"checkIfExists: true, type: '{path_type}', glob: false) }})"
             )
-        if feeds_scattered_process:
-            # A one-element queue pairs with only the first scatter task. A
-            # value channel broadcasts the same staged path to every task.
-            return (
-                f"Channel.value(file(params.{name} instanceof Map ? params.{name}.path : "
-                f"params.{name}, checkIfExists: true, type: '{path_type}', glob: false))"
-            )
+        # A workflow input is one value, which CWL passes unchanged to every
+        # job of a scattered step: a value channel, as for every other input.
         return (
-            f"Channel.fromPath(params.{name} instanceof Map ? params.{name}.path : "
-            f"params.{name}, checkIfExists: true, type: '{path_type}', glob: false)"
+            f"Channel.value(file(params.{name} instanceof Map ? params.{name}.path : "
+            f"params.{name}, checkIfExists: true, type: '{path_type}', glob: false))"
         )
     return f"Channel.value(params.{name})"
 
