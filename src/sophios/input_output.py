@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import yaml
 from ruamel.yaml import YAML
-from ruamel.yaml.nodes import ScalarNode
+from ruamel.yaml.nodes import ScalarNode as _RuamelScalarNode
 
 from . import auto_gen_header
 from .runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
@@ -42,7 +42,7 @@ class NoAliasDumper(yaml.SafeDumper):
 
 def _represent_str(dumper: yaml.SafeDumper, data: str) -> yaml.ScalarNode:
     plain = dumper.represent_str(data)
-    if plain.style is None and _YAML12_RESOLVER.resolve(ScalarNode, data, (True, False)) != _STR_TAG:
+    if plain.style is None and _YAML12_RESOLVER.resolve(_RuamelScalarNode, data, (True, False)) != _STR_TAG:
         return dumper.represent_scalar(_STR_TAG, data, style="'")
     return plain
 
