@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-import yaml
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -33,7 +32,6 @@ from sophios.cli import default_compilation_settings
 from sophios.compute_request import ComputeExecutionConfig, ComputeOutputConfig, ComputeRequest
 from sophios.ir.artifacts import CompilationResult
 from sophios.ir.frontdoor import bundle_from_disk
-from sophios.utils_yaml import wic_loader
 from sophios.wic_types import StepId, Yaml
 
 from . import ast_strategies as strat
@@ -41,6 +39,7 @@ from .ast_strategies import passthrough_keys, passthrough_values
 from .equivalence import Strength, equivalent
 from .hermetic import ORACLE, PARTITION, compile_hermetic, compile_hermetic_cwl
 from .synthetic_tools import SYNTHETIC_NS, SYNTHETIC_TOOLS
+from .wic_reading import read_wic
 
 # --------------------------------------------------------------------------
 # Path agreement
@@ -142,7 +141,7 @@ def test_the_written_wic_file_is_a_real_independent_document() -> None:
         text = path.read_text(encoding='utf-8')
 
     assert isinstance(text, str) and 'steps:' in text, 'the written file is not .wic text'
-    loaded = yaml.load(text, Loader=wic_loader())
+    loaded = read_wic(text)
     assert [step['id'] for step in loaded['steps']] == ['mk_file', 'mk_text', 'joined'], (
         'the file on disk does not even reflect the workflow that wrote it, so any '
         'agreement downstream would prove nothing about the file-based path')
@@ -286,7 +285,7 @@ def test_passthrough_survives_a_scatter_in_a_multi_step_workflow(data: st.DataOb
 
 def _written_output_source(workflow: Workflow, directory: Path) -> str:
     """The `outputSource` of `result` in the document `write_wic` writes for `workflow`."""
-    document = yaml.load(workflow.write_wic(directory).read_text(encoding='utf-8'), Loader=wic_loader())
+    document = read_wic(workflow.write_wic(directory).read_text(encoding='utf-8'))
     return str(document['outputs']['result']['outputSource'])
 
 
@@ -322,7 +321,7 @@ def test_a_written_document_compiles_under_any_file_name(stem: str) -> None:
     workflow = _build_workflow(_BundleSpec('a', 'b', 'c', rename=True, nest=False))
     with tempfile.TemporaryDirectory() as workdir:
         root = workflow.write_wic(Path(workdir) / f'{stem}.wic')
-        document = yaml.load(root.read_text(encoding='utf-8'), Loader=wic_loader())
+        document = read_wic(root.read_text(encoding='utf-8'))
         compiled = _compile_bundle(root).artifact.cwl
 
     assert document['outputs']['result']['outputSource'] == 'joined/file'

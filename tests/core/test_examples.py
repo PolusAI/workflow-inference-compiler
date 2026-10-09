@@ -24,9 +24,10 @@ import sophios.plugins
 from sophios import post_compile, preflight, realtime
 from sophios import auto_gen_header
 from sophios.cli import get_args
-from sophios.utils_yaml import Key, wic_loader
+from sophios.utils_yaml import Key
 from sophios.post_compile import apply_inline_options, inline_artifact_runs, remove_artifact_entrypoints
 from sophios.runtime_inputs import normalize_artifact_job_inputs
+from sophios.lang import parse
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
 from sophios.ir.artifacts import CompilationArtifact
@@ -68,14 +69,16 @@ large_workflows: list[str] = config_ci.get("large_workflows", [])
 
 
 def _is_workflow_document(yml_path: Path) -> bool:
-    with open(yml_path, mode='r', encoding='utf-8') as y:
-        match yaml.load(y.read(), Loader=wic_loader()):
-            case {"steps": _}:
-                return True
-            case {"wic": {"implementations": _}}:
-                return True
-            case _:
-                return False
+    """Whether the file has steps or a `wic: implementations:` block, as `parse` reads it.
+
+    `parse` rather than `read_wic`: an includer fragment carries diagnostics
+    and is still a workflow document.
+    """
+    document = parse(yml_path.read_text(encoding='utf-8'), str(yml_path)).document
+    if document is None:
+        return False
+    return (bool(document.steps) or document.steps_as_mapping
+            or (document.sidecar is not None and 'implementations' in dict(document.sidecar.entries)))
 
 
 yml_paths_tuples_not_large = [

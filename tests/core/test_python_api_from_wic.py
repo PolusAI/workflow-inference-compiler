@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-import yaml
 
 import sophios.compiler
 import sophios.plugins
@@ -32,7 +31,6 @@ from sophios.lang import LANG_VERSION
 from sophios.post_compile import inline_artifact_runs
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils_cwl import canonicalize_type
-from sophios.utils_yaml import wic_loader
 from sophios.wic_types import Json, StepId, Tools
 
 from .equivalence import Strength, equivalent
@@ -41,6 +39,7 @@ from .test_examples import _is_includer_fragment, yml_paths_tuples_not_large
 from .test_frontdoor import PYTHON_SCRIPT
 # pylint: disable-next=unused-import  # `corpus_registry` is a pytest fixture
 from .test_setup import CorpusRegistry, corpus_registry
+from .wic_reading import read_wic
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 
@@ -98,8 +97,7 @@ def _file_door(path: Path, workflow_paths: WorkflowPaths, tools: Tools) -> tuple
 
 def _named_outputs(path: Path) -> list[str]:
     """The outputs `path` declares, which `Workflow.compile()` narrows its CWL to."""
-    document = yaml.load(path.read_text(encoding='utf-8'), Loader=wic_loader())
-    outputs = document.get('outputs') if isinstance(document, dict) else None
+    outputs = read_wic(path.read_text(encoding='utf-8'), path.name).get('outputs')
     return list(outputs) if isinstance(outputs, dict) else []
 
 
@@ -265,7 +263,7 @@ def test_positional_and_generated_output_sources_become_object_references(
             f'outputs:\n  o:\n    type: File\n    outputSource: {output_source}\n')
     workflow = _from_wic(tmp_path, root=root)
     written = workflow.write_wic(tmp_path / 'written')
-    document = yaml.load(written.read_text(encoding='utf-8'), Loader=wic_loader())
+    document = read_wic(written.read_text(encoding='utf-8'))
     assert document['outputs']['o']['outputSource'] == 'xform/file'
     capsys.readouterr()
     workflow.compile()

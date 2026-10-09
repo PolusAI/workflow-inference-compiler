@@ -43,8 +43,9 @@ from sophios.ir.frontdoor import bundle_from_disk
 from sophios.post_compile import inline_artifact_runs
 from sophios.python_cwl_adapter import import_python_file
 from sophios.runtime_inputs import normalize_artifact_cwl
-from sophios.utils_yaml import wic_loader
 from sophios.wic_types import Json, Tools
+
+from .wic_reading import read_wic
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -59,10 +60,10 @@ def _adapter(name: str) -> Path:
 
 
 def _written(workflow: Workflow, directory: Path, name: str | None = None) -> dict[str, Any]:
-    """The document `write_wic` writes for `workflow` (or its nested workflow `name`), as the wic loader reads it."""
+    """The document `write_wic` writes for `workflow` (or its nested workflow `name`), as `parse` reads it."""
     root = workflow.write_wic(directory)
     target = root if name is None else directory / f"{name}.wic"
-    return cast(dict[str, Any], yaml.load(target.read_text(encoding="utf-8"), Loader=wic_loader()))
+    return read_wic(target.read_text(encoding="utf-8"))
 
 
 def _emit_text_tool() -> CommandLineTool:
@@ -785,7 +786,7 @@ def test_workflow_write_wic_exports_source_workflow_with_inferred_edges(tmp_path
     output_path = workflow.write_wic(tmp_path / "linear_export.wic")
 
     assert output_path == tmp_path / "linear_export.wic"
-    exported = yaml.load(output_path.read_text(encoding="utf-8"), Loader=wic_loader())
+    exported = read_wic(output_path.read_text(encoding="utf-8"))
     assert "file" not in exported["steps"][1]["in"]
 
 
