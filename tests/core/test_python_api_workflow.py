@@ -1894,7 +1894,27 @@ def test_a_run_that_failed_with_no_failed_step_says_where_to_look(
     monkeypatch.setattr(run_local.cwltool.main, "main", lambda args: 1)
     run_local.run_local({"container_engine": "docker", "cwl_runner": "cwltool"}, False,
                         passthrough_args=[], workflow_name="wf", basepath=str(tmp_path))
-    assert "Failure! The first ERROR line above says why the run failed." in capsys.readouterr().err
+    assert ("Failure! Above, the first ERROR line, or the error the runner itself raised, says why the run failed."
+            in capsys.readouterr().err)
+
+
+@pytest.mark.fast
+def test_a_run_whose_runner_raised_does_not_point_at_an_error_line_that_is_not_there(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def raising_main(args: list[str]) -> int:
+        del args
+        raise RuntimeError("the runner blew up")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(run_local.cwltool.main, "main", raising_main)
+    retval = run_local.run_local({"container_engine": "docker", "cwl_runner": "cwltool"}, False,
+                                 passthrough_args=[], workflow_name="wf", basepath=str(tmp_path))
+    captured = capsys.readouterr()
+    assert retval == 1
+    assert "the runner blew up" in captured.out
+    assert "See error_wf.txt for detailed technical information." in captured.out
+    assert "The first ERROR line above says" not in captured.err
+    assert "or the error the runner itself raised" in captured.err
 
 
 @pytest.mark.needs_cwltool

@@ -286,7 +286,7 @@ _STATUS_MEANS: Final = {
 def _failure_lines(failed: Mapping[str, int | str | None], spelled: Callable[[str], str]) -> list[str]:
     """One line per failed step: who, how it ended, what that means, where its messages are."""
     if not failed:
-        return ['Failure! The first ERROR line above says why the run failed.']
+        return ['Failure! Above, the first ERROR line, or the error the runner itself raised, says why the run failed.']
     lines = []
     for job, ended in failed.items():
         means: str | None
