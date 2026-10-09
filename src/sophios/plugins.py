@@ -230,7 +230,7 @@ def get_tools_cwl(config: Json, validate_plugins: bool = False, quiet: bool = Fa
                 if 'biobb_md' in cwl_path_str:
                     continue  # biobb_md is deprecated (in favor of biobb_gromacs)
                 with open(cwl_path_str, mode='r', encoding='utf-8') as f:
-                    tool: Cwl = yaml.safe_load(f.read())
+                    tool: Cwl = utils_cwl.tool_process(yaml.safe_load(f.read()), cwl_path_str)
                 stem = Path(cwl_path_str).stem
 
                 if validate_plugins:

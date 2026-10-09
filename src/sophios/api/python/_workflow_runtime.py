@@ -28,6 +28,7 @@ from sophios.lang import Diagnostics, Document, ParseResult, SophiosError, rende
 from sophios.cli import default_compilation_settings, get_known_and_unknown_args
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils import convert_args_dict_to_args_list
+from sophios.utils_cwl import tool_process
 from sophios.wic_types import StepId, Tool, Tools
 
 from ._errors import InvalidCLTError, InvalidStepError, WorkflowRunError
@@ -202,10 +203,13 @@ def load_clt(clt_path: Path, tool_registry: Tools) -> tuple[CWLCommandLineTool, 
 
     if clt_path.exists():
         try:
+            # The process first: a packed document with no `main` is refused by name, not as "invalid".
+            yaml_file = tool_process(_load_yaml(clt_path), str(clt_path))
             clt = load_document_by_uri(clt_path)
+        except SophiosError:
+            raise
         except Exception as exc:
             raise InvalidCLTError(f"invalid cwl file: {clt_path}") from exc
-        yaml_file = _load_yaml(clt_path)
         tool_registry[stepid] = Tool(str(clt_path), yaml_file)
         return clt, yaml_file
 
@@ -241,8 +245,8 @@ def load_clt_document(
         tuple[CWLCommandLineTool, dict[str, Any]]: Parsed CWL object and normalized YAML.
     """
     match yaml.safe_load(yaml.safe_dump(dict(document), sort_keys=False)):
-        case dict() as yaml_file:
-            pass
+        case dict() as loaded:
+            yaml_file = tool_process(loaded, str(run_path))
         case _:
             raise TypeError("document must be a mapping of CWL fields")
     try:

@@ -61,6 +61,12 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   it as a `.wic` subworkflow and call that, or run a CWL Workflow file on its
   own with `--allow_raw_cwl`. In Python, a `Step` whose `clt_path` is a CWL
   Workflow is refused the same way: build it as a nested `Workflow` of `Step`s.
+- A packed `.cwl` file (a `$graph`) whose `main` is a CommandLineTool is that
+  tool, on `search_paths_cwl`, as a `run:` path or as a `Step`'s `clt_path`:
+  the step has `main`'s ports and runs `main` on its own, as a CWL runner
+  would. It used to compile as a tool with no ports (wic028, or a failure in
+  cwltool). A packed file with no `main` is refused (wic013), naming the
+  processes it holds.
 - A `cwl_subinterpreter` step declares a real-time analysis, which Sophios
   runs beside the workflow under `--run_local` (see Real-time Analysis in
   `docs/advanced.md`); it is no longer emitted as a CWL step. Every input is a

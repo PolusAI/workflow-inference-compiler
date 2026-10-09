@@ -345,6 +345,10 @@ WINDOWS_EXCLUDED: Final = frozenset({
     # synthesized path was ever validated, and the authored one emitted a
     # reference to a step the document does not contain.
     'tests/core/test_leak_boundary.py::test_an_authored_output_source_validates',
+    # One `cwltool --validate` of a one-step workflow whose tool was unpacked from
+    # a `$graph`, under a second. The ports and the file written are checked on
+    # every leg by the test before it.
+    'tests/core/test_frontdoor.py::test_a_packed_tool_step_validates_in_cwltool',
     # The script validates the tool it writes through cwltool, so the import
     # is the script's, not the test's. Its compact twin builds the same hinted
     # tool without validating it and still runs on Windows.
