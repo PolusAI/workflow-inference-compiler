@@ -162,8 +162,8 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         'Write a list at the position shown: `- item` lines, or `[a, b]`.'),
     SophiosErrorCode.EXPECTED_SCALAR: Explanation(
         Kind.DOCUMENT,
-        'A scalar was expected here, such as a mapping key that is itself a list.',
-        'Write one name, number or string at the position shown.'),
+        'A scalar was expected here, such as a mapping key that is itself a list or carries a Sophios tag.',
+        'Write one name, number or string at the position shown; a tag goes on the value, as in `a: !ii b`.'),
     SophiosErrorCode.MISSING_STEP_ID: Explanation(
         Kind.DOCUMENT,
         'A step in a sequence has no `id:`.',

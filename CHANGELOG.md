@@ -41,8 +41,11 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   reported (wic009) at the loader's position, with the loader's own message,
   as an unknown `!` tag is; it used to pass the parser or crash it. Correct the
   value at that position, or quote the text if it was meant literally.
-- A Sophios tag used as a mapping key (`!ii a: b`) is reported (wic009). Put
-  the tag on the value: `a: !ii b`.
+- An `!ii` scalar is read as YAML reads the same text written plain, so
+  `!ii 2020-13-45` is reported (wic009) as `2020-13-45` is; it used to become
+  the text `2020-13-45`. Quote the text if it was meant literally.
+- A Sophios tag used as a mapping key (`!ii a: b`) is reported (wic005): a key
+  is a name. Put the tag on the value: `a: !ii b`.
 - `<<` merge keys apply everywhere, as YAML defines them: in `!ii` values, in
   `in:` and in plain CWL passed through, which used to carry a literal `<<` key
   or make an input named `<<`. A merged mapping keeps the key order the YAML
