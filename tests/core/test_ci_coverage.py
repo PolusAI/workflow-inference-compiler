@@ -20,7 +20,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import pytest
 import yaml
@@ -105,7 +105,51 @@ def _lane_argvs() -> list[list[str]]:
                                            for argv in _invocations(lane)})]
 
 
+#: The refs a branch dispatch hands a lane: one per repository it pairs.
+DISPATCHED_REFS: Final = ('wic_ref', 'mm-workflows_ref', 'image-workflows_ref')
+
+
+def _dispatched_workflows() -> dict[str, Any]:
+    """Each workflow a branch dispatch starts, by name: those taking the paired refs as inputs."""
+    found = {}
+    for workflow in sorted(WORKFLOWS.glob('*.yml')):
+        script = yaml.safe_load(workflow.read_text(encoding='utf-8'))
+        # YAML 1.1 reads the bare key `on` as the boolean True.
+        triggers = script.get('on') or script.get(True) or {}
+        inputs = (triggers.get('workflow_dispatch') or {}).get('inputs') or {}
+        if all(ref in inputs for ref in DISPATCHED_REFS):
+            found[workflow.name] = script
+    return found
+
+
 @pytest.mark.fast
+def test_every_dispatched_run_names_the_refs_it_tests() -> None:
+    """A dispatched run's name and its summary say which three refs ran together.
+
+    A branch dispatch starts the lanes on the fork, attached to whatever sha
+    the dispatch itself ran on, and pairs same-named branches of sophios,
+    mm-workflows and image-workflows. The run page therefore does not say which
+    three refs were tested, and the inputs only carry refs, never commits. So
+    the run name must spell the three refs, and some step must write the three
+    commits it checked out to the job summary, so a green run can be read back
+    to what it ran.
+    """
+    dispatched = _dispatched_workflows()
+    assert {'lint_and_test.yml', 'run_workflows.yml'} <= dispatched.keys()
+    for name, script in dispatched.items():
+        run_name = str(script.get('run-name') or '')
+        unnamed = [ref for ref in DISPATCHED_REFS if f'inputs.{ref}' not in run_name]
+        assert not unnamed, f'{name}: run-name does not name {unnamed}'
+
+        summaries = [
+            step for job in (script.get('jobs') or {}).values() for step in (job.get('steps') or [])
+            if 'GITHUB_STEP_SUMMARY' in str(step.get('run') or '')
+            and all(f'inputs.{ref}' in ' '.join(map(str, (step.get('env') or {}).values()))
+                    for ref in DISPATCHED_REFS)
+        ]
+        assert summaries, f'{name}: no step writes the three checked-out refs to the job summary'
+
+
 @pytest.mark.fast
 def test_no_lane_checks_our_own_repo_out_at_a_literal_ref() -> None:
     """A lane tests the ref it was triggered on, or it tests nothing it claims.
