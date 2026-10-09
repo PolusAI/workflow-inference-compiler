@@ -220,10 +220,13 @@ input. Two conversions remain, because neither loses anything:
 - an integer on a `float` input is that float (`!ii 1` is `1.0`);
 - a number or a boolean on a `string` input is its text, so `!ii 20` binds `"20"`.
 
-Under `!ii` a scalar is read by what it says, whatever its quotes: `!ii '20'` is the
-number 20, which is why the second conversion exists. The desugared spelling
-(section 3.7) keeps the quotes: `{wic_inline_input: '007'}` is the text `007`, and
-on an `int` input it is `wic020`.
+Under `!ii` a scalar is read as YAML reads the same scalar. Unquoted, it is read by
+what it says: `!ii 20` is the number 20 and `!ii 007` is the number 7. Quoted, with
+either kind of quote, it is its text: `!ii '20'` is the text `20`, `!ii '007'` is the
+text `007`, and on an `int` input each is `wic020`. Quote a literal to keep it text;
+leave it unquoted for a number, a boolean or a date. The desugared spelling (section
+3.7) is plain YAML and reads the same way: `{wic_inline_input: '007'}` is the text
+`007`.
 
 YAML reads `1e-5` as text, not as a number: a float needs a decimal point and a
 signed exponent. `!ii 1e-5` on a `float` input is `wic020`; write `!ii 1.0e-5`.

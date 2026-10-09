@@ -1678,6 +1678,21 @@ def test_a_quoted_inline_input_yaml_cannot_read_is_its_text(value: str) -> None:
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize('spelling, value', [
+    ('5', 5), ('007', 7), ('1:30', 90), ('true', True),
+    ("'5'", '5'), ('"5"', '5'), ("'007'", '007'), ("'1:30'", '1:30'), ("'true'", 'true'), ('"a\\tb"', 'a\tb'),
+], ids=['int', 'octal', 'sexagesimal', 'bool',
+        'single-quoted-int', 'double-quoted-int', 'quoted-octal', 'quoted-sexagesimal', 'quoted-bool', 'escape'])
+def test_an_inline_input_scalar_is_read_as_yaml_reads_it(spelling: str, value: object) -> None:
+    """A plain `!ii` scalar is typed as YAML types it; a quoted one is its text, YAML's escapes and all."""
+    result = parse(f'steps:\n  s:\n    in:\n      f: !ii {spelling}\n', 'd.wic')
+    assert result.ok and result.document is not None, [str(d) for d in result.diagnostics]
+    literal = result.document.steps[0].input('f')
+    assert isinstance(literal, InlineLiteral)
+    assert (literal.value, type(literal.value)) == (value, type(value))
+
+
+@pytest.mark.fast
 @pytest.mark.parametrize('value', [
     '&x !cwl {q: *x}',
     '&x !cwl {<<: {q: *x}}',

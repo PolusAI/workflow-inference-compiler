@@ -14,10 +14,13 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
 
 - A literal must already have its input's type; nothing is converted any more
   (wic020). Write `!ii 2` rather than `!ii 2.9` on an `int` input, `!ii true`
-  rather than `!ii yes` on a `boolean` input, `!ii 7` rather than `!ii '007'`
-  on an `int` input, and `!ii 1.0e-5` rather than `!ii 1e-5` (YAML 1.1 reads
-  the latter as text). A `string` input still takes any scalar, and an `int`
-  still feeds a `float`.
+  rather than `!ii yes` on a `boolean` input, and `!ii 1.0e-5` rather than
+  `!ii 1e-5` (YAML 1.1 reads the latter as text). A `string` input still takes
+  any scalar, and an `int` still feeds a `float`.
+- A quoted `!ii` scalar is its text, as it is in plain YAML: `!ii '007'` is the
+  text `007`, where it used to be the number 7. Quote a literal to keep it
+  text; leave it unquoted for a number, so `!ii 7` on an `int` input. A
+  `string` input takes either spelling.
 - A boolean on a `string` input reaches the tool as `true` or `false`, where it
   was `True` or `False`. A tool that compares against `True` must compare
   against `true`.

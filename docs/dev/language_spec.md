@@ -261,6 +261,14 @@ specification says, and nothing else decides them. An unknown tag (`!foo`) is
 `wic009`. `!&` in any position other than an `out:` entry is `wic019`: it is a known
 tag in a position with no meaning.
 
+A tag switches off YAML's implicit typing, so the payload of `!ii` is read as
+`yaml.SafeLoader` would read the same scalar untagged: a plain scalar by what it
+says (`!ii 5` is the integer 5; `!ii 2020-13-45` is `wic009`, as the untagged
+value is), and a quoted or block scalar as its text (`!ii '5'` is the string `5`,
+with YAML's own escapes in double quotes). The desugared spelling has no tag, so
+YAML's own reading gives it the same rule. The writer keeps the distinction: a
+string that YAML would read as something else is written quoted.
+
 ### 2.1 `wic_` in construct position
 
 Where an input value is expected, a **single-key mapping whose key begins `wic_`** is
