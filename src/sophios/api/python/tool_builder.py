@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from cwl_utils.parser import cwl_v1_2 as _cwl
-from sophios.input_output import dump_wic_yaml
 from sophios.wic_types import Tools
 
 from ._tool_builder_step_bridge import _command_line_tool_to_step
@@ -61,6 +60,7 @@ from ._tool_builder_support import (
     _warn_raw_escape_hatch,
     ToolBuilderValidationError,
     ValidationResult,
+    dump_wic_yaml,
     validate_cwl_document,
 )
 from ...lang.cwl import CWL_VERSION
