@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import yaml
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML as _RuamelYAML
 from ruamel.yaml.nodes import ScalarNode as _RuamelScalarNode
 
 from . import auto_gen_header
@@ -31,7 +31,7 @@ from .wic_types import Yaml, Json
 # PyYAML leaves `1e3`, `0o17` and `._5` plain, which ruamel reads as a float, an
 # int and a float (`._` as a float it then cannot convert). Every string is
 # written quoted when either reader would type it as anything else.
-_YAML12_RESOLVER = YAML(typ='rt').resolver
+_YAML12_RESOLVER = _RuamelYAML(typ='rt').resolver
 _STR_TAG = 'tag:yaml.org,2002:str'
 
 
