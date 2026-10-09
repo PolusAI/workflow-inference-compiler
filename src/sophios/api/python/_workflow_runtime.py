@@ -22,6 +22,7 @@ from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 from sophios import compiler, input_output, plugins, post_compile as pc, preflight, realtime, run_local as rl
 from sophios.ir.artifacts import CompilationResult
 from sophios.ir.frontdoor import SourceBundle
+from sophios.ir.realtime import ADAPTER
 from sophios.ir.resolve import RegistrySnapshot
 from sophios.lang import Diagnostics, Document, ParseResult, SophiosError, render
 from sophios.cli import default_compilation_settings, get_known_and_unknown_args
@@ -305,6 +306,16 @@ def _wic_output_path(workflow: "Workflow", path: str | Path | None) -> Path:
     return output_path / f"{workflow.process_name}.wic"
 
 
+def step_run(clt_path: Path) -> str:
+    """What a step's `run:` names: `<stem>.cwl`, the tool written beside the document.
+
+    The real-time analysis adapter is named by its registry stem instead, and not
+    written: a step is a declaration only when it runs the adapter the registry
+    holds, and a `run:` path would make it an ordinary tool step.
+    """
+    return ADAPTER if clt_path.stem == ADAPTER else f"{clt_path.stem}.cwl"
+
+
 def _bundle_tools(workflow: "Workflow") -> dict[str, "Step"]:
     """Every tool the workflow tree runs, by the file stem a document names it with."""
     tools: dict[str, "Step"] = {}
@@ -339,6 +350,8 @@ def write_workflow_wic(workflow: "Workflow", path: str | Path | None = None) -> 
     root = _wic_output_path(workflow, path)
     missing_tools: dict[Path, "Step"] = {}
     for stem, step in _bundle_tools(workflow).items():
+        if step_run(step.clt_path) != f"{stem}.cwl":
+            continue
         target = root.parent / f"{stem}.cwl"
         if not target.exists():
             missing_tools[target] = step

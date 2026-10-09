@@ -14,11 +14,13 @@ Then two properties over every workflow the corpus holds, and the in-repo table:
     that bundle back gives the same compilation again.
 """
 # pylint: disable=redefined-outer-name  # `corpus_registry` is a pytest fixture
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
+import yaml
 
 import sophios.compiler
 import sophios.plugins
@@ -31,7 +33,7 @@ from sophios.lang import LANG_VERSION
 from sophios.post_compile import inline_artifact_runs
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils_cwl import canonicalize_type
-from sophios.wic_types import Json, StepId, Tools
+from sophios.wic_types import Json, StepId, Tool, Tools
 
 from .equivalence import Strength, equivalent
 from .synthetic_tools import SYNTHETIC_NS, SYNTHETIC_TOOLS
@@ -279,6 +281,33 @@ def test_a_note_from_a_loaded_workflow_names_the_wic_line(tmp_path: Path) -> Non
     workflow = _from_wic(tmp_path, root=root)
     (note,) = workflow.compile().diagnostics
     assert note.startswith('root.wic:8:3: note [wic043]'), note
+
+
+@pytest.mark.fast
+def test_a_real_time_declaration_written_back_stays_a_declaration(tmp_path: Path) -> None:
+    """`write_wic` names the adapter as the registry does, so the bundle declares the same analysis
+    the objects do, `max_times: !ii '20'` included, and emits no step for it."""
+    adapter = REPO_ROOT / 'cwl_adapters' / 'file_watchers' / 'cwl_subinterpreter.cwl'
+    tools = {**TOOLS, StepId(adapter.stem, SYNTHETIC_NS): Tool(str(adapter), yaml.safe_load(adapter.read_text()))}
+    root = ("steps:\n- id: mk_file\n  in:\n    name: !ii a.txt\n"
+            "- id: cwl_subinterpreter\n  in:\n    file_pattern: !ii '*.txt'\n    cwl_tool: !ii count\n"
+            "    max_times: !ii '20'\n    config: !ii {in: {file: a.txt}}\n")
+    workflow = Workflow.from_wic(tmp_path / 'root.wic', tool_registry=tools,
+                                 workflow_paths=_documents(tmp_path, root=root))
+    direct = _workflow_runtime.compile_workflow_result(workflow, tool_registry=tools)
+
+    bundle = tmp_path / 'bundle'
+    written_root = workflow.write_wic(bundle)
+    written: WorkflowPaths = {'global': {path.stem: path for path in bundle.glob('*.wic')}}
+    via_file = _compile_file(written_root, written, tools)
+
+    (declared,) = direct.realtime
+    assert declared.max_times == 20
+    assert [replace(item, span=None) for item in via_file.realtime] == [replace(declared, span=None)]
+    direct_cwl = _workflow_runtime.compiled_workflow_from_result(workflow, direct).cwl_workflow
+    via_file_cwl = _workflow_runtime.compiled_workflow_from_result(workflow, via_file).cwl_workflow
+    assert [step['id'] for step in direct_cwl['steps']] == ['root__step__1__mk_file']
+    assert equivalent(direct_cwl, via_file_cwl, Strength.IDENTICAL) is None
 
 
 # --------------------------------------------------------------------------
