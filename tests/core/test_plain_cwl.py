@@ -128,6 +128,7 @@ def _sophios(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[..., P
     What would reach for a container engine is recorded instead.
     """
     extracted: list[Path] = []
+    monkeypatch.setattr(cli.run_local, 'RUNNER_UNAVAILABLE', None)   # Windows has no runner; `--check` would stop there
     monkeypatch.setattr(preflight, 'prepare', lambda documents, _settings, _jobs=(): extracted.extend(documents))
     (tmp_path / 'wf').mkdir()
     (tmp_path / 'wf' / 'say.cwl').write_text(SAY, encoding='utf-8')
