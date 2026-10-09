@@ -16,7 +16,7 @@ readable or writable here) or `run` (nothing in Sophios: a tool failed while it 
 | `wic002` | document | The document is not a mapping. | Make the top level a mapping, with keys such as `inputs:`, `steps:` and `outputs:`. |
 | `wic003` | document | A mapping was expected here, as in `steps: 3`. | Write `key: value` entries at the position shown. |
 | `wic004` | document | A sequence was expected here, as in `out: 3`. | Write a list at the position shown: `- item` lines, or `[a, b]`. |
-| `wic005` | document | A scalar was expected here, such as a mapping key that is itself a list. | Write one name, number or string at the position shown. |
+| `wic005` | document | A scalar was expected here, such as a mapping key that is itself a list or carries a Sophios tag. | Write one name, number or string at the position shown; a tag goes on the value, as in `a: !ii b`. |
 | `wic006` | document | A step in a sequence has no `id:`. | Add `id:` with the tool or workflow the step runs, or write `steps:` as a mapping keyed by step (language guide §2.1). |
 | `wic007` | document | A step's `id:` is empty. | Write the name of the tool or workflow the step runs. |
 | `wic008` | document | A `wic: steps:` key is neither `(index, name)` nor a step id. | Key the entry `(index, name)` with the step's 1-based position and id, or by the id alone when no other step has it (language guide §7). |

@@ -845,9 +845,9 @@ def test_a_yaml_tag_the_loader_cannot_construct_is_unknown_tag(source: str) -> N
     'a: !!omap [{b: !!int x}]', 'a: !!pairs [{b: {c: !!bool x}}]', 'a: !!set {x: [!!int y]}',
 ])
 def test_a_core_tag_the_loader_cannot_build_is_reported(source: str) -> None:
-    """A tag the loader knows can still fail on its node; the parser reports it, never raises."""
+    """A tag YAML knows can still fail on its node; the parser reports it, never raises."""
     with pytest.raises((yaml.YAMLError, ValueError, KeyError, AttributeError, IndexError)):
-        yaml.load(source, Loader=wic_loader())
+        yaml.safe_load(source)
     result = parse(source, 'x.wic')
     assert [d.code for d in result.diagnostics] == [SophiosErrorCode.UNKNOWN_TAG], source
 
@@ -1599,10 +1599,10 @@ def test_a_merge_the_loader_cannot_build_is_reported(src: str) -> None:
     'x: &m {p: 1, r: 2}\ny: &n {<<: *m, r: 3}\na: {<<: *n, s: 4}\n',
 ], ids=['merge', 'override', 'earlier-wins', 'nested'])
 def test_a_merge_builds_what_the_loader_builds(source: str) -> None:
-    """Passthrough holds the merged mapping, as the loader builds it, and no `<<` key."""
+    """Passthrough holds the merged mapping, as YAML builds it, and no `<<` key."""
     result = parse(source, 'm.wic')
     assert result.ok and result.document is not None, [str(d) for d in result.diagnostics]
-    assert dict(result.document.passthrough)['a'] == yaml.load(source, Loader=wic_loader())['a']
+    assert dict(result.document.passthrough)['a'] == yaml.safe_load(source)['a']
 
 
 @pytest.mark.fast
@@ -1627,12 +1627,18 @@ def test_a_step_in_applies_its_merge_keys(body: str, names: list[str]) -> None:
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize('source', ['!ii a: b\n', 'steps:\n  s:\n    in:\n      !* e: x\n'])
-def test_a_sophios_tag_the_loader_cannot_use_as_a_key_is_wic009(source: str) -> None:
-    """The loader builds a Sophios tag to a mapping, which cannot be a key."""
-    with pytest.raises(yaml.YAMLError):
-        yaml.load(source, Loader=wic_loader())
-    assert [d.code for d in parse(source, 'k.wic').diagnostics] == [SophiosErrorCode.UNKNOWN_TAG]
+@pytest.mark.parametrize('source, tag', [
+    ('!ii a: b\n', '!ii'),
+    ('steps:\n  s:\n    in:\n      !ii a: b\n', '!ii'),
+    ('steps:\n  s:\n    in:\n      !* a: x\n', '!*'),
+    ('requirements:\n  !cwl a: b\n', '!cwl'),
+], ids=['top', 'input', 'edge', 'passthrough'])
+def test_a_sophios_tag_on_a_key_is_wic005(source: str, tag: str) -> None:
+    """YAML admits a tagged key; a key in the language is a name, so the tag belongs on the value."""
+    yaml.compose(source, Loader=yaml.SafeLoader)  # valid YAML
+    assert [(d.code, d.message) for d in parse(source, 'k.wic').diagnostics] == [
+        (SophiosErrorCode.EXPECTED_SCALAR,
+         f'a mapping key is a name and takes no tag; {tag} belongs on the value, as in `a: {tag} <value>`')]
 
 
 @pytest.mark.fast
@@ -1645,7 +1651,7 @@ def test_a_merged_mapping_keeps_the_loaders_key_order(source: str) -> None:
     result = parse(source, 'm.wic')
     assert result.ok and result.document is not None, [str(d) for d in result.diagnostics]
     built = dict(result.document.passthrough)['a']
-    loaded = yaml.load(source, Loader=wic_loader())['a']
+    loaded = yaml.safe_load(source)['a']
     assert isinstance(built, dict) and list(built.items()) == list(loaded.items())
 
 
@@ -1660,11 +1666,19 @@ def test_merged_steps_run_in_the_loaders_order() -> None:
 
 
 @pytest.mark.fast
-def test_an_inline_input_the_loader_reads_as_text_stays_text() -> None:
-    """`!ii 2020-13-45` is no date; the loader keeps the text, and so does the parser."""
-    source = 'steps:\n  s:\n    in:\n      f: !ii 2020-13-45\n'
-    assert yaml.load(source, Loader=wic_loader())['steps']['s']['in']['f'] == {Key.INLINE_INPUT: '2020-13-45'}
-    result = parse(source, 'd.wic')
+@pytest.mark.parametrize('value', ['2020-13-45', '!ii 2020-13-45'], ids=['plain', 'inline'])
+def test_an_inline_input_yaml_cannot_read_is_what_the_plain_value_is(value: str) -> None:
+    """`!ii 2020-13-45` is read as YAML reads `2020-13-45`, which is no date."""
+    diagnostics = parse(f'steps:\n  s:\n    in:\n      f: {value}\n', 'd.wic').diagnostics
+    assert [(d.code, d.message, d.span.start_line if d.span else None) for d in diagnostics] == [
+        (SophiosErrorCode.UNKNOWN_TAG, 'YAML cannot read this value as timestamp', 4)]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('value', ["!ii '2020-13-45'", '!ii "2020-13-45"'], ids=['single', 'double'])
+def test_a_quoted_inline_input_yaml_cannot_read_is_its_text(value: str) -> None:
+    """Quoting is how a literal says it is text, so a quoted `!ii` YAML cannot read stays text."""
+    result = parse(f'steps:\n  s:\n    in:\n      f: {value}\n', 'd.wic')
     assert result.ok and result.document is not None, [str(d) for d in result.diagnostics]
     literal = result.document.steps[0].input('f')
     assert isinstance(literal, InlineLiteral) and literal.value == '2020-13-45'

@@ -13,7 +13,7 @@ from typing import Any, Final, Mapping, NoReturn, TypeAlias, final
 
 import yaml
 
-from ..utils_yaml import Key, Tag, wic_loader
+from ..utils_yaml import Key, Tag
 from .diagnostics import Diagnostics
 from .error_codes import SophiosErrorCode
 from .nodes import (
@@ -185,17 +185,16 @@ class _Unbuildable(yaml.constructor.ConstructorError):
 
 
 class _Loader(yaml.SafeLoader):  # pylint: disable=too-many-ancestors  # SafeLoader's own depth
-    """`wic_loader()`, run over an already composed tree.
+    """`yaml.SafeLoader`, run over an already composed tree.
 
-    The constructors are the loader's own, so whatever it builds or rejects,
-    this does too. Two things differ, neither in what is built: a `!` tag
-    with no constructor builds nothing, since the parser reports each one
-    itself, so the check goes on past it; and a failure the loader raises
-    with no mark is raised at the node that failed.
+    The constructors are YAML's own, so whatever YAML builds or rejects, this
+    does too. A `!` tag builds nothing, since the parser reads each one
+    itself; the content of a tagged collection is still YAML, and is built.
+    A failure YAML raises with no mark is raised at the node that failed.
     """
 
-    yaml_constructors = dict(wic_loader().yaml_constructors)
-    yaml_multi_constructors = dict(wic_loader().yaml_multi_constructors)
+    yaml_constructors = dict(yaml.SafeLoader.yaml_constructors)
+    yaml_multi_constructors = dict(yaml.SafeLoader.yaml_multi_constructors)
 
     def construct_object(self, node: yaml.nodes.Node, deep: bool = False) -> Any:
         try:
@@ -209,9 +208,17 @@ class _Loader(yaml.SafeLoader):  # pylint: disable=too-many-ancestors  # SafeLoa
                    if node.tag == _MERGE_TAG else f'unknown tag {node.tag!r}; YAML cannot construct it')
         raise _Unbuildable(None, None, problem, node.start_mark)
 
+    def construct_sophios_tag(self, _suffix: str, node: yaml.nodes.Node) -> None:
+        """Build the content of a `!` tagged collection as YAML, and nothing for the tag."""
+        match node:
+            case yaml.nodes.MappingNode():
+                self.construct_mapping(node, deep=True)
+            case yaml.nodes.SequenceNode():
+                self.construct_sequence(node, deep=True)
+
 
 _Loader.yaml_constructors[None] = _Loader.construct_undefined  # what a tag with no constructor gets
-_Loader.add_multi_constructor('!', lambda _loader, _suffix, _node: None)
+_Loader.add_multi_constructor('!', _Loader.construct_sophios_tag)
 
 
 def _tag_name(tag: str) -> str:
@@ -1036,8 +1043,9 @@ def _literal(node: yaml.nodes.Node, file: str, diags: Diagnostics) -> Any:
     """Materialise an `!ii` payload, which may be a scalar, mapping, or sequence.
 
     A custom tag suppresses YAML's own type resolution, so `!ii 5` arrives as
-    the text "5"; re-resolving it here must reproduce `inlineinput_constructor`
-    exactly.
+    the text "5"; it is read here as YAML reads that text, so a plain value
+    YAML cannot read (`!ii 2020-13-45`) is reported as the untagged one is,
+    and a quoted one (`!ii '2020-13-45'`) is the text it quotes.
     """
     if not isinstance(node, yaml.nodes.ScalarNode):
         return _opaque(node, file, diags, _wrap_self=False)
@@ -1045,9 +1053,14 @@ def _literal(node: yaml.nodes.Node, file: str, diags: Diagnostics) -> Any:
         return ''
     try:
         return yaml.safe_load(node.value)
-    except (yaml.YAMLError, *_UNREADABLE):
-        # Not a primitive, or one YAML cannot read (`2020-13-45`); the loader
-        # keeps the text, and so does this.
+    except yaml.YAMLError:
+        # Not a primitive; the literal text is the honest interpretation.
+        return node.value
+    except _UNREADABLE:
+        if node.style is None:
+            read = yaml.compose(node.value, Loader=yaml.SafeLoader)
+            diags.error(SophiosErrorCode.UNKNOWN_TAG, f'YAML cannot read this value as {_tag_name(read.tag)}',
+                        SourceSpan.of(file, node))
         return node.value
 
 
@@ -1149,13 +1162,19 @@ def _name_text(node: yaml.nodes.Node, file: str, diags: Diagnostics) -> str:
 def _key_text(node: yaml.nodes.Node, file: str, diags: Diagnostics) -> str:
     """Return a mapping key as text.
 
-    YAML admits collection keys (`? [a, b]`); Sophios does not, since every
-    key in the language is a name. A non-scalar key is reported and
-    stringified for recovery.
+    YAML admits collection keys (`? [a, b]`) and tagged ones (`!ii a: b`);
+    Sophios does not, since every key in the language is a name. A non-scalar
+    key, or one carrying a Sophios tag, is reported and stringified for
+    recovery.
     """
     if not isinstance(node, yaml.nodes.ScalarNode):
         diags.error(SophiosErrorCode.EXPECTED_SCALAR,
                     f'mapping keys must be scalars, found {_kind(node)}',
+                    SourceSpan.of(file, node))
+    elif node.tag in Tag.ALL:
+        diags.error(SophiosErrorCode.EXPECTED_SCALAR,
+                    f'a mapping key is a name and takes no tag; {node.tag} belongs on the value, '
+                    f'as in `{node.value}: {node.tag} <value>`',
                     SourceSpan.of(file, node))
     return str(node.value)
 
