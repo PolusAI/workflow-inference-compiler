@@ -66,7 +66,8 @@ echo = Step(clt_path=Path("cwl_adapters") / "echo.cwl")
 ```
 
 At this point, Sophios has loaded the tool contract. It knows the tool has an
-input named `message` and an output named `stdout`.
+input named `message` and an output named `stdout`. A packed `.cwl` file (a `$graph`)
+is loaded through its `main`, as a CWL runner would run it.
 
 You can inspect the ports:
 

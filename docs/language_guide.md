@@ -173,6 +173,9 @@ ways:
   ```
 
 A path is used when that file exists; otherwise the value is read as a registry stem.
+A `.cwl` file, on a search path or named by `run:`, is one `CommandLineTool`, or a
+packed document (`$graph`) whose `main` is one: the step runs `main`, as a CWL runner
+would. A packed document with no `main` is refused (wic013).
 A stem nothing on the search paths provides is `wic013`. An inline body is written
 out as its own tool file next to the compiled workflow, like any other tool, and is
 written at the workflow's CWL version: a `cwlVersion` inside the body is ignored, as

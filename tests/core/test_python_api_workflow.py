@@ -2471,6 +2471,75 @@ def test_a_cwl_workflow_as_a_step_clt_path_is_refused_with_python_advice(tmp_pat
         f'Workflow on its own with sophios --yaml {say} --allow_raw_cwl')
 
 
+#: A packed document whose main is a tool, beside a process nothing runs.
+_PACKED_TOOL: dict[str, Any] = {
+    'cwlVersion': 'v1.2', '$namespaces': {'edam': 'https://edamontology.org/'},
+    '$graph': [
+        {'id': 'main', 'class': 'CommandLineTool', 'baseCommand': 'echo',
+         'inputs': {'text': {'type': 'string', 'inputBinding': {'position': 1}}},
+         'outputs': {'out': {'type': 'stdout', 'format': 'edam:format_1964'}}},
+        {'id': 'other', 'class': 'CommandLineTool', 'baseCommand': 'true', 'inputs': {}, 'outputs': {}},
+    ]}
+
+_NO_MAIN = ('is a packed CWL document ($graph) with no main process; it holds: say, other. CWL runs a packed '
+            'document through its main, so name the process to run main, or unpack it into a file of its own')
+
+
+def _packed_tool(directory: Path, main: str = 'main') -> Path:
+    """`_PACKED_TOOL` written to `directory`, its main's id spelled `main`."""
+    path = directory / 'packed.cwl'
+    document = {**_PACKED_TOOL, '$graph': [{**_PACKED_TOOL['$graph'][0], 'id': main}, _PACKED_TOOL['$graph'][1]]}
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding='utf-8')
+    return path
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('main', ['main', '#main'])
+def test_a_packed_tool_as_a_clt_path_is_its_main(tmp_path: Path, main: str) -> None:
+    """A `Step` whose `clt_path` packs a CommandLineTool as `main` is that tool: main's ports, and main alone as
+    the step's CWL, with the document's `cwlVersion` and `$namespaces`."""
+    step = Step(clt_path=_packed_tool(tmp_path, main))
+    assert ([p.name for p in step.inputs], [p.name for p in step.outputs]) == (['text'], ['out'])
+    assert step.yaml['class'] == 'CommandLineTool' and '$graph' not in step.yaml and 'id' not in step.yaml
+    assert (step.yaml['cwlVersion'], step.yaml['$namespaces']) == ('v1.2', {'edam': 'https://edamontology.org/'})
+    step.inputs.text = 'hi'
+    compiled, = Workflow([step], 'w').compile().cwl_workflow['steps']
+    assert (list(compiled['in']), compiled['out']) == (['text'], ['out'])
+
+
+@pytest.mark.fast
+def test_a_packed_document_as_a_cwl_document_is_its_main() -> None:
+    """`Step.from_cwl_document` reads a packed document the same way as a file: through its main."""
+    step = Step.from_cwl_document(_PACKED_TOOL, process_name='packed')
+    assert ([p.name for p in step.inputs], [p.name for p in step.outputs]) == (['text'], ['out'])
+    assert step.yaml['baseCommand'] == 'echo' and '$graph' not in step.yaml
+    step.inputs.text = 'hi'
+    compiled, = Workflow([step], 'w').compile().cwl_workflow['steps']
+    assert compiled['out'] == ['out']
+
+
+@pytest.mark.fast
+def test_a_packed_clt_path_with_no_main_is_refused(tmp_path: Path) -> None:
+    """A `$graph` with no `main` names no process to run: the file and its processes are named, with the fix."""
+    packed = _packed_tool(tmp_path, 'say')
+    with pytest.raises(SophiosError) as caught:
+        Step(clt_path=packed)
+    diagnostic, = caught.value.diagnostics
+    assert diagnostic.code is SophiosErrorCode.SUBWORKFLOW_INVALID
+    assert diagnostic.message == f'{packed} {_NO_MAIN}'
+
+
+@pytest.mark.fast
+def test_a_packed_cwl_document_with_no_main_is_refused() -> None:
+    """The same refusal for a packed document given to `Step.from_cwl_document`, named by its process name."""
+    document = {**_PACKED_TOOL, '$graph': [{**_PACKED_TOOL['$graph'][0], 'id': 'say'}, _PACKED_TOOL['$graph'][1]]}
+    with pytest.raises(SophiosError) as caught:
+        Step.from_cwl_document(document, process_name='packed')
+    diagnostic, = caught.value.diagnostics
+    assert diagnostic.code is SophiosErrorCode.SUBWORKFLOW_INVALID
+    assert diagnostic.message == f'packed.cwl {_NO_MAIN}'
+
+
 @pytest.mark.fast
 def test_a_script_diagnostic_names_its_module_level_line(tmp_path: Path) -> None:
     """A workflow built at a script's top level is reported at the script's own line."""
