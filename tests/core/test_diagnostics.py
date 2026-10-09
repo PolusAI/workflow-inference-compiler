@@ -488,6 +488,7 @@ def test_cli_asks_the_runner_to_be_quiet_only_with_quiet(cli_on_helloworld: Call
 
 
 @pytest.mark.fast
+@pytest.mark.skipif(sys.platform == 'win32', reason='Ctrl-C reaches the run as a POSIX process-group SIGINT')
 @pytest.mark.parametrize('cwl_runner', ['cwltool', 'toil-cwl-runner'])
 def test_ctrl_c_during_run_local_exits_130(monkeypatch: pytest.MonkeyPatch,
                                            cli_on_helloworld: Callable[..., None], cwl_runner: str) -> None:
