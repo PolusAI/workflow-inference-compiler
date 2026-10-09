@@ -126,6 +126,18 @@ def compile_hermetic(yml: Yaml, name: str = 'oracle', *,
         relative_run_path=True, testing=True)
 
 
+def compile_hermetic_source(source: str, name: str = 'oracle', *, tools: Tools | None = None) -> CompilationResult:
+    """Compile one `.wic` text against the synthetic registry, as `compile_hermetic` compiles a document.
+
+    For what only the text can say, such as whether an `!ii` scalar is quoted: `bundle` writes a document
+    out with `yaml.dump`, which chooses the quoting itself.
+    """
+    parsed = parse(source, f'{name}.wic')
+    return sophios.compiler.compile_source(
+        SourceBundle(parsed, name, RegistrySnapshot.from_tools(SYNTHETIC_TOOLS if tools is None else tools), ()),
+        sophios.cli.default_compilation_settings(), relative_run_path=True, testing=True)
+
+
 def compile_production(yml: Yaml, name: str = 'binding', *,
                        tools: Tools | None = None,
                        is_root: bool = True) -> CompilationResult:

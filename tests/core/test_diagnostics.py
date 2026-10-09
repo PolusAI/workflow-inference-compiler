@@ -40,7 +40,7 @@ from sophios.lang.spans import SourceSpan
 from sophios.python_cwl_adapter import check_args_match_inputs
 from sophios.wic_types import StepId, Tool
 
-from .hermetic import compile_hermetic
+from .hermetic import compile_hermetic, compile_hermetic_source
 from .provocations import _provoke_duplicate_document_name
 from .synthetic_tools import SYNTHETIC_NS, clt
 
@@ -154,6 +154,34 @@ def _job_value(declared: object, literal: object) -> object:
                                 tools={StepId('probe', SYNTHETIC_NS): tool})
     (value,) = compiled.artifact.job_inputs.values()
     return value
+
+
+def _job_value_written(declared: object, spelling: str) -> object:
+    """The job value `!ii <spelling>`, written in a `.wic` file, gives the one input of a tool that declares
+    `declared`. Only the text can say whether the literal is quoted."""
+    tool = Tool('/synthetic/probe.cwl',
+                clt({'x': {'type': declared, 'inputBinding': {'position': 1}}}, {}, canonical=True))
+    compiled = compile_hermetic_source(f'steps:\n- id: probe\n  in:\n    x: !ii {spelling}\n',
+                                       tools={StepId('probe', SYNTHETIC_NS): tool})
+    (value,) = compiled.artifact.job_inputs.values()
+    return value
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('spelling', ["'7'", '"7"', "'007'"], ids=['single', 'double', 'octal'])
+def test_a_quoted_number_on_an_int_input_is_wic020(spelling: str) -> None:
+    """A quoted `!ii` scalar is its text, and text is not an int; `!ii 7` is what binds the port."""
+    with pytest.raises(SophiosError) as caught:
+        _job_value_written('int', spelling)
+    assert caught.value.diagnostics[0].code is SophiosErrorCode.LITERAL_TYPE_MISMATCH
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('spelling, expected', [("'7'", '7'), ("'007'", '007'), ('7', '7'), ('007', '7')],
+                         ids=['quoted', 'quoted-octal', 'plain', 'plain-octal'])
+def test_a_number_on_a_string_input_is_its_text_quoted_or_not(spelling: str, expected: str) -> None:
+    """Quoted, the literal is the text as written; plain, it is the number YAML read, as text."""
+    assert _job_value_written('string', spelling) == expected
 
 
 @pytest.mark.fast

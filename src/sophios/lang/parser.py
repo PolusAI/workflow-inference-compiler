@@ -1035,32 +1035,40 @@ def step_key(text: str) -> StepKey | None:
 
 
 def _literal_text(node: yaml.nodes.Node) -> str | None:
-    """Return the source spelling of a tagged scalar literal, or None for collections."""
-    return str(node.value) if isinstance(node, yaml.nodes.ScalarNode) else None
+    """Return the source spelling of a plain, one-line tagged scalar literal, or None.
+
+    That is the only scalar whose spelling says more than its value: `!ii 0777`
+    is the int 511, and would otherwise be written back as `!ii 511`. A quoted
+    or block scalar is its text, which the writer spells from the value; a
+    plain scalar spanning lines has been folded, so its text is no spelling.
+    """
+    if not isinstance(node, yaml.nodes.ScalarNode) or node.style is not None or '\n' in node.value:
+        return None
+    return str(node.value)
 
 
 def _literal(node: yaml.nodes.Node, file: str, diags: Diagnostics) -> Any:
     """Materialise an `!ii` payload, which may be a scalar, mapping, or sequence.
 
     A custom tag suppresses YAML's own type resolution, so `!ii 5` arrives as
-    the text "5"; it is read here as YAML reads that text, so a plain value
-    YAML cannot read (`!ii 2020-13-45`) is reported as the untagged one is,
-    and a quoted one (`!ii '2020-13-45'`) is the text it quotes.
+    the text "5". A scalar is read as YAML reads the same scalar untagged
+    (language spec §2): a plain one by what it says, so `!ii 5` is the int 5,
+    and a plain value YAML cannot read (`!ii 2020-13-45`) is reported as the
+    untagged one is; a quoted or block one is its text, so `!ii '5'` is "5".
     """
     if not isinstance(node, yaml.nodes.ScalarNode):
         return _opaque(node, file, diags, _wrap_self=False)
-    if node.value == '':
-        return ''
+    if node.style is not None or node.value == '':
+        return node.value
     try:
         return yaml.safe_load(node.value)
     except yaml.YAMLError:
         # Not a primitive; the literal text is the honest interpretation.
         return node.value
     except _UNREADABLE:
-        if node.style is None:
-            read = yaml.compose(node.value, Loader=yaml.SafeLoader)
-            diags.error(SophiosErrorCode.UNKNOWN_TAG, f'YAML cannot read this value as {_tag_name(read.tag)}',
-                        SourceSpan.of(file, node))
+        read = yaml.compose(node.value, Loader=yaml.SafeLoader)
+        diags.error(SophiosErrorCode.UNKNOWN_TAG, f'YAML cannot read this value as {_tag_name(read.tag)}',
+                    SourceSpan.of(file, node))
         return node.value
 
 
