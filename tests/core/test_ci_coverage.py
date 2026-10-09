@@ -148,6 +148,25 @@ def test_the_weekly_property_lane_runs_the_whole_oracle_suite() -> None:
     assert not missing, 'the weekly property lane does not run:\n  ' + '\n  '.join(missing)
 
 
+@pytest.mark.fast
+def test_the_corpus_lane_round_trips_every_wic_root_through_the_python_api() -> None:
+    """The lane whose config reaches the external corpora runs the from_wic properties.
+
+    `test_python_api_from_wic.py` parametrizes its two properties over every
+    `.wic` root `search_paths_wic` reaches. Only `run_workflows.yml` writes a
+    config that reaches the mm-workflows and image-workflows roots; the
+    packaging lane also selects the file, but checks out neither corpus, so
+    there the properties see the repository's own roots and nothing else.
+    """
+    properties = {
+        'tests/core/test_python_api_from_wic.py::test_a_wic_file_and_its_python_objects_compile_alike',
+        'tests/core/test_python_api_from_wic.py::test_write_wic_of_a_loaded_workflow_compiles_identically',
+    }
+    selected = set().union(*_collect_all(_invocations(WORKFLOWS / 'run_workflows.yml')))
+    missing = sorted(properties - selected)
+    assert not missing, 'run_workflows.yml does not run:\n  ' + '\n  '.join(missing)
+
+
 def test_the_census_sees_the_repo() -> None:
     """Zero invocations is a green census that checks nothing."""
     found = [a for lane in WORKFLOWS.glob('*.yml') for a in _invocations(lane)]

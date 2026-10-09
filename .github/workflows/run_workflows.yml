@@ -185,6 +185,14 @@ jobs:
       if: always()
       run: cd sophios/ && pytest tests/core/test_python_api_workflow.py -k "not test_compile_python_workflows and not test_validate_generated_python_workflows"
 
+    # Workflow.from_wic and write_wic over every .wic root the config reaches.
+    # Only here does the config reach the mm-workflows and image-workflows
+    # roots: the packaging lane, which also selects this file, checks out
+    # neither, so a round trip that breaks on those roots alone was green.
+    - name: PyTest Python API from .wic (corpus round trip)
+      if: always()
+      run: cd sophios/ && pytest tests/core/test_python_api_from_wic.py
+
     - name: PyTest Run REST Core Tests
       if: always()
       # NOTE: Do NOT add coverage to PYPY CI runs https://github.com/tox-dev/tox/issues/2252
