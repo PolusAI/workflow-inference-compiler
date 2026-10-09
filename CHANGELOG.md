@@ -239,6 +239,10 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   names a singularity image with no tag as `cwl-docker-extract` pulls it
   (`<name>_latest`); with an older cwltool, a singularity run of such an
   image cannot find it. `pip install -U cwltool` if pip reports a conflict.
+- Before a release is uploaded to PyPI, its built wheel and sdist are each
+  installed into a fresh environment and used from outside the checkout: the
+  CLI, the Python API, and a tutorial compile with the adapters the package
+  ships. The same check runs on every pull request.
 
 ### New diagnostics that do not fail a compile
 
