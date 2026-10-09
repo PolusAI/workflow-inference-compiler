@@ -54,6 +54,7 @@ from ._workflow_runtime import (
     populate_parameters as _populate_parameters,
     run_workflow as _run_workflow,
     silence_autodiscovery_logging as _silence_autodiscovery_logging,
+    step_run as _step_run,
     validate_step_assignment as _validate_step_assignment,
     write_workflow_wic as _write_workflow_wic,
 )
@@ -720,8 +721,8 @@ class Step(_ProcessBase):
         return []
 
     def _as_workflow_step(self) -> nodes.Step:
-        """Return this step as the language's step node, with `run:` naming its tool's file."""
-        interpreted: list[tuple[str, OpaqueCwl]] = [("run", f"{self.clt_path.stem}.cwl")]
+        """Return this step as the language's step node, with `run:` naming its tool."""
+        interpreted: list[tuple[str, OpaqueCwl]] = [("run", _step_run(self.clt_path))]
         if self.scatter:
             interpreted += [("scatter", [input_port.name for input_port in self.scatter]),
                             ("scatterMethod", self.scatterMethod or ScatterMethod.dotproduct.value)]
@@ -967,9 +968,12 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         The bundle is the root ``<name>.wic``, one ``<child>.wic`` per nested
         workflow and one ``<stem>.cwl`` per distinct tool. Every step carries
         ``run: <stem>.cwl`` and every workflow output names its authored step.
-        Only the tool document is written: files it refers to by relative path
-        (such as a ``$import``) are not copied. Raises if ``<stem>.cwl`` already
-        exists in the directory with a different tool.
+        A real-time analysis declaration is the exception: it carries
+        ``run: cwl_subinterpreter``, the registry's adapter, which is not
+        written, so the bundle still declares the analysis. Only the tool
+        document is written: files it refers to by relative path (such as a
+        ``$import``) are not copied. Raises if ``<stem>.cwl`` already exists in
+        the directory with a different tool.
 
         Args:
             path (StrPath | None): Destination ``.wic`` path or output

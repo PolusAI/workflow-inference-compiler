@@ -321,7 +321,9 @@ bindings, named outputs, explicit edges, and intentionally unbound linear
 inputs are preserved, so the normal Sophios compiler can still apply edge
 inference later. Steps and workflow outputs use the names you gave them: a
 workflow output reads `step/port`, and every step carries `run: <stem>.cwl`
-(`Step(..., step_name="say_hi")` on `echo.cwl` reads `run: echo.cwl`). Only the
+(`Step(..., step_name="say_hi")` on `echo.cwl` reads `run: echo.cwl`). A
+real-time analysis declaration carries `run: cwl_subinterpreter` instead: the
+adapter is found on the search paths, as a declaration's must be. Only the
 tool's own document is written; files it imports by relative path are not
 copied. Writing into a directory that already holds a different `<stem>.cwl`
 is an error.

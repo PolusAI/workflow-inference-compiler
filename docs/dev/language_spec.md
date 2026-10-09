@@ -307,7 +307,8 @@ A workflow that contains a nested `Workflow` is written as a bundle: each nested
 workflow is its own `.wic` file and the parent calls it by name, like any other
 subworkflow. Workflow outputs name their authored step, and a step named apart from
 its tool's file stem carries `run: <stem>.cwl`, the tool written beside the
-document.
+document. A real-time analysis declaration names the adapter by its registry
+stem, `run: cwl_subinterpreter`, so it stays a declaration.
 
 Two obligations follow, and both are enforced by tests rather than convention:
 
