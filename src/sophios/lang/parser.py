@@ -1131,10 +1131,10 @@ def _opaque(node: yaml.nodes.Node, file: str, diags: Diagnostics,
 
 
 def _resolved_scalar(node: yaml.nodes.ScalarNode) -> Any:
-    """Convert a resolved scalar node to its Python value, exactly as the loader would.
+    """Convert a resolved scalar node to its Python value, exactly as `yaml.SafeLoader` would.
 
     Delegated to PyYAML's own `SafeConstructor` rather than re-implemented,
-    to avoid diverging from the loader on octals, hex, timestamps, `.inf`,
+    to avoid diverging from YAML on octals, hex, timestamps, `.inf`,
     and sexagesimals. A fresh constructor per call, since the class carries
     per-document state and this layer is shared across threads.
     """

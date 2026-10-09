@@ -247,20 +247,19 @@ Within the YAML surface, every Sophios-owned construct has a **tagged** form and
 | Raw CWL reference | `!cwl expr` | `{wic_raw_cwl: expr}` |
 | Step-input record | `!cwl {source: [!* a, b]}` | `{wic_raw_cwl: {source: [{wic_alias: a}, b]}}` |
 
-The desugared form exists for a specific reason: a YAML constructor that re-emitted
-its own tag would fire again when the document is reloaded, so the loader would not
-be idempotent. `sophios.lang.to_json` produces the desugared spelling, and the
-editor schema (section 4) describes it.
+The desugared form is plain YAML, with no tags, so a tool that cannot write YAML
+tags, or a JSON consumer, can still spell every construct. `sophios.lang.to_json`
+produces the desugared spelling, and the editor schema (section 4) describes it.
 
 **Both spellings are written by hand.** Every layer Sophios exposes is meant to be
 one a person can read and edit, and that includes the document a tool just emitted.
 Neither spelling is a lesser citizen.
 
-The syntax layer is stricter than the YAML loader, and may never be more permissive.
-An unknown tag (`!foo`) is `wic009`, which the loader has always rejected too. `!&`
-in any position other than an `out:` entry is `wic019`, although the loader accepts
-it (`anchor_constructor` is registered unconditionally): it is a known tag in a
-position with no meaning.
+The syntax layer reads YAML with `yaml.SafeLoader`, and may never be more permissive
+than it: what YAML cannot read is an error here too. The Sophios tags mean what this
+specification says, and nothing else decides them. An unknown tag (`!foo`) is
+`wic009`. `!&` in any position other than an `out:` entry is `wic019`: it is a known
+tag in a position with no meaning.
 
 ### 2.1 `wic_` in construct position
 
