@@ -309,7 +309,7 @@ def _unusable_engine(engine: str, status: int, said: str) -> Diagnostic:
     if socket is not None and 'DOCKER_HOST' in os.environ and not socket.exists():
         return _engine_error(f'{engine} is installed, but its engine is not reachable: the socket {socket} does '
                              f'not exist ({line}): start the engine, then run again')
-    if socket is not None and not os.access(socket, os.R_OK | os.W_OK):
+    if socket is not None and socket.exists() and not os.access(socket, os.R_OK | os.W_OK):
         return _engine_error(f'{engine} is installed, but you may not use its socket {socket} ({line}): add your '
                              'user to the docker group (sudo usermod -aG docker $USER), then log out and back in')
     return _engine_error(f'{engine} is installed, but `{engine} info` exited with status {status} ({line}): '

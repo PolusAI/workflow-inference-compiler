@@ -791,6 +791,20 @@ def test_an_engine_whose_socket_is_missing_says_so_and_quotes_the_engine(
 
 
 @pytest.mark.fast
+def test_a_stopped_engine_with_no_default_socket_is_not_blamed_on_permissions(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    machine('fails', said=b'Is the docker daemon running?')
+    monkeypatch.delenv('DOCKER_HOST', raising=False)
+    monkeypatch.setattr(preflight, 'DEFAULT_DOCKER_SOCKET', tmp_path / 'absent.sock')
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, tmp_path, _TOUCH)
+    line, = _wic015(capsys.readouterr().err)
+    assert 'usermod' not in line
+    assert '`docker info` exited with status 1 (Is the docker daemon running?)' in line
+
+
+@pytest.mark.fast
 @pytest.mark.skipif(sys.platform == 'win32' or os.geteuid() == 0, reason='file modes do not stop Windows or root')
 def test_an_engine_whose_socket_is_not_yours_says_so(
         machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
