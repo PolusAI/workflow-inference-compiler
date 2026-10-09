@@ -16,7 +16,6 @@ raises it with the messages it used to print.
 import datetime
 import json
 import math
-import nturl2path
 import os
 import re
 import shutil
@@ -806,9 +805,16 @@ def test_a_stopped_engine_with_no_default_socket_is_not_blamed_on_permissions(
 
 
 @pytest.mark.fast
-def test_a_file_uri_names_the_platform_path_of_a_windows_drive(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight, 'url2pathname', nturl2path.url2pathname)
-    assert preflight._written_path({'location': 'file:///C:/data/in%20x.txt'}) == 'C:\\data\\in x.txt'
+def test_a_file_uri_in_the_inputs_file_is_read_as_this_platforms_path(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A `file:` location names the file in this platform's own spelling: on Windows a drive path, not `/C:/...`."""
+    machine('running')
+    monkeypatch.setattr(run_local, 'RUNNER_UNAVAILABLE', None)
+    data = tmp_path / 'in x.txt'
+    data.write_text('x', encoding='utf-8')
+    (tmp_path / 'job.yml').write_text(f"file:\n  class: File\n  location: '{data.as_uri()}'\n", encoding='utf-8')
+    _cli(monkeypatch, tmp_path, _CAT_INPUT, '--inputs_file', str(tmp_path / 'job.yml'),
+         mode='--check')   # returns: the file is found where the URI names it
 
 
 @pytest.mark.fast
