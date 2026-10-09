@@ -9,8 +9,10 @@ is its payload (the document compiles, the inputs are well formed).
 Each check returns diagnostics rather than raising, so a caller reports every
 problem at once, each on one line: what is wrong, then what to do.
 """
+import ast
 import json
 import os
+import re
 import shutil
 import subprocess as sub
 import sys
@@ -199,12 +201,28 @@ def _load_archive(engine: str, source: str) -> None:
 
 
 def _fetch(cmd: list[str], doing: str, engine: str) -> None:
-    """Run `cmd`, which `doing` describes; when it exits non-zero, quote the last line it wrote to stderr."""
+    """Run `cmd`, which `doing` describes; when it exits non-zero, quote the engine's last error line."""
     proc = sub.run(cmd, check=False, stderr=sub.PIPE, text=True, errors='replace')
     if proc.returncode != 0:
-        said = next((text.strip() for text in reversed(proc.stderr.splitlines()) if text.strip()), 'it said nothing')
         raise SophiosError([_unavailable(f'{engine} could not {doing} ({cmd[0]} exited with status '
-                                         f'{proc.returncode}: {said})')])
+                                         f'{proc.returncode}: {_engine_said(proc.stderr)})')])
+
+
+_WRAPPED_OUTPUT = re.compile(r'SubprocessError: (b\'.*\'|b".*")\s*$')
+
+
+def _engine_said(stderr: str) -> str:
+    """The engine's `Error: ...` line in `stderr`, else its last non-empty line, else 'it said nothing'.
+
+    cwl-docker-extract folds the engine's output into a `SubprocessError(<bytes>)`, so its traceback ends in the
+    bytes repr of that output; that output is what gets read."""
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    wrapped = _WRAPPED_OUTPUT.search(lines[-1]) if lines else None
+    if wrapped:
+        output = ast.literal_eval(wrapped.group(1))
+        lines = [line.strip() for line in output.decode('utf-8', errors='replace').splitlines() if line.strip()]
+    errors = [line for line in lines if line.startswith('Error')]
+    return (errors or lines or ['it said nothing'])[-1]
 
 
 def _unavailable(message: str) -> Diagnostic:

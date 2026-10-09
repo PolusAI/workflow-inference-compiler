@@ -1235,6 +1235,23 @@ def test_a_failed_pull_load_or_import_is_one_wic037_quoting_the_engine(
 
 
 @pytest.mark.fast
+def test_a_failed_pull_quotes_the_engines_error_line_not_the_extractors_traceback(
+        engine: Callable[..., list[list[str]]], tmp_path: Path) -> None:
+    """cwl-docker-extract re-raises the engine's output as `SubprocessError(<bytes>)`; wic037 quotes the
+    engine's `Error:` line, decoded."""
+    traceback = ('Traceback (most recent call last):\n  File "extract.py", line 1, in <module>\n'
+                 "subprocess.SubprocessError: b'Trying to pull docker.io/nope:1... \\r\\n"
+                 "Error: requested access to the resource is denied \\r\\n'\n")
+    engine(('cwl-docker-extract',), said=traceback)
+    tool = _tool(tmp_path, {'dockerPull': 'docker.io/nope:1'})
+    with pytest.raises(SophiosError) as raised:
+        _prepare(tool, tmp_path)
+    [diagnostic] = raised.value.diagnostics
+    assert 'Error: requested access to the resource is denied)' in diagnostic.message
+    assert 'SubprocessError' not in diagnostic.message and "b'" not in diagnostic.message
+
+
+@pytest.mark.fast
 def test_check_loads_and_imports_nothing(engine: Callable[..., list[list[str]]], tmp_path: Path) -> None:
     """--check checks and fetches nothing."""
     calls = engine()
