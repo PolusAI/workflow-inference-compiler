@@ -16,6 +16,7 @@ raises it with the messages it used to print.
 import datetime
 import json
 import math
+import nturl2path
 import os
 import re
 import shutil
@@ -802,6 +803,12 @@ def test_a_stopped_engine_with_no_default_socket_is_not_blamed_on_permissions(
     line, = _wic015(capsys.readouterr().err)
     assert 'usermod' not in line
     assert '`docker info` exited with status 1 (Is the docker daemon running?)' in line
+
+
+@pytest.mark.fast
+def test_a_file_uri_names_the_platform_path_of_a_windows_drive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(preflight, 'url2pathname', nturl2path.url2pathname)
+    assert preflight._written_path({'location': 'file:///C:/data/in%20x.txt'}) == 'C:\\data\\in x.txt'
 
 
 @pytest.mark.fast

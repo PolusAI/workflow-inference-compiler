@@ -18,7 +18,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
-from urllib.parse import unquote, urldefrag, urlparse
+from urllib.parse import urldefrag, urlparse
+from urllib.request import url2pathname
 
 import cwl_utils.parser as cwl
 
@@ -224,7 +225,7 @@ def _written_path(value: Mapping[str, Any]) -> str | None:
         return None
     parsed = urlparse(written)
     if parsed.scheme == 'file':
-        return unquote(parsed.path)
+        return url2pathname(parsed.path)
     return None if len(parsed.scheme) > 1 else written   # one letter is a Windows drive
 
 
