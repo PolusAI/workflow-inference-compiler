@@ -50,8 +50,7 @@ WorkflowPaths = dict[str, dict[str, Path]]
 
 def _canonical_ports(cwl: Any) -> Any:
     """`cwl` with every Workflow document's port declarations in CWL's long form: a bare `T` as
-    `{type: T}`, and every type through `canonicalize_type` (`T?` and `T[]` are CWL's shorthand);
-    and a step's `scatter: p` as `scatter: [p]`, CWL's shorthand for the one-port list."""
+    `{type: T}`, and every type through `canonicalize_type` (`T?` and `T[]` are CWL's shorthand)."""
     match cwl:
         case {'class': 'Workflow'}:
             canonical = {key: _canonical_ports(value) for key, value in cwl.items()}
@@ -60,8 +59,6 @@ def _canonical_ports(cwl: Any) -> Any:
                 if isinstance(ports, dict):
                     canonical[kind] = {name: _long_form(spec) for name, spec in ports.items()}
             return canonical
-        case {'run': _, 'scatter': str() as port}:
-            return {**{key: _canonical_ports(value) for key, value in cwl.items()}, 'scatter': [port]}
         case dict():
             return {key: _canonical_ports(value) for key, value in cwl.items()}
         case list():

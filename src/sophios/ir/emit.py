@@ -228,12 +228,10 @@ def _emit_step(node: StepNode, ins: tuple[tuple[PortName, EmittedValue], ...],
 
 
 def _emit_scatter(scatter: Any, ports: tuple[PortName, ...], names: Names) -> Any:
-    """`scatter:` spelled from its resolved `ports`, in the authored shape."""
+    """`scatter:` spelled from its resolved `ports`, always as a list."""
     match scatter:
-        case list():
+        case list() | str():
             return [names.port(port) for port in ports]
-        case str():
-            return names.port(ports[0])
     return deepcopy(scatter)
 
 
