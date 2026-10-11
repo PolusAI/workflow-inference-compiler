@@ -27,7 +27,8 @@ tool.write_cwl("tool.cwl", validate=True)
 ```
 
 This checks that the generated document is valid CWL, not merely a dictionary
-that looks like CWL.
+that looks like CWL. Like a local run, it does not load the ontologies under
+`$schemas`.
 
 ### `.wic` Syntax and the Editor Schema
 
