@@ -543,7 +543,7 @@ def run_workflow(
     inputs_file = resolved_run_args.get("inputs_file", "")
     input_output.write_artifacts_to_disk(artifact, Path(basepath), True, inputs_file)
     plans = realtime.write(analyses, Path(basepath), workflow.process_name, Path.cwd())
-    extra = input_output.read_inputs_file(inputs_file) if inputs_file else {}
+    extra = normalize_artifact_job_inputs(artifact, input_output.read_inputs_file(inputs_file)) if inputs_file else {}
     # The inputs file wins over a value bound in Python for the same input when the job is written.
     jobs = (preflight.Job({key: value for key, value in bound.items() if key not in extra}, Path.cwd(), "the workflow"),
             *((preflight.Job(extra, Path(inputs_file).parent.absolute(), "inputs_file"),) if inputs_file else ()))

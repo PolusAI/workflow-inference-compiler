@@ -141,9 +141,11 @@ def write_artifacts_to_disk(artifact: CompilationArtifact, path: Path,
 
     A relative `location` or `path` of a File or Directory in `inputs_file`, at any depth, is
     resolved against the inputs file's own directory (CWL v1.2 section 5.1.5: the base IRI of the
-    document) and written absolute.
+    document) and written absolute. An output-target Directory in it is a name for the run to
+    create, so it is read as one first.
     """
-    inputs = absolute_paths(read_inputs_file(inputs_file), Path(inputs_file).absolute().parent) if inputs_file else {}
+    inputs = absolute_paths(normalize_artifact_job_inputs(artifact, read_inputs_file(inputs_file)),
+                            Path(inputs_file).absolute().parent) if inputs_file else {}
     _write_artifacts_to_disk(artifact, path, relative_run_path, inputs)
 
 
