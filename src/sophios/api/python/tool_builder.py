@@ -980,14 +980,12 @@ class CommandLineTool:
         """
         return dump_wic_yaml(self.to_cwl_document())
 
-    def write_cwl(self, path: str | Path, *, validate: bool = False, skip_schemas: bool = False) -> Path:
+    def write_cwl(self, path: str | Path, *, validate: bool = False) -> Path:
         """Write the tool as a `.cwl` file, creating its parent directories.
 
         Args:
             path (str | Path): The file to write.
             validate (bool): Validate the written file with cwltool, as `validate()` does.
-            skip_schemas (bool): When validating, do not load the ontologies under
-                `$schemas`, so no network access is needed.
 
         Returns:
             Path: The path written.
@@ -999,15 +997,14 @@ class CommandLineTool:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(self.to_cwl_yaml(), encoding="utf-8")
         if validate:
-            _validate_path(output_path, skip_schemas=skip_schemas)
+            _validate_path(output_path)
         return output_path
 
-    def validate(self, *, skip_schemas: bool = False) -> ValidationResult:
+    def validate(self) -> ValidationResult:
         """Validate the tool with cwltool, as a runner would load it, without writing it.
 
-        Args:
-            skip_schemas (bool): Do not load the ontologies under `$schemas`, so no
-                network access is needed.
+        The ontologies under `$schemas` are not loaded, as a local run does not
+        load them; cwltool only checks that each entry exists.
 
         Returns:
             ValidationResult: The loaded tool, for inspection.
@@ -1019,7 +1016,6 @@ class CommandLineTool:
         return validate_cwl_document(
             self.to_cwl_document(),
             filename=f"{self.name}.cwl",
-            skip_schemas=skip_schemas,
         )
 
 

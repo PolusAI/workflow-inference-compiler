@@ -416,10 +416,10 @@ def test_tool_builder_validate_uses_cwltool_stack(monkeypatch: pytest.MonkeyPatc
         assert loading_context is None
         assert Path(str(runtime_context.kwargs["workflow"])).name == "aligner.cwl"
         assert runtime_context.kwargs["validate"] is True
-        assert runtime_context.kwargs["skip_schemas"] is False
+        assert runtime_context.kwargs["skip_schemas"] is True
         assert Path(str(getattr(args, "workflow"))).name == "aligner.cwl"
         assert getattr(args, "validate") is True
-        assert getattr(args, "skip_schemas") is False
+        assert getattr(args, "skip_schemas") is True
         return "prepared-context"
 
     fake_load_tool = FakeLoadTool()

@@ -229,6 +229,9 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   `sophios.cwl_subinterpreter` module is gone.
 - `sophios.utils_yaml.wic_loader()` and its `WicLoader` are gone. Read a
   `.wic` with `sophios.lang.parse` or `Workflow.from_wic`.
+- `CommandLineTool.validate()`, `write_cwl(validate=True)` and
+  `validate_cwl_document()` never load the ontologies under `$schemas`, as a
+  local run does not, and no longer take `skip_schemas`. Drop the argument.
 
 <!-- Breaking changes merged before 0.7.0 is released add their upgrade steps
      to the section above that they belong to. -->
