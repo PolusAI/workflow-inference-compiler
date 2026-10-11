@@ -134,6 +134,7 @@ def _artifacts(root: CompilationArtifact) -> list[CompilationArtifact]:
     return [root, *(item for child in root.children for item in _artifacts(child))]
 
 
+@pytest.mark.skip_pypi_ci
 @pytest.mark.slow
 @pytest.mark.parametrize("yml_path_str, yml_path", yml_paths_tuples_not_blacklist_on_push)
 def test_run_workflows_on_push(yml_path_str: str, yml_path: Path, cwl_runner: str,
