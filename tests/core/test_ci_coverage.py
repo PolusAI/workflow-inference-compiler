@@ -315,6 +315,8 @@ WINDOWS_EXCLUDED: Final = frozenset({
     # them. Its platform-neutral sibling `test_flatten_keeps_meaning` runs on
     # every leg.
     'tests/core/test_examples.py::test_flatten_validates_as_cwl',
+    # The same check over the weekly workflows, which only the weekly lane runs.
+    'tests/core/test_examples.py::test_weekly_corpus_flatten_validates_as_cwl',
     # Plain CWL workflows run by cwltool through --run_local: a two-step one,
     # and twelve conformance workflows, each also run by cwltool directly, in
     # about four seconds. The file's other tests check what the runner is
