@@ -390,7 +390,8 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         io.write_artifacts_to_disk(artifact, Path(basepath), True, args.inputs_file)
         plans = realtime.write(analyses, Path(basepath), artifact.name, root_dir)
         # Check the machine, then pull the container images, the real-time analyses' too: they run with --disable-pull
-        extra = io.read_inputs_file(args.inputs_file) if args.inputs_file else {}
+        extra = (normalize_artifact_job_inputs(artifact, io.read_inputs_file(args.inputs_file))
+                 if args.inputs_file else {})
         # --inputs_file wins over a `!ii` value of the same input when the job is written.
         jobs = (preflight.Job({key: value for key, value in bound.items() if key not in extra},
                               root_dir, 'the workflow'),

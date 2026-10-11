@@ -1750,6 +1750,18 @@ def test_an_output_target_directory_bound_in_python_is_not_looked_for(
 
 
 @pytest.mark.fast
+def test_an_output_target_directory_in_the_inputs_file_is_not_looked_for(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Written as CWL writes a Directory, it still names the directory the step creates."""
+    monkeypatch.chdir(tmp_path)
+    step = Step(clt_path=_output_directory_tool(tmp_path / 'write_dir.cwl'))
+    Path('in.yml').write_text('wf__step__1__write_dir___outDir: {class: Directory, location: result.outDir}\n',
+                              encoding='utf-8')
+    monkeypatch.setattr(python_runtime.rl, 'run_local', lambda *_a, **_k: 0)
+    Workflow([step], 'wf').run(run_args_dict={'inputs_file': 'in.yml'})
+
+
+@pytest.mark.fast
 def test_a_missing_path_in_a_step_inputs_file_is_named_before_the_run(monkeypatch: pytest.MonkeyPatch,
                                                                       tmp_path: Path) -> None:
     """The step is built; the pre-flight of the local run names the path."""
