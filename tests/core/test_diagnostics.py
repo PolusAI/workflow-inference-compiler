@@ -24,6 +24,7 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
+from typing import Final
 
 import pytest
 import yaml
@@ -193,6 +194,34 @@ def test_a_literal_of_the_wrong_type_is_wic020_not_converted(declared: object, l
 ])
 def test_the_lossless_conversions_still_hold(declared: object, literal: object, expected: object) -> None:
     """YAML reads an unquoted 2024-01-15 as a date; bound to a string it is the text the author wrote."""
+    value = _job_value(declared, literal)
+    assert (value, type(value)) == (expected, type(expected))
+
+
+_ENUM: Final = {'type': 'enum', 'symbols': ['a', 'b']}
+_BOOL_OR_STRINGS: Final = ['null', 'boolean', {'type': 'array', 'items': 'string'}]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('declared, literal, expected', [
+    (_BOOL_OR_STRINGS, False, False),
+    (['null', 'int', {'type': 'array', 'items': 'int'}], 3, 3),
+    (['null', 'string', {'type': 'array', 'items': 'string'}], 'a', 'a'),
+    (['null', 'File', {'type': 'array', 'items': 'File'}], {'class': 'File', 'location': 'x'},
+     {'class': 'File', 'location': 'x'}),
+    (['null', 'float', {'type': 'array', 'items': 'int'}], 3, [3]),
+    (['null', 'string', {'type': 'array', 'items': 'int'}], 3, [3]),
+    (['null', 'string', {'type': 'array', 'items': {'type': 'array', 'items': 'int'}}], 3, [[3]]),
+    (['null', _ENUM, {'type': 'array', 'items': _ENUM}], 'a', ['a']),
+], ids=['bool-stays-a-bool', 'int-stays-an-int', 'text-stays-text', 'file-stays-a-file',
+        'int-is-not-widened-to-the-float', 'int-is-not-made-text', 'int-is-not-made-text-nested',
+        'enum-member-is-not-a-type-name'])
+def test_a_scalar_given_to_a_union_with_an_array_takes_the_scalar_member(
+        declared: object, literal: object, expected: object) -> None:
+    """biobb's `pdb` takes `filter` as `boolean | string[]`; `filter: !ii False`
+    reached it as `['false']`, so it kept only the lines starting with "false"
+    and wrote a PDB with no coordinates. A scalar takes the scalar member whose
+    type it already is; any other scalar is wrapped into the array, as before."""
     value = _job_value(declared, literal)
     assert (value, type(value)) == (expected, type(expected))
 
