@@ -331,11 +331,33 @@ def _coerce_type(name: PortName, raw: Any, value: Any, fmt: Any, *,
         non_null = [item for item in raw if item != 'null']
         arrays = [item for item in non_null if isinstance(item, dict)
                   and item.get('type') == 'array']
-        raw = arrays[0] if arrays else (non_null[0] if len(non_null) == 1 else non_null)
+        scalars = [item for item in non_null if item not in arrays]
+        if arrays and not isinstance(value, list):
+            # A scalar that already is a scalar member's type takes that member;
+            # any other scalar is wrapped into the array. `False` given to
+            # `boolean | string[]` is the boolean, not `['false']`.
+            raw = _scalar_member_for(scalars, value) or arrays[0]
+        else:
+            raw = arrays[0] if arrays else (non_null[0] if len(non_null) == 1 else non_null)
     if isinstance(raw, dict) and raw.get('type') == 'array':
         values = value if isinstance(value, list) else [value]
         return [_coerce_type(name, raw.get('items'), item, fmt, span=span, locator=locator) for item in values]
     return _coerce_scalar(name, raw, value, fmt, span=span, locator=locator)
+
+
+def _scalar_member_for(members: list[Any], value: Any) -> Any:
+    """The scalar member of a union whose type `value` already is, or None.
+
+    A bool is a `boolean`, an int an `int` or `long`, a float a `float` or
+    `double`, text a `string`, and a `File` or `Directory` object its class.
+    No conversion counts (an int into a float, a number into text), and an enum
+    or record member is not a type name, so neither matches.
+    """
+    for member in members:
+        if isinstance(member, str) and (_PYTHON_TYPE.get(member) is type(value)
+                                        or isinstance(value, dict) and value.get('class') == member):
+            return member
+    return None
 
 
 def _plain(value: Any) -> Any:
