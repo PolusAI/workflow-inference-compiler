@@ -1003,8 +1003,8 @@ class CommandLineTool:
     def validate(self) -> ValidationResult:
         """Validate the tool with cwltool, as a runner would load it, without writing it.
 
-        The ontologies under `$schemas` are not loaded, as a local run does not
-        load them; cwltool only checks that each entry exists.
+        The ontologies under `$schemas` are not loaded or checked, as a local
+        run does not load them.
 
         Returns:
             ValidationResult: The loaded tool, for inspection.
