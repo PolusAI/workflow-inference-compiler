@@ -2488,29 +2488,39 @@ _PACKED_TOOL: dict[str, Any] = {
     'cwlVersion': 'v1.2', '$namespaces': {'edam': 'https://edamontology.org/'},
     '$graph': [
         {'id': 'main', 'class': 'CommandLineTool', 'baseCommand': 'echo',
-         'inputs': {'text': {'type': 'string', 'inputBinding': {'position': 1}}},
-         'outputs': {'out': {'type': 'stdout', 'format': 'edam:format_1964'}}},
+         'inputs': [{'id': '#main/text', 'type': 'string', 'inputBinding': {'position': 1}}],
+         'outputs': [{'id': '#main/out', 'type': 'stdout', 'format': 'edam:format_1964'}]},
         {'id': 'other', 'class': 'CommandLineTool', 'baseCommand': 'true', 'inputs': {}, 'outputs': {}},
     ]}
+
+#: What `cwltool --pack` writes for a single tool: no `$graph`, the tool itself as `#main`.
+_PACKED_SINGLE_TOOL: dict[str, Any] = {
+    'cwlVersion': 'v1.2', '$namespaces': {'edam': 'https://edamontology.org/'},
+    **{**_PACKED_TOOL['$graph'][0], 'id': '#main'}}
 
 _NO_MAIN = ('is a packed CWL document ($graph) with no main process; it holds: say, other. CWL runs a packed '
             'document through its main, so name the process to run main, or unpack it into a file of its own')
 
 
-def _packed_tool(directory: Path, main: str = 'main') -> Path:
-    """`_PACKED_TOOL` written to `directory`, its main's id spelled `main`."""
+def _with_main(main: str) -> dict[str, Any]:
+    """`_PACKED_TOOL` with its main's id spelled `main`."""
+    return {**_PACKED_TOOL, '$graph': [{**_PACKED_TOOL['$graph'][0], 'id': main}, _PACKED_TOOL['$graph'][1]]}
+
+
+def _packed_tool(directory: Path, document: dict[str, Any]) -> Path:
+    """`document` written to `directory` as `packed.cwl`."""
     path = directory / 'packed.cwl'
-    document = {**_PACKED_TOOL, '$graph': [{**_PACKED_TOOL['$graph'][0], 'id': main}, _PACKED_TOOL['$graph'][1]]}
     path.write_text(yaml.safe_dump(document, sort_keys=False), encoding='utf-8')
     return path
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize('main', ['main', '#main'])
-def test_a_packed_tool_as_a_clt_path_is_its_main(tmp_path: Path, main: str) -> None:
+@pytest.mark.parametrize('document', [_with_main('main'), _with_main('#main'), _PACKED_SINGLE_TOOL],
+                         ids=['main', '#main', 'single-tool'])
+def test_a_packed_tool_as_a_clt_path_is_its_main(tmp_path: Path, document: dict[str, Any]) -> None:
     """A `Step` whose `clt_path` packs a CommandLineTool as `main` is that tool: main's ports, and main alone as
     the step's CWL, with the document's `cwlVersion` and `$namespaces`."""
-    step = Step(clt_path=_packed_tool(tmp_path, main))
+    step = Step(clt_path=_packed_tool(tmp_path, document))
     assert ([p.name for p in step.inputs], [p.name for p in step.outputs]) == (['text'], ['out'])
     assert step.yaml['class'] == 'CommandLineTool' and '$graph' not in step.yaml and 'id' not in step.yaml
     assert (step.yaml['cwlVersion'], step.yaml['$namespaces']) == ('v1.2', {'edam': 'https://edamontology.org/'})
@@ -2520,9 +2530,10 @@ def test_a_packed_tool_as_a_clt_path_is_its_main(tmp_path: Path, main: str) -> N
 
 
 @pytest.mark.fast
-def test_a_packed_document_as_a_cwl_document_is_its_main() -> None:
+@pytest.mark.parametrize('document', [_PACKED_TOOL, _PACKED_SINGLE_TOOL], ids=['graph', 'single-tool'])
+def test_a_packed_document_as_a_cwl_document_is_its_main(document: dict[str, Any]) -> None:
     """`Step.from_cwl_document` reads a packed document the same way as a file: through its main."""
-    step = Step.from_cwl_document(_PACKED_TOOL, process_name='packed')
+    step = Step.from_cwl_document(document, process_name='packed')
     assert ([p.name for p in step.inputs], [p.name for p in step.outputs]) == (['text'], ['out'])
     assert step.yaml['baseCommand'] == 'echo' and '$graph' not in step.yaml
     step.inputs.text = 'hi'
@@ -2533,7 +2544,7 @@ def test_a_packed_document_as_a_cwl_document_is_its_main() -> None:
 @pytest.mark.fast
 def test_a_packed_clt_path_with_no_main_is_refused(tmp_path: Path) -> None:
     """A `$graph` with no `main` names no process to run: the file and its processes are named, with the fix."""
-    packed = _packed_tool(tmp_path, 'say')
+    packed = _packed_tool(tmp_path, _with_main('say'))
     with pytest.raises(SophiosError) as caught:
         Step(clt_path=packed)
     diagnostic, = caught.value.diagnostics
@@ -2544,7 +2555,7 @@ def test_a_packed_clt_path_with_no_main_is_refused(tmp_path: Path) -> None:
 @pytest.mark.fast
 def test_a_packed_cwl_document_with_no_main_is_refused() -> None:
     """The same refusal for a packed document given to `Step.from_cwl_document`, named by its process name."""
-    document = {**_PACKED_TOOL, '$graph': [{**_PACKED_TOOL['$graph'][0], 'id': 'say'}, _PACKED_TOOL['$graph'][1]]}
+    document = _with_main('say')
     with pytest.raises(SophiosError) as caught:
         Step.from_cwl_document(document, process_name='packed')
     diagnostic, = caught.value.diagnostics
