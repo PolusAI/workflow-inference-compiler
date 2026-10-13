@@ -68,6 +68,16 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   as `'20'` is still accepted. From Python, a `.wic` analysis is found through
   `Workflow.run(workflow_paths=...)`, shaped like `Workflow.from_wic`'s.
 
+- The REST converter keeps each WFB setting as sent: a string setting is text
+  and is no longer read as YAML a second time. That second read crashed on
+  `*.tif`, `@x` or `%p`, turned `{row:c}` into a mapping, cut `x # y` to `x`,
+  folded line breaks, dropped surrounding quotes and spaces, and wrote a null,
+  alone or inside a list, as the text `None`. A typed value sent as text now
+  stays text: send `5`, `0.5`, `true`, `null` or `[1, 2]` as that JSON value,
+  not as the string `"5"`, `"0.5"`, `"true"`, `"null"` or `"[1, 2]"`, which a
+  typed input reports (wic020). `"2020-01-02"`, `"yes"`, `"0x1F"` and `"12:30"`
+  stay text as well.
+
 ### Command line
 
 - The runner's default output directory is named after the workflow too,
