@@ -9,7 +9,9 @@ from fastapi import Request
 import pytest
 import yaml
 
+from sophios.contrib.converter import wfb_to_wic
 from sophios.contrib.rest import api
+from sophios.utils_yaml import Key
 from sophios.wic_types import Json
 
 try:
@@ -179,6 +181,19 @@ def test_rest_wfb_compile() -> None:
     inp_path = REST_OBJECTS / "multi_node_wfb.json"
     res = prepare_call_rest_api(inp_path)
     assert int(res["retval"]) == 0
+
+
+def test_wfb_to_wic_keeps_settings_as_sent() -> None:
+    """A WFB setting reaches the inline input as sent, not re-read as YAML.
+
+    Returns:
+        None: The assertions verify each value is unchanged.
+    """
+    settings = {'glob': '*.tif', 'layout': '{row:c}', 'note': 'x # y', 'count': '5', 'flag': 'true',
+                'indices': '[1, 2]', 'none': None, 'size': 5, 'numbers': [1, 2]}
+    payload = {'nodes': [{'id': 1, 'pluginId': 'touch', 'settings': {'inputs': settings}}], 'links': []}
+    wic = wfb_to_wic(payload, [])
+    assert wic['steps'][0]['in'] == {k: {Key.INLINE_INPUT: v} for k, v in settings.items()}
 
 
 def test_rest_core_blank_plugin_id_uses_node_name() -> None:
