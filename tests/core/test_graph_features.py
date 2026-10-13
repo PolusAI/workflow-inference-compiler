@@ -74,7 +74,7 @@ def _edges(dot: str) -> list[tuple[str, str, dict[str, str]]]:
 
 def _cluster(dot: str, name: str) -> dict[str, str]:
     """The attributes of cluster `name`, written before its first node."""
-    block = re.search(rf'subgraph {name} {{\n((?:\t+\w+=.*\n)*)', dot)
+    block = re.search(rf'subgraph "?{re.escape(name)}"? {{\n((?:\t+\w+=.*\n)*)', dot)
     assert block is not None, f'{name} is not drawn'
     return {key: _unquoted(value) for key, value in _ATTRIBUTE.findall(block.group(1))}
 
@@ -111,14 +111,15 @@ def test_graph_label_stepname_labels_a_node_with_the_generated_step_name(qualifi
 @pytest.mark.fast
 @pytest.mark.parametrize(('depth', 'clusters'), [
     (0, {'cluster_oracle'}),
-    (1, {'cluster_oracle', 'cluster_sub'}),
-    (2, {'cluster_oracle', 'cluster_sub', 'cluster_inner'}),
+    (1, {'cluster_oracle', 'cluster_oracle__step__2__sub.wic'}),
+    (2, {'cluster_oracle', 'cluster_oracle__step__2__sub.wic',
+         'cluster_oracle__step__2__sub.wic___sub__step__3__inner.wic'}),
 ])
 def test_graph_inline_depth_draws_that_many_levels_of_subworkflow(depth: int, clusters: set[str]) -> None:
     """`--graph_inline_depth N` draws the subworkflows N levels down as clusters and leaves the steps of the
     deeper ones out of the drawing."""
     dot = _draw(inline_depth=depth)
-    assert set(re.findall(r'subgraph (cluster_\w+)', dot)) == clusters
+    assert {_unquoted(name) for name in re.findall(rf'subgraph ({_ID})', dot)} == clusters
     drawn = _nodes(dot)
     assert ('oracle__step__2__sub.wic___sub__step__2__count' in drawn) is (depth >= 1)
     assert ('oracle__step__2__sub.wic___sub__step__3__inner.wic___inner__step__1__mk_text' in drawn) is (depth >= 2)
@@ -213,6 +214,7 @@ def test_the_root_graphviz_label_titles_the_drawing(cli_graph: Callable[..., str
 #: A workflow whose second step calls `sub.wic`, which the `cli_graph` fixture writes beside it,
 #: and the name `sub.wic` is compiled under.
 _SUB = run_path_name('sub.wic', 'sub.wic')
+_SUB_CLUSTER = 'cluster_w__step__2__sub.wic'
 _CALLS_SUB = """\
 steps:
 - id: touch
@@ -266,7 +268,20 @@ def test_a_subworkflow_cluster_is_titled_by_its_label_else_by_the_id_that_calls_
     """The subworkflow's own `wic: graphviz: label` titles its cluster, and the calling step's entry wins
     over it; without either the cluster is titled with the calling step's id."""
     drawn = cli_graph(_with(_CALLS_SUB, entries={'sub.wic': call} if call else None), sub=_with(_TWO_STEPS, own))
-    assert _cluster(drawn, f'cluster_{_SUB}')['label'] == title
+    assert _cluster(drawn, _SUB_CLUSTER)['label'] == title
+
+
+@pytest.mark.fast
+def test_two_calls_to_one_subworkflow_are_two_clusters_each_with_its_own_look(
+        cli_graph: Callable[..., str]) -> None:
+    """Each call to a subworkflow is a cluster named after the step that calls it, so the label and
+    style a call's `wic: steps:` entry gives belong to that call alone."""
+    calls = _CALLS_SUB + "- id: sub.wic\n  run: sub.wic\n"
+    entries = {'(2, sub.wic)': {'label': 'First'}, '(3, sub.wic)': {'label': 'Second', 'style': 'invis'}}
+    drawn = cli_graph(_with(calls, entries=entries), sub=_TWO_STEPS)
+    first, second = _cluster(drawn, _SUB_CLUSTER), _cluster(drawn, 'cluster_w__step__3__sub.wic')
+    assert (first['label'], first.get('style'), second['label'], second['style']) == ('First', None, 'Second', 'invis')
+    assert _nodes(drawn)['w__step__2__sub.wic']['style'] == 'rounded, filled'
 
 
 @pytest.mark.fast
@@ -275,7 +290,7 @@ def test_an_invisible_subworkflow_hides_its_cluster_and_the_box_that_calls_it(
         cli_graph: Callable[..., str], own: Yaml | None, call: Yaml | None) -> None:
     """`style: invis` on a subworkflow, in its own file or at the call, hides the whole subworkflow."""
     drawn = cli_graph(_with(_CALLS_SUB, entries={'sub.wic': call} if call else None), sub=_with(_TWO_STEPS, own))
-    assert _cluster(drawn, f'cluster_{_SUB}')['style'] == 'invis'
+    assert _cluster(drawn, _SUB_CLUSTER)['style'] == 'invis'
     nodes = _nodes(drawn)
     assert nodes['w__step__2__sub.wic']['style'] == 'rounded, filled, invis'
     assert nodes['w__step__1__touch']['style'] == 'rounded, filled'
