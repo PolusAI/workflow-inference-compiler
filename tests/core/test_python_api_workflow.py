@@ -1425,11 +1425,11 @@ def test_compile_python_workflows() -> None:
             if config_ci.exists():
                 with open(config_ci, mode="r", encoding="utf-8") as r:
                     json_contents = json.load(r)
-            run_blacklist: list[str] = json_contents.get("run_blacklist", [])
+            fragments: list[str] = json_contents.get("fragments", [])
             subworkflows: list[workflow.Workflow] = retval._flatten_subworkflows()[
                 1:]
-            run_blacklist += [wf.process_name for wf in subworkflows]
-            json_contents["run_blacklist"] = run_blacklist
+            fragments += [wf.process_name for wf in subworkflows]
+            json_contents["fragments"] = fragments
             with open(config_ci, mode="w", encoding="utf-8") as f:
                 json.dump(json_contents, f)
 
