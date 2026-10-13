@@ -4,7 +4,7 @@
 // stripping out all lines that start with // before parsing.)
 {
     // These read a workflow input, which a run must be given.
-    "run_blacklist": [
+    "fragments": [
         "raw_cwl",
         "when",
         "workflow_input"
