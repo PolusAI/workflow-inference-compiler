@@ -70,13 +70,16 @@ def _entry(graph: WorkflowGraph, sidecar: WicSidecar | None, step: StepNode) -> 
 
 
 def _cluster(graph: WorkflowGraph, sidecars: _Sidecars, names: Names, settings: GraphSettings,
-             title: str) -> graphviz.Digraph:
-    """`graph` as a cluster, titled `title` unless its `wic: graphviz:` says otherwise, and each
-    workflow it calls as a cluster of its own, down to `--graph_inline_depth`."""
+             root: str) -> graphviz.Digraph:
+    """`graph` as a cluster, titled unless its `wic: graphviz:` says otherwise, and each workflow it
+    calls as a cluster of its own, down to `--graph_inline_depth`. The outermost is named and titled
+    `root`; a called workflow takes its title and its DOT name from the step that calls it, so two
+    calls to one workflow stay apart."""
     sidecar = sidecars[graph.namespace]
     look = graphviz_entry(sidecar)
-    cluster = graphviz.Digraph(name=f'cluster_{graph.name}')
-    cluster.attr(label=look.get('label', title))
+    call = graph.namespace.parts[-1] if graph.namespace.parts else None
+    cluster = graphviz.Digraph(name=f'cluster_{names.qualified(call) if call else root}')
+    cluster.attr(label=look.get('label', call.name if call else root))
     cluster.attr(color='lightblue')  # color of cluster subgraph outline
     if 'style' in look:
         cluster.attr(style=look['style'])
@@ -85,7 +88,7 @@ def _cluster(graph: WorkflowGraph, sidecars: _Sidecars, names: Names, settings: 
     _edges(cluster, graph, names, settings)
     if len(graph.namespace.parts) < settings['graph_inline_depth']:
         for child in graph.children:
-            cluster.subgraph(_cluster(child, sidecars, names, settings, child.namespace.parts[-1].name))
+            cluster.subgraph(_cluster(child, sidecars, names, settings, root))
     authored = {StepKey(step.id.index, step.id.name): step.id for step in graph.steps if not step.synthesized}
     # An entry that addresses no step was reported when the workflow was compiled.
     same = [f'"{names.qualified(authored[key])}"' for key in ranksame(sidecar) if key in authored]
