@@ -74,6 +74,7 @@ autodoc_default_options = {
 autodoc_type_aliases: Dict[str, str] = {
 }
 napoleon_use_param = True
+napoleon_preprocess_types = True  # `optional` in a type is a keyword, never a cross-reference
 napoleon_type_aliases: Dict[str, str] = {
 }
 

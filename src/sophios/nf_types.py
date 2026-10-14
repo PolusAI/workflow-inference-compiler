@@ -294,8 +294,8 @@ class NfFlag:
         """Return a JSON-compatible representation.
 
         Returns:
-            dict[str, str]: The token as ``{"kind": "flag", "name": ...,
-                "prefix": ...}``.
+            dict[str, str]: The token as
+                ``{"kind": "flag", "name": ..., "prefix": ...}``.
         """
         return {"kind": "flag", "name": self.name, "prefix": self.prefix}
 
@@ -323,8 +323,8 @@ class NfArrayBinding:
         """Return a JSON-compatible representation.
 
         Returns:
-            dict[str, Any]: The token as ``{"kind": "array", "name": ...,
-                "prefix": ...}``.
+            dict[str, Any]: The token as
+                ``{"kind": "array", "name": ..., "prefix": ...}``.
         """
         return {"kind": "array", "name": self.name, "prefix": self.prefix}
 
@@ -352,8 +352,7 @@ class NfShellLiteral:
         """Return a JSON-compatible representation.
 
         Returns:
-            dict[str, str]: The token as ``{"kind": "shell_literal",
-                "text": ...}``.
+            dict[str, str]: The token as ``{"kind": "shell_literal", "text": ...}``.
         """
         return {"kind": "shell_literal", "text": self.text}
 
