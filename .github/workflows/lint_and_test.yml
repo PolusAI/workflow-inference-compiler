@@ -49,10 +49,10 @@ on:
 
 # See https://github.com/orgs/community/discussions/15690
 # For workflow_dispatch, the commit message, repo, and branch name are not displayed by default.
-# A dispatched run is not attached to the branch it tests, so its name says which
-# sophios, mm-workflows and image-workflows refs ran together. The inputs carry refs,
-# not commits: the "Name what this run tests" step below adds the commits to the summary.
-run-name: "${{ inputs.commit_message || 'unknown' }} - ${{ inputs.sender_repo || 'unknown' }} - sophios ${{ inputs.wic_owner || 'unknown' }}/${{ inputs.wic_ref || 'unknown' }} - mm-workflows ${{ inputs.mm-workflows_owner || 'unknown' }}/${{ inputs.mm-workflows_ref || 'unknown' }} - image-workflows ${{ inputs.image-workflows_owner || 'unknown' }}/${{ inputs.image-workflows_ref || 'unknown' }}"
+# The name is the commit subject, plus a paired mm-workflows or image-workflows
+# branch when it is not main. The "Name what this run tests" step below writes the
+# three commits it checked out to the summary.
+run-name: "${{ inputs.commit_message || 'unknown' }}${{ inputs.mm-workflows_ref && inputs.mm-workflows_ref != 'main' && format(' · mm-workflows {0}', inputs.mm-workflows_ref) || '' }}${{ inputs.image-workflows_ref && inputs.image-workflows_ref != 'main' && format(' · image-workflows {0}', inputs.image-workflows_ref) || '' }}"
 
 defaults:
   run:
