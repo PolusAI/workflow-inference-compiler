@@ -247,10 +247,16 @@ class _Cache:
         return key
 
     def write(self, key: str, name: str, text: str) -> None:
-        """Append `text` to the file `name` of job `key`."""
+        """Append `text` to the file `name` of job `key`, in one step.
+
+        The watcher scans from a thread of this process: a scan between the file
+        appearing and its text landing would see a change no test made.
+        """
         path = self.root / key / name
-        with path.open('a', encoding='utf-8') as stream:
-            stream.write(text)
+        partial = path.with_name(path.name + '.partial')
+        before = path.read_text(encoding='utf-8') if path.exists() else ''
+        partial.write_text(before + text, encoding='utf-8')
+        os.replace(partial, path)
 
     def end(self, key: str, status: str = 'success') -> None:
         """End job `key` with `status`, as cwltool does."""
