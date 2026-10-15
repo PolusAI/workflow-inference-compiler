@@ -1230,10 +1230,9 @@ def test_workflow_run_prepares_the_cwl_in_its_basepath(
         workflow_name: str,
         basepath: str,
         user_env_vars: dict[str, str] | None = None,
-        output_directories: dict[str, str] | None = None,
         realtime_plans: tuple[Any, ...] = (),
     ) -> int:
-        del run_args_dict, use_subprocess, passthrough_args, workflow_name, basepath, user_env_vars, output_directories
+        del run_args_dict, use_subprocess, passthrough_args, workflow_name, basepath, user_env_vars
         del realtime_plans
         return 0
 
@@ -1271,7 +1270,6 @@ def test_workflow_run_does_not_forward_python_run_flags_to_runner(
         workflow_name: str,
         basepath: str,
         user_env_vars: dict[str, str] | None = None,
-        output_directories: dict[str, str] | None = None,
         realtime_plans: tuple[Any, ...] = (),
     ) -> int:
         captured["run_args_dict"] = run_args_dict
@@ -1287,7 +1285,6 @@ def test_workflow_run_does_not_forward_python_run_flags_to_runner(
     workflow.run(
         basepath=str(tmp_path),
         run_args_dict={
-            "copy_output_files": "yes",
             "generate_run_script": "yes",
             "logLevel": "INFO",
             "outdir": str(tmp_path / "workflow_output"),
@@ -1295,7 +1292,6 @@ def test_workflow_run_does_not_forward_python_run_flags_to_runner(
     )
 
     assert captured["passthrough_args"] == ["--logLevel", "INFO"]
-    assert captured["run_args_dict"]["copy_output_files"] == "yes"
     assert captured["run_args_dict"]["generate_run_script"] == "yes"
     assert captured["run_args_dict"]["outdir"] == str(tmp_path / "workflow_output")
     assert captured["workflow_name"] == "runtime_flag_demo"
@@ -1317,7 +1313,7 @@ def test_workflow_run_writes_virtual_output_directories_without_orphans(
         python_runtime.rl,
         "run_local",
         lambda run_args_dict, use_subprocess, passthrough_args, workflow_name, basepath,
-        user_env_vars=None, output_directories=None, realtime_plans=(): 0,
+        user_env_vars=None, realtime_plans=(): 0,
     )
 
     workflow.run(basepath=str(tmp_path))
