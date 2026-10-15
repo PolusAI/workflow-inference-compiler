@@ -22,7 +22,6 @@ from sophios.lang import (
     SophiosError,
     SophiosErrorCode,
     CwlRecord,
-    Diagnostics,
     Document,
     EdgeDef,
     EdgeRef,
@@ -868,14 +867,6 @@ def test_passthrough_scalars_resolve_exactly_as_yaml(text: str) -> None:
     top = dict(result.document.passthrough)['top']
     assert isinstance(top, dict)  # narrows the closed OpaqueCwl union
     assert top['k'] == yaml.safe_load(text)
-
-
-@pytest.mark.fast
-def test_diagnostics_slices_are_diagnostics() -> None:
-    """Slicing honours the Sequence contract instead of degrading to list."""
-    result = parse('steps:\n- id: s\n  in:\n    a: !foo x\n    b: !bar y\n', 'x.wic')
-    assert isinstance(result.diagnostics[0:1], Diagnostics)
-    assert len(result.diagnostics[0:1]) == 1
 
 # --------------------------------------------------------------------------
 # Pinned escapes

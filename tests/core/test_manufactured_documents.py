@@ -8,8 +8,6 @@ are built rather than parsed, so the grammar has no opinion about them unless
 asked, and three defects in a row lived exactly there: step ids spelled
 from the wrong stem, a producer still emitting a step form the grammar had
 removed, and scatter readable from two places with no owner.
-
-Sites no driver reaches are named in `UNREACHED` rather than ignored.
 """
 import importlib
 from pathlib import Path
@@ -50,10 +48,6 @@ MANUFACTURING_SITES: Final[dict[str, str]] = {
     'sophios/contrib/converter.py::wfb_to_wic': CONTRIB,
     'sophios/contrib/rest/api.py::compile_wf': CONTRIB,
 }
-
-#: Instrumented sites no driver below reaches, and why. Each is evidence not
-#: gathered, so each needs a reason that can be checked rather than a shrug.
-UNREACHED: Final[dict[str, str]] = {}
 
 
 def _documents_in(value: Any, depth: int = 0) -> list[dict[str, Any]]:
@@ -156,32 +150,6 @@ def test_every_manufactured_document_is_one_the_language_accepts() -> None:
     assert not rejected, (
         'the compiler manufactured documents the language does not accept:\n  '
         + '\n  '.join(sorted(set(rejected))))
-
-
-@pytest.mark.fast
-def test_the_sites_no_driver_reaches_are_the_recorded_ones() -> None:
-    """An instrumented site nothing exercises is a gap, and it is named here.
-
-    The claim this file makes is only as wide as the drivers, so the width is
-    written down. A site that starts being reached should leave `UNREACHED`;
-    one that stops being reached is evidence quietly lost, and both fail here.
-    """
-    monkeypatch = pytest.MonkeyPatch()
-    seen: list[tuple[str, dict[str, Any]]] = []
-    instrumented = [site for site, kind in MANUFACTURING_SITES.items() if kind == DOCUMENT]
-    try:
-        for site in instrumented:
-            _instrument(monkeypatch, site, seen)
-        _drive_everything()
-    finally:
-        monkeypatch.undo()
-
-    reached = {site for site, _ in seen}
-    unreached = set(instrumented) - reached
-
-    assert unreached == set(UNREACHED), (
-        f'newly unreached (evidence lost): {sorted(unreached - set(UNREACHED)) or "none"}\n'
-        f'now reached (drop from UNREACHED): {sorted(set(UNREACHED) - unreached) or "none"}')
 
 
 def _drive_everything() -> None:

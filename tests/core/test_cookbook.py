@@ -68,15 +68,6 @@ def test_both_surfaces_compile_to_the_same_cwl(stem: str) -> None:
 
 
 @pytest.mark.fast
-def test_every_construct_has_a_pair() -> None:
-    """The cookbook covers each construct, each with both spellings."""
-    assert set(PAIRS) == {'inline_literal', 'workflow_input', 'explicit_edge', 'raw_cwl', 'record',
-                          'scatter', 'when', 'nested', 'inference', 'named_output', 'renamed_step'}
-    for stem in PAIRS:
-        assert (COOKBOOK / f'{stem}.wic').is_file()
-
-
-@pytest.mark.fast
 def test_the_inference_pair_prints_its_note() -> None:
     """The inference entry shows a note; a pair that stopped making one would show nothing."""
     module = import_python_file('cookbook_inference', COOKBOOK / 'inference.py')

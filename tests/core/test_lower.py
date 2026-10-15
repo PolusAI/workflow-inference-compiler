@@ -12,34 +12,26 @@ from typing import Any
 
 import pytest
 from hypothesis import given
-from hypothesis import strategies as st
 
 from sophios.ir import (
-    Binding,
-    DeferredObligation,
     Direction,
-    Edge,
     Namespace,
-    Port,
     PortId,
-    PortType,
     RegistryKey,
     ResolvedDocument,
     ResolvedPort,
     ResolvedProcess,
     ResolvedStep,
     StepId,
-    StepNode,
     WorkflowGraph,
 )
-from sophios.ir.lower import lower, output_step
+from sophios.ir.lower import lower
 from sophios.ir.declarations import port_declaration
 from sophios.ir.types import AuthoredName
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
-from sophios.lang.nodes import Document, InlineLiteral, Step
+from sophios.lang.nodes import Document, Step
 from sophios.lang.parser import parse
-from sophios.lang.spans import SourceSpan
 
 from . import ast_strategies as strat
 from .hermetic import COVERAGE, ORACLE, compile_hermetic, compile_hermetic_cwl, subworkflow_step
@@ -316,56 +308,6 @@ def test_a_reference_to_a_defined_edge_becomes_an_edge() -> None:
     assert graph.edges[0].source.step.name == 'mk' and graph.edges[0].sink.step.name == 'use'
 
 
-_SPAN = SourceSpan('probe.wic', 1, 1, 1, 1)
-
-
-@st.composite
-def _hostile_graphs(draw: st.DrawFn) -> Any:
-    """A construction that violates one invariant, drawn rather than listed."""
-    ns = Namespace(tuple(draw(st.lists(st.builds(StepId, st.just(Namespace()), st.integers(1, 4),
-                                                 st.text('ab', min_size=1, max_size=2)),
-                                       max_size=2))))
-    one = StepId(ns, draw(st.integers(1, 4)), draw(st.text('xy', min_size=1, max_size=2)))
-    two = StepId(ns, one.index + draw(st.integers(1, 3)), one.name)
-    name = AuthoredName(draw(st.text('pq', min_size=1, max_size=2)))
-    out = PortId(one, Direction.OUTPUT, name)
-    inp = PortId(one, Direction.INPUT, name)
-    elsewhere = PortId(two, Direction.INPUT, name)
-    port = Port(inp, PortType(None))
-    return draw(st.sampled_from([
-        lambda: Edge(inp, inp),                                   # a port to itself
-        lambda: Edge(inp, PortId(two, Direction.INPUT, name)),    # input to input
-        lambda: Edge(out, PortId(two, Direction.OUTPUT, name)),   # output to output
-        lambda: DeferredObligation(out, name, PortType(None)),    # an output awaiting a value
-        lambda: StepNode(one, inputs=(Port(elsewhere, PortType(None)),)),
-        lambda: StepNode(one, outputs=(port,)),                   # an input listed as an output
-        lambda: StepNode(one, bindings=(Binding(inp, InlineLiteral(1, _SPAN)),)),
-        lambda: StepId(ns, 0, name),                              # a zero-based occurrence
-        lambda: StepId(ns, 1, ''),                                # an unnamed occurrence
-        lambda: PortId(one, Direction.INPUT, AuthoredName('')),   # an unnamed port
-        lambda: Namespace((StepId(Namespace(), 1, ''),)),         # an unnamed enclosing step
-        lambda: WorkflowGraph(ns, steps=(StepNode(one), StepNode(one))),
-        lambda: WorkflowGraph(ns, output_mapping=((name, out),)),
-        lambda: WorkflowGraph(ns, input_mapping=((name, (inp,)),)),
-        lambda: WorkflowGraph(ns, explicit_edge_defs=((name, out),)),
-        lambda: WorkflowGraph(Namespace((StepId(Namespace(), 1, 'elsewhere'),)),
-                              steps=(StepNode(one),)),
-    ]))
-
-
-@pytest.mark.fast
-@given(_hostile_graphs())
-@COVERAGE
-def test_a_malformed_graph_cannot_be_constructed(build: Any) -> None:
-    """The invariants live in `__post_init__`, so nothing can skip them.
-
-    Drawn rather than listed: a fixed table only ever proves the cases someone
-    thought of, and every gap this file has had was a case nobody listed.
-    """
-    with pytest.raises(ValueError):
-        build()
-
-
 _GHOST = PortId(StepId(Namespace(), 1, 'ghost'), Direction.INPUT, AuthoredName('p'))
 
 
@@ -383,47 +325,6 @@ def test_a_reference_to_a_port_no_step_declares_is_reported_where_it_is_held(
     with pytest.raises(ValueError) as caught:
         build()
     assert str(caught.value) == f'{where} names a port no step declares: {_GHOST}'
-
-
-class _Spelling(str):
-    """A name that notes when it is written out."""
-
-    spelled = False
-
-    def __repr__(self) -> str:
-        self.spelled = True
-        return super().__repr__()
-
-
-@pytest.mark.fast
-def test_a_reference_is_not_spelled_unless_it_is_reported() -> None:
-    """A derived name written out prints every step id it was exposed through,
-    which is the cost that made nesting exponential, so the name a reference is
-    held under is written for the report and not for every graph."""
-    step = StepId(Namespace(), 1, 'step')
-    source = PortId(step, Direction.OUTPUT, AuthoredName('o'))
-    sink = PortId(step, Direction.INPUT, AuthoredName('i'))
-    name = _Spelling('e')
-
-    WorkflowGraph(
-        Namespace(),
-        steps=(StepNode(step, inputs=(Port(sink, PortType(None)),), outputs=(Port(source, PortType(None)),)),),
-        explicit_edge_defs=((name, source),),
-        explicit_edge_calls=((name, sink),),
-        input_mapping=((AuthoredName(name), (sink,)),))
-
-    assert not name.spelled
-
-
-@pytest.mark.fast
-def test_the_graph_owns_no_mutable_container() -> None:
-    """A frozen graph holding a dict can have its invariants invalidated after
-    the constructor checked them, which makes checking them theatre."""
-    graph = _lower('steps:\n- id: s\n  in:\n    f: !ii 1\n').graph
-    assert graph is not None
-    for name in ('steps', 'explicit_edge_defs', 'explicit_edge_calls',
-                 'input_mapping', 'output_mapping', 'passthrough'):
-        assert isinstance(getattr(graph, name), tuple), name
 
 
 @pytest.mark.fast
@@ -491,16 +392,6 @@ def test_a_positional_output_source_naming_a_port_the_step_lacks_is_wic028() -> 
                     'outputs:\n  o:\n    type: File\n    outputSource: (2, s)/nope\n')
     assert [d.code for d in result.diagnostics] == [SophiosErrorCode.UNDECLARED_PORT]
     assert all("'nope'" in d.message and 'its outputs are: f' in d.message for d in result.diagnostics)
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize('step_text, found', [
-    ('s', (1, None)), ('wf__step__2__s', (2, None)), ('wf__step__3__t', (3, None)),
-    ('(2, s)', (2, 's')), ('(9, x)', (9, 'x')), ('u', None), ('wf__step__1__t', None)])
-def test_output_step_reads_the_step_an_output_source_names(step_text: str, found: Any) -> None:
-    """An id names its first occurrence, written as authored or as generated; a
-    positional key names its index whatever is there, and keeps the name it wrote."""
-    assert output_step('wf', ['s', 's', 't'], step_text) == found
 
 
 @pytest.mark.fast

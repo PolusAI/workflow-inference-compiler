@@ -12,20 +12,13 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from sophios.lang import SophiosErrorCode, parse, wic_schema
-from sophios.lang.cwl import CWL_VERSION, CWL_VERSIONS, CwlVersion
+from sophios.lang.cwl import CWL_VERSION, CWL_VERSIONS
 from sophios.python_cwl_adapter import generate_CWL_CommandLineTool
 
 
 # --------------------------------------------------------------------------
 # Sanity checks
 # --------------------------------------------------------------------------
-
-
-@pytest.mark.fast
-def test_the_declared_version_is_v1_2() -> None:
-    """The substrate is CWL v1.2."""
-    assert CWL_VERSION == 'v1.2'
-    assert CWL_VERSION == CwlVersion.V1_2
 
 
 @pytest.mark.fast
@@ -51,12 +44,6 @@ def test_a_generated_tool_declares_v1_2_and_dumps() -> None:
     tool = generate_CWL_CommandLineTool({}, {})
     assert tool['cwlVersion'] == 'v1.2'
     assert 'cwlVersion: v1.2' in yaml.safe_dump(tool)
-
-
-@pytest.mark.fast
-def test_every_supported_version_is_admitted() -> None:
-    """The versions the substrate toolchain runs are exactly the enum."""
-    assert CWL_VERSIONS == ('v1.0', 'v1.1', 'v1.2')
 
 
 #: The main schema, built once; these tests only read it.

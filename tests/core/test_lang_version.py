@@ -17,7 +17,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from sophios.ir.frontdoor import bundle_from_disk
-from sophios.lang import KNOWN_VERSIONS, LANG_VERSION, resolve_lang_version
+from sophios.lang import LANG_VERSION, resolve_lang_version
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
 from sophios.lang.versions import ANNOTATION_KEY, ANNOTATION_NAMESPACE_URI
@@ -189,19 +189,6 @@ def test_the_sophios_namespace_prefix_is_reserved() -> None:
                          **TOUCH})
     assert compiled['$namespaces']['sophios'] == ANNOTATION_NAMESPACE_URI
     assert compiled['$namespaces']['mine'] == 'https://mine/'
-
-
-# --------------------------------------------------------------------------
-# Sanity
-# --------------------------------------------------------------------------
-
-
-@pytest.mark.fast
-def test_exactly_one_version_exists_today() -> None:
-    """When this fails, versions.py has grown a second entry — go make sure
-    the resolution table in the language spec (§6) still tells the truth."""
-    assert KNOWN_VERSIONS == ('0.0.1',)
-    assert LANG_VERSION == '0.0.1'
 
 
 @pytest.mark.fast

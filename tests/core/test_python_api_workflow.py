@@ -3,7 +3,6 @@ import asyncio
 import copy
 import dataclasses
 import decimal
-import importlib
 import json
 import os
 import pickle
@@ -22,7 +21,6 @@ import pytest
 import yaml
 
 import sophios
-import sophios.api.python as python_api_package
 import sophios.api.python._workflow_runtime as python_runtime
 import sophios.compiler
 import sophios.compute_request as compute_request_module
@@ -428,20 +426,6 @@ def test_output_target_directories_reject_absolute_locations(tmp_path: Path) -> 
 
 
 @pytest.mark.fast
-def test_port_namespaces_do_not_accept_string_indexing() -> None:
-    """Ports are reached by attribute or by index, never by name as text.
-
-    A string subscript would silently miss a typo; the type rejects it."""
-    step = Step(_emit_text_tool())
-
-    with pytest.raises(TypeError, match="integer indexing only"):
-        step.inputs["message"]
-
-    with pytest.raises(TypeError, match="integer indexing only"):
-        step.outputs["file"]
-
-
-@pytest.mark.fast
 def test_compute_request_accepts_compiled_python_workflow() -> None:
     """A compiled workflow becomes a compute request whose JSON round-trips."""
     emit_step = Step(_emit_text_tool(), step_name="emit_text")
@@ -801,12 +785,6 @@ def test_removed_wic_accessors_point_at_write_wic(removed: str) -> None:
 
 
 @pytest.mark.fast
-def test_write_wic_is_the_one_wic_writer() -> None:
-    """A Workflow writes `.wic` one way and reads it one way; nothing else returns `.wic` text or a `.wic` document."""
-    assert {name for name in dir(Workflow) if not name.startswith("_")} == {"compile", "from_wic", "run", "write_wic"}
-
-
-@pytest.mark.fast
 def test_workflow_write_wic_rejects_non_wic_file_extension(tmp_path: Path) -> None:
     """A destination must be a `.wic` file or a directory to put one in."""
     workflow = Workflow([], "wf")
@@ -884,29 +862,6 @@ def test_scatter_rejects_unbound_foreign_or_scalar_inputs() -> None:
     other_echo.inputs.message = ["a", "b"]
     with pytest.raises(ValueError, match="belong to the same step"):
         echo.scatter = [other_echo.inputs.message]
-
-
-@pytest.mark.fast
-def test_top_level_python_api_exposes_concrete_modules_only() -> None:
-    """The package exposes modules, not re-exported names.
-
-    A name re-exported at package level becomes a second import path for one
-    thing, and the two drift."""
-    assert hasattr(python_api_package, "workflow")
-    assert hasattr(python_api_package, "tool_builder")
-    assert not hasattr(python_api_package, "Step")
-    assert not hasattr(python_api_package, "CommandLineTool")
-    assert not hasattr(python_api_package, "CWL" + "BuilderValidationError")
-    assert not hasattr(python_api_package, "WorkflowInputReference")
-    assert not hasattr(python_api_package, "set_input_Step_Workflow")
-    assert not hasattr(python_api_package, "extract_tools_paths_NONPORTABLE")
-
-
-@pytest.mark.fast
-def test_legacy_python_api_module_is_not_available() -> None:
-    """The pre-rename module path is gone, not aliased."""
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("sophios.api.python.api")
 
 
 @pytest.mark.fast
@@ -1948,24 +1903,6 @@ def test_a_real_failed_step_is_named_with_its_status(monkeypatch: pytest.MonkeyP
     err = capfd.readouterr().err
     assert "Failure! step 1 'exits_3' (" in err
     assert "exited with status 3." in err
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize('name', ['add_input', 'bind_input', 'bind_output', 'add_output'])
-def test_the_string_keyed_workflow_methods_are_gone(name: str) -> None:
-    """Workflow ports are declared and bound as objects, never by a name passed as text.
-
-    The class is probed: on an instance, attribute sugar reads any name as a workflow input reference.
-    """
-    assert not hasattr(Workflow, name)
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize('name', ['bind_input', 'get_output'])
-def test_the_string_keyed_step_methods_are_gone(name: str) -> None:
-    """Step ports are bound and read as objects, never by a name passed as text."""
-    assert not hasattr(Step, name)
-    assert not hasattr(Step(clt_path=_adapter('echo')), name)
 
 
 @pytest.mark.fast

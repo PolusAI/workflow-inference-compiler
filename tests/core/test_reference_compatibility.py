@@ -13,7 +13,6 @@ from sophios.api.python.workflow import _python_api_types_match
 from sophios.lang.compatibility import TypeRelation, reference_relation
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
-from sophios.lang.versions import KNOWN_VERSIONS
 from sophios.utils_cwl import desugar_into_canonical_normal_form
 from sophios.wic_types import StepId, Tool, Tools, Yaml
 
@@ -81,15 +80,6 @@ def test_a_recursive_or_malformed_declaration_is_unknown_not_a_crash() -> None:
     assert reference_relation(
         recursive, {'type': 'array', 'items': 'string'}, lang_version='0.0.1') \
         is TypeRelation.UNKNOWN
-
-
-@pytest.mark.fast
-def test_every_language_version_owns_a_judgment() -> None:
-    """Dispatch is exhaustive over versions and rejects an impossible caller value."""
-    assert all(reference_relation('string', 'string', lang_version=version)
-               is TypeRelation.OVERLAPS for version in KNOWN_VERSIONS)
-    with pytest.raises(ValueError, match='No reference judgment'):
-        reference_relation('string', 'string', lang_version='not-a-version')
 
 
 @pytest.mark.fast

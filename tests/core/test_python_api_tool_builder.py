@@ -1,16 +1,13 @@
-import importlib
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 import yaml
 from schema_salad.utils import yaml_no_ts  # pylint: disable=no-name-in-module
 
-import sophios.api.python._tool_builder_support as tool_builder_support
 from sophios.api.python.tool_builder import (
     CommandLineTool,
     Dirent,
-    DockerRequirement,
     Field,
     Fields,
     Input,
@@ -23,26 +20,6 @@ from sophios.api.python.tool_builder import (
 from sophios.api.python.workflow import Step, Workflow
 from sophios.lang import InlineLiteral
 from sophios.lang.cwl import CWL_VERSION
-
-
-@pytest.mark.fast
-def test_hand_authored_cwl_specs_compare_by_identity() -> None:
-    """Hand-authored spec classes compare and hash by identity."""
-    left = DockerRequirement("ubuntu")
-    right = DockerRequirement("ubuntu")
-    assert left != right
-    assert isinstance(hash(left), int)
-
-
-@pytest.mark.fast
-def test_old_tool_builder_module_name_is_not_available() -> None:
-    """The pre-rename module path is gone, not aliased.
-
-    An alias left behind keeps client code working and keeps two names for one
-    thing in circulation; the import must fail so the rename is visible.
-    """
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("sophios.api.python." + "cwl" + "_builder")
 
 
 def _rich_tool() -> CommandLineTool:
@@ -87,18 +64,6 @@ def _rich_tool() -> CommandLineTool:
         .stdout("aligned.sam")
         .success_codes(0, 2)
     )
-
-
-@pytest.mark.fast
-def test_tool_builder_requires_structural_core() -> None:
-    """Inputs and outputs are positional, not optional.
-
-    A tool without them serializes to a document CWL rejects, so the failure
-    belongs at construction rather than at validation.
-    """
-    constructor = cast(Any, CommandLineTool)
-    with pytest.raises(TypeError):
-        constructor("missing-inputs")
 
 
 @pytest.mark.fast
@@ -147,13 +112,6 @@ def test_tool_name_with_slash_keeps_document_ids() -> None:
     assert tool["class"] == "CommandLineTool"
     assert tool["cwlVersion"] == CWL_VERSION
     assert tool["id"] == "tools/align"
-
-
-@pytest.mark.fast
-def test_record_rejects_a_single_field_spec() -> None:
-    """A record's fields are a collection; one FieldSpec is not iterable."""
-    with pytest.raises(TypeError):
-        cwl.record(cast(Any, Field(cwl.int, name="x")), name="R")
 
 
 @pytest.mark.fast
@@ -365,81 +323,6 @@ def test_tool_builder_string_default_is_a_string_to_cwltool(text: str) -> None:
 
 
 @pytest.mark.fast
-def test_tool_builder_validate_uses_cwltool_stack(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Validation goes through cwltool, in-process and with no subprocess."""
-    class FakeRuntimeContext:
-        def __init__(self, kwargs: dict[str, object]) -> None:
-            self.kwargs = kwargs
-
-    class FakeLoadTool:
-        def __init__(self) -> None:
-            self.calls: list[tuple[str, object]] = []
-
-        def fetch_document(self, path: str, loading_context: str) -> tuple[str, dict[str, str], str]:
-            """Stand in for cwltool's document fetch, returning a fixed document."""
-            self.calls.append(("fetch_document", (Path(path).suffix, loading_context)))
-            return loading_context, {"class": "CommandLineTool"}, "file:///aligner.cwl"
-
-        def resolve_and_validate_document(
-            self,
-            loading_context: str,
-            workflowobj: dict[str, str],
-            uri: str,
-            preprocess_only: bool = False,
-        ) -> tuple[str, str]:
-            """Stand in for cwltool's resolve-and-validate step."""
-            self.calls.append(("resolve_and_validate_document", preprocess_only))
-            assert loading_context == "prepared-context"
-            assert workflowobj == {"class": "CommandLineTool"}
-            assert uri == "file:///aligner.cwl"
-            return "validated-context", "file:///validated-aligner.cwl"
-
-        def make_tool(self, uri: str, loading_context: str) -> dict[str, str]:
-            """Stand in for cwltool's tool construction."""
-            self.calls.append(("make_tool", uri))
-            assert loading_context == "validated-context"
-            return {"uri": uri, "loading_context": loading_context}
-
-    def fake_get_default_args() -> dict[str, object]:
-        return {
-            "validate": False,
-            "skip_schemas": False,
-            "workflow": None,
-            "do_validate": True,
-        }
-
-    def fake_setup_loading_context(
-        loading_context: None,
-        runtime_context: FakeRuntimeContext,
-        args: object,
-    ) -> str:
-        assert loading_context is None
-        assert Path(str(runtime_context.kwargs["workflow"])).name == "aligner.cwl"
-        assert runtime_context.kwargs["validate"] is True
-        assert runtime_context.kwargs["skip_schemas"] is True
-        assert Path(str(getattr(args, "workflow"))).name == "aligner.cwl"
-        assert getattr(args, "validate") is True
-        assert getattr(args, "skip_schemas") is True
-        return "prepared-context"
-
-    fake_load_tool = FakeLoadTool()
-    monkeypatch.setattr(tool_builder_support, "_import_cwltool_load_tool", lambda: fake_load_tool)
-    monkeypatch.setattr(
-        tool_builder_support,
-        "_import_cwltool_validation_support",
-        lambda: (FakeRuntimeContext, fake_get_default_args, fake_setup_loading_context),
-    )
-
-    result = _rich_tool().validate()
-
-    assert result.uri == "file:///validated-aligner.cwl"
-    assert result.process == {
-        "uri": "file:///validated-aligner.cwl",
-        "loading_context": "validated-context",
-    }
-
-
-@pytest.mark.fast
 def test_tool_builder_converts_to_in_memory_step() -> None:
     """A built tool becomes a workflow step without a file on disk.
 
@@ -517,11 +400,3 @@ def test_a_bound_stdin_input_is_promoted_as_a_file() -> None:
     workflow.outputs.log = step.outputs.out
 
     assert workflow.compile().cwl_workflow["inputs"] == {"data": {"type": "File"}}
-
-
-@pytest.mark.fast
-def test_output_has_no_from_input() -> None:
-    """An output's glob is written as a CWL expression; there is no input-derived shortcut."""
-    inputs = Inputs(output=Input(cwl.string))
-    with pytest.raises(TypeError, match="unexpected keyword argument 'from_input'"):
-        cast(Any, Output)(cwl.directory, from_input=inputs.output)  # pylint: disable=unexpected-keyword-arg

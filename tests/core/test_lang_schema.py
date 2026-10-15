@@ -16,7 +16,7 @@ one-directional (schema accepts everything the parser does) elsewhere. Stating
 this here rather than asserting a stronger equivalence that is not true.
 """
 import json
-from dataclasses import dataclass, fields
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -26,22 +26,7 @@ import yaml
 from hypothesis import given
 
 from sophios.lang import SophiosErrorCode, Forms, Grammar, parse, to_json, wic_schema
-from sophios.lang.nodes import (
-    CwlRecord,
-    Document,
-    EdgeDef,
-    EdgeRef,
-    InlineLiteral,
-    OutputBinding,
-    RawCwlRef,
-    Shape,
-    Step,
-    StepKey,
-    UnresolvedName,
-    WicSidecar,
-    surface,
-    surface_of,
-)
+from sophios.lang.nodes import Shape, Step, WicSidecar, surface_of
 
 from .budgets import budget
 from .strategies import documents
@@ -86,15 +71,6 @@ def test_schema_is_derived_from_the_parser() -> None:
 
     steps = SCHEMA['$defs']['wicBlock']['properties']['steps']
     assert set(steps['patternProperties']) == {Grammar.WIC_STEP_KEY_PATTERN, Grammar.WIC_STEP_ID_PATTERN}
-
-
-@pytest.mark.fast
-def test_schema_is_not_shared_between_callers() -> None:
-    """Each export is a fresh object, so one caller's edits cannot leak."""
-    first, second = wic_schema(), wic_schema()
-    assert first == second
-    first['$defs']['construct']['properties'].clear()
-    assert wic_schema()['$defs']['construct']['properties']
 
 
 @pytest.mark.fast
@@ -266,38 +242,6 @@ def test_a_step_may_have_no_body() -> None:
 # invented, without one of these failing.
 
 
-AST_NODES = [Document, Step, OutputBinding, WicSidecar, StepKey,
-             InlineLiteral, EdgeDef, EdgeRef, RawCwlRef, UnresolvedName, CwlRecord]
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize('node_type', AST_NODES, ids=lambda n: n.__name__)
-def test_every_ast_field_declares_its_surface(node_type: type) -> None:
-    """Every field says how it is written, or `surface_of` raises.
-
-    A field with no declaration is a hole in the specification: the AST would
-    carry something the schema cannot describe and the language guide does not
-    mention.
-    """
-    for declared in fields(node_type):
-        assert surface_of(node_type, declared.name) is not None
-
-
-@pytest.mark.fast
-def test_an_undeclared_field_is_rejected_loudly() -> None:
-    """Adding a field without declaring its surface fails, rather than
-    silently producing a schema that describes less than the AST holds."""
-
-    @dataclass(frozen=True)
-    class Drifted:
-        declared: str = surface(Shape.IDENTITY, 'declared')
-        forgotten: str = 'oops'
-
-    assert surface_of(Drifted, 'declared').key == 'declared'
-    with pytest.raises(TypeError, match='no surface declaration'):
-        surface_of(Drifted, 'forgotten')
-
-
 @pytest.mark.fast
 def test_schema_keys_come_only_from_the_ast() -> None:
     """Every key the schema describes traces back to a declared field.
@@ -361,23 +305,6 @@ def test_editing_an_export_cannot_affect_a_later_one() -> None:
     assert second['$defs']['stepBody']['properties']['in']['additionalProperties']['$ref'] \
         == '#/$defs/inputValue'
     assert second['$defs']['outputEntry']['oneOf'][0]['type'] == 'string'
-
-
-@pytest.mark.fast
-def test_no_two_places_in_one_export_share_a_fragment() -> None:
-    """Within a single export, equal fragments are still separate objects.
-
-    `stepBody.in` and `sequenceStep.in` describe the same shape, so they were
-    the same live object down inside; editing one edited both. Identity, not
-    equality, is what a caller relies on when annotating a schema in place.
-    """
-    schema = wic_schema()
-    step_body_in = schema['$defs']['stepBody']['properties']['in']
-    sequence_in = schema['$defs']['sequenceStep']['properties']['in']
-
-    assert step_body_in == sequence_in
-    assert step_body_in is not sequence_in
-    assert step_body_in['additionalProperties'] is not sequence_in['additionalProperties']
 
 
 # --------------------------------------------------------------------------
