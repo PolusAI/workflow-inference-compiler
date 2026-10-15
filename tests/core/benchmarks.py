@@ -1,12 +1,12 @@
-"""Compile-cost cases, run weekly and gating nothing.
+"""Compile-cost cases, run weekly; their timings gate nothing.
 
 Not a property suite and not hermetic: the corpus half is the point — a trend
 over the workflows people actually compile — so it imports `wic_corpus` and is
 excluded from the oracle's module list.
 
-No thresholds, no assertions: `main` returns 0 whatever the numbers say. A
-benchmark that can fail a build is a gate, and correctness is the property
-suite's job. `parse_only` deliberately does not compile for real, which is what
+No thresholds: however slow a week is, no number fails anything. A case that
+raises is reported in the table, the other cases still run, and `main` then
+returns 1. `parse_only` deliberately does not compile for real, which is what
 lets a slow week be pinned to the parser or to the compiler.
 """
 import sys
@@ -206,7 +206,7 @@ CASES: Final[tuple[Case, ...]] = tuple(
 
 
 def main() -> int:
-    """Time every case and print a table. Always returns 0."""
+    """Time every case and print a table. Returns 1 if a case raised, else 0."""
     # Discovery is shared setup, not a property of whichever corpus path sorts
     # first. Keep it lazy when a caller selects only synthetic cases.
     if any(case.name.startswith('corpus/') for case in CASES):
@@ -216,6 +216,7 @@ def main() -> int:
     print('|---|---:|')
     corpus_total = 0.0
     all_total = 0.0
+    failed = 0
     for case in CASES:
         start = time.perf_counter()
         try:
@@ -223,17 +224,18 @@ def main() -> int:
             elapsed_seconds = time.perf_counter() - start
             elapsed = f'{elapsed_seconds:.3f}'
         except Exception as exc:  # pylint: disable=broad-except
-            # A case that fails is reported and skipped. This job does not
-            # gate, so a broken case must not stop the other numbers arriving.
+            # A case that raises is reported and the rest still run, so one
+            # broken case does not hide the other numbers; the run then fails.
             elapsed_seconds = time.perf_counter() - start
             elapsed = f'error: {type(exc).__name__}'
+            failed += 1
         all_total += elapsed_seconds
         if case.name.startswith('corpus/'):
             corpus_total += elapsed_seconds
         print(f'| {case.name} | {elapsed} |')
     print(f'| corpus (total) | {corpus_total:.3f} |')
     print(f'| all cases (total) | {all_total:.3f} |')
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == '__main__':

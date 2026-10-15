@@ -1,9 +1,10 @@
 name: Benchmarks
 
-# Compile-cost cases, run weekly on the self-hosted runner. This is a trend,
-# not a gate: it never fails the build (see tests/core/benchmarks.py). It runs
-# on a schedule rather than on every push because the numbers only mean
-# anything compared week over week on one consistent runner.
+# Compile-cost cases, run weekly on the self-hosted runner. The timings are a
+# trend, so no number fails the run; a case that raises does (see
+# tests/core/benchmarks.py). It runs on a schedule rather than on every push
+# because the numbers only mean anything compared week over week on one
+# consistent runner.
 
 on:
   # push:  # Do NOT run benchmarks on every push!
@@ -13,11 +14,6 @@ on:
     # for on that day.
     - cron: '0 0 * * 5'
   workflow_dispatch:
-    inputs:
-      prove_non_gating:
-        description: 'Run a deliberately failing case to show the job stays green'
-        required: false
-        default: 'false'
 
 defaults:
   run:
@@ -103,31 +99,14 @@ jobs:
 
       - name: Generate Sophios Python API Workflows (*.py -> *.wic)
         if: always()
-        # Corpus preparation, not a check. test_compile_python_workflows is an
-        # assertion over workflow scripts in an unpinned external repository,
-        # and lint_and_test already owns that failure on every change; letting
-        # it red this job would make the trend gate on someone else's
-        # correctness regression. Nothing is lost: the test writes each
-        # workflow's *.wic inside its loop and only fails afterwards, so every
-        # script that generated has already put its files on disk. Only the
-        # manifest is skipped, and this job never reads it.
-        continue-on-error: true
+        # Corpus preparation: the corpus cases compile the *.wic files it writes.
         run: cd sophios/ && pytest tests/core/test_python_api_workflow.py -k test_compile_python_workflows
-
-      - name: Prove the job stays green (dispatch-only)
-        if: inputs.prove_non_gating == 'true'
-        # Not a real case failing — a whole step failing, deliberately, to
-        # demonstrate the claim on demand rather than merely asserting it: a
-        # guard nobody has seen fire is a guard whose green means nothing.
-        continue-on-error: true
-        run: exit 1
 
       - name: Run benchmarks
         id: benchmarks
-        # `pipefail` carries Python's status across `tee`; `|| true` keeps a
-        # case-runner failure green. `continue-on-error` also covers failures
-        # before that pipeline. This job is a trend, not a gate — see §6.3.
-        continue-on-error: true
+        if: always()
+        # `pipefail` carries Python's status across `tee`: a case that raised
+        # fails the step once the whole table is written.
         timeout-minutes: 60
         run: |
           cd sophios/
@@ -137,4 +116,4 @@ jobs:
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           set -o pipefail
-          python tests/core/benchmarks.py | tee -a "$GITHUB_STEP_SUMMARY" || true
+          python tests/core/benchmarks.py | tee -a "$GITHUB_STEP_SUMMARY"
