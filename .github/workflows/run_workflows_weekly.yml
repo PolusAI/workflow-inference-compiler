@@ -57,6 +57,9 @@ jobs:
       group: ${{ github.workflow }}-weekly-toil-${{ github.ref }}
       cancel-in-progress: true
     runs-on: [self-hosted, linux]
+    # A workflow that runs away fails the lane at 4 h instead of holding the runner
+    # for GitHub's default of 6 h.
+    timeout-minutes: 240
 
     steps:
     - name: Checkout sophios
