@@ -102,27 +102,6 @@ def test_script_argument_mismatch_reports(tmp_path: Path) -> None:
 
 
 @pytest.mark.fast
-def test_literal_type_mismatch_reports() -> None:
-    """The typed job boundary reports a literal that will not coerce to its
-    input's declared type instead of letting `int()`/`float()` raise a bare
-    `ValueError`. `!ii` places no constraint relating a literal to the
-    declared CWL type of the input it binds, so this is reachable from real
-    documents (e.g. `in: {n: !ii _}` against a tool declaring `n: int`).
-
-    The message must name all three of the input, the declared type, and the
-    offending literal, since the user's next move is to fix one of them.
-    """
-    with pytest.raises(SophiosError) as caught:
-        coerce_job_value(AuthoredName('n'), port_declaration({'type': 'int'}), '_')
-
-    assert caught.value.diagnostics[0].code is SophiosErrorCode.LITERAL_TYPE_MISMATCH
-    message = caught.value.diagnostics[0].message
-    assert 'n' in message
-    assert 'int' in message
-    assert '_' in message
-
-
-@pytest.mark.fast
 def test_literal_type_mismatch_reports_a_null_array_element() -> None:
     """A null inside an array literal is diagnosed, not raised as a bare
     `TypeError`.

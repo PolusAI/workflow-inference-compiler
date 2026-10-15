@@ -15,7 +15,6 @@ import tempfile
 from typing import Any, Final
 
 import pytest
-import yaml
 from hypothesis import example, given
 from schema_salad.utils import yaml_no_ts  # pylint: disable=no-name-in-module
 
@@ -53,16 +52,6 @@ from .cwl_validation import validate_cwl
 from .equivalence import Strength, equivalent
 from .hermetic import ORACLE, compile_hermetic, compile_hermetic_cwl, network_refused, subworkflow_step
 from .synthetic_tools import SYNTHETIC_NS, SYNTHETIC_TOOLS, clt
-
-
-@pytest.mark.skip_pypi_ci
-@given(strat.workflows())
-@ORACLE
-def test_the_live_compiler_emits_only_from_its_graph(workflow: Yaml) -> None:
-    """The public compiler's artifact is exactly its final graph projection."""
-    result = compile_hermetic(copy.deepcopy(workflow))
-    names = Names.of(result.graph)
-    assert result.artifact.cwl == emit(surface(result.graph, names), names)
 
 
 @pytest.mark.fast

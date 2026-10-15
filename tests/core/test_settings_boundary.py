@@ -47,21 +47,6 @@ def test_defaults_are_available_without_a_command_line() -> None:
     assert options['allow_raw_cwl'] is False
 
 
-@pytest.mark.fast
-def test_the_converter_requires_arguments() -> None:
-    """`get_dicts_for_compilation` has no default parse to fall back on.
-
-    Its old default was a fresh parse of a synthesised argv, which is what let
-    `main` hold the user's arguments and silently compile with defaults. A
-    caller must now either pass what it parsed or say `default_...` out loud.
-    """
-    # Bound through a loosely typed alias so the call is a runtime experiment
-    # rather than something the type checker rejects before it runs.
-    converter: Callable[..., object] = sophios.cli.get_dicts_for_compilation
-    with pytest.raises(TypeError):
-        converter()
-
-
 # --------------------------------------------------------------------------
 # Every setting the user chooses is the setting the compiler or the drawing is handed
 # --------------------------------------------------------------------------

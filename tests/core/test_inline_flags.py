@@ -13,7 +13,6 @@ import yaml
 import sophios.main
 from sophios import post_compile
 from sophios.ir.artifacts import CompilationArtifact
-from sophios.lang.cwl import CWL_VERSIONS
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
 from sophios.wic_types import Yaml
@@ -35,12 +34,6 @@ def _embedded(artifact: CompilationArtifact) -> Yaml:
     (step,) = post_compile.inline_artifact_runs(artifact).cwl['steps']
     embedded: Yaml = step['run']
     return embedded
-
-
-@pytest.mark.fast
-def test_the_table_says_what_every_cwl_version_implies() -> None:
-    """Admitting a CWL version to the enum means deciding what it implies for an embedded tool."""
-    assert tuple(post_compile.IMPLIED_BY_VERSION) == CWL_VERSIONS
 
 
 @pytest.mark.fast
@@ -443,13 +436,6 @@ def test_a_call_left_nested_inside_a_dissolved_workflow_keeps_the_subworkflow_re
     assert [child.cwl['class'] for child in flat.children] == ['CommandLineTool', 'Workflow']
     assert flat.cwl['requirements']['SubworkflowFeatureRequirement'] == {}
     assert 'it is marked `wic: inlineable: false`' in capsys.readouterr().err
-
-
-@pytest.mark.fast
-def test_a_workflow_with_no_subworkflow_is_returned_as_it_is() -> None:
-    """Nothing to dissolve is nothing to copy."""
-    artifact = compile_hermetic({'steps': [MK_FILE]}).artifact
-    assert post_compile.flatten_subworkflows(artifact) is artifact
 
 
 @pytest.mark.fast

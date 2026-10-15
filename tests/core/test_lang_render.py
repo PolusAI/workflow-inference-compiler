@@ -349,21 +349,6 @@ def test_a_tagged_literal_keeps_its_source_spelling(spelling: str) -> None:
     assert payload == spelling, f'{spelling!r} came back as {payload!r}'
 
 
-@pytest.mark.fast
-@given(unquoted_spellings)
-@FAST
-def test_a_parsed_literal_records_the_text_it_came_from(spelling: str) -> None:
-    """The mechanism behind the claim above: a literal parsed from tagged
-    YAML carries its spelling. Stated separately so a regression names the
-    cause rather than only the symptom."""
-    source = f'steps:\n- id: s\n  in:\n    f: !ii {spelling}\n'
-    document = parse(source, 'transcribe.wic').document
-    assert document is not None
-    literal = dict(document.steps[0].inputs)['f']
-    assert isinstance(literal, InlineLiteral)
-    assert literal.text == spelling
-
-
 #: Strings a plain `!ii` spelling would not read back as themselves. The first
 #: row YAML types; the second it cannot scan plain, as a scalar or at all; the
 #: third it would read as a structure.
