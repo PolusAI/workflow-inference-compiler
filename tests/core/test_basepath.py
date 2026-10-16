@@ -169,8 +169,9 @@ def test_a_basepath_outside_or_at_a_search_path_hides_nothing(tmp_path: Path) ->
 @pytest.mark.fast
 def test_the_cli_and_python_write_a_run_to_the_same_places(
         project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """The same workflow run with the same base path leaves the same files there and a runner command that
-    writes provenance, the summary and the outputs there, from `--basepath` and from `run(basepath=)`."""
+    """The same workflow run with the same base path leaves its root and job there and a runner command that
+    writes provenance, the summary and the outputs there, from `--basepath` and from `run(basepath=)`. The
+    command line writes the tree beside the root; Python, one document."""
     commands: dict[str, str] = {}
     monkeypatch.setattr(run_local, 'generate_run_script', lambda cmdline: commands.update(last=cmdline))
     monkeypatch.setattr(python_runtime.preflight, 'prepare', lambda *_a, **_k: None)
@@ -184,7 +185,8 @@ def test_the_cli_and_python_write_a_run_to_the_same_places(
         basepath=str(python_base), run_args_dict={'generate_run_script': 'yes'})
     from_python = commands['last']
 
-    assert _files(cli_base) == _files(python_base) >= {'w.cwl', 'w_inputs.yml'}
+    assert _files(cli_base) == {'w.cwl', 'w_inputs.yml', 'w~noop.cwl'}
+    assert _files(python_base) == {'w.cwl', 'w_inputs.yml'}
     for base, cmdline in ((cli_base, from_cli), (python_base, from_python)):
         resolved = base.resolve()
         assert f'--provenance {shlex.quote(f"{resolved}/provenance/w")}' in cmdline

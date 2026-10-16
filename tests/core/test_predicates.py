@@ -7,123 +7,154 @@ that fact rather than by which register row they came from is the point — a
 reader can tell at a glance which properties compare two runs and which read
 one.
 
-One claim lives here, **namespace injectivity**: distinct ports never
-collide after namespacing. Edge soundness is `cwltool --validate`'s, over the
-same generator (`test_emit.test_emit_validates_as_cwl_v1_2`); the fixed-point
-guard's is `test_infer_phase.test_iteration_exhaustion_is_exactly_wic022`'s.
+One claim lives here, **made-name injectivity**: distinct authored steps and
+ports never get the same made name. Edge soundness is `cwltool --validate`'s,
+over the same generator (`test_emit.test_emit_validates_as_cwl_v1_2`); the
+fixed-point guard's is `test_infer_phase.test_iteration_exhaustion_is_exactly_wic022`'s.
 """
 import copy
-
 import pytest
-from hypothesis import given
+from hypothesis import example, given
+from hypothesis import strategies as st
 
-from sophios.lang.diagnostics import SophiosError
-from sophios.lang.error_codes import SophiosErrorCode
-from sophios.ir.artifacts import CompilationResult
-from sophios.ir.names import Names
-from sophios.ir.types import AuthoredName, DerivedName
-from sophios.wic_types import Yaml
+from sophios.ir.artifacts import CompilationArtifact
+from sophios.utils_cwl import desugar_into_canonical_normal_form
+from sophios.wic_types import Cwl, StepId, Tool, Tools, Yaml
 
-from . import ast_strategies as strat
-from .hermetic import ORACLE, compile_hermetic
-from .synthetic_tools import outputs_of
+from .hermetic import ORACLE, compile_hermetic, subworkflow_step
+from .synthetic_tools import SYNTHETIC_NS, clt
 
 # --------------------------------------------------------------------------
-# Namespace injectivity
+# Made-name injectivity
 # --------------------------------------------------------------------------
 
+#: Authored names (wic045 admits `[A-Za-z0-9_.-]`) over a small alphabet, so
+#: that one name is often another's prefix.
+_NAMES = st.from_regex(r'[ab][ab_.-]{0,3}', fullmatch=True)
+_SEPARATORS = st.sampled_from('_.-')
 
-def _expected_port_names(yml: Yaml, compiled: CompilationResult) -> dict[str, list[str]]:
-    """The emitted spelling of every port this workflow should expose, per section.
+#: A tool's inputs and outputs, each a set of authored port names.
+_Signature = tuple[frozenset[str], frozenset[str]]
 
-    `inputs` holds the workflow input each inline literal (`wic_inline_input`)
-    becomes, `outputs` each registry step's outputs. They are kept apart
-    because they are separate namespaces: a tool may name an input and an
-    output alike.
 
-    Rebuilt from the AST and the registry rather than read back from the
-    compiled document, and that direction is the whole point: a collision is
-    one dict key silently overwriting another, so from the output alone it is
-    invisible — the document simply has one fewer key than it should, and
-    nothing in it says which one went missing.
+def _tools(signatures: dict[str, _Signature]) -> Tools:
+    """A registry with one stub tool per stem, every port a string."""
+    def tool(inputs: frozenset[str], outputs: frozenset[str]) -> Cwl:
+        return clt({port: {'type': 'string', 'inputBinding': {'position': 1}} for port in inputs},
+                   {port: {'type': 'string', 'outputBinding': {'outputEval': '$("x")'}} for port in outputs},
+                   javascript=True)
+    return {StepId(stem, SYNTHETIC_NS): Tool(f'/synthetic/{stem}.cwl',
+                                             desugar_into_canonical_normal_form(tool(*signature)))
+            for stem, signature in signatures.items()}
 
-    Only the step occurrences are taken from the compiled graph. Each port is
-    a structural `DerivedName`, so each list is distinct by construction and a
-    duplicate in its rendering is `Names` spelling two identities alike.
+
+def _workflow(stems: list[str], signatures: dict[str, _Signature], calls: list[str],
+              bodies: dict[str, Yaml]) -> Yaml:
+    """Tool steps, each input bound to a literal, then a call of each subworkflow named in `calls`."""
+    steps: list[Yaml] = [{'id': stem, 'in': {port: {'wic_inline_input': f'{stem}/{port}'}
+                                             for port in sorted(signatures[stem][0])}}
+                         for stem in stems]
+    return {'steps': steps + [subworkflow_step(f'{name}.wic', copy.deepcopy(bodies[name])) for name in calls]}
+
+
+@st.composite
+def _signatures(draw: st.DrawFn) -> dict[str, _Signature]:
+    """Tools whose names are built to meet: step `x` with port `y·z` beside
+    step `x·y` with port `z`, `·` being `_`, `.` or `-`."""
+    ports = st.frozensets(_NAMES, max_size=2)
+    drawn = draw(st.dictionaries(_NAMES, st.tuples(ports, ports), min_size=1, max_size=3))
+    found = {stem: (set(ins), set(outs)) for stem, (ins, outs) in drawn.items()}
+    for x, separator, y, z in draw(st.lists(st.tuples(_NAMES, _SEPARATORS, _NAMES, _NAMES), max_size=2)):
+        for stem, port in ((x, f'{y}{separator}{z}'), (f'{x}{separator}{y}', z)):
+            for side in found.setdefault(stem, (set(), set())):
+                side.add(port)
+    return {stem: (frozenset(ins), frozenset(outs)) for stem, (ins, outs) in found.items()}
+
+
+@st.composite
+def _trees(draw: st.DrawFn) -> tuple[str, Yaml, dict[str, _Signature]]:
+    """A root name, a workflow, and the signatures of the tools it runs.
+
+    The root runs every tool at least once, so names built to meet do meet,
+    and may repeat a step `x` beside a step named `x·n`, `n` being the
+    position of one copy of `x`. Steps repeat, a subworkflow may be called
+    more than once, and a call may be named like a tool; subworkflows nest up
+    to two levels below the root.
+    A subworkflow name keeps one body throughout, since the registry holds
+    one body per name.
     """
-    steps = compiled.graph.steps
-    assert [step.id.name for step in steps] == [str(step['id']) for step in yml['steps']], (
-        'the compiled graph no longer lists the authored steps in order')
-    names = Names.of(compiled.graph)
-    tools = [(node.id, step) for node, step in zip(steps, yml['steps'])
-             if not str(step['id']).endswith('.wic')]
-    return {
-        'inputs': [names.port(DerivedName(identity, AuthoredName(key)))
-                   for identity, step in tools
-                   for key, value in (step.get('in') or {}).items()
-                   if isinstance(value, dict) and 'wic_inline_input' in value],
-        'outputs': [names.port(DerivedName(identity, AuthoredName(key)))
-                    for identity, step in tools for key in outputs_of(str(step['id']))],
-    }
+    signatures = draw(_signatures())
+    stems = st.lists(st.sampled_from(sorted(signatures)), min_size=1, max_size=3)
+    callees = draw(st.lists(_NAMES, max_size=2, unique=True))
+    bodies: dict[str, Yaml] = {}
+
+    def calls(names: list[str]) -> list[str]:
+        return draw(st.lists(st.sampled_from(names), max_size=2)) if names else []
+
+    for depth, name in reversed(list(enumerate(callees))):
+        bodies[name] = _workflow(draw(stems), signatures, calls(callees[depth + 1:]), bodies)
+    order = draw(st.permutations(sorted(signatures)))
+    repeated = draw(st.lists(st.tuples(st.sampled_from(order), _SEPARATORS), max_size=2, unique_by=lambda x: x[0]))
+    numbered = sorted({f'{x}{separator}{order.index(x) + 1}' for x, separator in repeated} - set(signatures))
+    signatures |= {name: (frozenset(), frozenset()) for name in numbered}
+    root = order + numbered + [x for x, _separator in repeated] + draw(stems)
+    return draw(_NAMES), _workflow(root, signatures, calls(callees), bodies), signatures
 
 
-def _assert_every_port_survives(yml: Yaml, compiled: CompilationResult) -> None:
-    """Each expected port renders uniquely and is a key of its emitted section."""
-    cwl = compiled.artifact.cwl
-    for section, expected in _expected_port_names(yml, compiled).items():
-        duplicates = sorted({name for name in expected if expected.count(name) > 1})
-        assert not duplicates, f'two distinct {section} namespace to the same string: {duplicates}'
-        missing = sorted(set(expected) - set(cwl.get(section) or {}))
-        assert not missing, f'namespaced {section} were dropped or overwritten: {missing}'
+def _exposed(yml: Yaml, signatures: dict[str, _Signature]) -> tuple[int, int]:
+    """How many inputs and outputs `yml` exposes: one per literal and one per
+    tool output, through every subworkflow call. Counted from the source, so
+    a made name that two of them share shows as a missing key."""
+    inputs = outputs = 0
+    for step in yml['steps']:
+        if 'subtree' in step:
+            nested = _exposed(step['subtree'], signatures)
+            inputs, outputs = inputs + nested[0], outputs + nested[1]
+        else:
+            inputs, outputs = inputs + len(step['in']), outputs + len(signatures[step['id']][1])
+    return inputs, outputs
 
 
-def _refuses_no_collision(error: SophiosError) -> None:
-    """A diagnosed workflow may be skipped, but not one refused for a collision."""
-    assert all(diagnostic.code is not SophiosErrorCode.DUPLICATE_DOCUMENT_NAME
-               for diagnostic in error.diagnostics), f'two distinct ports rendered alike: {error}'
+def _assert_every_name_is_distinct(yml: Yaml, signatures: dict[str, _Signature],
+                                   artifact: CompilationArtifact, files: list[str]) -> None:
+    """Each step of `yml` keeps its own id, each exposed port its own key, and
+    each process its own file, in `artifact` and every workflow it calls."""
+    cwl = artifact.cwl
+    ids = [str(step['id']) for step in cwl['steps']]
+    assert len(set(ids)) == len(yml['steps']) == len(ids), f'steps share an id in {artifact.name}: {ids}'
+    inputs, outputs = _exposed(yml, signatures)
+    assert len(cwl['inputs']) == inputs, f'inputs share a name in {artifact.name}: {sorted(cwl["inputs"])}'
+    assert len(cwl['outputs']) == outputs, f'outputs share a name in {artifact.name}: {sorted(cwl["outputs"])}'
+    assert len(artifact.children) == len(yml['steps'])
+    for step, child in zip(yml['steps'], artifact.children):
+        files.append(child.name)
+        if 'subtree' in step:
+            _assert_every_name_is_distinct(step['subtree'], signatures, child, files)
 
 
 @pytest.mark.skip_pypi_ci
 @pytest.mark.slow
-@given(strat.workflows().filter(lambda w: len(w['steps']) >= 2))
+@given(_trees())
+@example(('r', {'steps': [{'id': 'a', 'in': {'b_c': {'wic_inline_input': 'v'}}},
+                          {'id': 'a_b', 'in': {'c': {'wic_inline_input': 'w'}}}]},
+          {'a': (frozenset({'b_c'}), frozenset({'b_c'})), 'a_b': (frozenset({'c'}), frozenset({'c'}))}))
 @ORACLE
-def test_distinct_ports_never_collide_after_namespacing(yml: Yaml) -> None:
-    """Every port a workflow has survives namespacing under its own name.
+def test_distinct_authored_names_never_share_a_made_name(tree: tuple[str, Yaml, dict[str, _Signature]]) -> None:
+    """No two distinct steps or ports get the same made name, whatever
+    `[A-Za-z0-9_.-]` names they were written with.
 
-    BLIND SPOTS: quantifies over the stems in the synthetic registry, none of
-    which contain `__`. The workflow-stem half of that gap is covered by the
-    parametrised test below, which supplies stems containing both separators
-    directly. Subworkflow steps are skipped: their ports come from the subtree,
-    so reconstructing them independently would mean recursing through it, and
-    the relative namespacing that governs them is what the `split` rewrite
-    already quantifies over. A workflow the compiler *diagnoses* is skipped
-    rather than failed — this claim is about the ports a successful
-    compilation produces — unless the diagnosis is `wic031`, which is this
-    claim failing at Emit rather than here.
+    A made name is a step id, `<step>~<port>` for a port exposed through a
+    step, or `<root>~<address>` for a written file; a step id repeated in one
+    workflow is `<id>@<index>` on every copy. The drawn names are built to
+    meet under a join on `_`, `.` or `-`, steps repeat, a call may share a
+    tool's name, and subworkflows nest and repeat, so each of those spellings
+    is exercised where it could collide. A collision is a dict key silently
+    overwritten, which the compiled document cannot show by itself; the
+    expected counts are therefore taken from the source.
     """
-    try:
-        compiled = compile_hermetic(copy.deepcopy(yml), 'ns')
-    except SophiosError as error:
-        _refuses_no_collision(error)
-        return  # a diagnosed workflow has no ports to collide; see BLIND SPOTS
-    _assert_every_port_survives(yml, compiled)
-
-
-@pytest.mark.skip_pypi_ci
-@pytest.mark.slow
-@pytest.mark.parametrize('stem', ['ns', 'a__b', 'x___y'], ids=['plain', 'double', 'triple'])
-def test_injectivity_survives_a_workflow_name_containing_the_separators(stem: str) -> None:
-    """Steps render as `{workflow}__step__{i}__{name}` and ports join on `___`.
-
-    Nothing stops a workflow's name containing either separator — `a__b` is a
-    legal filename — so the spelling is not injective by construction for
-    ordinary input. Either distinct identities still render apart, or this
-    finds the collision; both are results worth having, which is why the case
-    is stated rather than avoided.
-    """
-    yml: Yaml = {'steps': [
-        {'id': 'mk_file', 'in': {'name': {'wic_inline_input': 'a.txt'}}},
-        {'id': 'mk_text', 'in': {'name': {'wic_inline_input': 'b.txt'}}},
-    ]}
-    compiled = compile_hermetic(copy.deepcopy(yml), stem)
-    _assert_every_port_survives(yml, compiled)
+    root, yml, signatures = tree
+    compiled = compile_hermetic(copy.deepcopy(yml), root, tools=_tools(signatures))
+    files: list[str] = []
+    _assert_every_name_is_distinct(yml, signatures, compiled.artifact, files)
+    duplicates = sorted({name for name in files if files.count(name) > 1})
+    assert not duplicates, f'two processes are written to the same file: {duplicates}'

@@ -337,6 +337,10 @@ WINDOWS_EXCLUDED: Final = frozenset({
     # wording of cwltool's job-failure record, which the summary reads; the other
     # tests of the summary use a stand-in for cwltool and run on every leg.
     'tests/core/test_python_api_workflow.py::test_a_real_failed_step_is_named_with_its_status',
+    # Two roots of a few echo steps, nested two deep, each run through the command line by cwltool
+    # and by Toil with provenance, in about twenty seconds. Which files are written is checked on
+    # every leg by `test_names_emitted.py`; only a runner shows what its snapshot holds.
+    'tests/core/test_provenance.py::test_every_step_file_is_in_the_provenance_snapshot',
 })
 
 

@@ -61,10 +61,9 @@ class SophiosErrorCode(StrEnum):
     #: A program the run calls that is not installed here, or cannot run on this platform.
     PROGRAM_MISSING = 'wic029'
     RECURSIVE_ALIAS = 'wic030'
-    #: Two different things the emitted document would spell the same way:
-    #: ports, e.g. an authored name equal to one the compiler derives, or the
-    #: URIs one `$namespaces` prefix would stand for in the `format:` of a
-    #: promoted port.
+    #: Two different URIs bound to one `$namespaces` prefix by a workflow and
+    #: the tools it promotes ports from, when a promoted port's `format:` uses
+    #: that prefix: the emitted document could keep only one of them.
     DUPLICATE_DOCUMENT_NAME = 'wic031'
     #: A scatter entry naming no input of its step, or one nothing binds once
     #: inference is done. On a subworkflow call the inputs are the ones the
@@ -283,8 +282,9 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         'Remove the alias that refers back to its own anchor.'),
     SophiosErrorCode.DUPLICATE_DOCUMENT_NAME: Explanation(
         Kind.DOCUMENT,
-        'Two ports the compiled CWL would spell the same way, or a namespace prefix bound to two URIs.',
-        'Rename one of the two ports, or bind the prefix to one URI (.wic reference §5.2).'),
+        'A promoted port whose `format:` uses a `$namespaces` prefix that two of its sources bind to different '
+        'URIs.',
+        'Bind the prefix to the same URI in both, or use another prefix in one of them (.wic reference §5.2).'),
     SophiosErrorCode.UNKNOWN_SCATTER_PORT: Explanation(
         Kind.DOCUMENT,
         'A `scatter:` entry that is not an input of its step.',

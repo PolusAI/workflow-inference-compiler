@@ -62,7 +62,7 @@ def _compile_loaded_document(yaml_path: str, bundle: SourceBundle,
                              ) -> tuple[CompilationResult, tuple[realtime.Analysis, ...]]:
     """Compile to a graph-derived result, and each real-time analysis it declares."""
     try:
-        result = compiler.compile_source(bundle, compiler_options, relative_run_path=True, testing=False)
+        result = compiler.compile_source(bundle, compiler_options, testing=False)
         analyses = realtime.compile_analyses(result.realtime, yml_paths, tools_cwl, compiler_options)
     except SophiosError:
         # The library reports; only this adapter is allowed to exit. The
@@ -392,7 +392,7 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
         # The runner reads the job from `basepath`, so a relative path is written absolute: read beside the workflow.
         artifact = replace(artifact, job_inputs=io.absolute_paths(bound, root_dir))
-        io.write_artifacts_to_disk(artifact, Path(basepath), True, args.inputs_file)
+        io.write_artifacts_to_disk(artifact, Path(basepath), args.inputs_file)
         plans = realtime.write(analyses, Path(basepath), artifact.name, root_dir)
         draw_after_write()
         # Check the machine, then pull the container images, the real-time analyses' too: they run with --disable-pull
@@ -413,7 +413,7 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         _run(args, unknown_args, artifact.name, realtime_plans=plans)
 
     elif args.generate_cwl_workflow:
-        io.write_artifacts_to_disk(artifact, Path(args.basepath), True, args.inputs_file)
+        io.write_artifacts_to_disk(artifact, Path(args.basepath), args.inputs_file)
         realtime.write(analyses, Path(args.basepath), artifact.name, root_dir)
         draw_after_write()
     else:

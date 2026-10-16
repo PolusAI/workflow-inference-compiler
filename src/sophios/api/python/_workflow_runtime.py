@@ -451,7 +451,7 @@ def _compile_bundle(
         ParseResult(workflow_document(workflow), Diagnostics()),
         Path(workflow.process_name).stem,
         RegistrySnapshot.from_tools(merged_tools, workflows=_nested_documents(workflow)))
-    return bundle, compiler.compile_source(bundle, options, relative_run_path=True, testing=False)
+    return bundle, compiler.compile_source(bundle, options, testing=False)
 
 
 #: The background of a drawing from Python: opaque, so it reads in a light or a dark notebook,
@@ -602,7 +602,7 @@ def run_workflow(
     bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
     artifact = replace(artifact, job_inputs=input_output.absolute_paths(bound, Path.cwd()))
     inputs_file = resolved_run_args.get("inputs_file", "")
-    input_output.write_artifacts_to_disk(artifact, Path(basepath), True, inputs_file)
+    input_output.write_artifacts_to_disk(artifact, Path(basepath), inputs_file)
     plans = realtime.write(analyses, Path(basepath), workflow.process_name, Path.cwd())
     extra = normalize_artifact_job_inputs(artifact, input_output.read_inputs_file(inputs_file)) if inputs_file else {}
     # The inputs file wins over a value bound in Python for the same input when the job is written.

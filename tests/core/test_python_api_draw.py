@@ -21,9 +21,14 @@ def _workflow() -> Workflow:
     return Workflow([touch, append, cat], "wf")
 
 
+def _box_labels(drawing: graphviz.Digraph) -> list[str]:
+    """The label of each box, in the order the drawing declares the boxes."""
+    return re.findall(r'\[label="?([\w@~]+)"? ', drawing.source)
+
+
 def _edge_colours(drawing: graphviz.Digraph) -> dict[tuple[str, str], str]:
     """The colour of each edge, by the labels of the steps it joins."""
-    edges = re.findall(r'^\s*"?wf__step__\d__(\w+)"? -> "?wf__step__\d__(\w+)"? \[color=(\w+)\]$',
+    edges = re.findall(r'^\s*"?(\w+)"? -> "?(\w+)"? \[color=(\w+)\]$',
                        drawing.source, re.MULTILINE)
     return {(source, sink): colour for source, sink, colour in edges}
 
@@ -61,8 +66,11 @@ def test_draw_infers_as_compile_does() -> None:
 
 @pytest.mark.fast
 def test_draw_labels_edges_and_boxes_as_the_flags_do() -> None:
-    """`label_edges` names each edge's port, and `label_stepname` names each box by its generated name."""
-    drawing = _workflow().draw(label_edges=True, label_stepname=True)
-    assert 'label=file' in drawing.source
-    assert 'label=wf__step__1__touch' in drawing.source
-    assert 'label=touch ' not in drawing.source
+    """`label_edges` names each edge's port, and `label_stepname` names each box by its name in the
+    compiled CWL, which differs from the step's id when a workflow output has that id: `touch` is
+    compiled as `touch@1`."""
+    assert 'label=file' in _workflow().draw(label_edges=True).source
+    flow = _workflow()
+    flow.outputs.touch = flow.steps[0].outputs.file
+    assert _box_labels(flow.draw()) == ['touch', 'append', 'cat']
+    assert _box_labels(flow.draw(label_stepname=True)) == ['touch@1', 'append', 'cat']
