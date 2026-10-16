@@ -52,7 +52,7 @@ explains when each kind of check runs and how a diagnostic is laid out.
 | `wic028` | document | An input or output name the step's process does not declare. | Use a port the tool or subworkflow declares. |
 | `wic029` | machine | A program the run calls is not installed, or cannot run on this platform. | Install the program the message names, as it says; on Windows, run Sophios inside WSL. |
 | `wic030` | document | A YAML alias that contains itself. | Remove the alias that refers back to its own anchor. |
-| `wic031` | document | Two ports the compiled CWL would spell the same way, or a namespace prefix bound to two URIs. | Rename one of the two ports, or bind the prefix to one URI (.wic reference §5.2). |
+| `wic031` | document | A promoted port whose `format:` uses a `$namespaces` prefix that two of its sources bind to different URIs. | Bind the prefix to the same URI in both, or use another prefix in one of them (.wic reference §5.2). |
 | `wic032` | document | A `scatter:` entry that is not an input of its step. | Scatter over an input the step declares and binds (.wic reference §6.1). |
 | `wic033` | document | A key the `wic:` block does not have. | Use a key from .wic reference §7, or remove it. |
 | `wic034` | document | A `wic:` value of the wrong shape. | Write the value in the shape .wic reference §7 gives for its key. |

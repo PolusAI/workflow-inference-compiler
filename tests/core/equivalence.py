@@ -39,9 +39,9 @@ class Strength(IntEnum):
     UP_TO_RENAMING = 1
 
     #: `run:` paths may differ; nothing else may. Legitimate because `run:`
-    #: encodes where a document sits relative to its parent — `relative_run_path`
-    #: writes `step_name/stem.cwl` or `'___'.join(namespaces + [stem.cwl])`
-    #: (src/sophios/compiler.py:626-634) — which is embedding, not meaning.
+    #: names the file a process is written to, which depends on what else the
+    #: tree holds (a stem another process took is numbered) — embedding, not
+    #: meaning.
     UP_TO_EMBEDDING = 2
 
     #: Mapping key order may differ; nothing else may. Legitimate because a
@@ -217,11 +217,11 @@ _OUTPUT_NODE: Final = '<output> '
 def _process(step: Yaml) -> Any:
     """The process a step runs, read from its `run:` and never from its id.
 
-    A path contributes its final segment: the compiler writes the process file
-    as `{process}.cwl` under a directory recording where the document sits
-    (`step_id/`, `../`), and that directory is embedding, which a renaming
-    re-roots. An embedded process contributes the whole of itself. Neither is
-    a decoding of an id, so an id's spelling can change without this moving.
+    A path contributes its final segment. The compiler names that file by the
+    root and the step's address, which is embedding, so a document compared up
+    to renaming is first given its tools embedded (`flatten_model`). An
+    embedded process contributes the whole of itself. Neither is a decoding of
+    an id, so an id's spelling can change without this moving.
 
     So a path and an embedded copy of the same process label differently:
     `UP_TO_RENAMING` does not forgive embedding, and a document compared
@@ -615,6 +615,31 @@ def _set_source(bindings: Yaml, name: str, source: str) -> None:
         bindings[name] = source
 
 
+def _inlined_steps(wrapper_id: str, inner: Yaml, formal_to_actual: dict[str, str | None],
+                   step_requirements: Yaml) -> list[Yaml]:
+    """The steps of the flattened subworkflow `inner`, as the call `wrapper_id` inlines them.
+
+    Ids are unique in a document only: two subworkflows may each call a step `captured`, so an
+    inlined step takes its wrapper's id in front of its own, as the compiler's flattening does.
+    """
+    inner_ids = {str(inner_step['id']) for inner_step in inner.get('steps', [])}
+    inlined: list[Yaml] = []
+    for inner_step in inner.get('steps', []):
+        for name, value in inner_step.get('in', {}).items():
+            source = _source_of(value)
+            if source is not None and source in formal_to_actual:
+                actual = formal_to_actual[source]
+                if actual is not None:
+                    _set_source(inner_step['in'], name, actual)
+            elif source is not None and source.partition('/')[0] in inner_ids:
+                _set_source(inner_step['in'], name, f'{wrapper_id}~{source}')
+        inner_step['id'] = f'{wrapper_id}~{inner_step["id"]}'
+        if step_requirements:
+            inner_step['requirements'] = {**step_requirements, **(inner_step.get('requirements') or {})}
+        inlined.append(inner_step)
+    return inlined
+
+
 def flatten_model(artifact: CompilationArtifact) -> Yaml:
     """The compiled document with every subworkflow step inlined whose boundary
     is proved removable, so a split and an unsplit compilation of the same
@@ -624,7 +649,9 @@ def flatten_model(artifact: CompilationArtifact) -> Yaml:
     UP_TO_RENAMING actually forgives: it needs the DAG's topology and every
     step's body right, and it does not need `run:` paths, `steps[].id`, or
     workflow-level port *names* right at all, because those are exactly what
-    that strength already ignores (`equivalence.py`).
+    that strength already ignores (`equivalence.py`). A tool step's `run:` is
+    the tool it runs, embedded: its file is named by the step's address, which
+    is embedding.
 
     Recognising a subworkflow step by its own sub-tree's `class` (`Workflow`,
     not `CommandLineTool`) rather than by an `id` suffix: `rose.sub_trees` has
@@ -653,7 +680,9 @@ def flatten_model(artifact: CompilationArtifact) -> Yaml:
 
     for step, child in zip(steps, children):
         if child.cwl.get('class') != 'Workflow':
-            flat_steps.append(step)
+            # A tool's file is named by where its step sits, which a split moves; the step is
+            # labelled with the process itself.
+            flat_steps.append({**step, 'run': copy.deepcopy(child.cwl)})
             continue
         if set(step) - {'id', 'in', 'run', 'out'} or (child.graph is not None and not child.graph.inlineable):
             # The author wrote more on the call than `in` and `out` (a scatter, a `when`...), or the
@@ -677,24 +706,19 @@ def flatten_model(artifact: CompilationArtifact) -> Yaml:
         # The wrapper's own `in:` maps the subworkflow's formal parameter
         # names (its inner workflow-level `inputs:` keys) to the sources that
         # actually feed them at *this* level.
-        formal_to_actual = {name: _source_of(value) for name, value in step.get('in', {}).items()}
-        for inner_step in inner.get('steps', []):
-            for name, value in inner_step.get('in', {}).items():
-                source = _source_of(value)
-                if source is not None and source in formal_to_actual:
-                    actual = formal_to_actual[source]
-                    if actual is not None:
-                        _set_source(inner_step['in'], name, actual)
-            if step_requirements:
-                inner_step['requirements'] = {**step_requirements, **(inner_step.get('requirements') or {})}
-            flat_steps.append(inner_step)
         wrapper_id = step['id']
+        inner_ids = {str(inner_step['id']) for inner_step in inner.get('steps', [])}
+        flat_steps.extend(_inlined_steps(
+            wrapper_id, inner, {name: _source_of(value) for name, value in step.get('in', {}).items()},
+            step_requirements))
         # The subworkflow's own `outputs:` map its output port names to
         # `outputSource: '<inner step>/<port>'`; anything outside referred to
         # `{wrapper_id}/{that port name}`, so redirect that reference straight
         # to the real producer, which is now itself one of `flat_steps`.
         for out_name, out_value in inner.get('outputs', {}).items():
-            redirects[f'{wrapper_id}/{out_name}'] = out_value['outputSource']
+            producer, _, port = out_value['outputSource'].partition('/')
+            redirects[f'{wrapper_id}/{out_name}'] = (
+                f'{wrapper_id}~{producer}/{port}' if producer in inner_ids else out_value['outputSource'])
 
     for flat_step in flat_steps:
         for name, value in flat_step.get('in', {}).items():

@@ -84,7 +84,7 @@ def test_both_surfaces_compile_to_the_same_cwl(stem: str) -> None:
     workflows = {'global': {path.stem: path for path in COOKBOOK.glob('*.wic')}}
     bundle = bundle_from_disk(wic_path, workflows, _shipped_tools())
     result = sophios.compiler.compile_source(bundle, default_compilation_settings(),
-                                             relative_run_path=True, testing=True)
+                                             testing=True)
     artifact = inline_artifact_runs(result.artifact)
 
     assert _as_compile_returns(normalize_artifact_cwl(artifact), wic_path) == python_side.cwl_workflow
@@ -135,17 +135,17 @@ def test_naming_conventions_give_the_summary_to_the_step_that_wants_it(
 
     def source(settings: CompilerOptions) -> str:
         bundle = bundle_from_disk(wic_path, workflows, _shipped_tools())
-        result = sophios.compiler.compile_source(bundle, settings, relative_run_path=True, testing=True)
+        result = sophios.compiler.compile_source(bundle, settings, testing=True)
         (step,) = [step for step in normalize_artifact_cwl(inline_artifact_runs(result.artifact))['steps']
-                   if step['id'] == f'{stem}__step__3__{consumer}']
+                   if step['id'] == consumer]
         binding = step['in'][port]
         return str(binding['source'] if isinstance(binding, dict) else binding)
 
-    assert source(default_compilation_settings()) == f'{stem}__step__2__summarize/output_details'
+    assert source(default_compilation_settings()) == 'summarize/output_details'
     with_conventions = default_compilation_settings()
     with_conventions['inference_use_naming_conventions'] = True
     with_conventions['renaming_conventions'] = renamings
-    assert source(with_conventions) == f'{stem}__step__2__summarize/output_summary'
+    assert source(with_conventions) == 'summarize/output_summary'
 
 
 @pytest.mark.fast
@@ -161,10 +161,10 @@ def test_python_naming_conventions_give_the_summary_to_the_step_that_wants_it(
     module = import_python_file(f'cookbook_{stem}', COOKBOOK / f'{stem}.py')
 
     def source(compiled: Json) -> str:
-        (step,) = [step for step in compiled['steps'] if step['id'] == f'{stem}__step__3__{consumer}']
+        (step,) = [step for step in compiled['steps'] if step['id'] == consumer]
         binding = step['in'][port]
         return str(binding['source'] if isinstance(binding, dict) else binding)
 
-    assert source(module.workflow().compile().cwl_workflow) == f'{stem}__step__2__summarize/output_details'
+    assert source(module.workflow().compile().cwl_workflow) == 'summarize/output_details'
     with_conventions = module.workflow().compile(inference=inference).cwl_workflow
-    assert source(with_conventions) == f'{stem}__step__2__summarize/output_summary'
+    assert source(with_conventions) == 'summarize/output_summary'

@@ -117,7 +117,7 @@ def test_flattening_agrees_with_the_independent_model(data: st.DataObject) -> No
     if not _closed(nested):
         reject()
     flat = post_compile.flatten_subworkflows(nested)
-    found = equivalent(flatten_model(nested), flat.cwl, Strength.UP_TO_RENAMING)
+    found = equivalent(flatten_model(nested), flatten_model(flat), Strength.UP_TO_RENAMING)
     assert found is None, found
     assert all(isinstance(step['run'], str) for step in flat.cwl['steps'])
     assert all(child.cwl['class'] != 'Workflow' for child in flat.children)

@@ -197,8 +197,8 @@ def test_the_sam3_handoff_snippet_compiles_with_stdout_and_stderr_outputs() -> N
     step.inputs.message = 'hello'
     compiled = Workflow([step], 'wf').compile().cwl_workflow
     step_id = compiled['steps'][0]['id']
-    assert compiled['outputs'][f'{step_id}___out']['type'] == 'File'
-    assert compiled['outputs'][f'{step_id}___err']['type'] == 'File'
+    assert compiled['outputs'][f'{step_id}~out']['type'] == 'File'
+    assert compiled['outputs'][f'{step_id}~err']['type'] == 'File'
     declared = {output['id']: output['type'] for output in compiled['steps'][0]['run']['outputs']}
     assert declared == {'out': 'stdout', 'err': 'stderr'}, 'the tool keeps its own shorthand'
 
@@ -215,7 +215,7 @@ def test_the_word_count_example_runs_wc_on_the_greeting(monkeypatch: pytest.Monk
     assert count['run']['baseCommand'] == ['wc', '-w']
     assert count['run']['stdout'] == 'counts.txt'
     assert count['in']['text'] == {'source': count['in']['text']['source']}
-    assert count['in']['text']['source'].endswith('__step__2__append/file')
+    assert count['in']['text']['source'] == 'append/file'
 
 
 @pytest.mark.fast

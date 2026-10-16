@@ -92,7 +92,7 @@ def test_generate_schemas_writes_the_ast_schema_and_nothing_else(
     from .hermetic import compile_hermetic, subworkflow_step  # pylint: disable=import-outside-toplevel
 
     compiled = compile_hermetic({'steps': [subworkflow_step('child.wic', {'steps': [{'id': 'mk_file'}]})]})
-    generated = 'child__step__1__mk_file___name'
+    generated = 'mk_file~name'
     assert any(generated in child.cwl['inputs'] for child in compiled.artifact.children)
 
     def forbidden(*_args: Any, **_kwargs: Any) -> None:

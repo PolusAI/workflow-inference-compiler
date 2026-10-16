@@ -1111,8 +1111,8 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
                 inferred edges, and blue edges you wrote.
             label_edges (bool): Draw one edge per port, labelled with the port's
                 name, instead of one edge per pair of steps.
-            label_stepname (bool): Label each box with the step's generated
-                name instead of its id.
+            label_stepname (bool): Label each box with the step's name in the
+                compiled CWL instead of its id.
             inline_depth (int): How many levels of nested workflows to draw
                 step by step; a call below that is one box. The default draws
                 every level.

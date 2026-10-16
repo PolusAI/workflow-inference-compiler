@@ -112,7 +112,7 @@ def _cluster(graph: WorkflowGraph, sidecars: _Sidecars, names: Names, settings: 
 
 def _box(graph: WorkflowGraph, step: StepNode, sidecars: _Sidecars, names: Names,
          settings: GraphSettings) -> dict[str, str]:
-    """The attributes of `step`'s box. `--graph_label_stepname` labels it with its generated name;
+    """The attributes of `step`'s box. `--graph_label_stepname` labels it with its compiled CWL name;
     without it, a tool step's `wic: graphviz: label` wins over its id, and its `style` is appended.
     The box of a call to a subworkflow styled `invis` is hidden with it. A box is not filled, so it takes
     the background's colour, and its outline and label take the foreground's."""

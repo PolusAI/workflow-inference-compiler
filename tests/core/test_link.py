@@ -207,9 +207,9 @@ def test_consuming_scatter_participates_in_reference_judgment() -> None:
 def test_a_wrapper_cannot_scatter_over_a_name_generated_inside_its_callee() -> None:
     """A caller scatters only over what its callee declares.
 
-    `child__step__1__mk_b___value` is how the compiler spells `mk_b`'s input
-    once `child.wic` is emitted; a wrapper naming it would depend on the
-    callee's step layout. It is `wic032`.
+    `mk_b~value` is how the compiler spells `mk_b`'s input once `child.wic`
+    is emitted; a wrapper naming it would depend on the callee's step layout.
+    It is `wic032`.
     """
     tools = copy.deepcopy(SYNTHETIC_TOOLS)
     tools[LegacyStepId('mk_a', SYNTHETIC_NS)] = Tool(
@@ -218,7 +218,7 @@ def test_a_wrapper_cannot_scatter_over_a_name_generated_inside_its_callee() -> N
         '/synthetic/mk_b.cwl', clt({'value': {'type': 'File'}}, {}))
     child = 'steps:\n- id: mk_b\n  in: {value: !* shared}\n'
     root = ('steps:\n- id: mk_a\n  out:\n  - value: !& shared\n'
-            '- id: child.wic\n  scatter: [child__step__1__mk_b___value]\n')
+            '- id: child.wic\n  scatter: [mk_b~value]\n')
     typed = _rooted(root, tools, child=child)
     assert typed.graph is None
     [diagnostic] = typed.diagnostics
@@ -311,7 +311,7 @@ steps:
 outputs:
   result:
     type: File
-    outputSource: child__step__1__mk_file/file
+    outputSource: mk_file/file
 '''
     root = '''
 steps:
