@@ -53,16 +53,21 @@ During compilation a name is a value, never a string: a step occurrence is a
 spells them, through `sophios/ir/names.py`:
 
 ```text
-{workflow}__step__{i}__{name}        a step, i its 1-based position
-{step}___{port}                      a port exposed at a boundary
-{outer}___{inner}                    nesting, joined with three underscores
+{name}                 a step, its id less a `.wic`
+{name}@{i}             every step whose id another step, input or output of
+                       its document has (case ignored), i its 1-based position
+{step}~{port}          a port exposed at a boundary
+{outer}~{inner}        nesting (a flattened step, a drawing's node)
+{root}~{address}.cwl   the file a step's process is written to, beside the root
 ```
 
-The spelling is one-way: nothing takes a name apart, and a consumer that
-needs to know what a name came from is given the identity. The names map
-(`<workflow>.names.json`) is the spelled form of that identity for readers
-outside the compiler, and `AuthoredNamesFilter` in `plugins.py` uses it to
-rewrite cwltool's messages during a run.
+A written name matches `[A-Za-z0-9_-][A-Za-z0-9_.-]*` (`sophios/lang/names.py`,
+checked by Lower and by `Step` and `Workflow`, `wic045`), so it contains
+neither `~` nor `@`: a made name, a numbered id and an authored name never
+share a text, and the compiled CWL never holds one id twice. A root's name
+contains no `~`, so two roots in one directory never share a file. The spelling
+is one-way: nothing takes a name apart, and a consumer that needs to know what
+a name came from is given the identity.
 
 Subworkflows use relative namespacing: the parts a parent adds are dropped
 inside the child, so a child's documents are the same wherever it is called
@@ -124,15 +129,24 @@ never the source:
   replaces a call by the child's steps when the call carries only `in` and
   `out` and the child allows it, and leaves the root's inputs, outputs and job
   inputs alone;
-- `inline_artifact_runs` (`--cwl_inline_runtag`, `Workflow.compile()`, the
-  REST route) changes the packaging: every `run:` carries its process, and a
-  v1.0 process keeps the defaults it had as a file through two hints, as
-  cwltool's updater adds them;
+- `inline_artifact_runs` (`--cwl_inline_runtag`, `Workflow.compile()` and
+  `Workflow.run()`, the REST route) changes the packaging: every `run:`
+  carries its process, and a v1.0 process keeps the defaults it had as a file
+  through two hints, as cwltool's updater adds them;
 - `cwl_update_outputs_optional_artifact` and the `when:` Emit writes under
   `partial_failure` implement `--partial_failure_enable`.
 
 Neither packaging option is a second implementation of workflow-call
 semantics.
+
+Each process an artifact carries is a description, never data. When
+`compiler._artifact_tree` emits a step, a tool whose text refers to a file
+relative to itself (`$include`, `$import`, a relative `location`) is packed by
+cwltool where it was read (`utils_cwl.packed`), once per tool per compile; a
+pack error is `wic013` at the step. Inference and Link have already read the
+tool as written. Lower writes a relative `location` in a `.wic` `default:`
+absolute against the `.wic`'s directory, and the Python adapter does the same
+for a `StepInput` default against the working directory.
 
 ## Around the compiler
 
@@ -143,16 +157,22 @@ semantics.
   diagnostics and exit code 1. Nothing below it sees an argparse namespace.
 - `sophios.api.python._workflow_runtime` is the Python API's adapter: it
   builds the `Document` and the registry from `Step` and `Workflow` objects,
-  calls `compile_source`, and runs through the same `preflight` and
-  `run_local` as the command line. The import-linter contract keeps
+  calls `compile_source`, and runs the one document `compile()` returns
+  through the same `run_setup` and `run_local` as the command line. The import-linter contract keeps
   `workflow.py` and `tool_builder.py` from reaching the compiler any other
   way.
+- `sophios.run_setup.prepare` is the one path from an artifact to a run, for
+  both adapters: it binds and writes the job, writes the workflow and its
+  analyses, and calls the pre-flight. The command line gives it the tree, or
+  one document under `--cwl_inline_runtag`; Python gives it one document.
+  `run_local_async.run_cwl_serialized` runs a workflow it is given as it is.
 - `sophios.preflight` answers what a local run needs from this machine, with
   one diagnostic per problem, and pulls images; it is called by both
   adapters and never by a compute submission.
-- `sophios.run_local` builds the runner command and runs cwltool or Toil
-  in-process, with the logging filters that collect failed jobs and rewrite
-  names; `sophios.realtime` compiles each declaration once and runs a
+- `sophios.run_local` builds the runner command (`--provenance` unless
+  `no_provenance`) and runs cwltool or Toil in-process, with the logging
+  filter that collects failed jobs, then names each failed step;
+  `sophios.realtime` compiles each declaration once and runs a
   `Watcher` per plan beside the runner.
 
 ## Compatibility contract

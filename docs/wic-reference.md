@@ -138,11 +138,22 @@ the message names the two forms to write instead. An `id:` that is empty is
 A step may have no body. `multistep1.wic:` under `steps:` calls that
 subworkflow with nothing bound, leaving its inputs to inference.
 
+A step id, a workflow input or output name, and the name of the `.wic` file
+itself are letters, digits, `_`, `.` and `-`, and do not start with `.`;
+anything else is `wic045`. These names become ids in the compiled CWL and
+parts of its file names, and the names Sophios makes join them with `~` and
+number them with `@` ([Compiling to CWL](compiling-to-cwl.md#step-names)),
+so a name you write can never be mistaken for one Sophios made. In the
+compiled CWL a step keeps its id, less a `.wic`; in the sequence above the
+two `append` steps become `append@2` and `append@3`, after their positions.
+A tool's own port names are not checked.
+
 | Code | When | Fix |
 |---|---|---|
 | `wic006` | a step in a sequence has no `id:` | add `id:`, or write `steps:` as a mapping |
 | `wic007` | a step's `id:` is empty | write the tool or workflow the step runs |
 | `wic010` | a step name is repeated in the mapping form, or a step has both a key and an `id:` | use the sequence form, or keep one name |
+| `wic045` | a step id, workflow input or output, or the workflow's name has a character other than letters, digits, `_`, `.` and `-`, or starts with `.` | rename it with those characters |
 
 [Steps and tools](steps-and-tools.md) uses one tool twice under two names.
 
@@ -321,8 +332,9 @@ input and gives it a value from an inputs file.
 
 `!cwl` on a string writes it into the compiled CWL as it is, without checking
 it. What it names must exist in the compiled CWL under that name. A workflow
-input does; a step name does not, since steps are renamed, so `!cwl echo/stdout`
-points at nothing. To use a step's output, define an edge (§4).
+input does; a step output is not one to rely on, since Sophios does not read
+the string and numbers a step id that a second step shares, so `!cwl echo/stdout`
+is no edge it knows of. To use a step's output, define an edge (§4).
 
 It is an escape hatch, for a CWL reference that Sophios does not model.
 Prefer the checked forms wherever one fits:
@@ -385,6 +397,12 @@ and are written out as they are. Sophios adds the requirements the record
 needs: `MultipleInputFeatureRequirement` for several sources or a
 `linkMerge`, `StepInputExpressionRequirement` for a `valueFrom`, and
 `InlineJavascriptRequirement` when the `valueFrom` is an expression.
+
+A `File` or `Directory` in a `default:`, here or under the workflow's
+`inputs:`, that names a relative `location` or `path` is read from the
+directory of the `.wic` file and written absolute into the compiled CWL, so
+`default: {class: File, location: words.txt}` names the `words.txt` beside
+the `.wic` wherever the compiled workflow runs.
 
 These are `wic038`: a key that is not one of those fields; a `source` entry
 that is not a reference (`!ii`, `!cwl`); a Sophios tag inside another field;
@@ -578,15 +596,12 @@ names, as an array when that step scatters. One with no `type:` and no
 producer to take it from is `wic036`. A list `outputSource:`, and `linkMerge`
 or `pickValue` on a workflow output, are `wic038`.
 
-A generated step name (`o__step__1__touch`) resolves in `outputSource:` but
-changes when steps move, so the compile prints a line on stderr naming the
-spelling to write instead. A bare id that more than one step has resolves to
+A bare id that more than one step has resolves to
 the first of them, and the compile says so with the position that spells it.
 
-An input or output you declare that is spelled like a name the compiler
-derives for another port is `wic031`, since the compiled CWL could not tell
-them apart. So is a `$namespaces` prefix that the document and the steps
-whose promoted ports use it bind to different URIs.
+A name you declare is never spelled like one the compiler makes, which
+always contains `~` (§2.1). A `$namespaces` prefix that the document and the
+steps whose promoted ports use it bind to different URIs is `wic031`.
 
 A workflow output gives a result a name that stays the same when you add or
 move steps, for whoever runs the workflow and for a workflow that calls this
@@ -598,7 +613,7 @@ one. Every step output stays available under its generated name as well.
 | `wic028` | the named step has no output of that name | use an output the step declares |
 | `wic036` | no `type:` and no producer to take it from | give a `type:` or an `outputSource:` |
 | `wic038` | a list `outputSource`, or `linkMerge` or `pickValue` on a workflow output | name one step output; merge in a step's input instead |
-| `wic031` | a declared port is spelled like a generated name, or a prefix is bound to two URIs | rename the port, or bind the prefix to one URI |
+| `wic031` | a prefix is bound to two URIs | bind the prefix to one URI |
 
 [Connecting steps](connecting-steps.md) names the greeting file as the
 workflow's output.
@@ -643,8 +658,10 @@ one run.
 `when:` is written into the CWL as it is, and Sophios adds
 `InlineJavascriptRequirement`. CWL evaluates an `inputs.<name>` the step does
 not have as `null`; the compile prints a line on stderr when `when:` reads
-such a name, and a different line when the name is one the compiler
-generates for an input inside a called subworkflow. To give `when:` a value
+such a name. On a subworkflow call the names it can read include those the
+compiler makes for the inputs inside it, such as `touch~filename`; `~`
+cannot appear in `inputs.<name>`, so write `inputs["touch~filename"]`, and
+the line names that form when `when:` reads `inputs.touch`. To give `when:` a value
 the tool does not take, bind it with a record (§3.5):
 
 ```yaml

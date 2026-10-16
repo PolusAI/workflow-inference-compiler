@@ -256,21 +256,19 @@ give `null` when they do not run.
 
 ## What the runner reports
 
-The compiled CWL renames each step `<workflow>__step__<n>__<id>`, and a port
-exposed as a workflow input or output `<renamed step>___<port>`. The runner
-knows only these names. Sophios writes `<workflow>.names.json` into the base
-path, which maps each one back to what you wrote, and during a run cwltool's
-messages name each step both ways. On a machine without `samtools`, a run of
+The compiled CWL calls each step by its id, and a port exposed as a workflow
+input or output `<step>~<port>`, so cwltool's messages name each step as you
+wrote it. On a machine without `samtools`, a run of
 the `bam_stats` workflow above ends with:
 
 ```text
 ERROR 'samtools' not found: [Errno 2] No such file or directory: 'samtools'
-ERROR [step 1 'index_stats' (bam_stats__step__1__index_stats)] Output is missing expected field ...
-Failure! step 1 'index_stats' (bam_stats__step__1__index_stats) could not run, or its outputs could not be collected. Its own messages are above, under its name.
+ERROR [step index_stats] Output is missing expected field ...
+Failure! step 'index_stats' could not run, or its outputs could not be collected. Its own messages are above, under its name.
 ```
 
 `output_<workflow>.json` in the base path lists the run's outputs: a workflow
-output you named under your name, and step outputs under their renamed form.
+output you named under your name, and step outputs as `<step>~<port>`.
 [Running workflows](running.md) lists everything a run writes.
 
 ## Recap

@@ -181,8 +181,8 @@ become a line:
 and `report.txt` holds the count of the shouted file, twice:
 
 ```text
-2 /var/lib/cwl/stg9be54098-0d4d-43c3-beb0-cd809e6c134b/shouted.txt
-2 /var/lib/cwl/stg9be54098-0d4d-43c3-beb0-cd809e6c134b/shouted.txt
+2 /var/lib/cwl/stg2f9ef4f9-e17a-44c3-aa96-da5d815535cd/shouted.txt
+2 /var/lib/cwl/stg2f9ef4f9-e17a-44c3-aa96-da5d815535cd/shouted.txt
 ```
 
 Nothing failed, because every connection had the right type, which is why

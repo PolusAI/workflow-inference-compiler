@@ -56,7 +56,7 @@ a run; the fix is on the machine, a stopped engine or a missing file, not in
 the workflow:
 
 ```text
-error [wic016] input 'cat/file' (from the workflow, whose relative paths are read from /home/you/sophios-tutorial) names 'data.txt', which does not exist at /home/you/sophios-tutorial/data.txt: correct the path, or create the file.
+error [wic016] input 'cat~file' (from the workflow, whose relative paths are read from /home/you/sophios-tutorial) names 'data.txt', which does not exist at /home/you/sophios-tutorial/data.txt: correct the path, or create the file.
 ```
 
 `ERROR` and `WARNING` lines followed by a `Failure!` line come from the run:
@@ -64,9 +64,9 @@ a tool failed, and its own messages, above the `Failure!` line and under the
 step's name, say why:
 
 ```text
-WARNING [job step 1 'fail' (fail__step__1__fail)] exited with status: 1
+WARNING [job fail] exited with status: 1
 ...
-Failure! step 1 'fail' (fail__step__1__fail) exited with status 1. Its own messages are above, under its name.
+Failure! step 'fail' exited with status 1. Its own messages are above, under its name.
 ```
 
 A Python exception whose message carries a code starting `api` comes from a
@@ -126,11 +126,12 @@ reports everything it finds at once, so one run of `--check` lists every
 missing file and the stopped engine together:
 
 ```text
-error [wic016] input 'cat/file' (from the workflow, whose relative paths are read from /home/you/sophios-tutorial) names 'data.txt', which does not exist at /home/you/sophios-tutorial/data.txt: correct the path, or create the file.
+error [wic016] input 'cat~file' (from the workflow, whose relative paths are read from /home/you/sophios-tutorial) names 'data.txt', which does not exist at /home/you/sophios-tutorial/data.txt: correct the path, or create the file.
 error [wic015] docker is installed, but `docker info` exited with status 1 (Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?): run `docker info` to see why, and start the engine if it is stopped.
 ```
 
-`wic016` lines name the input as you wrote it (`cat/file`) and say where
+`wic016` lines name the input by its name in the compiled workflow,
+`cat~file`, the input `file` of the step `cat`, and say where
 Sophios looked, which depends on where the path was written;
 [Inputs and values](inputs-and-values.md) has the rule. After the checks,
 the image pulls: `wic037` for one that failed, with the engine's last line
@@ -138,17 +139,16 @@ quoted.
 
 ### Run
 
-A tool that fails is the runner's to report. Sophios adds two
-things: the runner's messages name each step both ways, `step 2 'append'
-(greeting__step__2__append)`, through the names map the compile wrote; and
-after the run, one `Failure!` line per failed step with its exit status and,
-for 126, 127 and 137, what that status means:
+A tool that fails is the runner's to report, and its messages name each step
+by its id, `[step append]`. Sophios adds, after the run, one `Failure!` line
+per failed step with its exit status and, for 126, 127 and 137, what that
+status means:
 
 ```text
-WARNING [job step 1 'fail' (fail__step__1__fail)] exited with status: 1
-WARNING [job step 1 'fail' (fail__step__1__fail)] completed permanentFail
+WARNING [job fail] exited with status: 1
+WARNING [job fail] completed permanentFail
 ...
-Failure! step 1 'fail' (fail__step__1__fail) exited with status 1. Its own messages are above, under its name.
+Failure! step 'fail' exited with status 1. Its own messages are above, under its name.
 ```
 
 The step's own output is above, under its name. In Python the run raises

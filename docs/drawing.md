@@ -101,7 +101,7 @@ connections you wrote in a lighter blue.
 | Flag | Effect |
 |---|---|
 | `--graph_label_edges` | one edge per port, labelled with the name of the output it carries |
-| `--graph_label_stepname` | label each box with its generated step name (`greeting__step__1__touch`) instead of its id or its `wic: graphviz: label` |
+| `--graph_label_stepname` | label each box with its step's name in the compiled CWL (`touch`, `echo@2`) instead of its `wic: graphviz: label` |
 | `--graph_inline_depth N` | draw the steps of subworkflows nested up to depth `N`; a deeper call is one box |
 | `--graph_dark_theme` | white text, box outlines and inferred edges, and explicit edges in a lighter blue, for a dark background |
 
@@ -133,7 +133,7 @@ steps:
 ```
 
 - `label` on a step replaces its id as the label of its box; write `\n` for a
-  line break. `--graph_label_stepname` overrides it with the generated name.
+  line break. `--graph_label_stepname` overrides it with the step's name in the compiled CWL.
 - `label` on a workflow, or on the `wic: steps:` entry that calls it, titles
   the workflow's cluster. A subworkflow without one is titled with the id it
   is called by.

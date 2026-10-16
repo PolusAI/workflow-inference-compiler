@@ -81,7 +81,7 @@ step's tool is passthrough wholesale: Sophios does not classify
 |---|---|---|---|
 | `doc` | passthrough | | `test_step_passthrough_is_byte_identical` |
 | `hints` | passthrough | | `test_step_passthrough_is_byte_identical` |
-| `id` | native | | `test_sequence_and_mapping_steps_agree` (`test_lang_parser.py`) |
+| `id` | native | `[A-Za-z0-9_-][A-Za-z0-9_.-]*`, else `wic045`, as for workflow input and output names and the root's name | `test_sequence_and_mapping_steps_agree` (`test_lang_parser.py`), `test_a_step_id_outside_the_allowed_characters_is_refused_at_its_line` (`test_diagnostics.py`) |
 | `in` | native | | `test_input_values_are_closed` (`test_lang_parser.py`) |
 | `label` | passthrough | | `test_step_passthrough_is_byte_identical` |
 | `out` | native | | `test_the_two_spellings_of_an_edge_definition_agree_on_an_output` (`test_lang_parser.py`) |
@@ -97,7 +97,7 @@ step's tool is passthrough wholesale: Sophios does not classify
 |---|---|---|---|
 | `id` | native | the `in:` key | `test_input_values_are_closed` (`test_lang_parser.py`) |
 | `source` | native | `!*`, a bare workflow-input name, or a list of them inside `!cwl {source: [...]}` | `test_input_values_are_closed` (`test_lang_parser.py`) |
-| `default` | native | through `!cwl {...}` | `test_a_cwl_record_emits_the_fields_it_carries` (`test_emit.py`) |
+| `default` | native | through `!cwl {...}`; a relative File or Directory `location`/`path` is written absolute against the `.wic`'s directory | `test_a_cwl_record_emits_the_fields_it_carries` (`test_emit.py`), `test_a_wic_step_default_is_written_absolute_against_the_wic` (`test_wic_defaults.py`) |
 | `label` | native | through `!cwl {...}` | `test_a_cwl_record_emits_the_fields_it_carries` (`test_emit.py`) |
 | `linkMerge` | native | through `!cwl {...}` | `test_a_cwl_record_emits_the_fields_it_carries` (`test_emit.py`) |
 | `loadContents` | native | through `!cwl {...}` | `test_a_cwl_record_emits_the_fields_it_carries` (`test_emit.py`) |
@@ -127,7 +127,7 @@ step's tool is passthrough wholesale: Sophios does not classify
 | `id` | native | | `test_class_is_written_while_inputs_outputs_and_version_are_not` |
 | `type` | native | read for the reference judgment | `test_only_proven_disjoint_cross_scope_types_are_rejected` (`test_link.py`) |
 | `format` | native | read by inference | `test_promoted_input_preserves_a_cwl_format_expression` (`test_infer_phase.py`) |
-| `default` | passthrough | | `test_class_is_written_while_inputs_outputs_and_version_are_not` |
+| `default` | passthrough | a relative File or Directory `location`/`path` is written absolute against the `.wic`'s directory | `test_class_is_written_while_inputs_outputs_and_version_are_not`, `test_a_wic_file_default_is_written_absolute_against_the_wic` (`test_wic_defaults.py`) |
 | `doc` | passthrough | | `test_a_referenced_input_merges_the_documentation_of_the_argument_it_binds` (`test_compiler.py`) |
 | `label` | passthrough | | `test_a_referenced_input_merges_the_documentation_of_the_argument_it_binds` (`test_compiler.py`) |
 | `inputBinding` | passthrough | | `test_class_is_written_while_inputs_outputs_and_version_are_not` |
@@ -159,18 +159,22 @@ step's tool is passthrough wholesale: Sophios does not classify
 
 ### 1.2 Compiler-owned keys outside the schema
 
-- `$schemas` is append-only: authored entries survive and the EDAM entry is
-  added once.
-- `$namespaces` is merged, with two reserved prefixes: every authored binding
-  survives except `edam` and `sophios`, which the compiler binds. A port the
+- `$schemas` is what the author wrote: authored entries survive, and the
+  compiler adds none, so a document with none has no `$schemas` key.
+- `$namespaces` is merged: every authored binding survives, except `edam` in a
+  document that uses EDAM (a `format` of a workflow input or output, of a File in
+  an input's or a step input's `default:`, or of a File in the job inputs, is an
+  `edam:` CURIE), which the compiler binds to
+  EDAM. The compiler binds no prefix and writes no key of its own. A port the
   document promotes from a step keeps that port's `format:` CURIE, so the
   document also declares each prefix such a format uses, bound as the step's
   tool or subworkflow binds it. If the document and the steps whose promoted
   ports use a prefix do not all bind it to one URI, that is `wic031`; a tool
   that binds the prefix differently but promotes no port using it conflicts
   with nothing, so the result does not depend on how the workflow is split
-  into subworkflows. Pinned by `test_user_namespaces_survive_except_edam`,
-  `test_the_sophios_namespace_prefix_is_reserved`, and in `test_emit.py` by
+  into subworkflows. Pinned by
+  `test_user_namespaces_survive_and_edam_is_edams_where_a_format_says_it`, the
+  tests of `test_metadata_emitted.py`, and in `test_emit.py` by
   `test_a_prefix_two_promoting_sources_bind_differently_is_reported`,
   `test_a_clash_on_a_prefix_no_promoted_format_uses_is_no_error` and
   `test_a_step_promoting_no_format_with_a_prefix_is_no_source_for_it_wherever_it_sits`.
@@ -337,9 +341,9 @@ newest version that still accepts it; one using syntax only a newer version
 added resolves there without a tag. A tag is for pinning a file, or for a
 construct valid under two versions with different meanings.
 
-The version chosen is always reported: on the command line, on
-`CompiledWorkflow.lang_version`, and as a `sophios:lang_version` annotation
-in the emitted CWL, namespaced so the output stays valid. It can be pinned
+The version chosen is always reported: on the command line and on
+`CompiledWorkflow.lang_version`. The emitted CWL does not carry it, so it
+stays plain CWL. It can be pinned
 per file (`wic: {lang_version: 0.0.1}`) or set for a whole compilation
 (`--lang_version`, `Workflow.compile(lang_version=...)`); the explicit setting
 beats any tag, and one compilation resolves to exactly one version tree-wide.

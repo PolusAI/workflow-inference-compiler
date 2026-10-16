@@ -86,7 +86,7 @@ Goodbye for now
 ```
 
 The step names reach the compiled workflow and every message about it:
-`two_lines__step__2__hello` and `two_lines__step__3__goodbye`. In Python, two
+`hello` and `goodbye`. In Python, two
 steps of one workflow with the same name are `api002`. A `.wic` file may
 repeat an id in its list of steps, and Sophios tells the steps apart by
 position, but a reader cannot, and [Converting](converting.md) to Python
@@ -138,7 +138,7 @@ word_count.wic:8:3: note [wic043] step 'word_count' input 'text' was inferred fr
 The output directory holds `counts.txt`, which reads `2` followed by the
 path `wc` was given: two words, `Hello,` and `Sophios`. The step takes its
 name from the tool's file in both forms, so it is
-`word_count__step__3__word_count` in the compiled workflow.
+`word_count` in the compiled workflow.
 
 Which to use? Name a tool by stem when it lives in a shared collection on
 the search paths, so the workflow runs on any machine whose configuration

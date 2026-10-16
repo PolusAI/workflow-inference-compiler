@@ -1167,8 +1167,14 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         A relative File or Directory path bound in Python is read from the working
         directory, as Python reads one.
 
+        The run writes the one document ``compile()`` returns to
+        ``<basepath>/<name>.cwl``, with its job file beside it, and runs exactly
+        that.
+
         Args:
-            run_args_dict (dict[str, str] | None): Runtime CLI options for local execution.
+            run_args_dict (dict[str, str] | None): Runtime CLI options for local execution,
+                by flag name without the dashes. ``quiet`` (``'yes'`` by default) and
+                ``no_provenance`` (``'no'`` by default) are yes/no switches.
             user_env_vars (dict[str, str] | None): Environment variables to expose to the run.
             basepath (str): Directory used for generated files and execution artifacts.
             tool_registry (Tools | None): Optional tool registry override.
