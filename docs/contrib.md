@@ -29,7 +29,7 @@ tools found through the configuration the server's user has
 {
   "name": "workflow_",
   "cwlJobInputs": {"...": "..."},
-  "steps": {"workflow___step__1__echo": {"...": "..."}},
+  "steps": {"echo": {"...": "..."}},
   "inputs": {"...": "..."},
   "outputs": {"...": "..."},
   "retval": "0"

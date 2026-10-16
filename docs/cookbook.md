@@ -31,10 +31,11 @@ print(compiled.to_job_inputs_yaml())
 ```
 
 Three things hold for every pair, and [Compiling to CWL](compiling-to-cwl.md)
-explains them: each step is renamed `<workflow>__step__<n>__<id>`; a literal
-becomes a workflow input named `<step>___<port>` with its value in the job
-file; and every step output is exposed as a workflow output, except that
-`compile()` of a Python workflow which names outputs returns only those.
+explains them: each step keeps its id; a literal
+becomes a workflow input named `<step>~<port>` with its value in the job
+file; and every step output is exposed as a workflow output, except that a
+Python workflow which names outputs keeps only those, in `compile()` and
+`run()` alike.
 
 ## The pairs
 

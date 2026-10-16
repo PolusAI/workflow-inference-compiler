@@ -84,12 +84,12 @@ some of it: `inputs:` and `outputs:` in `.wic`, `flow.inputs` and
 - every required input that nothing connects, and inference could not fill,
   becomes a workflow input for the run to supply;
 - every step output is exposed as a workflow output, so that nothing a step
-  made is lost. `Workflow.compile()` of a Python workflow that names outputs
-  returns only those; the command line and `Workflow.run()` keep them all.
+  made is lost. A Python workflow that names outputs keeps only those:
+  `Workflow.compile()` returns them, and `Workflow.run()` runs the same
+  document. The command line keeps them all.
 
 The names the compiler adds are made from the step and the port,
-`<step>___<port>`, and the names map it writes,
-`<workflow>.names.json`, relates each one back to the line you wrote.
+`<step>~<port>`.
 
 ## Why the graph has no cycles
 
@@ -182,11 +182,13 @@ explains how to read them.
 
 ## Versions
 
-The language has a version, `lang_version`, and the compiled artifact says
-which one it was read under: `0.0.1` today. A file may pin one
-(`wic: {lang_version: 0.0.1}`), a compile may set one (`--lang_version`,
-`compile(lang_version=...)`), and without either a document is read under
-the newest version that accepts it. Two pins that disagree in one
+The language has a version, `lang_version`, and the compile reports which
+one it read a document under, `0.0.1` today: printed as
+`Sophios lang_version: 0.0.1` on the command line, and as
+`CompiledWorkflow.lang_version` in Python. The compiled CWL does not carry
+it. A file may pin one (`wic: {lang_version: 0.0.1}`), a compile may set one
+(`--lang_version`, `compile(lang_version=...)`), and without either a
+document is read under the newest version that accepts it. Two pins that disagree in one
 compilation are `wic018`, and an unknown version is `wic017`.
 
 ## One model, two forms
