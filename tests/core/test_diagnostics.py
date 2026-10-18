@@ -733,7 +733,7 @@ def test_a_directory_sophios_cannot_write_is_wic021(monkeypatch: pytest.MonkeyPa
     assert caught.value.code == 1
     printed = capsys.readouterr().err
     assert 'error [wic021] Sophios writes the compiled workflow to' in printed
-    assert 'run Sophios from a directory you can write to' in printed
+    assert 'give --basepath a directory you can write to' in printed
 
 
 # --------------------------------------------------------------------------
