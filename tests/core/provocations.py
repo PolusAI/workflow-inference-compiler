@@ -334,6 +334,13 @@ def _provoke_invalid_tool() -> None:
     Step(clt_path='no_such_tool.cwl')
 
 
+def _provoke_invalid_inference() -> None:
+    """Renamings given while naming conventions are off."""
+    from sophios.api.python.workflow import Inference  # pylint: disable=import-outside-toplevel
+
+    Inference(renamings=[('a', 'b')])
+
+
 def _provoke_workflow_run_failed() -> None:
     """Run a workflow whose runner exits non-zero.
 
@@ -358,6 +365,7 @@ COMPILED.update({
     SophiosErrorCode.INVALID_STEP: _provoke_invalid_step,
     SophiosErrorCode.INVALID_LINK: _provoke_invalid_link,
     SophiosErrorCode.INVALID_TOOL: _provoke_invalid_tool,
+    SophiosErrorCode.INVALID_INFERENCE: _provoke_invalid_inference,
     SophiosErrorCode.WORKFLOW_RUN_FAILED: _provoke_workflow_run_failed,
     SophiosErrorCode.UNDEFINED_EDGE: _provoke_undefined_edge,
     SophiosErrorCode.DUPLICATE_EDGE_DEF: _provoke_duplicate_edge_def,
