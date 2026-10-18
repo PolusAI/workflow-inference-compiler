@@ -35,10 +35,13 @@ The two drawings are `docs/tutorials/multistep1.wic`, whose every edge is
 written with `!&` and `!*`, and `multistep2.wic`, the same four steps with
 every edge left to inference. Each step is a box labelled with its id, and
 each workflow a cluster labelled with its file name. An explicit edge is
-blue; an inferred edge takes the drawing's foreground colour, white on the
-transparent background, or black with `--graph_dark_theme`, so that a reader
-can tell what the document said from what the compiler decided. The graphs are
-the same, which is what inference is for.
+blue; an inferred edge is black, so that you can tell what the document said
+from what the compiler decided. The graphs are the same, which is what
+inference is for.
+
+The drawing has a transparent background and boxes with no fill, so it
+suits a light page or slide as it is. For a dark one, `--graph_dark_theme`
+draws the text, the box outlines and the inferred edges in white.
 
 One edge is drawn per pair of steps, however many ports connect them.
 
@@ -49,7 +52,7 @@ One edge is drawn per pair of steps, however many ports connect them.
 | `--graph_label_edges` | one edge per port, labelled with the name of the output it carries |
 | `--graph_label_stepname` | label each box with its generated step name (`greeting__step__1__touch`) instead of its id or its `wic: graphviz: label` |
 | `--graph_inline_depth N` | draw the steps of subworkflows nested up to depth `N`; a deeper call is one box |
-| `--graph_dark_theme` | black text and inferred edges, for a light background |
+| `--graph_dark_theme` | white text, box outlines and inferred edges, for a dark background |
 
 ## Labels and layout from the `.wic` file
 
@@ -83,7 +86,7 @@ steps:
 - `label` on a workflow, or on the `wic: steps:` entry that calls it, titles
   the workflow's cluster. A subworkflow without one is titled with the id it
   is called by.
-- `style` on a step is appended to the box's own `rounded, filled`; on a
+- `style` on a step is appended to the box's own `rounded`; on a
   workflow it styles the cluster, and `invis` hides the cluster and the box of
   the step that calls it.
 - `ranksame` lists steps of this document, as `(index, name)`, to draw on one

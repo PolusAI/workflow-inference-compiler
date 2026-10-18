@@ -84,7 +84,7 @@ The four rewriting flags (`--cwl_inline_subworkflows`, `--cwl_inline_runtag`,
 | `--graph_label_edges` | off | one edge per port, labelled with the output it carries, instead of one per pair of steps |
 | `--graph_label_stepname` | off | label each box with its generated step name instead of its id or its `wic: graphviz: label` |
 | `--graph_inline_depth N` | unlimited | draw the steps of subworkflows nested up to depth `N`; a deeper call is one box |
-| `--graph_dark_theme` | off | black text and inferred edges, for a light background |
+| `--graph_dark_theme` | off | white text, box outlines and inferred edges, for a dark background, and explicit edges in a lighter blue; without it they are black and explicit edges are `blue` |
 
 ## Output
 
