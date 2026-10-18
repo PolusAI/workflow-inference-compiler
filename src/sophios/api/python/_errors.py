@@ -1,6 +1,6 @@
 """Structured failures from Python API compilation and validation.
 
-These five errors are subclasses of `SophiosError`, so callers handling a
+These errors are subclasses of `SophiosError`, so callers handling a
 reported API failure can write one `except` and read `.diagnostics` whether a
 document is rejected or a tool cannot be loaded. Ordinary Python call-contract
 errors such as a wrong argument type remain their usual built-in exceptions.
@@ -51,6 +51,12 @@ class InvalidCLTError(ApiError):
     """A CWL tool that could not be loaded or parsed."""
 
     code = SophiosErrorCode.INVALID_TOOL
+
+
+class InvalidInferenceError(ApiError):
+    """An `Inference` whose settings the compiler cannot be given."""
+
+    code = SophiosErrorCode.INVALID_INFERENCE
 
 
 class WorkflowRunError(ApiError):

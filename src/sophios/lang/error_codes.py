@@ -112,6 +112,11 @@ class SophiosErrorCode(StrEnum):
     #: `Workflow.from_wic`. The document is valid and compiles; the API cannot
     #: hold it. The message names the construct and what to write instead.
     NO_PYTHON_SPELLING = 'api006'
+    #: An `Inference` the compiler cannot be given: a format rule that is
+    #: neither `continue` nor `break`, a renaming that is not a pair of
+    #: strings, renamings with naming conventions off, or format rules with
+    #: step insertion off.
+    INVALID_INFERENCE = 'api007'
 
     @property
     def is_language(self) -> bool:
@@ -358,4 +363,11 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         Kind.CALL,
         'A `.wic` construct the Python API has no spelling for, met by `Workflow.from_wic`.',
         'Write the workflow in the Python API in the way the message names, or keep it as a `.wic` file.'),
+    SophiosErrorCode.INVALID_INFERENCE: Explanation(
+        Kind.CALL,
+        'An `Inference` the compiler cannot be given: a format rule other than `continue` or `break`, '
+        'a renaming that is not a pair of strings, renamings with naming conventions off, '
+        'or format rules with step insertion off.',
+        'Do what the message names: use `continue` or `break`, write each renaming as `(before, after)`, '
+        'set `naming_conventions=True` for renamings, or set `insert_steps=True` for format rules.'),
 }

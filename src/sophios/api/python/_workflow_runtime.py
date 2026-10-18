@@ -29,8 +29,9 @@ from sophios.cli import default_compilation_settings, get_known_and_unknown_args
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils import convert_args_dict_to_args_list
 from sophios.utils_cwl import tool_process
-from sophios.wic_types import DEFAULT_BASEPATH, StepId, Tool, Tools
+from sophios.wic_types import DEFAULT_BASEPATH, CompilerOptions, StepId, Tool, Tools
 
+from ._inference import Inference
 from ._errors import InvalidCLTError, InvalidStepError, WorkflowRunError
 from ._compiled import CompiledWorkflow
 from ._ports import InputParameter, OutputParameter, ParameterStore
@@ -394,11 +395,28 @@ def _nested_documents(workflow: "Workflow") -> dict[tuple[str, str], ParseResult
     return documents
 
 
+def compiler_options(inference: Inference, lang_version: str | None = None) -> CompilerOptions:
+    """The options the command line builds from its inference flags, from `inference`. No configuration file is read."""
+    options: CompilerOptions = {
+        **default_compilation_settings(),
+        'inference_disable': not inference.enabled,
+        'inference_strict': inference.strict,
+        'inference_use_naming_conventions': inference.naming_conventions,
+        'insert_steps_automatically': inference.insert_steps,
+        'inference_rules': dict(inference.format_rules),
+        'renaming_conventions': list(inference.renamings),
+    }
+    if lang_version is not None:
+        options['lang_version'] = lang_version
+    return options
+
+
 def compile_workflow_result(
     workflow: "Workflow",
     *,
     tool_registry: Tools | None = None,
     lang_version: str | None = None,
+    inference: Inference = Inference(),
 ) -> CompilationResult:
     """Compile a Python API workflow to the graph-derived internal result.
 
@@ -408,6 +426,7 @@ def compile_workflow_result(
             compilation; None (the default) infers it. An explicit setting
             beats any file tag.
         tool_registry (Tools | None): Optional tool registry override.
+        inference (Inference): How unbound inputs are connected.
 
     Returns:
         CompilationResult: The typed compiler output for the workflow.
@@ -416,14 +435,12 @@ def compile_workflow_result(
 
     merged_tools = _merged_known_tools(workflow, tool_registry)
 
-    compiler_options = default_compilation_settings()
-    if lang_version is not None:
-        compiler_options = {**compiler_options, 'lang_version': lang_version}
+    options = compiler_options(inference, lang_version)
     bundle = SourceBundle(
         ParseResult(workflow_document(workflow), Diagnostics()),
         Path(workflow.process_name).stem,
         RegistrySnapshot.from_tools(merged_tools, workflows=_nested_documents(workflow)))
-    result = compiler.compile_source(bundle, compiler_options, relative_run_path=True, testing=False)
+    result = compiler.compile_source(bundle, options, relative_run_path=True, testing=False)
     return result
 
 
@@ -456,6 +473,7 @@ def compiled_workflow(
     *,
     tool_registry: Tools | None = None,
     lang_version: str | None = None,
+    inference: Inference = Inference(),
 ) -> CompiledWorkflow:
     """Compile a workflow into the public compiled-workflow boundary object.
 
@@ -464,6 +482,7 @@ def compiled_workflow(
         tool_registry (Tools | None): Optional tool registry override.
         lang_version (str | None): Pin the Sophios language version for this
             compilation; None infers it. An explicit setting beats file tags.
+        inference (Inference): How unbound inputs are connected.
 
     Returns:
         CompiledWorkflow: Compiled CWL workflow plus generated job inputs.
@@ -472,6 +491,7 @@ def compiled_workflow(
         workflow,
         tool_registry=tool_registry,
         lang_version=lang_version,
+        inference=inference,
     )
     return compiled_workflow_from_result(workflow, result)
 
@@ -501,6 +521,7 @@ def run_workflow(
     basepath: str = DEFAULT_BASEPATH,
     tool_registry: Tools | None = None,
     workflow_paths: Mapping[str, Mapping[str, Path]] | None = None,
+    inference: Inference = Inference(),
 ) -> None:
     """Compile and execute a workflow locally.
 
@@ -512,6 +533,8 @@ def run_workflow(
         tool_registry (Tools | None): Optional tool registry override.
         workflow_paths (Mapping[str, Mapping[str, Path]] | None): The `.wic` files a
             real-time analysis may be, shaped `{namespace: {stem: path}}`.
+        inference (Inference): How unbound inputs are connected; the same
+            settings `compile` takes, so a run infers the edges its compile does.
 
     Raises:
         WorkflowRunError: If the runner exits non-zero.
@@ -521,10 +544,10 @@ def run_workflow(
     plugins.logging_filters()
 
     resolved_run_args = _run_args(run_args_dict)
-    result = compile_workflow_result(workflow, tool_registry=tool_registry)
+    result = compile_workflow_result(workflow, tool_registry=tool_registry, inference=inference)
     analyses = realtime.compile_analyses(
         result.realtime, {namespace: dict(paths) for namespace, paths in (workflow_paths or {}).items()},
-        _merged_known_tools(workflow, tool_registry), default_compilation_settings())
+        _merged_known_tools(workflow, tool_registry), compiler_options(inference))
     artifact = pc.inline_artifact_runs(result.artifact)
     if (problem := preflight.unwritable(Path(basepath), "the workflow and its run",
                                         "pass run() a basepath you can write to")) is not None:

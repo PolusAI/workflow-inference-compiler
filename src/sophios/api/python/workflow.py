@@ -19,9 +19,11 @@ from sophios.lang.versions import KNOWN_VERSIONS
 from sophios.wic_types import DEFAULT_BASEPATH, Tools
 
 from ._compiled import CompiledWorkflow
+from ._inference import Inference
 from ._errors import (
     ApiError,
     InvalidCLTError,
+    InvalidInferenceError,
     InvalidInputValueError,
     InvalidLinkError,
     InvalidStepError,
@@ -72,7 +74,9 @@ StrPath = str | Path
 __all__ = [
     "ApiError",
     "CompiledWorkflow",
+    "Inference",
     "InvalidCLTError",
+    "InvalidInferenceError",
     "InvalidInputValueError",
     "InvalidLinkError",
     "InvalidStepError",
@@ -1044,6 +1048,7 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         *,
         tool_registry: Tools | None = None,
         lang_version: str | None = None,
+        inference: Inference = Inference(),
     ) -> CompiledWorkflow:
         """Compile this workflow into CWL and generated job inputs.
 
@@ -1053,13 +1058,20 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
                 this compilation; None (the default) infers it. An explicit
                 setting beats any file tag. The resolved version is reported
                 on the result as ``CompiledWorkflow.lang_version``.
+            inference (Inference): How an unbound input is connected to an
+                earlier output. Unlike the command line, the Python API
+                reads no configuration: renamings and format rules are empty
+                unless passed, and ``insert_steps=True`` inserts only
+                converters among ``tool_registry``. See :class:`Inference`
+                for each option and its flag.
 
         Returns:
             CompiledWorkflow: Public compiled workflow boundary object.
         """
-        return _compiled_workflow(self, tool_registry=tool_registry, lang_version=lang_version)
+        return _compiled_workflow(self, tool_registry=tool_registry, lang_version=lang_version,
+                                  inference=inference)
 
-    def run(
+    def run(  # pylint: disable=too-many-arguments
         self,
         run_args_dict: dict[str, str] | None = None,
         user_env_vars: dict[str, str] | None = None,
@@ -1067,6 +1079,7 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         tool_registry: Tools | None = None,
         *,
         workflow_paths: Mapping[str, Mapping[str, Path]] | None = None,
+        inference: Inference = Inference(),
     ) -> None:
         """Compile and execute this workflow locally.
 
@@ -1083,6 +1096,8 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
             tool_registry (Tools | None): Optional tool registry override.
             workflow_paths (Mapping[str, Mapping[str, Path]] | None): The
                 ``.wic`` files a real-time analysis may be.
+            inference (Inference): How an unbound input is connected; the run
+                infers the same edges ``compile(inference=...)`` does.
 
         Raises:
             ValueError: If a `user_env_vars` key is not an environment variable name.
@@ -1096,6 +1111,7 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
             basepath=basepath,
             tool_registry=tool_registry,
             workflow_paths=workflow_paths,
+            inference=inference,
         )
 
     def _as_workflow_step(self) -> nodes.Step:

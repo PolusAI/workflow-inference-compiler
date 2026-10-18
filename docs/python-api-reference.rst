@@ -8,7 +8,7 @@ concrete modules:
 
 .. code-block:: python
 
-   from sophios.api.python.workflow import Step, StepInput, Workflow
+   from sophios.api.python.workflow import Inference, Step, StepInput, Workflow
    from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 
 The guides explain how the pieces fit: the pages under **Write workflows**
@@ -18,7 +18,7 @@ sophios.api.python.workflow
 ---------------------------
 
 .. automodule:: sophios.api.python.workflow
-   :members: Step, StepInput, Workflow, CompiledWorkflow, ApiError, InvalidInputValueError, InvalidStepError, InvalidLinkError, InvalidCLTError, WorkflowRunError, SophiosError, SophiosErrorCode
+   :members: Step, StepInput, Inference, Workflow, CompiledWorkflow, ApiError, InvalidInferenceError, InvalidInputValueError, InvalidStepError, InvalidLinkError, InvalidCLTError, WorkflowRunError, SophiosError, SophiosErrorCode
 
 sophios.api.python.tool_builder
 -------------------------------

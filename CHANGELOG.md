@@ -181,6 +181,12 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
 - `Workflow.run()` raises `WorkflowRunError` (api005, importable from
   `sophios.api.python.workflow`) when the run fails, instead of returning.
   Catch it where you used to inspect the result.
+- `Workflow.compile()` and `Workflow.run()` take `inference=Inference(...)`
+  (`sophios.api.python.workflow`), the Python spelling of
+  `--inference_disable`, `--inference_strict`,
+  `--inference_use_naming_conventions`, `--insert_steps_automatically` and the
+  configuration file's `renaming_conventions` and `inference_rules`. An
+  invalid one is `api007`. Without it, inference runs with the defaults, as before.
 - Library code raises `SophiosError` (`sophios.lang.diagnostics`) instead of
   calling `sys.exit(1)`, so a bad workflow no longer ends the calling process.
   Catch `SophiosError` where you caught `SystemExit`. The CLI's exit codes are
