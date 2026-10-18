@@ -126,12 +126,14 @@ def test_graph_inline_depth_draws_that_many_levels_of_subworkflow(depth: int, cl
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize(('dark_theme', 'font_colour'), [(False, 'white'), (True, 'black')])
+@pytest.mark.parametrize(('dark_theme', 'font_colour', 'blue'),
+                         [(False, 'black', 'blue'), (True, 'white', 'lightskyblue')])
 def test_the_graph_draws_inferred_edges_in_the_font_colour_and_the_rest_in_blue(
-        dark_theme: bool, font_colour: str) -> None:
+        dark_theme: bool, font_colour: str, blue: str) -> None:
     """An edge the document wrote is blue, whether it joins two steps of one
-    document or reaches into a subworkflow; an edge the compiler inferred takes
-    the theme's font colour, which is black on a dark theme and white otherwise.
+    document or reaches into a subworkflow, and a lighter blue on a dark theme; an
+    edge the compiler inferred takes the foreground colour, which is black, or white
+    on a dark theme.
     """
     document: Yaml = {'steps': [
         {'id': 'mk_file', 'in': {'name': {'wic_inline_input': 'a'}}, 'out': [{'file': {'wic_anchor': 'f'}}]},
@@ -144,8 +146,8 @@ def test_the_graph_draws_inferred_edges_in_the_font_colour_and_the_rest_in_blue(
     colours = {(source, sink): attrs.get('color')
                for source, sink, attrs in _edges(_draw(document, dark_theme=dark_theme))}
     assert colours == {
-        ('oracle__step__1__mk_file', 'oracle__step__2__xform'): 'blue',
-        ('oracle__step__1__mk_file', 'oracle__step__3__sub.wic___sub__step__1__xform'): 'blue',
+        ('oracle__step__1__mk_file', 'oracle__step__2__xform'): blue,
+        ('oracle__step__1__mk_file', 'oracle__step__3__sub.wic___sub__step__1__xform'): blue,
         ('oracle__step__3__sub.wic___sub__step__1__xform',
          'oracle__step__3__sub.wic___sub__step__2__count'): font_colour,
     }
@@ -194,13 +196,49 @@ def test_graphviz_writes_the_graph_of_the_compiled_workflow(cli_graph: Callable[
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize(('flags', 'font'), [((), 'white'), (('--graph_dark_theme',), 'black')])
-def test_graph_dark_theme_sets_the_font_of_the_drawing(
+@pytest.mark.parametrize(('flags', 'font'), [((), 'black'), (('--graph_dark_theme',), 'white')])
+def test_graph_dark_theme_sets_the_foreground_of_the_drawing(
         cli_graph: Callable[..., str], flags: tuple[str, ...], font: str) -> None:
-    """The drawing's font and its inferred edges take one colour, white, or black with `--graph_dark_theme`."""
+    """The drawing's text, its box outlines and its inferred edges take one colour: black, or white with
+    `--graph_dark_theme`. A box is not filled, so it takes the background's colour."""
     drawn = cli_graph(_TWO_STEPS, *flags)
     assert f'fontcolor={font}\n' in drawn
-    assert f'-> w__step__2__cat [color={font}]' in drawn
+    boxes = _nodes(drawn)
+    assert {(attrs['color'], attrs['fontcolor']) for attrs in boxes.values()} == {(font, font)}
+    assert not any('filled' in attrs['style'] or 'fillcolor' in attrs for attrs in boxes.values())
+    assert [attrs['color'] for _source, _sink, attrs in _edges(drawn)] == [font]
+
+
+_EXPLICIT_EDGE = """\
+steps:
+- id: touch
+  in:
+    filename: !ii empty.txt
+  out:
+  - file: !& f
+- id: cat
+  in:
+    file: !* f
+"""
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(('flags', 'blue'), [((), 'blue'), (('--graph_dark_theme',), 'lightskyblue')])
+def test_graph_dark_theme_draws_an_explicit_edge_in_a_lighter_blue(
+        cli_graph: Callable[..., str], flags: tuple[str, ...], blue: str) -> None:
+    """An edge the document wrote is `blue`, which does not read on a dark background, so
+    `--graph_dark_theme` draws it in a lighter blue."""
+    drawn = cli_graph(_EXPLICIT_EDGE, *flags)
+    assert [attrs['color'] for _source, _sink, attrs in _edges(drawn)] == [blue]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(('flags', 'font'), [((), 'black'), (('--graph_dark_theme',), 'white')])
+def test_an_edge_label_takes_the_foreground_colour(
+        cli_graph: Callable[..., str], flags: tuple[str, ...], font: str) -> None:
+    """With `--graph_label_edges` an edge's label is written in the drawing's foreground colour."""
+    drawn = cli_graph(_TWO_STEPS, '--graph_label_edges', *flags)
+    assert [attrs['fontcolor'] for _source, _sink, attrs in _edges(drawn)] == [font]
 
 
 @pytest.mark.fast
@@ -250,10 +288,10 @@ def test_a_step_label_names_its_box_unless_the_flag_asks_for_generated_names(
 
 @pytest.mark.fast
 def test_a_step_style_is_appended_to_the_style_of_its_box(cli_graph: Callable[..., str]) -> None:
-    """A step's `wic: graphviz: style` follows `rounded, filled`; a step without one keeps that alone."""
+    """A step's `wic: graphviz: style` follows `rounded`; a step without one keeps that alone."""
     nodes = _nodes(cli_graph(_with(_TWO_STEPS, entries={'touch': {'style': 'dashed, bold'}})))
-    assert nodes['w__step__1__touch']['style'] == 'rounded, filled, dashed, bold'
-    assert nodes['w__step__2__cat']['style'] == 'rounded, filled'
+    assert nodes['w__step__1__touch']['style'] == 'rounded, dashed, bold'
+    assert nodes['w__step__2__cat']['style'] == 'rounded'
 
 
 @pytest.mark.fast
@@ -281,7 +319,7 @@ def test_two_calls_to_one_subworkflow_are_two_clusters_each_with_its_own_look(
     drawn = cli_graph(_with(calls, entries=entries), sub=_TWO_STEPS)
     first, second = _cluster(drawn, _SUB_CLUSTER), _cluster(drawn, 'cluster_w__step__3__sub.wic')
     assert (first['label'], first.get('style'), second['label'], second['style']) == ('First', None, 'Second', 'invis')
-    assert _nodes(drawn)['w__step__2__sub.wic']['style'] == 'rounded, filled'
+    assert _nodes(drawn)['w__step__2__sub.wic']['style'] == 'rounded'
 
 
 @pytest.mark.fast
@@ -292,8 +330,8 @@ def test_an_invisible_subworkflow_hides_its_cluster_and_the_box_that_calls_it(
     drawn = cli_graph(_with(_CALLS_SUB, entries={'sub.wic': call} if call else None), sub=_with(_TWO_STEPS, own))
     assert _cluster(drawn, _SUB_CLUSTER)['style'] == 'invis'
     nodes = _nodes(drawn)
-    assert nodes['w__step__2__sub.wic']['style'] == 'rounded, filled, invis'
-    assert nodes['w__step__1__touch']['style'] == 'rounded, filled'
+    assert nodes['w__step__2__sub.wic']['style'] == 'rounded, invis'
+    assert nodes['w__step__1__touch']['style'] == 'rounded'
 
 
 @pytest.mark.fast

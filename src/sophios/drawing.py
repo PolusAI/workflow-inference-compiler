@@ -38,12 +38,22 @@ def draw(compiled: CompilationResult, bundle: SourceBundle, settings: GraphSetti
     # required for rank=same constraints to work across subgraphs/clusters.
     root.attr(newrank='True')
     root.attr(bgcolor='transparent')  # Useful for making slides
-    root.attr(fontcolor='black' if settings['graph_dark_theme'] else 'white')
+    root.attr(fontcolor=_foreground(settings))
     assert bundle.parsed.document is not None  # `compiled` was compiled from it
     document = called_document(bundle.parsed.document, None, bundle.registry)
     sidecars = _sidecars(compiled.graph, document.sidecar if document else None, bundle.registry)
     root.subgraph(_cluster(compiled.graph, sidecars, Names.of(compiled.graph), settings, name))
     return root
+
+
+def _foreground(settings: GraphSettings) -> str:
+    """The colour of text, box outlines and inferred edges: black, or white with `--graph_dark_theme`."""
+    return 'white' if settings['graph_dark_theme'] else 'black'
+
+
+def _explicit(settings: GraphSettings) -> str:
+    """The colour of an explicit edge: blue, or with `--graph_dark_theme` a lighter one, as `blue` is too dark."""
+    return 'lightskyblue' if settings['graph_dark_theme'] else 'blue'
 
 
 def _sidecars(graph: WorkflowGraph, sidecar: WicSidecar | None, registry: RegistrySnapshot) -> _Sidecars:
@@ -101,9 +111,10 @@ def _box(graph: WorkflowGraph, step: StepNode, sidecars: _Sidecars, names: Names
          settings: GraphSettings) -> dict[str, str]:
     """The attributes of `step`'s box. `--graph_label_stepname` labels it with its generated name;
     without it, a tool step's `wic: graphviz: label` wins over its id, and its `style` is appended.
-    The box of a call to a subworkflow styled `invis` is hidden with it."""
+    The box of a call to a subworkflow styled `invis` is hidden with it. A box is not filled, so it takes
+    the background's colour, and its outline and label take the foreground's."""
     label = names.step(step.id) if settings['graph_label_stepname'] else step.id.name
-    style = 'rounded, filled'
+    style = 'rounded'
     if step.run is not None and step.run.child is not None:
         called = graphviz_entry(sidecars[graph.namespace.child(step.id)])
         style += ', invis' if 'invis' in called.get('style', '') else ''
@@ -111,7 +122,8 @@ def _box(graph: WorkflowGraph, step: StepNode, sidecars: _Sidecars, names: Names
         look = graphviz_entry(_entry(graph, sidecars[graph.namespace], step))
         label = label if settings['graph_label_stepname'] else look.get('label', label)
         style += f", {look['style']}" if 'style' in look else ''
-    return {'label': label, 'shape': 'box', 'style': style, 'fillcolor': 'lightblue'}
+    return {'label': label, 'shape': 'box', 'style': style,
+            'color': _foreground(settings), 'fontcolor': _foreground(settings)}
 
 
 def _edges(cluster: graphviz.Digraph, graph: WorkflowGraph, names: Names, settings: GraphSettings) -> None:
@@ -120,14 +132,15 @@ def _edges(cluster: graphviz.Digraph, graph: WorkflowGraph, names: Names, settin
     for edge in graph.edges:
         source = names.qualified(edge.source.step)
         sink = names.qualified(edge.sink.step)
-        # Explicit edges are blue; an inferred one takes the theme's font
+        # Explicit edges are blue; an inferred one takes the foreground
         # colour, as docs/drawing.md says, so a reader can tell
         # what the document said from what the compiler decided.
-        attrs = {'color': 'blue'}
+        attrs = {'color': _explicit(settings)}
         if edge.origin is EdgeOrigin.INFERRED:
-            attrs['color'] = 'black' if settings['graph_dark_theme'] else 'white'
+            attrs['color'] = _foreground(settings)
         if settings['graph_label_edges']:
             attrs['label'] = names.port(edge.source.port)
+            attrs['fontcolor'] = _foreground(settings)
         elif (source, sink) in seen:
             continue
         seen.add((source, sink))

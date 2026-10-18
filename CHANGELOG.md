@@ -161,6 +161,15 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   stays nested and is named on stderr.
 - The `cwl_subinterpreter` command is gone; `--run_local` runs a declared
   real-time analysis itself.
+- `--graphviz` draws each step as a box with no fill, its outline and label
+  in black, and an inferred edge in black; an explicit edge is still blue.
+  The boxes used to be filled light blue and the inferred edges white, which
+  vanished on a white page. `--graph_dark_theme` now draws the text, the box
+  outlines and the inferred edges in white, for a dark background; it used to
+  turn the text and the inferred edges black. Drop the flag where you passed
+  it to get black, and pass it where you relied on white. With the flag an
+  explicit edge is a lighter blue (`lightskyblue`), which reads on a dark
+  background where `blue` does not.
 
 ### Python API and embedding
 
