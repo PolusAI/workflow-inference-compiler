@@ -162,7 +162,7 @@ def _cli_graph(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[...,
     """
     monkeypatch.setattr(preflight, 'prepare', lambda *_a, **_k: None)
     monkeypatch.setattr(main.shutil, 'which', lambda _name: '/usr/bin/dot')
-    monkeypatch.setattr(main, 'sub', SimpleNamespace(run=lambda *_a, **_k: None))
+    monkeypatch.setattr(main, 'sub', SimpleNamespace(run=lambda *_a, **_k: SimpleNamespace(stdout=b'')))
     monkeypatch.chdir(tmp_path)
 
     def run(source: str, *flags: str, sub: str | None = None) -> str:
