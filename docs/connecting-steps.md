@@ -1,118 +1,249 @@
 # Connecting steps
 
-How do I say which output feeds which input, and which results the workflow
-exposes under names of my choosing? An edge connects one step's output to a
-later step's input; a workflow output exposes a step output under a name. You
-write both when inference would choose wrongly, when the choice matters enough
-to be visible, or when a result must have a stable name for whoever runs the
-workflow.
+You have connected steps since chapter 1: `!&` names what a step made and
+`!*` hands it on. In this chapter you will learn the rules those names
+follow, and give the workflow's result a name of your own, so that whoever
+runs it, or a workflow that uses it as a step, finds the greeting file
+without knowing which step made it. Then you will let the greeting branch
+into two steps and join again, and see that a workflow is a graph, not a
+list.
 
-## Explicit edges
+## The rules for connections
 
-```{literalinclude} cookbook/explicit_edge.wic
+A connection joins one step's output to a later step's input. In `.wic`
+each connection has a name, defined with `!&` on an entry of a step's `out:`
+list and used with `!*` on an input, as in `greeting.wic`:
+
+```{literalinclude} cookbook/greeting.wic
 :language: yaml
-:caption: explicit_edge.wic
+:caption: greeting.wic
 ```
 
-```{literalinclude} cookbook/explicit_edge.py
-:language: python
-:caption: explicit_edge.py
-```
+The names follow a few rules, and Sophios reports each broken one by code:
 
-In `.wic`, `!& created` on an entry of `touch`'s `out:` list defines an edge
-named `created` from the output `file`, and `!* created` on `append`'s input
-uses it. In Python, assigning `touch.outputs.file` to `append.inputs.file` is
-the edge; the name is internal. Both compile to the same edge
-([Compiling to CWL](compiling-to-cwl.md#edges-and-outputs)).
+- A name is used after the step that defines it. A `!*` above its `!&` is
+  `wic025`, and so is a name nothing defines.
+- A name is defined once. A second `!& empty_file` is `wic026`.
+- `!&` goes only on an `out:` entry, because a connection starts where its
+  value is made. On an input it is `wic019`.
+- A name may be used by any number of later steps, and a name nothing uses
+  is not an error.
+- An output whose type can never fit the input, a `string` into a `File`
+  for instance, is `wic023`.
 
-The rules for `.wic` edge names:
+In Python the connection is an assignment, `cat.inputs.file =
+append.outputs.file`, and the output object is the name. The step that
+makes the output must come earlier in the workflow's list of steps than the
+step that reads it, and both must belong to the same `Workflow`; otherwise
+Sophios raises `api002` and says which step to move or add. Types are
+compared when you assign, so a mismatch stops the script at that line with
+`api003`. A string is never a connection: `cat.inputs.file = 'append/file'`
+gives `cat` a `File` whose `location` is `append/file`, not the output of
+`append`.
 
-- A reference comes after its definition. A `!* created` above the
-  `!& created` that defines it is `wic025`, in the same document too.
-- A name is defined once. A second `!& created` is `wic026`: an edge name
-  identifies one producer.
-- A definition nothing uses is not an error. It names a result for a consumer
-  outside the document, such as a later step of a caller.
-- Edge names are shared by the whole compilation. A subworkflow may use an edge
-  its caller defined before calling it, and a step after a subworkflow call may
-  use an edge defined inside it. A reference that no document defines is
-  `wic025`, reported at the root when nothing in the compilation discharges it.
-- `!&` is allowed only on an `out:` entry, since an edge is defined where its
-  value comes into being. Anywhere else it is `wic019`; if you meant to use the
-  edge, write `!*`.
-- An edge whose output type can never feed the input it binds (a `string` into
-  a `File`) is `wic023`. Sophios rejects only what it can prove disjoint; see
-  [Types and records](types-and-records.md).
+[§4 of the `.wic` reference](wic-reference.md#4-edges) has the complete
+rules, including how names cross into a workflow used as a step.
 
-The rules for Python, where a port object stands for the edge:
+## Name the workflow's result
 
-- The source step must come earlier in the workflow's step list than the step
-  that reads it, and both must be children of the same `Workflow`; otherwise
-  `api002` says which step to move or add.
-- A workflow cannot consume one of its own outputs (`api003`), and a string is
-  never a reference: `cat.inputs.file = 'touch/file'` binds the text, and a
-  list that holds a port object is `api001` ("a port object or a StepInput is
-  never a literal").
-- Port types are compared as the value is bound, so a mismatch is raised at
-  the assignment, with the script line.
+The greeting file is the point of the workflow, but so far it comes out
+under a name Sophios made, `greeting__step__2__append___file`, which changes
+if you add a step before `append`. A **workflow output** gives it a name of
+your choosing. Save this pair:
 
-A step output may be bound to any number of later inputs.
-
-## Workflow outputs
-
-A workflow output exposes a step output under a name you choose:
-
-```{literalinclude} cookbook/named_output.wic
+```{literalinclude} cookbook/greeting_output.wic
 :language: yaml
-:caption: named_output.wic
+:caption: greeting_output.wic
 ```
 
-```{literalinclude} cookbook/named_output.py
+```{literalinclude} cookbook/greeting_output.py
 :language: python
-:caption: named_output.py
+:caption: greeting_output.py
 ```
 
-In `.wic`, `outputSource` names the producer as `<step>/<output>`, the step by
-its id. When a step id repeats, name the occurrence by its 1-based position,
-`(2, append)/file`; a position that holds a different step is `wic039`, and a
-port the step does not have is `wic028`, with the step's outputs listed. A
-bare id that several steps have resolves to the first of them, and the compile
-says so on stderr with the positional spelling to write. The compiled CWL
-renames steps, and a generated name such as `named_output__step__1__echo`
-still resolves in `outputSource`, but it changes when steps move, so the
-compile prints a line asking for `echo/stdout` instead. The output reaches the
-compiled workflow under your name
-([Compiling to CWL](compiling-to-cwl.md#edges-and-outputs)).
+In `.wic`, the `outputs:` section declares `greeting`, a `File`, and
+`outputSource: append/file` says it is the output `file` of the step
+`append`. In Python, `flow.outputs.greeting = append.outputs.file` declares
+the output and connects it in one line. Run either form:
 
-An output with no `type:` takes the type of the step output it names, as an
-array when that step scatters. One with no `type:` and no producer to take it
-from is `wic036`. An output names exactly one step output: a list
-`outputSource`, or `linkMerge` or `pickValue` on a workflow output, is
-`wic038`. To merge several outputs, give them to one step's input as a
-[record](types-and-records.md) and expose that step's output.
+```bash
+sophios --yaml greeting_output.wic --run_local
+```
 
-In Python, `flow.outputs.greeting = echo.outputs.stdout` declares and binds
-the output in one line; a workflow input may also be exposed as an output. An
-output that is declared and never bound is `api002`.
+```bash
+python greeting_output.py
+```
 
-### What `compile()` returns and what the command line writes
+The Python run first says what you added:
 
-This is the one place the two forms give different CWL. The command line
-exposes every step output as a workflow output, named
-`<step>___<port>`, whether or not you named any; `named_output.wic` compiles
-to `greeting` and `named_output__step__1__echo___stdout`. When a Python
-workflow names outputs, `compile()` returns only those, and `Workflow.run()`
-runs that. A Python workflow that names none is compiled exactly as the
-command line compiles its `.wic` twin, every step output exposed.
+```text
+Adding a new output greeting to workflow greeting_output
+ starting compilation of greeting_output
+finishing compilation of greeting_output
+...
+Success! Runner outputs are under /home/you/sophios-tutorial/autogenerated/outdir_cwltool_greeting_output_2026_10_18_19.11.12/
+```
 
-At run time the exposed outputs are what `output_<workflow>.json` lists and
-what the runner's output directory holds. A nested workflow's step outputs
-are exposed by it and again by its parent, named outputs or not.
+`output_greeting_output.json` now lists your name first, beside the names
+Sophios made:
 
-## Edges, inference and notes together
+```text
+greeting
+greeting_output__step__1__touch___file
+greeting_output__step__2__append___file
+greeting_output__step__3__cat___output
+```
 
-An explicit edge binds its input, so inference never touches it. Pinning one
-input does not change what inference does for the others, and a pin is also
-how you silence the note inference prints when it chose between equal
-candidates. [Edge inference](edge-inference.md) has the rule and the exact
-pin to write.
+A workflow output adds a name; it hides nothing. Every output of every step
+is still kept under its generated name, so nothing a step made is lost, and
+your name stays the same when you add or move steps.
+
+An output with no `type:` takes the type of the output it names. An output
+names exactly one step output: to combine several, give them to one step's
+input, as [Types and records](types-and-records.md) shows, and name that
+step's output. When the same step id appears twice in a `.wic` file,
+`outputSource` names the one you mean by its position, as in
+`(2, append)/file`.
+
+### `compile()` returns only the outputs you named
+
+There is one place where the Python API keeps less than a run. For a
+workflow that names outputs, `Workflow.compile()` returns only those:
+
+```python
+from greeting_output import workflow
+
+print(sorted(workflow().compile().cwl_workflow['outputs']))
+```
+
+```text
+['greeting']
+```
+
+A workflow that names none gets every step output from `compile()`, as the
+command line compiles it. `Workflow.run()` and the command line always run
+with every output, which is why the run above listed four.
+
+## Branch and join: the greeting becomes a graph
+
+So far each step's result has fed exactly one later step, and the workflow
+has been a straight line. Real analyses branch. One result feeds several
+steps, which have nothing to do with each other and could run at the same
+time, and a later step joins what they made. A workflow is a graph, a
+**directed acyclic graph** to be exact: steps, with arrows for the data
+flowing between them, that never loop back. You already have everything you
+need to write one: a connection's name may be used by any number of later
+steps, and one step may read from several.
+
+Here the greeting file feeds two steps, `shout`, which writes a copy in
+capital letters, and `word_count`, which counts its words; then `combine`
+puts the two results into one report. The three tools are small files kept
+beside the workflow:
+
+```{literalinclude} cookbook/shout.cwl
+:language: yaml
+:caption: shout.cwl
+```
+
+```{literalinclude} cookbook/word_count.cwl
+:language: yaml
+:caption: word_count.cwl
+```
+
+```{literalinclude} cookbook/combine.cwl
+:language: yaml
+:caption: combine.cwl
+```
+
+The steps that use them say `run: shout.cwl`, a tool named by its file,
+beside the workflow, instead of by a name Sophios looks up. In Python,
+`Path(__file__).with_name('shout.cwl')` is the same file, beside the script.
+[Steps and tools](steps-and-tools.md) explains both ways of naming a tool;
+here they only keep the new tools next to the workflow. Save the workflow
+in either form:
+
+```{literalinclude} cookbook/greeting_graph.wic
+:language: yaml
+:caption: greeting_graph.wic
+```
+
+```{literalinclude} cookbook/greeting_graph.py
+:language: python
+:caption: greeting_graph.py
+```
+
+`greeting_file` is used twice, by `shout` and by `word_count`: that is the
+branch. `combine` reads `shouted_file` and `counts_file`, one from each
+branch: that is the join. In Python, `append.outputs.file` is assigned to
+two inputs, and `combine` takes one input from each step. To see the graph,
+add `--graphviz` to a compile, or, in Python, call `workflow().draw()`,
+which a Jupyter notebook shows as the cell's result:
+
+```bash
+sophios --yaml greeting_graph.wic --generate_cwl_workflow --graphviz
+```
+
+![The greeting graph: append feeds shout and word_count, which both feed combine](cookbook/greeting_graph.wic.gv.png)
+
+Each arrow is a connection you wrote, drawn blue; [Drawing a
+workflow](drawing.md) explains the rest of the picture. Run either form:
+
+```bash
+sophios --yaml greeting_graph.wic --run_local
+```
+
+```bash
+python greeting_graph.py
+```
+
+`report.txt` in the output directory holds both results:
+
+```text
+HELLO, SOPHIOS
+2 /var/lib/cwl/stg7fa53ee1-c48b-48f4-a5a8-1ceb58c7203c/greeting.txt
+```
+
+### What just happened: the order comes from the graph
+
+The lines of the `.wic` run's step log where cwltool starts each step show
+the order it chose:
+
+```text
+INFO [workflow ] starting step 1 'touch' (greeting_graph__step__1__touch)
+INFO [workflow ] starting step 2 'append' (greeting_graph__step__2__append)
+INFO [workflow ] starting step 3 'shout' (greeting_graph__step__3__shout)
+INFO [workflow ] starting step 4 'word_count' (greeting_graph__step__4__word_count)
+INFO [workflow ] starting step 5 'combine' (greeting_graph__step__5__combine)
+```
+
+Run it again, and the two in the middle may swap. Of four more runs, two
+started them in this order and two in the other:
+
+```text
+INFO [workflow ] starting step 4 'word_count' (greeting_graph__step__4__word_count)
+INFO [workflow ] starting step 3 'shout' (greeting_graph__step__3__shout)
+```
+
+The runner starts a step once the data it needs exists, and `shout` and
+`word_count` both waited only for `append`, so either could go first.
+cwltool, the default runner, runs one step at a time and picks one of the
+two; `combine` waits for both. The order of your list does not decide when a step runs. It decides
+only which steps a step may read from, those before it, which is what keeps
+the graph free of loops. [The workflow model](workflow-model.md) explains
+the graph in full.
+
+## Recap
+
+A connection's name is defined with `!&` on an output and used with `!*`
+on a later input; in Python the output object is the name. Each rule a name
+can break has its own code. A name used by several steps makes a branch, and
+a step that reads from several makes a join: a workflow is a graph, and the
+runner orders its steps by the data they need. A workflow output, under `outputs:` in `.wic` or
+`flow.outputs.<name>` in Python, gives a result a name of your choosing,
+without hiding the others.
+
+## Next
+
+Writing every connection by hand is clear, and in the straight stretches of a
+long pipeline it is also a lot of lines that say the obvious. In [Edge inference](edge-inference.md)
+you will leave the obvious ones out and let Sophios fill them in.

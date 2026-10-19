@@ -1,137 +1,154 @@
 # Sophios
 
-Sophios is a framework for authoring, managing and running scientific workflows.
-You describe what each step runs and what it needs. Sophios then:
+An analysis is rarely one program. You clean the raw data; then several
+things happen to the clean data at once, one program fitting a model while
+another computes summary statistics; and a last program puts both results
+into the figure for your paper. Draw that on a whiteboard and you get a
+graph: steps, and arrows for the data that flows between them. Run by hand
+or from a shell script, the graph works on your machine, today. It gets
+harder when you want to run it again on next month's data, on a thousand
+files at once, or on a colleague's computer that has none of your programs
+installed.
 
-- connects the steps;
-- checks the whole workflow before anything runs;
-- compiles it to the [Common Workflow Language](https://www.commonwl.org/) (CWL);
-- runs it on your machine.
+Sophios is for that moment. You describe each step, which program it runs,
+what you give it and which earlier results it reads, in a short YAML file or
+a Python script. Sophios checks the whole graph before anything runs, runs
+every program in the container it asks for, and writes the result out as a
+standard workflow that you, a colleague or a cluster can run again, with or
+without Sophios.
 
-It is built for two kinds of user:
+## A first look
 
-- scientists whose pipelines of containerised command-line tools must be
-  reproducible and shareable, without hand-writing CWL;
-- the agents that build and run those pipelines with them.
+Here is a small workflow, written as a `.wic` file, Sophios's short YAML
+format. It writes a greeting into a file, then does two things with that
+file side by side, making a shouted copy and counting its words, and finally
+joins the two results into one report:
 
-The CWL it compiles is standard. A CWL runner needs nothing from Sophios to run
-it.
-
-## Two ways to write a workflow
-
-There are two ways to write a Sophios workflow:
-
-- **The `.wic` language.** A compact YAML format for composing CWL
-  CommandLineTools that already exist. A `.wic` file lists the steps and the
-  values you give them; Sophios works out the rest.
-- **The Python API.** It builds the same workflows from Python objects
-  (`sophios.api.python.workflow`). It also covers something `.wic` does not:
-  writing the CommandLineTools themselves (`sophios.api.python.tool_builder`).
-  The tool builder writes the CWL boilerplate for you. When you need a CWL
-  feature it does not wrap, you set that part yourself, still in Python.
-
-For workflows the two are equal. Anything a `.wic` file says, a Python
-workflow can say. Sophios converts between the two forms: `Workflow.write_wic()`
-goes from Python to `.wic`, and `Workflow.from_wic()` goes back.
-
-Here is one workflow in both forms. It creates a file, appends a line to it, and
-prints the file:
-
-```{literalinclude} cookbook/greeting.wic
+```{literalinclude} cookbook/greeting_graph.wic
 :language: yaml
-:caption: greeting.wic
+:caption: greeting_graph.wic
 ```
 
-```{literalinclude} cookbook/greeting.py
-:language: python
-:caption: greeting.py
+Each `- id:` is a step, and names the program it runs; `run:` names a tool
+file kept beside the workflow, and
+[Connecting steps](connecting-steps.md) shows the three tool files. `!ii` gives a step a value. `!&` names what a
+step made, and `!*` hands it to a later step, so `greeting_file` feeds both
+`shout` and `word_count`, and `combine` reads from both of them. Sophios
+draws the graph it compiled, from the command line or, with
+`Workflow.draw()`, in a Python notebook:
+
+```bash
+sophios --yaml greeting_graph.wic --generate_cwl_workflow --graphviz
 ```
 
-Run the first with `sophios --yaml greeting.wic --run_local`, and the second
-with `python greeting.py`.
+![The graph of greeting_graph.wic: append feeds shout and word_count, which both feed combine](cookbook/greeting_graph.wic.gv.png)
 
-Neither version says which file `append` writes to, or what `cat` prints.
-Sophios works that out by **edge inference**. An input you leave unbound is
-connected to the most recent earlier output of a matching type. So `append`
-takes the file `touch` created, and `cat` takes the file `append` wrote. When
-more than one earlier output fits, Sophios reports which one it chose. You can
-always name an edge yourself instead; [Connecting steps](connecting-steps.md)
-shows how, and [Edge inference](edge-inference.md) gives the exact rules.
+One command runs it:
 
-## Writing a tool in Python
-
-When the tool you need has no CWL description yet, write it with the tool
-builder rather than writing CWL by hand:
-
-```python
-from sophios.api.python.tool_builder import (
-    CommandLineTool, Input, Inputs, Output, Outputs, cwl,
-)
-
-word_count = (
-    CommandLineTool('word_count',
-                    Inputs(text=Input(cwl.file, position=1)),
-                    Outputs(counts=Output(cwl.file, glob='counts.txt')))
-    .base_command('wc', '-w')
-    .stdout('counts.txt')
-    .docker('debian:bookworm-slim')
-)
-word_count.write_cwl('word_count.cwl', validate=True)
+```bash
+sophios --yaml greeting_graph.wic --run_local
 ```
 
-`write_cwl(..., validate=True)` also validates the written file with cwltool.
-`word_count.to_step()` puts the tool straight into a workflow, where inference
-connects it like any other step, and the written `word_count.cwl` is a tool a
-`.wic` step can run. See [Writing tools in Python](tool-builder.md).
+```text
+Success! Runner outputs are under /home/you/sophios-tutorial/autogenerated/outdir_cwltool_greeting_graph_2026_10_18_19.57.36/
+```
+
+That directory holds `report.txt`, the shouted greeting followed by its word
+count:
+
+```text
+HELLO, SOPHIOS
+2 /var/lib/cwl/stg7fa53ee1-c48b-48f4-a5a8-1ceb58c7203c/greeting.txt
+```
+
+The same workflow in Python is a few lines of assignments.
+[Your first workflow](first-workflow.md) starts smaller, with three steps in
+a line, writes and runs it in both forms, and the chapters after it grow it
+into this graph.
 
 ## What Sophios does for you
 
-**It compiles to CWL.** The output is a CWL `Workflow`, the CommandLineTools
-it uses, and a job file with the values you gave. All of it lands under
-`autogenerated/`. Along the way the compiler handles CWL's bookkeeping:
+A workflow that fails in its last step because of a typo in its first can
+cost you an afternoon. So Sophios checks the whole workflow when it compiles
+it, and checks your machine before a run starts: that the container engine
+is running, that the input files exist, that the programs it needs are
+installed. Each problem is one line that says where it is and what to change,
+and `sophios --explain` expands any code it carries.
 
-- it names each step uniquely, so one tool can appear twice;
-- it turns each literal value into a workflow input with its value in the job
-  file;
-- it adds the requirements a feature needs, such as scatter or a nested
-  workflow.
+Every program runs in the container image its tool names, so it behaves the
+same on your laptop, on a colleague's workstation and on a cluster node.
+Sophios fetches the images before the run, then hands the workflow to a
+runner, cwltool or Toil, using Docker, Podman or Singularity. The machine you
+run Sophios on can be your laptop, a cloud instance or the login node of an
+HPC cluster: with Toil as the runner, each step can go to the cluster's
+scheduler, such as Slurm or LSF, as [Running workflows](running.md) shows.
+The runner starts each step once the data it needs exists, so the order
+comes from the graph, not from the order in which you wrote the steps.
 
-[Compiling to CWL](compiling-to-cwl.md) shows what the generated CWL looks
-like and why.
+Where a stretch of the graph is a straight line, each input can usually come
+from only one place, the file the step before made, and you may leave those
+connections out: Sophios adds them for you. This is called edge inference.
+It saves a great deal of writing in long pipelines, and Sophios tells you
+about each connection it chose that you might not expect. Where the graph
+branches, as above, you write the connections.
+[Edge inference](edge-inference.md) explains it, once you have written
+connections by hand in the chapters before it.
 
-**It checks before it runs.** An unknown step, a missing input or a type that
-cannot flow along an edge is reported with a code (`wic` followed by a number)
-and the line in your `.wic` or Python file that caused it. `sophios --explain`
-followed by a code explains it. Errors that come from YAML, CWL or the runner
-are passed through as those layers report them. See
-[Checks and errors](checks-and-errors.md).
+What Sophios writes is plain
+[Common Workflow Language](https://www.commonwl.org/) (CWL), so any CWL runner
+can execute it without Sophios, and the CWL tools you or your field already
+have are steps you can use as they are.
 
-**It runs the workflow.** It runs locally with cwltool or Toil, under Docker,
-Podman or Singularity. Before the run it checks the machine and pulls every
-container image; `--check` stops after the checks, having pulled nothing.
-Three more options:
+Sophios writes everything it generates into `autogenerated/` under the
+directory you run it from. `--basepath` on the command line, or `basepath=`
+in Python, moves that directory, and `--outdir` moves only the files the run
+produces.
 
-- partial failures, so a step that fails with an expected exit code does not
-  end the run;
-- real-time analyses, which process results as they arrive;
-- a generated run script, for running the same workflow elsewhere.
+## Writing your own tools
 
-See [Running workflows](running.md).
+Sophios ships a handful of tools, and many scientific programs already have
+a CWL description. For a program that has none, you write one, and Sophios's
+Python API is built for that as much as for workflows. It has two halves:
+`sophios.api.python.workflow` builds workflows from `Step` and `Workflow`
+objects, and `sophios.api.python.tool_builder` builds the tools themselves.
+Here is `wc -w`, the word counter, as a tool:
 
-**It uses the CWL you already have.** Any CommandLineTool on your search paths
-can be a step, and with `--allow_raw_cwl` a plain CWL workflow passes through
-unchanged. See [Steps and tools](steps-and-tools.md).
+```{literalinclude} ../examples/scripts/count_words.py
+:language: python
+:lines: 12-19
+:caption: from count_words.py
+```
+
+It names the tool and the program it runs, `wc -w`; takes one file; keeps
+what `wc` prints as `counts.txt`; and names the image the program runs in.
+`Step(word_count)` makes it a step of a workflow, and
+`word_count.write_cwl('word_count.cwl')` writes a tool file that a `.wic`
+workflow can use too.
+[Writing tools in Python](tool-builder.md) builds it up a line at a time.
+
+## What Sophios is underneath
+
+Both forms describe the same thing: the steps, what each one takes and
+produces, the connections between them, and what the whole workflow takes
+and returns. Sophios holds that description in a model of its own and checks
+it there. Sophios is built to be multi-backend: a backend writes the model
+out for a runner, and today the only backend writes CWL, one workflow file,
+one tool file for each step, and the values the run uses.
+[The workflow model](workflow-model.md) describes the model, and
+[Compiling to CWL](compiling-to-cwl.md) reads what the backend writes, line
+by line.
 
 ## Where to go next
 
 | You want to | Read |
 |---|---|
-| Install Sophios and run a first workflow | [Install](install.md), then [Your first workflow](first-workflow.md) |
-| Learn to write workflows, step by step | the **Write workflows** section, in order |
-| Wrap a command-line program as a CWL tool | [Writing tools in Python](tool-builder.md) |
+| Install Sophios | [Install](install.md) |
+| Learn to write workflows, from the first step | [Your first workflow](first-workflow.md), then the chapters after it in order |
+| Turn a program of your own into a tool | [Writing tools in Python](tool-builder.md) |
+| Run on another engine, cache results, choose where results go | [Running workflows](running.md) |
+| Copy a working example | [Cookbook](cookbook.md) |
 | Look up a key, a flag, a method or an error code | the **Reference** section |
-| Find a pattern you can copy | [Cookbook](cookbook.md) |
-| Understand what the compiler does | [The workflow model](workflow-model.md), then [Compiling to CWL](compiling-to-cwl.md) |
+| Understand what the compiler builds | [The workflow model](workflow-model.md), then [Compiling to CWL](compiling-to-cwl.md) |
 
 <!-- pdf-end -->
 
@@ -149,10 +166,10 @@ first-workflow
 :maxdepth: 1
 :caption: Write workflows
 
-steps-and-tools
 inputs-and-values
 connecting-steps
 edge-inference
+steps-and-tools
 scatter-and-conditions
 types-and-records
 subworkflows

@@ -1,0 +1,8 @@
+steps:
+- id: echo
+  in:
+    message: !ii The quick brown fox jumps over the lazy dog
+- id: summarize
+  run: summarize.cwl
+- id: report
+  run: report.cwl

@@ -1,49 +1,50 @@
 # Types and records
 
-What may flow along an edge, and how do I feed one input from several sources,
-or transform a value on the way in? Types decide the first question. Sophios
-reads CWL's types as the tools declare them, compares them where it connects
-things, and rejects only what it can prove wrong. The step-input record
-answers the second: one binding that names several sources, or a default, or
-a transformation, written in either form.
+Every input and output has a type, and Sophios uses types to catch a
+mistaken connection before anything runs. In this chapter you will see what
+Sophios checks, and what it leaves to the runner. Then you will meet the
+**step-input record**, which you used for a condition in the last chapter,
+and use it to feed one input from two steps at once.
 
 ## Types
 
-A port's type is what its tool declares: an atom (`null`, `boolean`, `int`,
-`long`, `float`, `double`, `string`, `File`, `Directory`), an array of a type
-(`File[]`, or `{type: array, items: File}`), a union (`[null, File]`, which
-`File?` also spells), an enum, a record, or `Any`. Sophios does not define
-types of its own.
+A port's type is whatever its tool declares in CWL: a single kind of value
+(`boolean`, `int`, `float`, `string`, `File`, `Directory` and a few more),
+an array of one (`File[]`), a choice between several (`File?` is "a file or
+nothing"), an enum, a record, or `Any`. Sophios has no types of its own; it
+reads CWL's.
 
-Where a value meets a port, Sophios asks one question: can this value ever be
+When a value meets a port, Sophios asks one question: can this value ever be
 of the port's type?
 
-- A **literal** must have the port's type, with the two conversions
-  [Inputs and values](inputs-and-values.md) lists (integer to `float`,
-  number or boolean to `string`). Anything else is `wic020`, in both forms:
-  `touch.inputs.filename = 20` binds `"20"`, while a float on an `int` port is
-  reported at the assignment's line.
-- A **reference** (an edge or a workflow input) is rejected only when its type
-  and the port's are provably disjoint: two different atoms, an array against
-  a scalar atom, or unions none of whose members overlap. That is `wic023` in
-  `.wic` and `api003` in Python, raised at the assignment. `Any`, a named
-  schema, a record or an enum make the relation unknown, and an unknown
-  relation is left to the runner, which validates the compiled CWL when it
-  loads it. A scatter is taken into account on both sides: a scattered
-  producer's output is an array, and an input the consumer scatters over is
-  compared as an array of its declared type.
-- **Inference** is stricter than rejection, because it chooses rather than
-  checks: an output is a candidate only when its type equals the input's, or
-  one is a union containing the other or the two unions share a member, and its
-  format fits. `Any` matches only
-  `Any`. [Edge inference](edge-inference.md) has the full rule.
+- A **value you write** must have the port's type, with the three conversions
+  [Inputs and values](inputs-and-values.md) describes. Anything else is
+  `wic020`, in both forms.
+- A **connection**, or a workflow input, is rejected only when Sophios can
+  prove the two types never meet: two different kinds of value, an array
+  against a single value, or choices with nothing in common. That is
+  `wic023` in `.wic` and `api003` in Python, raised at the line that made
+  the connection. When it cannot tell, because one side is `Any`, a record,
+  an enum or a named type, it leaves the question to the runner, which
+  checks the compiled workflow when it loads it.
+- **Edge inference** is stricter than either, because it chooses rather than
+  checks: an output is a candidate only when its type matches the input's
+  ([Edge inference](edge-inference.md)).
 
-A workflow input takes the type of the first port it feeds, in Python, or the
-type you declare under `inputs:`, in `.wic`. A workflow output takes the type
-of its source. A tool's `stdout` and `stderr` shorthands are `File` at a
-workflow boundary.
+So a `string` output connected to a `File` input is caught when you compile,
+and an `Any` output connected to a `File` input is not caught by Sophios or
+by cwltool's check of the compiled workflow; it fails only when the step
+runs, if the value is not a file. Give tool outputs their exact type, and connect an
+`Any` input by hand. A workflow input takes the type you declare under
+`inputs:` in `.wic`, or the type of the first port it feeds in Python. A
+workflow output takes the type of the output it names.
 
-## Step-input records
+## Feed one input from two steps
+
+Some tools take several files at once: a tool that joins files, merges
+tables or compares samples. Its input is an array, `File[]`, and the files
+come from several steps. Here two steps each make a file, and a third joins
+them with `cat`:
 
 ```{literalinclude} cookbook/record.wic
 :language: yaml
@@ -55,53 +56,71 @@ workflow boundary.
 :caption: record.py
 ```
 
-Two outputs are merged into one `File[]` input; Sophios resolves the two
-sources into one binding ([Compiling to CWL](compiling-to-cwl.md#records)
-shows the result). In `.wic` the record is `!cwl` on a mapping; in Python it
-is a `StepInput`, bound like any value. The fields are the step input's, in
-their own spelling in `.wic` and in Python spelling in `StepInput`:
+The joining tool, `concat`, is written inline, under `run:` in `.wic` and as
+a mapping given to `Step.from_cwl_document()` in Python; its one input,
+`files`, takes a `File[]`. The input's value is the record: in `.wic`, `!cwl`
+on a mapping; in Python, a `StepInput`. Its `source` lists the two outputs,
+and `linkMerge: merge_flattened` joins them into one list. Run either form:
+
+```bash
+sophios --yaml record.wic --run_local
+```
+
+```bash
+python record.py
+```
+
+Both succeed, and `joined.txt` in the output directory reads `Hello`: the
+empty file followed by the line `echo` wrote. One file is empty on purpose,
+so that the result shows plainly what came from where; with
+`merge_flattened` the two files arrive as one list, in the order `source`
+names them, and `cat` writes them out in that order.
+
+## What a record can say
+
+A record is CWL's step input written out in full. Its fields are CWL's, in
+CWL's spelling in `.wic` and in Python's spelling in `StepInput`:
 
 | CWL field | `StepInput` | Meaning |
 |---|---|---|
-| `source` | `source` | one step output or workflow input, or a list of them |
-| `linkMerge` | `link_merge` | how several sources combine: `merge_nested` (a list with one entry per source, the default) or `merge_flattened` (arrays concatenated) |
-| `pickValue` | `pick_value` | which of several sources to keep when some are `null`: `first_non_null`, `the_only_non_null` or `all_non_null` |
-| `valueFrom` | `value_from` | an expression over the value (`self`) whose result is bound instead |
+| `source` | `source` | one output or workflow input, or a list of them |
+| `linkMerge` | `link_merge` | how several sources combine: `merge_nested`, one list entry per source (the default), or `merge_flattened`, arrays joined into one |
+| `pickValue` | `pick_value` | which sources to keep when some are `null`: `first_non_null`, `the_only_non_null` or `all_non_null` |
+| `valueFrom` | `value_from` | an expression over the value, `self`, whose result is used instead |
 | `default` | `default` | the value when the source gives none |
-| `loadContents` | `load_contents` | read the first 64 KiB of a file into `contents` |
+| `loadContents` | `load_contents` | read the first 64 KiB of a file into its `contents` |
 | `loadListing` | `load_listing` | how deep a directory is listed |
 | `label` | `label` | a title |
 
-The rules:
+You need a record for five things: several sources into one input, as
+above; a value for a `when:` under a name the tool does not take, as in
+[Scatter and conditions](scatter-and-conditions.md); a `default`; a
+transformation on the way in, such as
+`minval: !cwl {source: count, valueFrom: '$(self + 1)'}`; and choosing among
+the outputs of conditional steps with `pickValue`. For a single value or a
+single connection, the plain spellings you already know are clearer.
 
-- `source` entries are references: `!* name` or a workflow-input name in
-  `.wic`, port objects in Python. A `!ii` or a `!cwl` inside `source`, a
-  string in a `StepInput`'s `source`, is an error (`wic038`, `api001`).
-- A record may bind an input the step's tool does not declare. That is how a
-  `when:` or a `valueFrom` reads an extra value; in Python a `StepInput` is
-  the only value that may be assigned to an undeclared name. The input is
-  typed `Any`.
-- A source that a merge, a pick or a `valueFrom` transforms is not checked
-  against the input's type, since the transformation decides the type. A record with one source and nothing else is checked as a
-  plain edge would be.
-- A record with one source resolves it as the same reference written alone,
-  so it may use an edge its caller defined. A record with several sources
-  takes each from its own document: an edge no step of the document defines
-  is `wic025` there, even when the caller defines it; declare the value in
-  `inputs:` instead.
-- These are `wic038`: a key that is not one of the fields above; a record with
-  no `source`, `default` or `valueFrom`, which gives the input no value; and
-  an untagged mapping of these fields in an input position.
+A few rules keep records honest. A `source` holds connections only: a `!ii`
+or a `!cwl` inside it, or a string in a `StepInput`'s `source`, is
+`wic038` or `api001`. A record may bind a name the tool does not declare,
+which is how a `when:` reads an extra value; that input's type is `Any`. A
+record whose sources are merged, picked or transformed is not checked
+against the input's type, since the transformation decides it. A key that is
+not one of the fields above is `wic038`, and so is a record with no
+`source`, `default` or `valueFrom`. [§3.5 of the `.wic`
+reference](wic-reference.md#35-step-input-records-cwl-on-a-mapping) has the
+rest.
 
-## Where a record is the only way
+## Recap
 
-- Several sources into one input: a merge, as above.
-- A value for `when:`, bound to a name the tool does not take; see
-  [Scatter and conditions](scatter-and-conditions.md).
-- A default for an input that may receive nothing, with `default`.
-- A transformation on the way in, with `valueFrom`:
-  `minval: !cwl {source: count, valueFrom: '$(self + 1)'}`.
-- Picking among the outputs of conditional steps, with `pickValue`.
+Sophios rejects a value whose type is wrong and a connection whose types can
+never meet, and leaves to the runner the cases it cannot decide. A
+step-input record, `!cwl {...}` in `.wic` or `StepInput(...)` in Python,
+says more than one value can: several sources and how to merge them, a
+default, a transformation, or a pick among conditional outputs.
 
-Everything else, a literal, a workflow input or a single edge, has its plain
-spelling, which is the one to use.
+## Next
+
+Your pipeline has grown. In [Subworkflows](subworkflows.md) you will take
+the part that makes the greeting and use it as a single step of a larger
+workflow.

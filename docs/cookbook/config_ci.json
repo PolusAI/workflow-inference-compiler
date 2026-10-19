@@ -7,6 +7,8 @@
     // (data.txt) that has to exist beside them.
     "fragments": [
         "cat_file",
+        "greeting_if",
+        "greeting_input",
         "raw_cwl",
         "when",
         "workflow_input"

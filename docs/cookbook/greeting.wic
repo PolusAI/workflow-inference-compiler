@@ -2,7 +2,14 @@ steps:
 - id: touch
   in:
     filename: !ii greeting.txt
+  out:
+  - file: !& empty_file
 - id: append
   in:
+    file: !* empty_file
     str: !ii Hello, Sophios
+  out:
+  - file: !& greeting_file
 - id: cat
+  in:
+    file: !* greeting_file

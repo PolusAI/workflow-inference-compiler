@@ -9,6 +9,13 @@ what the suite promises.
 
 ## A source checkout
 
+First install a container engine and start it: the tests that run workflows
+need one, as does any local run of a tool that names a container image.
+Docker is the default; [Install](../install.md) has the steps for each
+platform and a check that it works.
+
+Then clone the repository and create the development environment:
+
 ```bash
 git clone https://github.com/PolusAI/sophios.git
 cd sophios
@@ -121,7 +128,7 @@ test keeps the two equal.
 | `preflight.py` | what a local run needs from this machine |
 | `run_local.py`, `realtime.py` | running the compiled CWL, and the real-time analyses beside it |
 | `post_compile.py` | the rewrites of a compiled tree: flattening, embedding, partial failures |
-| `drawing.py` | `--graphviz` |
+| `drawing.py` | `--graphviz` and `Workflow.draw()` |
 | `contrib/` | see [Contrib](../contrib.md) |
 
 ## Runtime notes

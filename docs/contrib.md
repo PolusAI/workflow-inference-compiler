@@ -1,11 +1,11 @@
 # Contrib: REST API, ICT conversion, payload fixing
 
-What else ships in the `sophios` package besides the compiler and the two
-authoring forms? Three peripheral surfaces, under `sophios.contrib`, kept
-working and deliberately outside the core: the core never imports them, and
-nothing on the other pages depends on them. They serve a graphical workflow
-builder that composes tools described by ICT files and sends the result to be
-compiled.
+This page is for people who connect Sophios to a graphical workflow builder;
+if you write workflows in `.wic` or Python, nothing here applies to you.
+Three peripheral surfaces ship in the `sophios` package under
+`sophios.contrib`, outside the core: the core never imports them, and no
+other page depends on them. They serve a builder that composes tools
+described by ICT files and sends the result to be compiled.
 
 ## The REST API
 
