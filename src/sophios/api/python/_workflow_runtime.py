@@ -541,11 +541,13 @@ def compiled_workflow(
 def _run_args(overrides: dict[str, str] | None) -> dict[str, str]:
     """The default local-run settings with `overrides` applied.
 
-    `quiet` is on unless the caller turns it off, and is normalised to the `yes`/`no`
-    that `run_local` reads.
+    `quiet` is on unless the caller turns it off. It and `generate_run_script` are
+    normalised to the `yes`/`no` that `run_local` reads.
     """
     resolved = {**DEFAULT_RUN_ARGS, **(overrides or {})}
-    resolved["quiet"] = "yes" if _enabled(resolved["quiet"]) else "no"
+    for switch in ("quiet", "generate_run_script"):
+        if switch in resolved:
+            resolved[switch] = "yes" if _enabled(resolved[switch]) else "no"
     return resolved
 
 

@@ -1145,6 +1145,15 @@ def test_workflow_run_is_quiet_by_default(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize("value", ["yes", "true", "1", "on", True])
+def test_workflow_run_generate_run_script_run_arg(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: str | bool
+) -> None:
+    """Any spelling of yes for `generate_run_script` writes `run.sh`; it does not run the workflow."""
+    assert _api_run_command(monkeypatch, tmp_path, {"generate_run_script": value})
+
+
+@pytest.mark.fast
 @pytest.mark.parametrize(
     ("quiet", "expected"),
     [("yes", True), ("true", True), (True, True), ("no", False), ("false", False), (False, False)],

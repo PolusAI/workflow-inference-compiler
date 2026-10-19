@@ -4,6 +4,7 @@ import subprocess as sub
 import sys
 import os
 import re
+import shlex
 import stat
 from contextlib import contextmanager
 from pathlib import Path
@@ -352,7 +353,7 @@ def run_local(run_args_dict: dict[str, str], use_subprocess: bool,
                     container_engine, passthrough_args, run_args_dict.get('outdir') or None,
                     quiet=run_args_dict.get('quiet', 'yes') == 'yes', documents=documents,
                     cachedir=cachedir or None)
-    cmdline = ' '.join(cmd)
+    cmdline = shlex.join(cmd)
     exec_env = create_safe_env(user_env_vars or {})
 
     if run_args_dict.get('generate_run_script', 'no') == 'yes':
