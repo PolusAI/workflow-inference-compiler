@@ -43,7 +43,7 @@ def _draw(document: Yaml = _DOCUMENT, *, label_edges: bool = False, label_stepna
     settings['graph_label_stepname'] = label_stepname
     settings['graph_inline_depth'] = inline_depth
     settings['graph_dark_theme'] = dark_theme
-    dot: str = drawing.draw(compiled, source, settings, 'oracle').source
+    dot: str = drawing.draw(compiled, source, settings, 'oracle', background=None).source
     return dot
 
 
@@ -200,8 +200,10 @@ def test_graphviz_writes_the_graph_of_the_compiled_workflow(cli_graph: Callable[
 def test_graph_dark_theme_sets_the_foreground_of_the_drawing(
         cli_graph: Callable[..., str], flags: tuple[str, ...], font: str) -> None:
     """The drawing's text, its box outlines and its inferred edges take one colour: black, or white with
-    `--graph_dark_theme`. A box is not filled, so it takes the background's colour."""
+    `--graph_dark_theme`. The background is transparent either way, so a slide gives it its colour;
+    a box is not filled, so it takes that colour too."""
     drawn = cli_graph(_TWO_STEPS, *flags)
+    assert 'bgcolor=transparent\n' in drawn
     assert f'fontcolor={font}\n' in drawn
     boxes = _nodes(drawn)
     assert {(attrs['color'], attrs['fontcolor']) for attrs in boxes.values()} == {(font, font)}

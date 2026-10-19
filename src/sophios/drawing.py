@@ -1,4 +1,4 @@
-"""Draw a compiled workflow, for `--graphviz`.
+"""Draw a compiled workflow, for `--graphviz` and `Workflow.draw`.
 
 A projection made after compiling, and only when a drawing is asked for: the
 compiled graph gives the steps and the edges between them, and the `wic: graphviz:`
@@ -21,7 +21,7 @@ _Sidecars = dict[Namespace, WicSidecar | None]
 
 
 def draw(compiled: CompilationResult, bundle: SourceBundle, settings: GraphSettings,
-         name: str) -> graphviz.Digraph:
+         name: str, *, background: str | None) -> graphviz.Digraph:
     """The drawing of `compiled`, the result of compiling `bundle`.
 
     Args:
@@ -29,6 +29,9 @@ def draw(compiled: CompilationResult, bundle: SourceBundle, settings: GraphSetti
         bundle (SourceBundle): The documents `compiled` was compiled from.
         settings (GraphSettings): The `--graph_*` flags.
         name (str): The drawing's name, and its title when the root document gives none.
+        background (str | None): The Graphviz colour the drawing is painted on, or None for a
+            transparent one, which a slide takes the colour of. `--graph_dark_theme` picks the
+            foreground, so a dark background goes with it.
 
     Returns:
         graphviz.Digraph: The drawing, ready to save as DOT.
@@ -37,7 +40,7 @@ def draw(compiled: CompilationResult, bundle: SourceBundle, settings: GraphSetti
     # newrank='True' ranks nodes globally (rather than per-cluster), which is
     # required for rank=same constraints to work across subgraphs/clusters.
     root.attr(newrank='True')
-    root.attr(bgcolor='transparent')  # Useful for making slides
+    root.attr(bgcolor=background or 'transparent')
     root.attr(fontcolor=_foreground(settings))
     assert bundle.parsed.document is not None  # `compiled` was compiled from it
     document = called_document(bundle.parsed.document, None, bundle.registry)

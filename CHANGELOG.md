@@ -251,13 +251,19 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   `get_dicts_for_compilation()` returns `(compiler_options, graph_settings)`.
   The compiler no longer draws: `CompilationArtifact.graph_view` and
   `sophios.utils_graphs` are gone, and `sophios.drawing.draw(result, bundle,
-  graph_settings, name)` draws a compiled workflow. The
+  graph_settings, name, *, background)` draws a compiled workflow. The
   `sophios.cwl_subinterpreter` module is gone.
 - `sophios.utils_yaml.wic_loader()` and its `WicLoader` are gone. Read a
   `.wic` with `sophios.lang.parse` or `Workflow.from_wic`.
 - `CommandLineTool.validate()`, `write_cwl(validate=True)` and
   `validate_cwl_document()` never load the ontologies under `$schemas`, as a
   local run does not, and no longer take `skip_schemas`. Drop the argument.
+- `Workflow.draw()` returns the workflow's drawing as a `graphviz.Digraph`,
+  which a Jupyter notebook shows inline when a cell ends with it. It compiles
+  as `compile()` does, so `inference=` changes the edges it draws. Its
+  background is opaque, white or with `dark=True` near-black, so it reads in
+  a light or a dark notebook, in exported HTML and on GitHub; `--graphviz`
+  keeps its transparent background.
 
 <!-- Breaking changes merged before 0.7.0 is released add their upgrade steps
      to the section above that they belong to. -->
