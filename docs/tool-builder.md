@@ -1,62 +1,117 @@
 # Writing tools in Python
 
-How do I turn a command-line program into a tool a workflow can run? A tool
-is a CWL `CommandLineTool`: the command, its inputs and how each reaches the
-command line, its outputs and how each is collected, and what it needs to run
-(a container, memory, a GPU). `sophios.api.python.tool_builder` writes that
-document from Python objects, validates it with cwltool, and hands it to a
-workflow without a file in between. This page goes from a command line to a
-validated tool, one part of the document at a time. For the parts of CWL the
-builder does not change, the rules the runner applies to files, outputs and
-expressions, read [The CWL you still need](cwl-you-still-need.md) next.
+In [Steps and tools](steps-and-tools.md) you added a word counter from a
+tool file someone had written in CWL. Most programs you will want to run,
+your own scripts above all, have no such file yet. In this chapter you will
+write that word counter yourself, in Python, run it in the greeting
+workflow, and learn the parts of a tool well enough to describe a program of
+your own.
+
+This is the second half of Sophios's Python API. `sophios.api.python.workflow`
+builds workflows from steps; `sophios.api.python.tool_builder` builds the
+tools the steps run. You describe the program in Python, and the builder
+writes the CWL, checks it with cwltool, and hands the tool to a workflow
+directly.
 
 ## From a command line to a tool
 
-Take `wc -w greeting.txt > counts.txt`: a program, one file argument, and
-standard output captured to a file.
+A tool describes one program: what it is called, what it takes and how each
+input reaches its command line, what it produces and where the runner finds
+it, and what it needs, such as a container image. Start from the command you
+would type:
 
-```python
-from sophios.api.python.tool_builder import (
-    CommandLineTool, Input, Inputs, Output, Outputs, cwl,
-)
-
-word_count = (
-    CommandLineTool('word_count',
-                    Inputs(text=Input(cwl.file, position=1)),
-                    Outputs(counts=Output(cwl.file, glob='counts.txt')))
-    .base_command('wc', '-w')
-    .stdout('counts.txt')
-    .docker('debian:bookworm-slim')
-)
+```bash
+wc -w greeting.txt > counts.txt
 ```
 
-The constructor takes the tool's contract, its name, its inputs and its
-outputs, and nothing else; everything after it is one chained call per part
-of the document. Read it as:
+It has a program with a fixed flag, `wc -w`, one file argument, and its
+standard output saved to a file. Here it is as a tool, in the greeting
+workflow, in place of `cat`. Save it as `count_words.py`:
 
-- `word_count` is the tool's `id`, and the name of a step that runs it;
-- `Inputs(text=...)`: the input is called `text`, from the keyword; it is a
-  `File`, given as the first positional argument;
-- `Outputs(counts=...)`: the output is called `counts`; it is the `File`
-  named `counts.txt` in the working directory when the tool exits;
-- `base_command('wc', '-w')`: the program and the words that always follow
-  it, one word per argument;
-- `stdout('counts.txt')`: the file standard output is written to;
-- `docker('debian:bookworm-slim')`: the image the runner pulls and runs the
-  command in.
-
-Three things come out of the object:
-
-```python
-word_count.validate()                                 # cwltool loads it, as a runner would
-word_count.write_cwl('word_count.cwl', validate=True) # the .cwl file, validated
-count = word_count.to_step()                          # a workflow Step, no file written
+```{literalinclude} ../examples/scripts/count_words.py
+:language: python
+:caption: count_words.py
 ```
 
-`to_cwl_document()` is the document as a mapping and `to_cwl_yaml()` as
-text, for when you want to read what will be written. The written file is
-what a `.wic` step runs, by stem from a search path or by `run:` path; the
-[word_count pair](steps-and-tools.md) runs this one.
+The tool is the `word_count` object. Read it one line at a time:
+
+- `CommandLineTool('word_count', Inputs(...), Outputs(...))` names the tool
+  and lists its inputs and outputs. The name is also the name of a step that
+  runs it.
+- `Inputs(text=Input(cwl.file, position=1))` is one input, `text`, a file,
+  which goes on the command line as the first argument.
+- `Outputs(counts=Output(cwl.file, glob='counts.txt'))` is one output,
+  `counts`: the file called `counts.txt` that the program leaves in its
+  working directory.
+- `.base_command('wc', '-w')` is the program and the words that always
+  follow it.
+- `.stdout('counts.txt')` saves standard output to `counts.txt`.
+- `.docker('debian:bookworm-slim')` names the image the program runs in.
+
+Each method after the constructor adds one part of the description and
+returns the tool, so the calls chain. In the workflow, `Step(word_count)`
+makes a step from the tool, the same way `Step(clt_path=...)` makes one from
+a file, and `count.inputs.text = append.outputs.file` connects it as you have
+connected every step since chapter 1.
+
+Run it from your project directory:
+
+```bash
+python count_words.py
+```
+
+```text
+Resolved 'word_count.cwl' to 'file:///home/you/sophios-tutorial/word_count.cwl'
+ starting compilation of count_words
+finishing compilation of count_words
+...
+Success! Runner outputs are under /home/you/sophios-tutorial/autogenerated/outdir_cwltool_count_words_2026_10_18_18.46.03/
+```
+
+The first line is cwltool loading the tool file the script wrote, to check
+it. The output directory holds `counts.txt`, which reads `2` followed by the
+path `wc` was given, exactly as with the hand-written tool. The script also
+left the tool file beside itself:
+
+```yaml
+class: CommandLineTool
+id: word_count
+inputs:
+- id: text
+  type: File
+  inputBinding:
+    position: 1
+outputs:
+- id: counts
+  type: File
+  outputBinding:
+    glob: counts.txt
+requirements:
+- class: DockerRequirement
+  dockerPull: debian:bookworm-slim
+cwlVersion: v1.2
+baseCommand:
+- wc
+- -w
+stdout: counts.txt
+```
+
+This is the CWL the builder wrote. It says the same as the hand-written
+`word_count.cwl` of [Steps and tools](steps-and-tools.md), in CWL's list
+form, and a `.wic` step runs it the same way, with `run: word_count.cwl`.
+
+A tool object gives you three things:
+
+```python
+word_count.validate()                                  # cwltool loads it; raises if it is not valid CWL
+word_count.write_cwl('word_count.cwl', validate=True)  # the .cwl file, checked
+count = Step(word_count)                               # a Step, no file written
+```
+
+`to_cwl_yaml()` returns the document as text and `to_cwl_document()` as a
+mapping, so you can read what will be written. The rest of this chapter
+takes the parts of a tool one at a time; the
+[Python API reference](python-api-reference.rst) lists every method.
 
 ## Inputs
 
@@ -82,20 +137,17 @@ The type is a value of the `cwl` namespace (`cwl.int`, `cwl.float`,
 `Input.enum('a', 'b', ...)` and `Input.record(...)` build the composite and
 the input in one call.
 
-How the value reaches the command line is the `inputBinding`:
-
-| Keyword | CWL | Meaning |
-|---|---|---|
-| `position=1` | `position` | the sort key among inputs and arguments; lower comes first |
-| `flag='--threads'` | `prefix` | a flag written before the value |
-| `separate=False` | `separate` | join the flag and the value into one word (`--threads=4`) |
-| `item_separator=','` | `itemSeparator` | join an array into one word |
-| `value_from='$(self * 1024)'` | `valueFrom` | put the expression's result on the command line instead |
-| `shell_quote=False` | `shellQuote` | hand the value to a shell unquoted, for a pipe or a redirection; read only when the tool has `.shell_command()` |
+Most programs take each value one of three ways, and an `Input` says which.
+A value given by position, such as the file `wc -w` counts, takes
+`position=`. A value after a flag, such as `--threads 4`, takes `flag=`. A
+switch that is either there or not, such as `-v`, is a `boolean` with a
+flag, written only when the value is true. Everything else, such as joining
+an array into one word or computing the value with an expression, is a
+keyword on the same `Input`, listed in the
+[reference at the end of this chapter](#quick-reference).
 
 An input with none of these is not put on the command line; the tool reads it
-through an expression or a staged file. A `boolean` with a flag writes the
-flag when the value is true and nothing when it is false. `required=False`
+through an expression or a staged file. `required=False`
 makes the type optional (`['null', 'int']`), and an optional input with no
 value writes nothing. `default=` is the value used when none is given.
 
@@ -105,7 +157,7 @@ chained method that returns a changed copy: `.label('...')`, `.doc('...')`,
 the files that travel with a `File`, `.load_contents(True)` to read the first
 64 KiB into `contents`, `.load_listing('deep_listing')` for a `Directory`,
 `.streamable(True)`. Names are Python identifiers; a name that starts with
-`_` or is a method of the collection (`keys`) is `ValueError`.
+`_` or is a method of the collection (`keys`) is a `ValueError`.
 
 ## Outputs
 
@@ -128,7 +180,7 @@ outputs = Outputs(
   that matches more than one file. `required=False` makes no match a `null`;
   `cwl.array(cwl.file)` collects every match.
 - `load_contents=True` reads the first 64 KiB of each match into `contents`,
-  and `output_eval` turns the matches (`self`) into the output's value, which
+  and `output_eval` turns the matches (`self`) into the output's value. That
   is how a tool returns a number or a string read from a file.
 - `Output.stdout()` and `Output.stderr()` are the captured streams. Name the
   files with `.stdout('name')` and `.stderr('name')` on the tool; without a
@@ -147,16 +199,19 @@ tool = (
 ```
 
 `base_command(*parts)` is the program and the words that always follow it;
-it replaces an earlier one. `argument(value, position=, prefix=, ...)` adds a
-word that comes from no input, with the same binding keywords as an input; a
-bare `argument('--verbose')` is the word itself. `stdin(expression)` names
-the file read on standard input. The command line is assembled by CWL's rule:
-the base command, then every argument and bound input sorted by `position`,
-ties in declaration order.
+calling it again replaces the earlier one. `argument(value, position=,
+prefix=, ...)` adds a word that comes from no input, with the same binding
+keywords as an input; a bare `argument('--verbose')` is the word itself.
+`stdin(expression)` names the file read on standard input. The command line
+is assembled by CWL's rule: the base command, then every argument and bound
+input sorted by `position`, ties in declaration order.
 
 ## Requirements
 
-Each requirement is one method. The common ones:
+A requirement tells the runner what the tool needs from the machine it runs
+on: an image, cores and memory, an environment variable, the network, a time
+limit, a file staged where the tool can write it. Each is one method, named
+for what it asks for. The common ones:
 
 ```python
 tool = (
@@ -170,25 +225,13 @@ tool = (
 )
 ```
 
-| Method | Writes | Notes |
-|---|---|---|
-| `.docker(image, ...)` | `DockerRequirement` | `dockerPull`; `docker_image_id=` for an image that exists only locally; `docker_load=`, `docker_file=`, `docker_import=`, `docker_output_directory=` |
-| `.resources(cores=, ram=, tmpdir=, outdir=)` | `ResourceRequirement` | the `_min` fields; `cores_max=`, `ram_max=`, ... for maxima; memory and disk in mebibytes |
-| `.gpu(cuda_version_min=, compute_capability=, device_count_min=)` | `cwltool:CUDARequirement` | a hint by default, and declares the `cwltool` namespace; runners other than cwltool ignore a hint they do not know |
-| `.env_var(name, value)` | `EnvVarRequirement` | one variable per call; the tool sees no other |
-| `.network_access(True)` | `NetworkAccess` | a v1.2 tool has no network unless it says so |
-| `.time_limit(seconds)` | `ToolTimeLimit` | the runner stops the tool and fails the step |
-| `.stage(inputs.name, writable=, entryname=)` | `InitialWorkDirRequirement` entry | put the input in the working directory, writable or not |
-| `.initial_workdir(listing)` | `InitialWorkDirRequirement` | the whole listing, replacing staged entries |
-| `.shell_command()` | `ShellCommandRequirement` | run the command line through a shell, so that `shell_quote=False` arguments can pipe and redirect |
-| `.inline_javascript(*expression_lib)` | `InlineJavascriptRequirement` | added for you when any field holds `$(` or `${`; call it only for an `expressionLib` |
-| `.schema_definitions(*types)` | `SchemaDefRequirement` | named records and enums |
-| `.software([...])`, `.load_listing(...)`, `.work_reuse(...)`, `.inplace_update(...)` | the requirement of that name | |
-
-Every one takes `as_hint=True` to write the entry under `hints`, which a
-runner may ignore, instead of `requirements`, which it must honour or refuse
-the tool. `.gpu()` and `.inplace_update()` are hints by default. A class
-added twice replaces the earlier entry.
+Use `.docker()` for every tool whose program is not on every machine: it is
+what makes the tool run the same everywhere. Ask for resources when a tool
+needs more than a runner gives by default, and for the network only when the
+tool downloads something, since a CWL v1.2 tool has none unless it asks. A
+requirement the runner must honour can also be written as a hint, which it
+may ignore; the [reference at the end of this chapter](#quick-reference)
+lists every method and when each is a hint.
 
 ## Description and metadata
 
@@ -201,7 +244,7 @@ ontology under `$schemas`, for `format` values such as `edam:format_2572`;
 `.success_codes(0, 1)`, `.temporary_fail_codes(...)` and
 `.permanent_fail_codes(...)` say which exit codes mean what.
 
-## Escape hatches
+## When the builder has no method for it
 
 CWL is larger than the builder. Four calls write what no method covers, as
 given:
@@ -238,34 +281,102 @@ under `$schemas` are not fetched, as a local run does not fetch them. A
 rejected here, since cwltool reads its extensions only with `--enable-ext`,
 which Sophios passes when it runs; keep it a hint.
 
-To Python and to `validate()` an expression is text: `$(inputs.read)` for an
-input named `reads` is found by the runner, when the tool runs. Validate at
-the tool boundary, then compile the workflow; a mistake in the tool is
+Validation checks the document, not the program. To Python and to
+`validate()` an expression is text: `$(inputs.read)` for an input named
+`reads` is found by the runner, when the tool runs. And whether `wc` exists
+in the image, or writes `counts.txt`, is found out by running. Validate at
+the tool boundary, then compile the workflow: a mistake in the tool is
 reported against the tool, not against the step that runs it.
 
 ## Into a workflow
 
 ```python
-from sophios.api.python.workflow import Step, Workflow
-
-touch = Step(clt_path='cwl_adapters/touch.cwl')
-touch.inputs.filename = 'greeting.txt'
-append = Step(clt_path='cwl_adapters/append.cwl')
-append.inputs.str = 'Hello, Sophios'
-count = word_count.to_step()
-
-flow = Workflow([touch, append, count], 'counted')
-flow.outputs.counts = count.outputs.counts
-flow.run()
+count = Step(word_count)
+counter = Step(word_count, step_name='count_greeting')
 ```
 
-`Step(tool)` and `tool.to_step()` make a step from the object; `to_step`
-also takes `step_name=` and `step_inputs={...}`. The step's inputs and outputs
-are the tool's, by name, and inference connects it like any other step: here
-`count.text` takes `append`'s file. The compiled workflow carries the tool
-under `autogenerated/`, as it carries every tool. The run pulls
-`debian:bookworm-slim` with the other images and writes `counts.txt` into the
-output directory.
+`Step` takes a built `CommandLineTool` as it takes a tool file. `step_name=`
+names the step, which otherwise takes the tool's name. The step's inputs
+and outputs are the tool's, by name, and inference connects it like any
+other step. The compiled workflow carries the tool in the base path as it
+carries every tool, and the run pulls its image with the others.
 
 A tool built this way is CWL v1.2; the other tools of a workflow may be
 older, since the compiled workflow is v1.2 whatever its tools declare.
+
+The builder writes the YAML; it does not change what the YAML means. The
+runner runs the tool by CWL's rules, and a tool that ignores them fails when
+it runs, not when it is validated. [The CWL you still need](cwl-you-still-need.md)
+is those rules, one per section, each with the builder call that writes it.
+
+## A mistake validation cannot catch
+
+Leave out `.stdout('counts.txt')` and the tool is still valid CWL, so
+`validate()` passes. But `wc -w` now prints its count to the terminal instead of a file,
+and the run fails when the runner looks for the output:
+
+```text
+0 /var/lib/cwl/stg8c3929ee-2030-49af-81f7-f83d4a38bf04/greeting.txt
+ERROR [job step 2 'word_count' (forgot_stdout__step__2__word_count)] Job error:
+("Error collecting output for parameter 'counts': autogenerated/forgot_stdout.cwl:49:9: Did not find output file with glob pattern: ['counts.txt'].", {})
+```
+
+Read it from the top: the first line is `wc`'s own output, which nothing
+captured; the error names the output, `counts`, and the glob that found
+nothing. An output is collected only from files in the tool's working
+directory, and a program that prints its result needs `.stdout()` to make
+that a file. [The CWL you still need](cwl-you-still-need.md) lists the few
+rules of this kind.
+
+## Quick reference
+
+How an input's value reaches the command line:
+
+| Keyword | Writes | Meaning |
+|---|---|---|
+| `position=1` | `position` | the order among arguments; lower comes first |
+| `flag='--threads'` | `prefix` | a flag written before the value |
+| `separate=False` | `separate` | join the flag and the value into one word (`--threads=4`) |
+| `item_separator=','` | `itemSeparator` | join an array into one word |
+| `value_from='$(self * 1024)'` | `valueFrom` | put the expression's result on the command line instead |
+| `shell_quote=False` | `shellQuote` | hand the value to a shell unquoted, for a pipe or a redirection; read only when the tool has `.shell_command()` |
+
+The requirement methods:
+
+| Method | Writes | Notes |
+|---|---|---|
+| `.docker(image, ...)` | `DockerRequirement` | `dockerPull`; `docker_image_id=` for an image that exists only locally; `docker_load=`, `docker_file=`, `docker_import=`, `docker_output_directory=` |
+| `.resources(cores=, ram=, tmpdir=, outdir=)` | `ResourceRequirement` | the `_min` fields; `cores_max=`, `ram_max=`, ... for maxima; memory and disk in mebibytes |
+| `.gpu(cuda_version_min=, compute_capability=, device_count_min=)` | `cwltool:CUDARequirement` | a hint by default, and declares the `cwltool` namespace; runners other than cwltool ignore a hint they do not know |
+| `.env_var(name, value)` | `EnvVarRequirement` | one variable per call; the tool sees no other |
+| `.network_access(True)` | `NetworkAccess` | a v1.2 tool has no network unless it says so |
+| `.time_limit(seconds)` | `ToolTimeLimit` | the runner stops the tool and fails the step |
+| `.stage(inputs.name, writable=, entryname=)` | `InitialWorkDirRequirement` entry | put the input in the working directory, writable or not |
+| `.initial_workdir(listing)` | `InitialWorkDirRequirement` | the whole listing, replacing staged entries |
+| `.shell_command()` | `ShellCommandRequirement` | run the command line through a shell, so that `shell_quote=False` arguments can pipe and redirect |
+| `.inline_javascript(*expression_lib)` | `InlineJavascriptRequirement` | added for you when any field holds `$(` or `${`; call it only for an `expressionLib` |
+| `.schema_definitions(*types)` | `SchemaDefRequirement` | named records and enums |
+| `.software([...])`, `.load_listing(...)`, `.work_reuse(...)`, `.inplace_update(...)` | the requirement of that name | |
+
+Every requirement method takes `as_hint=True` to write the entry under
+`hints`, which a runner may ignore, instead of `requirements`, which it must
+honour or refuse the tool. `.gpu()` and `.inplace_update()` are hints by
+default. A class added twice replaces the earlier entry.
+
+`tool.to_step(step_name=..., step_inputs={...})` is a convenience for
+`Step(tool, step_name=...)` that also binds inputs in one call. The
+[Python API reference](python-api-reference.rst) documents every method.
+
+## Recap
+
+`CommandLineTool(name, Inputs(...), Outputs(...))` describes a program, and
+chained methods add its command, its standard output and its container.
+`validate()` checks the description with cwltool, `write_cwl()` writes a
+tool file any `.wic` workflow can run, and `Step(tool)` makes a step of a
+Python workflow without writing a file.
+
+## Next
+
+The builder writes CWL for you, but the runner still runs it by CWL's
+rules. [The CWL you still need](cwl-you-still-need.md) is the short list of
+rules that decide whether a tool works when it runs.

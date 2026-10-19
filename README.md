@@ -2,29 +2,45 @@
 
 [![doc-build-status](https://readthedocs.org/projects/sophios/badge/?version=latest)](https://sophios.readthedocs.io/en/latest/)
 
-Sophios is a framework for authoring, managing and running scientific workflows. You describe what each step runs and what it needs; Sophios connects the steps, checks the whole workflow before anything runs, compiles it to the [Common Workflow Language](https://www.commonwl.org) (CWL), and runs it on your machine with cwltool or Toil.
+An analysis is rarely one program: you clean the raw data, fit a model and compute statistics on it side by side, and put both into a figure. Steps, and the data that flows between them, make a graph. Sophios helps you turn that graph into a workflow that runs the same way on your laptop, on a colleague's machine and on a cluster. You describe each step, which program it runs, what you give it and which earlier results it reads, in a short YAML file (a `.wic` file) or a Python script. Sophios checks the whole graph before anything runs, runs every program in the container it asks for, and writes the result out as standard [Common Workflow Language](https://www.commonwl.org) (CWL) that any CWL runner can execute, with or without Sophios. The runner can be cwltool on one machine, or Toil on a cloud instance or an HPC cluster's scheduler such as Slurm or LSF. Sophios is multi-backend, with a workflow model of its own; CWL is its only backend today.
 
-There are two ways to write a workflow, and for workflows they are equal:
-
-- the `.wic` language, a compact YAML format for composing CWL CommandLineTools that already exist;
-- the Python API (`sophios.api.python.workflow`), which builds the same workflows from Python objects and also writes the CommandLineTools themselves (`sophios.api.python.tool_builder`).
+Sophios's Python API has two halves. `sophios.api.python.workflow` builds workflows from `Step` and `Workflow` objects. `sophios.api.python.tool_builder` builds the tools themselves, so a program of your own becomes a step without hand-written CWL.
 
 ## Documentation
 
-The documentation is on [Read the Docs](https://sophios.readthedocs.io/en/latest/): [install](docs/install.md), then [your first workflow](docs/first-workflow.md).
+The documentation is on [Read the Docs](https://sophios.readthedocs.io/en/latest/). Start with [Install](docs/install.md), then [Your first workflow](docs/first-workflow.md).
 
-## Quick start
+## Install
 
-```bash
-pip install sophios
-sophios --generate_config     # writes ~/wic/global_config.json and copies the example tools to ~/wic/cwl_adapters
-mkdir sophios-examples && cd sophios-examples
-cp -r ~/wic/cwl_adapters .    # the Python form names its tools as cwl_adapters/<tool>.cwl
-```
+1. Install [Docker](https://docs.docker.com/get-docker/) and start it. Sophios runs each tool in the container image it names.
+2. Create a conda environment with the programs pip cannot install, Node.js and Graphviz (Node.js 26.8.0 has a version string cwltool cannot parse, hence the pin):
 
-Running a workflow also needs a container engine (Docker by default) and Node.js; the [install guide](docs/install.md) has the details. Developers working from a checkout start with the [developer guide](docs/dev/devguide.md).
+   ```bash
+   conda create --name sophios --channel conda-forge python=3.11 "nodejs<26.8" graphviz
+   conda activate sophios
+   ```
 
-One workflow, in both forms, saved in that directory. It creates a file, appends a line to it, and prints the file; the edges between the steps are inferred:
+3. Install Sophios, and let it write its configuration and copy the tools that ship with it to `~/wic/`:
+
+   ```bash
+   python -m pip install sophios
+   sophios --generate_config
+   ```
+
+4. Check that it works:
+
+   ```bash
+   mkdir sophios-check && cd sophios-check
+   sophios --yaml ~/wic/examples/multistep1.wic --run_local --quiet
+   ```
+
+   The last line starts with `Success! Runner outputs are under`.
+
+The [install guide](docs/install.md) explains each step and what to do when one fails. To work on Sophios itself, start with the [developer guide](docs/dev/devguide.md).
+
+## A first workflow
+
+This workflow makes an empty file, writes a greeting into it, and reads the file back. In a project directory, save either form:
 
 ```yaml
 # greeting.wic
@@ -32,38 +48,72 @@ steps:
 - id: touch
   in:
     filename: !ii greeting.txt
+  out:
+  - file: !& empty_file
 - id: append
   in:
+    file: !* empty_file
     str: !ii Hello, Sophios
+  out:
+  - file: !& greeting_file
 - id: cat
+  in:
+    file: !* greeting_file
 ```
 
 ```python
 # greeting.py
+"""Create a file, write a greeting into it, and read it back."""
+from pathlib import Path
+
 from sophios.api.python.workflow import Step, Workflow
 
-touch = Step(clt_path='cwl_adapters/touch.cwl')
-touch.inputs.filename = 'greeting.txt'
-append = Step(clt_path='cwl_adapters/append.cwl')
-append.inputs.str = 'Hello, Sophios'
-cat = Step(clt_path='cwl_adapters/cat.cwl')
 
-Workflow([touch, append, cat], 'greeting').run()
+#: The tools that ship with Sophios, where `sophios --generate_config` put them.
+ADAPTERS = Path.home() / 'wic' / 'cwl_adapters'
+
+
+def workflow() -> Workflow:
+    """The same three steps as greeting.wic."""
+    touch = Step(clt_path=ADAPTERS / 'touch.cwl')
+    touch.inputs.filename = 'greeting.txt'
+    append = Step(clt_path=ADAPTERS / 'append.cwl')
+    append.inputs.file = touch.outputs.file
+    append.inputs.str = 'Hello, Sophios'
+    cat = Step(clt_path=ADAPTERS / 'cat.cwl')
+    cat.inputs.file = append.outputs.file
+    return Workflow([touch, append, cat], 'greeting')
+
+
+if __name__ == '__main__':
+    workflow().run()
 ```
+
+`!ii` marks a value written into the workflow; `!&` names a step's output and `!*` feeds it into a later step's input. In Python, an assignment does each, and `ADAPTERS` is where `sophios --generate_config` put the tools that ship with Sophios. Run either form:
 
 ```bash
 sophios --yaml greeting.wic --run_local
 python greeting.py
 ```
 
-Both compile to the same CWL under `autogenerated/`, check the machine, pull the images and run. `sophios --yaml greeting.wic --check` stops after the checks, and `--generate_cwl_workflow` only compiles. Every problem Sophios finds carries a code; `sophios --explain <code>` says what to change.
+Both compile to the same CWL, check the machine, fetch the container images and run. The results go under `autogenerated/` in the directory you run from; `--basepath` (or `basepath=` in Python) moves it, and `--outdir` moves only the files the run produces. Every problem Sophios finds carries a code, and `sophios --explain <code>` says what to change.
 
 ## Writing a tool
 
-When a tool has no CWL description yet, the tool builder writes it:
+When a program has no CWL description yet, the tool builder writes one, and the tool goes straight into a workflow. Here `wc -w` counts the words of the greeting:
 
 ```python
-from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
+# count_words.py
+"""Build a tool in Python, then run it in a workflow."""
+from pathlib import Path
+
+from sophios.api.python.tool_builder import (
+    CommandLineTool, Input, Inputs, Output, Outputs, cwl,
+)
+from sophios.api.python.workflow import Step, Workflow
+
+#: The tools that ship with Sophios, where `sophios --generate_config` put them.
+ADAPTERS = Path.home() / 'wic' / 'cwl_adapters'
 
 word_count = (
     CommandLineTool('word_count',
@@ -73,9 +123,26 @@ word_count = (
     .stdout('counts.txt')
     .docker('debian:bookworm-slim')
 )
-word_count.write_cwl('word_count.cwl', validate=True)   # a tool any .wic step can run
-count = word_count.to_step()                            # or a step, with no file written
+
+
+def workflow() -> Workflow:
+    """Create a file, write a line into it, and count its words."""
+    touch = Step(clt_path=ADAPTERS / 'touch.cwl')
+    touch.inputs.filename = 'greeting.txt'
+    append = Step(clt_path=ADAPTERS / 'append.cwl')
+    append.inputs.file = touch.outputs.file
+    append.inputs.str = 'Hello, Sophios'
+    count = Step(word_count)
+    count.inputs.text = append.outputs.file
+    return Workflow([touch, append, count], 'count_words')
+
+
+if __name__ == '__main__':
+    word_count.write_cwl('word_count.cwl', validate=True)
+    workflow().run()
 ```
+
+The run writes `word_count.cwl`, a tool file any `.wic` workflow can use, and leaves `counts.txt` in the output directory. [Writing tools in Python](docs/tool-builder.md) takes the builder one part at a time.
 
 ## License
 

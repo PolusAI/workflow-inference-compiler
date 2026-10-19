@@ -1,5 +1,11 @@
 """A step-input record: two sources merged into one array input."""
+from pathlib import Path
+
 from sophios.api.python.workflow import Step, StepInput, Workflow
+
+
+#: The tools that ship with Sophios, where `sophios --generate_config` put them.
+ADAPTERS = Path.home() / 'wic' / 'cwl_adapters'
 
 
 CONCAT = {
@@ -14,9 +20,9 @@ CONCAT = {
 
 def workflow() -> Workflow:
     """Concatenate the outputs of two steps, given to one ``File[]`` input."""
-    touch = Step(clt_path='cwl_adapters/touch.cwl')
+    touch = Step(clt_path=ADAPTERS / 'touch.cwl')
     touch.inputs.filename = 'empty.txt'
-    echo = Step(clt_path='cwl_adapters/echo.cwl')
+    echo = Step(clt_path=ADAPTERS / 'echo.cwl')
     echo.inputs.message = 'Hello'
     concat = Step.from_cwl_document(CONCAT, process_name='concat')
     concat.inputs.files = StepInput(source=[touch.outputs.file, echo.outputs.stdout], link_merge='merge_flattened')

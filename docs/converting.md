@@ -1,26 +1,29 @@
 # Converting between `.wic` and Python
 
-How do I get a `.wic` file from a Python workflow, and Python objects from a
-`.wic` file? The two forms describe the same workflows, so Sophios converts
-in both directions: `Workflow.write_wic()` writes a `.wic` bundle, and
-`Workflow.from_wic()` reads one back into `Workflow` and `Step` objects. Use
-them to hand a Python workflow to someone who works in files, to inspect what
-a Python script says before compiling it, to bring a `.wic` workflow into a
-program, or to compile a Python workflow with command-line options that
-`compile()` does not take.
+You have written every workflow in this guide twice, once in each form.
+Sophios can do that work for you. In this chapter you will write the Python
+greeting out as a `.wic` file, read `greeting.wic` back into Python objects,
+and learn what survives the trip. You will want this to hand a Python
+workflow to a colleague who works in files, to bring a shared `.wic`
+workflow into a Python program, or to use a command-line feature that has no
+Python spelling, such as `--partial_failure_enable`.
+
+`Workflow.write_wic()` writes a `.wic` bundle, and `Workflow.from_wic()`
+reads a `.wic` file into `Workflow` and `Step` objects. This is the one
+chapter where both forms only compile, since compiling is what converting
+is checked against.
 
 ## Python to `.wic`: `write_wic()`
 
 ```python
 from greeting import workflow
 
-flow = workflow()
-flow.write_wic('bundle')
+workflow().write_wic('bundle')
 ```
 
 `write_wic(path)` takes a `.wic` file path or a directory; with no argument
-it writes `<name>.wic` in the working directory. It writes a bundle into one
-directory:
+it writes `<name>.wic` in the working directory. For `greeting.py` it writes
+a bundle into one directory:
 
 ```text
 bundle/
@@ -36,16 +39,33 @@ steps:
 - id: touch
   in:
     filename: !ii greeting.txt
+  out:
+  - file: !& fileappend
   run: touch.cwl
 - id: append
   in:
+    file: !* fileappend
     str: !ii Hello, Sophios
+  out:
+  - file: !& filecat
   run: append.cwl
 - id: cat
+  in:
+    file: !* filecat
   run: cat.cwl
 ```
 
-What it writes:
+This is `greeting.wic` with two differences. Each step names its tool by
+path, `run: touch.cwl`, the file beside it, so the bundle compiles with no
+search path at all. And a connection made in Python has no name, so each
+`!&` name is made from the input it feeds and that input's step: `fileappend`
+feeds `append`'s `file`. Compile or run it as any `.wic` file:
+
+```bash
+sophios --yaml bundle/greeting.wic --run_local
+```
+
+What `write_wic` writes:
 
 - Steps in the sequence form, each with `id:` and `run: <stem>.cwl`, the tool
   written beside the document. Literals are `!ii`, edges are `!&` and `!*`,
@@ -66,15 +86,17 @@ Only a tool's own document is written; files it refers to by relative path,
 such as an `$import`, are not copied. A `<stem>.cwl` already in the directory
 is left alone when it is the same tool, and is an error when it is a different
 one. Nothing is compiled: `write_wic` does not write CWL, and the bundle is
-the source, to compile with `sophios --yaml bundle/greeting.wic`.
+the source.
 
 ## `.wic` to Python: `from_wic()`
 
 ```python
+from pathlib import Path
+
 from sophios import plugins
 from sophios.api.python.workflow import Workflow
 
-config = {'search_paths_cwl': {'global': ['cwl_adapters']}}
+config = {'search_paths_cwl': {'global': [str(Path.home() / 'wic' / 'cwl_adapters')]}}
 flow = Workflow.from_wic('greeting.wic', tool_registry=plugins.get_tools_cwl(config))
 
 (touch, append, cat) = flow.steps
@@ -135,8 +157,23 @@ CWL; so does `from_wic` then `write_wic`. Names are kept: step names, port
 names, edge names you wrote. Positions are not, since a Python object has no
 file of its own until it is written.
 
-One asymmetry is worth knowing. A Python workflow that names outputs compiles
-to those outputs only, while the command line also exposes every step output.
-A bundle written from such a workflow and compiled on the command line
-therefore has more outputs than `compile()` returned; the named ones are the
-same.
+One asymmetry is worth knowing. For a Python workflow that names outputs,
+`compile()` returns only those outputs, while the command line, and
+`Workflow.run()`, also expose every step output. A bundle written from such
+a workflow and compiled on the command line therefore has more outputs than
+`compile()` returned; the named ones are the same.
+
+## Recap
+
+`write_wic()` turns a Python workflow into a `.wic` file and the tool files
+it names, ready to compile with no search path. `from_wic()` reads a `.wic`
+file into Python objects that compile to the same CWL. Names survive both
+ways; the few `.wic` constructs with no Python spelling are refused with
+`api006`, each with the line it is on and what to write instead.
+
+## Next
+
+You can now write workflows in either form, and grow them. The next part
+of the guide is about the tools themselves: in [Writing tools in
+Python](tool-builder.md) you will write the word counter from
+[Steps and tools](steps-and-tools.md) without writing any CWL by hand.

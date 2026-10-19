@@ -5,13 +5,17 @@ from sophios import input_output, plugins
 from sophios.api.python.workflow import Step, Workflow
 
 
+#: The tools that ship with Sophios, where `sophios --generate_config` put them.
+ADAPTERS = Path.home() / 'wic' / 'cwl_adapters'
+
+
 def workflow() -> Workflow:
     """Create and append to a file, watched by a cat analysis."""
-    touch = Step(clt_path='cwl_adapters/touch.cwl')
+    touch = Step(clt_path=ADAPTERS / 'touch.cwl')
     touch.inputs.filename = 'greeting.txt'
-    append = Step(clt_path='cwl_adapters/append.cwl')
+    append = Step(clt_path=ADAPTERS / 'append.cwl')
     append.inputs.str = 'Hello, Sophios'
-    watch = Step(clt_path='cwl_adapters/file_watchers/cwl_subinterpreter.cwl')
+    watch = Step(clt_path=ADAPTERS / 'file_watchers' / 'cwl_subinterpreter.cwl')
     watch.inputs.file_pattern = 'greeting.txt'
     watch.inputs.cwl_tool = 'cat'
     watch.inputs.max_times = 3

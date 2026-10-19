@@ -1,3 +1,4 @@
+import shutil
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -75,3 +76,17 @@ def load_test_registry() -> CorpusRegistry:
 def corpus_registry() -> CorpusRegistry:
     """Explicit registry fixture for tests that exercise the discovered corpus."""
     return load_test_registry()
+
+
+def home_with_shipped_tools(home: Path, repo_root: Path) -> Path:
+    """`home`, given the tools this checkout ships under `wic/cwl_adapters`, where
+    `sophios --generate_config` puts them: the documented Python examples name their
+    tools as `Path.home() / 'wic' / 'cwl_adapters' / <tool>`, whatever the real home holds."""
+    shutil.copytree(repo_root / 'cwl_adapters', home / 'wic' / 'cwl_adapters')
+    return home
+
+
+def use_home(monkeypatch: pytest.MonkeyPatch, home: Path) -> None:
+    """Make `home` what `Path.home()` returns, on POSIX (`HOME`) and on Windows (`USERPROFILE`)."""
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home))

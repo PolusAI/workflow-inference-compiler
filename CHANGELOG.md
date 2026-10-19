@@ -171,8 +171,9 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   The boxes used to be filled light blue and the inferred edges white, which
   vanished on a white page. `--graph_dark_theme` now draws the text, the box
   outlines and the inferred edges in white, for a dark background; it used to
-  turn the text and the inferred edges black. Drop the flag where you passed
-  it to get black, and pass it where you relied on white. With the flag an
+  turn the text and the inferred edges black. The labels `--graph_label_edges`
+  writes take the same colour as the text. Drop the flag where you passed it
+  to get black, and pass it where you relied on white. With the flag an
   explicit edge is a lighter blue (`lightskyblue`), which reads on a dark
   background where `blue` does not.
 

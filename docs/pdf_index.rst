@@ -18,10 +18,10 @@ Sophios documentation
    :maxdepth: 2
    :caption: Write workflows
 
-   steps-and-tools
    inputs-and-values
    connecting-steps
    edge-inference
+   steps-and-tools
    scatter-and-conditions
    types-and-records
    subworkflows

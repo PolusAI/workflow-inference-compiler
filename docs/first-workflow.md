@@ -1,143 +1,123 @@
 # Your first workflow
 
-How do I write a workflow, compile it, run it, and find what it produced? This
-page does all four with one three-step workflow, in both forms. It assumes the
-working directory from [Install](install.md): `sophios-examples/`, with a copy
-of `cwl_adapters/` in it.
+In this chapter you will write a workflow of three steps, run it, and find
+what it made. You will write it twice, once as a `.wic` file and once as a
+Python script, so that you can see the two say the same thing and choose the
+one that suits you. Along the way you will meet the three ideas every Sophios
+workflow is built from: steps, the values you give them, and the connections
+between them.
 
-## Write it
+You need a machine set up as in [Install](install.md).
 
-The workflow creates a file, appends a line to it, and prints the file. Save
-the `.wic` form as `greeting.wic`, or the Python form as `greeting.py`:
+## The pipeline
+
+The pipeline in this guide is small on purpose. It makes an empty file,
+writes a greeting into it, and reads the file back. Each step runs in about a
+second, so you can watch everything it does. Its three steps form a straight
+line, the simplest shape a workflow can have: one program makes a file, the
+next changes it, and the next reads it. A real analysis is a graph, where one
+result feeds several steps and a later step joins them, and later chapters
+grow the greeting into one, a single idea at a time: it will take its
+greeting when you run it, branch into two steps and join again, greet
+several people at once, and count its own words.
+
+## Set up a project directory
+
+Sophios writes its results into the directory you run it from, so give the
+guide a directory of its own:
+
+```bash
+mkdir sophios-tutorial
+cd sophios-tutorial
+```
+
+A **tool** is a short file that describes one command-line program: what the
+program is called, what it takes, what it produces, and which container it
+runs in. [Install](install.md) put the tools that ship with Sophios in
+`~/wic/cwl_adapters/`. Here is `~/wic/cwl_adapters/touch.cwl`, which
+describes `touch`:
+
+```{literalinclude} ../cwl_adapters/touch.cwl
+:language: yaml
+:caption: ~/wic/cwl_adapters/touch.cwl
+```
+
+It runs `touch` in the container image `docker.io/bash:4.4`. It takes one
+input, `filename`, a string, and it has one output, `file`, the file that
+`touch` creates. Tools are written in the
+[Common Workflow Language](https://www.commonwl.org/) (CWL), and many
+scientific programs already have one. You will not write a tool until
+[Writing tools in Python](tool-builder.md); this chapter uses three that
+ship with Sophios: `touch`, `append`, which adds a line of text to a file,
+and `cat`, which reads a file back.
+
+The `.wic` form of the workflow refers to a tool by its name alone, and
+Sophios finds it among the tools it ships. The Python form refers to each
+tool by its path, starting from `~/wic/cwl_adapters/`.
+
+## Write the workflow
+
+Save this as `greeting.wic` in `sophios-tutorial/`:
 
 ```{literalinclude} cookbook/greeting.wic
 :language: yaml
 :caption: greeting.wic
 ```
 
+A `.wic` file is YAML. Under `steps:`, each entry that starts with `- id:`
+is a **step**. A step's id names the tool it runs: `touch` runs `touch.cwl`.
+[Steps and tools](steps-and-tools.md) explains where Sophios looks for
+tools, and how to add places of your own.
+
+Under `in:`, a step gets its inputs. `touch` has one input, `filename`, and
+`filename: !ii greeting.txt` gives it the value `greeting.txt`. The `!ii`
+tag, short for *inline input*, marks a value written into the workflow
+itself. It matters: you will see what happens without it at the end of this
+chapter. `append` gets a value the same way, the line of text
+`Hello, Sophios`.
+
+The other lines are **connections**. Under `out:`, a step can give one of
+its outputs a name: `- file: !& empty_file` gives `touch`'s output `file`
+the name `empty_file`. In `append`, `file: !* empty_file` feeds that file
+into `append`'s own input called `file`. `!&` defines a name and `!*` uses
+it, so you can read every connection by matching the two. `append` names its
+result `greeting_file` in turn, and `cat` reads it.
+
+These connections also set the order: each step needs the file the one
+before it made, so the runner runs the three one after another.
+
+Now the same workflow in Python. Save it as `greeting.py`:
+
 ```{literalinclude} cookbook/greeting.py
 :language: python
 :caption: greeting.py
 ```
 
-Read the two side by side:
+`ADAPTERS` holds the directory of the tools that ship with Sophios,
+`~/wic/cwl_adapters` (`C:\Users\<you>\wic\cwl_adapters` on Windows;
+`Path.home()` is the same place `sophios --generate_config` wrote to), and
+`Step(clt_path=ADAPTERS / 'touch.cwl')` loads one of them and makes a step
+that runs it. `clt_path` takes a path, so `/` joins the directory and the
+file name, on any operating system. The step's inputs and outputs are the
+tool's, under `inputs` and `outputs`: `touch.inputs.filename`, `touch.outputs.file`. Assigning a value
+to an input gives it that value. Assigning another step's output to an input
+connects them: `append.inputs.file = touch.outputs.file` is the Python
+spelling of `!& empty_file` and `!* empty_file`. Finally,
+`Workflow([touch, append, cat], 'greeting')` puts the steps in order and
+names the workflow `greeting`.
 
-- A step runs a tool. In `.wic` the step's `id` is the tool's file stem, and
-  Sophios finds `touch.cwl` on `search_paths_cwl`. In Python a `Step` is given
-  the tool's path.
-- A step's inputs take values. `!ii greeting.txt` and
-  `touch.inputs.filename = 'greeting.txt'` both bind the input `filename` to
-  that literal.
-- `append` takes a file and `cat` takes a file, and neither form says which.
-  Sophios infers both edges from the types of the earlier outputs:
-  `append.file` from `touch.file`, and `cat.file` from `append.file`, the most
-  recent output of type `File`.
-- The Python script keeps its workflow in a function and runs it only under
-  `__main__`. That is the shape Sophios's own examples use, so that a script
-  can be imported, compiled and tested without running.
+The script builds the workflow in a function, `workflow()`, so that another
+script can import it without running it. The last two lines run it when you
+run the file itself.
 
-## Compile it
+The two files describe the same workflow, and Sophios compiles them to
+exactly the same result. Use whichever you prefer: a `.wic` file is short and
+easy to share, and a Python script can build a workflow with loops and
+functions.
 
-Compiling checks the workflow and writes the CWL without running anything:
+## Run the workflow
 
-```bash
-sophios --yaml greeting.wic --generate_cwl_workflow
-```
-
-```python
-from greeting import workflow
-
-compiled = workflow().compile()
-compiled.write_cwl('autogenerated')
-compiled.write_job_inputs('autogenerated')
-```
-
-`cat`'s input `file` had two earlier outputs of type `File` to choose from,
-and Sophios took the most recent. It says so in a note. The command line
-prints it on stderr; `compile()` keeps it in `compiled.diagnostics`, a tuple
-of strings, and does not print the notes, so print them yourself:
-
-```python
-for note in compiled.diagnostics:
-    print(note)
-```
-
-```text
-greeting.wic:8:3: note [wic043] step 'cat' input 'file' was inferred from the most recent match step 2 'append' output 'file'; earlier steps also match: step 1 'touch' output 'file'; pin it: `out: - file: !& <name>` on step 2 'append' and `in: file: !* <name>` here (step 3 'cat', port 'file')
-```
-
-The note names the line (`greeting.wic:8:3`, or `greeting.py` and the line of
-`cat = Step(...)` in Python), the choice, the alternative, and the two lines
-that would pin the choice so the note goes away. A note never stops a
-compile. [Edge inference](edge-inference.md) explains the rule and the pin.
-
-The command line also prints `Sophios lang_version: 0.0.1`, the version of
-the language it read the file as. In Python it is `compiled.lang_version`.
-
-What the command line wrote:
-
-```text
-autogenerated/
-  greeting.cwl                             the CWL Workflow
-  greeting_inputs.yml                      its job file: the values you gave
-  greeting.names.json                      generated names mapped to what you wrote
-  greeting__step__1__touch/touch.cwl       the tool of each step, one directory per step
-  greeting__step__1__touch/touch_inputs.yml  an empty job file beside each tool
-  greeting__step__2__append/append.cwl
-  greeting__step__2__append/append_inputs.yml
-  greeting__step__3__cat/cat.cwl
-  greeting__step__3__cat/cat_inputs.yml
-```
-
-What the Python script wrote:
-
-```text
-autogenerated/
-  greeting.cwl
-  greeting_inputs.yml
-```
-
-`Workflow.compile()` writes nothing by itself. `write_cwl` and
-`write_job_inputs` write the workflow and the job file, each to a path or into
-a directory, and nothing else: the Python workflow carries every tool embedded
-in the CWL under `run:`, so there are no tool files, and no names map is
-written until `run()` writes the full tree. The command line writes the tools
-as separate files beside the workflow.
-
-Open `greeting_inputs.yml`:
-
-```yaml
-greeting__step__1__touch___filename: greeting.txt
-greeting__step__2__append___str: Hello, Sophios
-```
-
-Every literal you wrote became a workflow input, named for the step and port
-it feeds, with its value here rather than in the CWL. `greeting.cwl` holds the
-three steps, renamed `greeting__step__1__touch` and so on, with the two
-inferred edges written as `source` fields.
-[Compiling to CWL](compiling-to-cwl.md) reads the whole file.
-
-## Check the machine
-
-```bash
-sophios --yaml greeting.wic --check
-```
-
-`--check` compiles, then asks whether this machine can run the result: the
-container engine is reachable (two of the three tools run in `docker.io/bash:4.4`),
-every input file exists, the directories Sophios writes to are writable, and
-the programs it calls are installed. It pulls nothing and runs nothing, and
-ends with:
-
-```text
-Checked autogenerated/greeting.cwl: nothing in the way of a local run on this machine. Nothing was pulled or run.
-```
-
-A problem is one line per problem, each with a code and what to do.
-[Checks and errors](checks-and-errors.md) lists them. `Workflow.run()` makes
-the same checks before it runs.
-
-## Run it
+From `sophios-tutorial/`, run either form:
 
 ```bash
 sophios --yaml greeting.wic --run_local
@@ -147,55 +127,241 @@ sophios --yaml greeting.wic --run_local
 python greeting.py
 ```
 
-Both compile the workflow, check the machine, pull the two images, and run
-the CWL with cwltool. The run ends with:
+The `.wic` run prints a good deal. Here it is, with the long lines and the
+repetitive middle cut short:
 
 ```text
-Success! Runner outputs are under /.../sophios-examples/autogenerated/outdir_cwltool_greeting_2026_10_15_15.05.21/
+ starting compilation of greeting
+finishing compilation of greeting
+Sophios lang_version: 0.0.1
+Running cwltool_filterlog --disable-pull --provenance /home/you/sophios-tutorial/autogenerated/provenance/greeting ...
+...
+INFO [workflow ] starting step 1 'touch' (greeting__step__1__touch)
+INFO [step 1 'touch' (greeting__step__1__touch)] start
+INFO [job step 1 'touch' (greeting__step__1__touch)] /private/tmp/docker_tmp3m00i1qq$ docker \
+    run \
+    ...
+    docker.io/bash:4.4 \
+    touch \
+    greeting.txt
+INFO [job step 1 'touch' (greeting__step__1__touch)] completed success
+INFO [step 1 'touch' (greeting__step__1__touch)] completed success
+INFO [workflow ] starting step 2 'append' (greeting__step__2__append)
+INFO [step 2 'append' (greeting__step__2__append)] start
+INFO [job step 2 'append' (greeting__step__2__append)] /private/tmp/docker_tmpegtjhgii$ /bin/sh \
+    -c \
+    echo Hello, Sophios >> /private/tmp/docker_tmpegtjhgii/greeting.txt
+INFO [job step 2 'append' (greeting__step__2__append)] completed success
+...
+INFO [workflow ] completed success
+...
+Success! Runner outputs are under /home/you/sophios-tutorial/autogenerated/outdir_cwltool_greeting_2026_10_18_18.44.10/
 ```
 
-The Python run goes through the same path; `workflow().run()` raises
-`WorkflowRunError` instead of exiting when the runner fails. The command line
-passes `--quiet` to cwltool only when you give `--quiet`, so it prints each
-step's command; Python passes `--quiet` unless you set
-`run_args_dict={'quiet': 'no'}`, which makes it print the commands too.
+### What just happened
 
-## Read what landed
+Sophios did four things.
+
+First, it read `greeting.wic`, checked it, and **compiled** it: it
+translated your workflow into CWL, the same language the tools are written
+in, which programs called workflow runners know how to execute. That is the
+work between `starting compilation` and `finishing compilation`.
+
+Second, it checked that this machine can run the result: that Docker is
+running and that every file the workflow reads exists. Then it fetched
+`docker.io/bash:4.4`, the image `touch` and `cat` name. Sophios asks for the
+image before every run, so the first run downloads it and later runs only
+confirm it is current.
+
+Third, it handed the compiled workflow to **cwltool**, a CWL runner; that is
+the line that begins `Running`. Each `INFO` line is cwltool's log: a step
+starting, the exact command it ran, and whether it succeeded. `touch` and
+`cat` ran inside `docker.io/bash:4.4`. `append`'s tool names no container,
+so it ran directly on your machine, as `/bin/sh -c echo ...`. The log names
+every step in two ways: as you know it (`step 2 'append'`), and by the name
+it has in the compiled workflow (`greeting__step__2__append`).
+
+Fourth, it reported where the results are, on the last line.
+
+The Python run does the same work and prints less:
+
+```text
+ starting compilation of greeting
+finishing compilation of greeting
+Running cwltool_filterlog --disable-pull --quiet --provenance /home/you/sophios-tutorial/autogenerated/provenance/greeting ...
+via cwltool.main.main python API
+...
+Final output json metadata blob is in output_greeting.json
+Success! Runner outputs are under /home/you/sophios-tutorial/autogenerated/outdir_cwltool_greeting_2026_10_18_18.44.15/
+```
+
+`run()` passes `--quiet` to cwltool, so the step-by-step log is hidden. To
+see it, run with `workflow().run(run_args_dict={'quiet': 'no'})`. If a step
+fails, `run()` raises `WorkflowRunError` instead of printing `Success!`, so a
+script that runs a workflow can catch the failure like any other exception.
+
+## Find the results
+
+Look in the directory the last line names. Its name ends with the date and
+time of your run, so yours differs from the one here:
+
+```bash
+cat autogenerated/outdir_cwltool_greeting_2026_10_18_18.44.10/greeting.txt
+```
+
+```text
+Hello, Sophios
+```
+
+Sophios keeps everything about a run under one directory, its **base
+path**. Unless you choose another, the base path is `autogenerated/` in the
+directory you ran Sophios from. After both runs, it holds:
 
 ```text
 autogenerated/
-  outdir_cwltool_greeting_<timestamp>/greeting.txt   the run's output files
-  output_greeting.json                               every workflow output, with its value
-  provenance/greeting/                               cwltool's research object for the run
+  outdir_cwltool_greeting_2026_10_18_18.44.10/   the files the .wic run produced
+  outdir_cwltool_greeting_2026_10_18_18.44.15/   the files the Python run produced
+  output_greeting.json                           every output of the latest run, with its value
+  greeting.cwl                                   the compiled workflow
+  greeting_inputs.yml                            the values the compiled workflow runs with
+  greeting__step__1__touch/                      the tool each step runs
+  greeting__step__2__append/
+  greeting__step__3__cat/
+  greeting.names.json                            the compiled names, mapped back to your file
+  provenance/                                    cwltool's record of the run
 ```
 
-`greeting.txt` holds `Hello, Sophios`. `output_greeting.json` lists each
-workflow output by its generated name: the two `File` outputs point at
-`greeting.txt`, and `greeting__step__3__cat___output` is the string
-`"Hello, Sophios\n"`, because `cat.cwl` declares its output as the text it
-read. The output directory is named for the runner, the workflow and the
-start time, so two runs never share one; `--outdir <dir>` names it yourself.
+Each run's files go into a new **output directory**, named for the runner,
+the workflow and the time the run started, so a later run does not overwrite
+an earlier one. The compiled files are rewritten by each run;
+[Compiling to CWL](compiling-to-cwl.md) reads them line by line.
 
-[Running workflows](running.md) covers the rest: Toil, other container
-engines, caching, run scripts and what each file under `autogenerated/` is
-for.
+`output_greeting.json` lists every output of every step. Shortened, it reads:
+
+```text
+{
+    "greeting__step__1__touch___file": {
+        "basename": "greeting.txt",
+        "class": "File",
+        ...
+    },
+    "greeting__step__2__append___file": {
+        "basename": "greeting.txt",
+        "class": "File",
+        "size": 15,
+        ...
+    },
+    "greeting__step__3__cat___output": "Hello, Sophios\n"
+}
+```
+
+Each output is listed under a name Sophios made from the workflow, the step
+and the output: `greeting__step__3__cat___output` is the output called
+`output` of step 3, `cat`, in the workflow `greeting`. `cat`'s tool returns
+the text of the file rather than a file, so its value is the greeting itself.
+You will meet names of this shape in messages from the runner, and they
+always read the same way.
+
+### Choose where the results go
+
+The base path and the output directory are defaults, and you can change
+both. By default the base path is `autogenerated/` under the directory you
+run Sophios from, wherever the workflow file is. `--basepath` on the command
+line, or `basepath=` in Python, names another directory, relative to the
+current one, and everything Sophios generates for the run goes there.
+`--outdir`, or `outdir` in `run_args_dict`, moves only the files the run
+produces:
+
+```bash
+sophios --yaml greeting.wic --run_local --basepath build --outdir results
+```
+
+```python
+from greeting import workflow
+
+workflow().run(basepath='build', run_args_dict={'outdir': 'results'})
+```
+
+Either run keeps its compiled files, `output_greeting.json` and the record
+of the run in `build/`, writes `greeting.txt` to `results/`, and creates no
+`autogenerated/`. The last line says where the results are:
+
+```text
+Success! Runner outputs are under /home/you/sophios-tutorial/results/
+```
 
 ## When something goes wrong
 
-- A mistake in the workflow stops the compile with a code and a position, such
-  as `greeting.wic:4:15: error [wic011] ...`. `sophios --explain wic011` says
-  what the code means and what to change.
-- A machine that cannot run the workflow stops before the run with one line
-  per problem (`wic015` for the engine, `wic016` for an input file, `wic029`
-  for a missing program).
-- A tool that fails while it runs is reported after the run, by step name and
-  exit status, with the step's own messages above it:
-  `Failure! step 3 'cat' (greeting__step__3__cat) exited with status 1 ...`.
+Mistakes are part of writing workflows, so it is worth seeing what one looks
+like. Open `greeting.wic` and delete the `!ii` before `greeting.txt`:
 
-[Checks and errors](checks-and-errors.md) explains all three.
+```yaml
+- id: touch
+  in:
+    filename: greeting.txt
+```
+
+Run it again:
+
+```text
+Failed to compile greeting.wic
+greeting.wic:4:15: error [wic011] Did you forget to use !ii before greeting.txt? (step 1 'touch', port 'filename')
+greeting.wic:4:15: error [wic011] If you want to compile the workflow anyway, use --allow_raw_cwl (step 1 'touch', port 'filename')
+```
+
+Sophios stopped before running anything. Each line starts with where the
+problem is, as file, line and column, then says how serious it is (`error`
+means the compile stopped), gives a code, `wic011`, and ends with the step
+and the input it is about. Without the tag, Sophios reads `greeting.txt` as
+the name of a value to be supplied when the workflow runs, a **workflow
+input**, which [Inputs and values](inputs-and-values.md) introduces. This
+workflow declares no such input, so Sophios asks whether you meant `!ii`.
+The second line offers a way to compile the file anyway, which is not what
+you want here: put the `!ii` back.
+
+Every code has a short explanation, which `--explain` prints:
+
+```bash
+sophios --explain wic011
+```
+
+```text
+wic011 (document): An untagged input value names no workflow input.
+Fix: Write a literal as `!ii <value>`, or declare the name under `inputs:` (.wic reference §3.3).
+```
+
+Python catches mistakes as you make them. Give an input the wrong name in
+`greeting.py`, say `touch.inputs.file_name = 'greeting.txt'`, and the script
+stops at that line:
+
+```text
+Traceback (most recent call last):
+  ...
+  File "/home/you/sophios-tutorial/greeting.py", line 14, in workflow
+    touch.inputs.file_name = 'greeting.txt'
+    ^^^^^^^^^^^^^^^^^^^^^^
+  ...
+AttributeError: 'touch' has no input named 'file_name'
+```
+
+Problems can also turn up later: a machine that cannot run the workflow, or
+a program that fails while it runs. [Checks and errors](checks-and-errors.md)
+shows each kind and how to read it.
+
+## Recap
+
+A workflow is a list of steps, and each step runs a tool, a file that
+describes one program. You give a step's inputs values with `!ii` in a
+`.wic` file, or by assignment in Python. You connect one step's output to
+another's input by naming it with `!&` and using it with `!*`, or in Python
+by assigning the output to the input. Both
+`sophios --yaml greeting.wic --run_local` and `python greeting.py` compile
+the workflow, check the machine and run it. The results land under the base
+path, which is `autogenerated/` in the directory you run from unless you
+choose another.
 
 ## Next
 
-The **Write workflows** section takes the constructs one at a time, starting
-with [Steps and tools](steps-and-tools.md). To wrap a program of your own as a
-tool, go to [Writing tools in Python](tool-builder.md).
+Your pipeline writes the same greeting every time it runs. In
+[Inputs and values](inputs-and-values.md) you will make the greeting
+something you give it when you run it.

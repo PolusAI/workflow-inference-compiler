@@ -12,6 +12,7 @@ Compiled, never executed; whether a runner can execute the result belongs to
 the workflow-running lane.
 """
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ import pytest
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 from sophios.api.python.workflow import Step, Workflow
 from sophios.python_cwl_adapter import import_python_file
+
+from .test_setup import home_with_shipped_tools, use_home
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ADAPTERS = REPO_ROOT / 'cwl_adapters'
@@ -198,3 +201,31 @@ def test_the_sam3_handoff_snippet_compiles_with_stdout_and_stderr_outputs() -> N
     assert compiled['outputs'][f'{step_id}___err']['type'] == 'File'
     declared = {output['id']: output['type'] for output in compiled['steps'][0]['run']['outputs']}
     assert declared == {'out': 'stdout', 'err': 'stderr'}, 'the tool keeps its own shorthand'
+
+
+@pytest.mark.fast
+def test_the_word_count_example_runs_wc_on_the_greeting(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """`examples/scripts/count_words.py` is the tool-builder example the README, the landing page and
+    docs/tool-builder.md show: its third step runs `wc -w` and keeps what it prints as `counts.txt`."""
+    # It names the shipped tools under `Path.home() / 'wic' / 'cwl_adapters'`, as the docs run it.
+    use_home(monkeypatch, home_with_shipped_tools(tmp_path, REPO_ROOT))
+    example = REPO_ROOT / 'examples' / 'scripts' / 'count_words.py'
+    module = import_python_file(example.stem, example)
+    count = module.workflow().compile().cwl_workflow['steps'][2]
+    assert count['run']['baseCommand'] == ['wc', '-w']
+    assert count['run']['stdout'] == 'counts.txt'
+    assert count['in']['text'] == {'source': count['in']['text']['source']}
+    assert count['in']['text']['source'].endswith('__step__2__append/file')
+
+
+@pytest.mark.fast
+def test_the_landing_page_shows_the_whole_word_count_tool() -> None:
+    """docs/index.md includes the `word_count` expression of count_words.py by line numbers; they must still
+    frame exactly that expression."""
+    index = (REPO_ROOT / 'docs' / 'index.md').read_text(encoding='utf-8')
+    included = re.search(r'count_words\.py\n:language: python\n:lines: (\d+)-(\d+)', index)
+    assert included is not None, 'docs/index.md no longer includes count_words.py by line numbers'
+    first, last = map(int, included.groups())
+    lines = (REPO_ROOT / 'examples' / 'scripts' / 'count_words.py').read_text(encoding='utf-8').splitlines()
+    shown = lines[first - 1:last]
+    assert (shown[0], shown[-1]) == ('word_count = (', ')')

@@ -481,11 +481,11 @@ def test_write_wic_of_a_loaded_workflow_compiles_identically(yml_path_str: str, 
 
 
 #: The in-repo workflows the Python API cannot hold, each refused with `api006`:
-#: six repeat a step id, `test_rand_fail` scatters a `.wic` call and reads an
+#: four repeat a step id, `test_rand_fail` scatters a `.wic` call and reads an
 #: edge across documents, and `secrets_echo` declares `$namespaces`, `hints` and
 #: an input `default`.
-REFUSED: Final = frozenset({'append_twice', 'multistep1', 'multistep2', 'multistep3', 'naming_conventions',
-                            'naming_conventions_explicit', 'test_rand_fail', 'secrets_echo'})
+REFUSED: Final = frozenset({'append_twice', 'multistep1', 'multistep2', 'multistep3', 'test_rand_fail',
+                            'secrets_echo'})
 
 #: The directories of `.wic` files shipped in this repository.
 IN_REPO: Final = (REPO_ROOT / 'docs' / 'tutorials', REPO_ROOT / 'examples')

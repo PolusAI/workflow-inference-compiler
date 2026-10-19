@@ -1,101 +1,177 @@
 # Scatter and conditions
 
-How do I run a step once per element of an array, and how do I run a step only
-when a condition holds? A step may scatter over some of its inputs, and a
-step may carry a condition. Sophios carries both into the compiled workflow
-and checks what can be checked before anything runs: that a scattered name is
-an input of the step, that its literal is a list, that the step's outputs are
-typed as arrays downstream, and that the expression of a condition reads
-something the step has.
+Analyses rarely run once. You have a hundred samples and want every step to
+run on each, or a step you need only some of the time. In this chapter you
+will run the greeting pipeline for three people in one go, which CWL calls
+a **scatter**, and make its last step run only when you ask for it, with a
+**condition**. Each is one line on a step.
 
-## Scatter
+## Greet three people
 
-```{literalinclude} cookbook/scatter.wic
+Save this pair as `greet_many.wic` and `greet_many.py`:
+
+```{literalinclude} cookbook/greet_many.wic
 :language: yaml
-:caption: scatter.wic
+:caption: greet_many.wic
 ```
 
-```{literalinclude} cookbook/scatter.py
+```{literalinclude} cookbook/greet_many.py
 :language: python
-:caption: scatter.py
+:caption: greet_many.py
 ```
 
-The step runs once per combination of the two arrays, four times here, and
-its output `stdout` is an array of `File`. [Compiling to CWL](compiling-to-cwl.md#scatter-and-conditions)
-shows the compiled step.
+Each step now gets lists where it had single values: three file names for
+`touch`, three greetings for `append`. `scatter:` lists the inputs a step
+runs once per element of, and the step runs once for each. In Python,
+`step.scatter_on(...)` says the same. The YAML list of greetings is quoted,
+because each greeting holds a comma, which would otherwise split it in two.
+Run either form:
 
-In `.wic`, `scatter:` lists the step's inputs to scatter over and
-`scatterMethod:` is one of `dotproduct`, `flat_crossproduct` and
-`nested_crossproduct`, carried through as written. In Python,
-`step.scatter_on(step.inputs.a, step.inputs.b, method='flat_crossproduct')`
-does the same; `method` defaults to `dotproduct`. One scattered input with
-`dotproduct` walks its array.
+```bash
+sophios --yaml greet_many.wic --run_local
+```
 
-The rules:
+```bash
+python greet_many.py
+```
 
-- A `scatter:` entry that is not an input of the step is `wic032`. On a
-  subworkflow call the inputs are those the subworkflow declares in
-  `inputs:`; a name the compiler generates for an input inside it is not one
-  of them. To scatter a call over an inner step's input, declare the input in
-  the subworkflow and bind the inner step to it.
-- A literal bound to a scattered input must be a list: `!ii a.txt` on a
-  scattered `string` input is `wic020`; write `!ii [a.txt, b.txt]`.
-- A scattered input that nothing binds, once inference is done, is `wic032`:
-  a scatter needs a value to split.
-- The step's outputs are arrays. Under `nested_crossproduct` each scattered
-  input adds one array level; the other methods add one in all. A later step
-  may scatter over such an output, and inference compares types with these
-  levels in place, so a scattered consumer of a scattered producer is inferred
-  without a pin.
-- In Python, `scatter_on` checks at the call that each input belongs to this
-  step, is bound, and is bound to array-valued data, so bind an input before
-  scattering over it, and scatter a producer before the step that scatters
-  over its output.
+Each step ran three times, and the output directory holds three files:
 
-## Conditions
+```text
+alice.txt
+bob.txt
+carol.txt
+```
 
-```{literalinclude} cookbook/when.wic
+each with its own greeting. A scattered step's outputs are lists too, so
+`output_greet_many.json` lists `cat`'s three results under its one name:
+
+```text
+    "greet_many__step__3__cat___output": [
+        "Hello, Alice\n",
+        "Hello, Bob\n",
+        "Hello, Carol\n"
+    ]
+```
+
+### Walk the lists together, or every combination
+
+`append` scatters over two inputs, its file and its greeting, and
+`scatterMethod: dotproduct` walks the two lists side by side: the first file
+with the first greeting, and so on, so the lists must be the same length.
+The other two methods make every combination: `flat_crossproduct` as one
+flat list, and `nested_crossproduct` as nested lists, one level for each
+scattered input. In Python, `scatter_on(..., method='flat_crossproduct')` picks
+one, and `dotproduct` is the default.
+
+### What Sophios checks
+
+Sophios checks a scatter when it compiles. The mistake people make most is
+scattering over an input and giving it a single value. Change `touch`'s
+file names to one name, `filename: !ii alice.txt`, and the compile stops:
+
+```text
+one_name.wic:6:15: error [wic020] Input 'filename' is scattered, so its literal must be a list of values to scatter over; 'alice.txt' is a scalar. Write `!ii [...]`, or drop the port from `scatter:`. (step 1 'touch', port 'filename')
+```
+
+A list of one works, `!ii [alice.txt]`. A `scatter:` entry that is not an
+input of the step is `wic032`, and so is a scattered input that nothing gives
+a value to. In Python, `scatter_on` checks when you call it that
+each input belongs to the step and already has a value, so give an input its
+value, or connect it, before you scatter over it. A step that scatters over
+a scattered step's output receives a list, element by element, and
+[edge inference](edge-inference.md) compares the types that way, so a
+scattered step can follow another one without a written connection.
+
+## Run a step only when asked
+
+Save this pair as `greeting_if.wic` and `greeting_if.py`:
+
+```{literalinclude} cookbook/greeting_if.wic
 :language: yaml
-:caption: when.wic
+:caption: greeting_if.wic
 ```
 
-```{literalinclude} cookbook/when.py
+```{literalinclude} cookbook/greeting_if.py
 :language: python
-:caption: when.py
+:caption: greeting_if.py
 ```
 
-`when:` is an expression over the step's inputs, carried through as written;
-the step runs only when it is true. In Python,
-`step.when = '$(inputs.enabled)'` sets it, and a value that does not start
-with `$(` and end with `)` is `ValueError`.
+`when:` on a step is an expression over the step's inputs, and the step runs
+only when it is true. Here `cat` runs only when `show` is true. In Python,
+`step.when = '$(inputs.show)'` sets it; an expression that does not start
+with `$(` and end with `)` is a `ValueError`.
 
-The expression here reads `inputs.enabled`, which `echo.cwl` does not declare.
-A tool's inputs are fixed, so the value reaches the step through a
-[step-input record](types-and-records.md) bound to a name of your choosing:
-`enabled: !cwl {source: loud}` in `.wic`, and
-`echo.inputs.enabled = StepInput(source=flow.inputs.loud.as_type('boolean'))`
-in Python. A record that feeds an input the tool does not declare gives the
-workflow input no type, which is why the `.wic` declares `loud` under
-`inputs:` and the Python calls `.as_type('boolean')`.
+`cat`'s tool has no input called `show`, and a tool's inputs are fixed. So
+the value reaches the step under a name of your choosing, through a
+**step-input record**, which [Types and records](types-and-records.md)
+covers: `show: !cwl {source: show}` in `.wic`, and
+`cat.inputs.show = StepInput(source=flow.inputs.show.as_type('boolean'))`
+in Python. A name the tool does not declare gives the workflow input no type
+of its own, which is why the `.wic` declares `show` under `inputs:` and the
+Python calls `.as_type('boolean')`.
 
-What a `when:` reads:
+Give `show` a value in `job.yml`:
 
-- The runner evaluates an `inputs.<name>` that the step does not have as
-  `null`, which usually keeps the step from running. The compile prints a line on
-  stderr when a `when:` reads such a name, and carries on.
-- A name the compiler generates for an input inside a called subworkflow
-  resolves, but only because of how the subworkflow's steps are laid out; the
-  compile prints a different line asking you to declare the port in the
-  subworkflow's `inputs:` and read that.
+```yaml
+show: true
+```
 
-A step that did not run gives `null` for each of its outputs, and the runner
-warns that a source from a conditional step may produce `null`.
-A later step that reads such an output declares how to treat it with
-`pickValue` in a record (`first_non_null`, `the_only_non_null`,
-`all_non_null`), or declares the input optional. Under
-`--partial_failure_enable`, Sophios itself writes a `when:` on every step that
-has required inputs, and it replaces a `when:` you wrote on that step: for
-`cookbook/when.wic` the compiled step reads
-`when: $(inputs["message"] != null && inputs["enabled"] != null)`. A step with
-no required inputs keeps its own `when:`; see
-[Partial failures](partial-failures.md).
+```bash
+sophios --yaml greeting_if.wic --inputs_file job.yml --run_local
+```
+
+```bash
+python greeting_if.py
+```
+
+Both read the greeting back, as before. Now set `show: false` and run again.
+Both succeed, and the step log says:
+
+```text
+INFO [workflow ] starting step 3 'cat' (greeting_if__step__3__cat)
+INFO [step 3 'cat' (greeting_if__step__3__cat)] will be skipped
+INFO [step 3 'cat' (greeting_if__step__3__cat)] completed skipped
+```
+
+A step that did not run gives `null` for each of its outputs, and
+`output_greeting_if.json` ends with:
+
+```text
+    "greeting_if__step__3__cat___output": null
+```
+
+Both runs also print a warning from cwltool before they start:
+
+```text
+WARNING Workflow checker warning:
+autogenerated/greeting_if.cwl:29:5: Source 'output' of type ["null", "string"] may be incompatible
+autogenerated/greeting_if.cwl:54:5:   with sink 'cat/output (greeting_if__step__3__cat___output)' of type
+                                      "string"
+                                      Source is from conditional step and may produce `null`
+```
+
+It is saying what the `null` above shows: a step that may be skipped may
+give `null`, and the workflow output that keeps it is typed `string`. It is
+expected and changes nothing.
+
+A step after a conditional one can read its outputs, and must cope with a
+`null`. Declare that input optional in its tool, or choose among several
+sources with `pickValue` in a [record](types-and-records.md). A `when:` that
+reads a name the step does not have is evaluated as `null`, which usually
+keeps the step from running, and the compile prints a line saying so.
+
+## Recap
+
+`scatter:`, or `scatter_on()` in Python, runs a step once per element of the
+lists it names, and its outputs become lists; `scatterMethod` decides
+whether lists are walked together or combined. `when:` runs a step only when
+an expression over its inputs is true, and a step that is skipped gives
+`null`. A value the tool does not take reaches a `when:` through a
+step-input record.
+
+## Next
+
+The record you just used is one form of a bigger idea. In [Types and
+records](types-and-records.md) you will see what types Sophios checks, and
+feed one input from two steps at once.
