@@ -2,12 +2,14 @@
 """Python API for building Sophios workflows that compile to CWL."""
 
 import logging
+import sys
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Final, cast, overload
 
+import graphviz
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 
 from sophios.lang import CwlRecord, EdgeRef, InputValue, OpaqueCwl, UnresolvedName, nodes
@@ -49,6 +51,7 @@ from ._types import ScatterMethod
 from ._workflow_runtime import (
     coerce_path as _coerce_path,
     compiled_workflow as _compiled_workflow,
+    draw_workflow as _draw_workflow,
     load_clt_document as _load_clt_document,
     load_clt as _load_clt,
     lookup_parameter as _lookup_parameter,
@@ -1070,6 +1073,63 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         """
         return _compiled_workflow(self, tool_registry=tool_registry, lang_version=lang_version,
                                   inference=inference)
+
+    def draw(  # pylint: disable=too-many-arguments
+        self,
+        *,
+        dark: bool = False,
+        label_edges: bool = False,
+        label_stepname: bool = False,
+        inline_depth: int = sys.maxsize,
+        inference: Inference = Inference(),
+        tool_registry: Tools | None = None,
+        lang_version: str | None = None,
+    ) -> graphviz.Digraph:
+        """Draw this workflow as a graph: a box per step and an edge per dependency.
+
+        The workflow is compiled as :meth:`compile` and :meth:`run` compile it, so
+        with the same ``inference``, ``tool_registry`` and ``lang_version`` the
+        drawing shows the edges they would build. An edge you wrote is blue; one
+        inference added takes the text colour, so you can tell what you said from
+        what Sophios decided.
+
+        In a Jupyter notebook, end a cell with the returned object and it
+        renders inline as an image. Inline display and ``.render(...)`` both
+        need the Graphviz ``dot`` program; without it the notebook shows an
+        ``ExecutableNotFound`` traceback instead of the drawing. ``.source`` is
+        the DOT text and needs nothing.
+
+        The drawing carries its own opaque background, so it reads in a light or
+        a dark notebook, in exported HTML and PDF, and on GitHub. ``dark`` picks
+        which one. (The command line's ``--graphviz`` draws on a transparent
+        background instead, for slides.)
+
+        Args:
+            dark (bool): Draw on a dark background with white text, outlines and
+                inferred edges, and a lighter blue for edges you wrote; the
+                default is a white background with black text, outlines and
+                inferred edges, and blue edges you wrote.
+            label_edges (bool): Draw one edge per port, labelled with the port's
+                name, instead of one edge per pair of steps.
+            label_stepname (bool): Label each box with the step's generated
+                name instead of its id.
+            inline_depth (int): How many levels of nested workflows to draw
+                step by step; a call below that is one box. The default draws
+                every level.
+            inference (Inference): How an unbound input is connected to an
+                earlier output; the Python API reads no configuration, so
+                renamings and format rules are empty unless passed. See
+                :class:`Inference`.
+            tool_registry (Tools | None): Optional tool registry override.
+            lang_version (str | None): Pin the Sophios language version for
+                this compilation; None (the default) infers it.
+
+        Returns:
+            graphviz.Digraph: The drawing. ``.source`` is its DOT text.
+        """
+        return _draw_workflow(self, dark=dark, label_edges=label_edges, label_stepname=label_stepname,
+                              inline_depth=inline_depth, inference=inference,
+                              tool_registry=tool_registry, lang_version=lang_version)
 
     def run(  # pylint: disable=too-many-arguments
         self,

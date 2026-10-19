@@ -13,13 +13,14 @@ import logging
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path, PurePath
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Final, Protocol, TypeVar
 
+import graphviz
 import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 
-from sophios import compiler, input_output, plugins, post_compile as pc, preflight, realtime, run_local as rl
+from sophios import compiler, drawing, input_output, plugins, post_compile as pc, preflight, realtime, run_local as rl
 from sophios.ir.artifacts import CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.realtime import ADAPTER
@@ -29,7 +30,7 @@ from sophios.cli import default_compilation_settings, get_known_and_unknown_args
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils import convert_args_dict_to_args_list
 from sophios.utils_cwl import tool_process
-from sophios.wic_types import DEFAULT_BASEPATH, CompilerOptions, StepId, Tool, Tools
+from sophios.wic_types import DEFAULT_BASEPATH, CompilerOptions, GraphSettings, StepId, Tool, Tools
 
 from ._inference import Inference
 from ._errors import InvalidCLTError, InvalidStepError, WorkflowRunError
@@ -431,6 +432,16 @@ def compile_workflow_result(
     Returns:
         CompilationResult: The typed compiler output for the workflow.
     """
+    return _compile_bundle(workflow, tool_registry, lang_version, inference)[1]
+
+
+def _compile_bundle(
+    workflow: "Workflow",
+    tool_registry: Tools | None,
+    lang_version: str | None,
+    inference: Inference,
+) -> tuple[SourceBundle, CompilationResult]:
+    """The documents `workflow` is compiled from, and the result of compiling them."""
     workflow._validate()
 
     merged_tools = _merged_known_tools(workflow, tool_registry)
@@ -440,8 +451,39 @@ def compile_workflow_result(
         ParseResult(workflow_document(workflow), Diagnostics()),
         Path(workflow.process_name).stem,
         RegistrySnapshot.from_tools(merged_tools, workflows=_nested_documents(workflow)))
-    result = compiler.compile_source(bundle, options, relative_run_path=True, testing=False)
-    return result
+    return bundle, compiler.compile_source(bundle, options, relative_run_path=True, testing=False)
+
+
+#: The background of a drawing from Python: opaque, so it reads in a light or a dark notebook,
+#: in exported HTML and PDF, and on GitHub.
+_LIGHT_BACKGROUND: Final = "white"
+_DARK_BACKGROUND: Final = "#1e1e1e"
+
+
+# pylint: disable-next=too-many-arguments
+def draw_workflow(
+    workflow: "Workflow",
+    *,
+    dark: bool,
+    label_edges: bool,
+    label_stepname: bool,
+    inline_depth: int,
+    inference: Inference,
+    tool_registry: Tools | None,
+    lang_version: str | None,
+) -> graphviz.Digraph:
+    """Compile `workflow` once and draw the result: see `Workflow.draw`."""
+    bundle, result = _compile_bundle(workflow, tool_registry, lang_version, inference)
+    settings: GraphSettings = {
+        "graph_dark_theme": dark,
+        "graph_inline_depth": inline_depth,
+        "graph_label_edges": label_edges,
+        "graph_label_stepname": label_stepname,
+        "graph_show_inputs": False,
+        "graph_show_outputs": False,
+    }
+    background = _DARK_BACKGROUND if dark else _LIGHT_BACKGROUND
+    return drawing.draw(result, bundle, settings, bundle.name, background=background)
 
 
 def compiled_workflow_from_result(

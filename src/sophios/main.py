@@ -375,10 +375,15 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
     artifact = pc.apply_inline_options(artifact, subworkflows=args.cwl_inline_subworkflows,
                                        runtag=args.cwl_inline_runtag)
 
-    if args.graphviz:
-        _report(_draw(drawing.draw(compilation, bundle, graph_settings, yaml_path),
-                      str(Path(args.basepath) / f'{yaml_stem}.cwl'), yaml_stem, Path(args.basepath)),
-                args.diagnostics)
+    # A transparent background, for slides.
+    drawing_graph = drawing.draw(compilation, bundle, graph_settings, yaml_path,
+                                 background=None) if args.graphviz else None
+
+    def draw_after_write() -> None:
+        # cwltool draws the CWL file, so it is drawn once this compile has written it.
+        if args.graphviz:
+            _report(_draw(drawing_graph, str(Path(args.basepath) / f'{yaml_stem}.cwl'), yaml_stem,
+                          Path(args.basepath)), args.diagnostics)
 
     if _is_local_run(args):
         # The pre-flight reads the CWL the runner will get, so it is written first.
@@ -389,6 +394,7 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         artifact = replace(artifact, job_inputs=io.absolute_paths(bound, root_dir))
         io.write_artifacts_to_disk(artifact, Path(basepath), True, args.inputs_file)
         plans = realtime.write(analyses, Path(basepath), artifact.name, root_dir)
+        draw_after_write()
         # Check the machine, then pull the container images, the real-time analyses' too: they run with --disable-pull
         extra = (normalize_artifact_job_inputs(artifact, io.read_inputs_file(args.inputs_file))
                  if args.inputs_file else {})
@@ -409,6 +415,7 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
     elif args.generate_cwl_workflow:
         io.write_artifacts_to_disk(artifact, Path(args.basepath), True, args.inputs_file)
         realtime.write(analyses, Path(args.basepath), artifact.name, root_dir)
+        draw_after_write()
     else:
         print('Please specify either --generate_cwl_workflow (compile), --check or --run_local (run)')
         sys.exit(1)
