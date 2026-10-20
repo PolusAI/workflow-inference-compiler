@@ -97,8 +97,7 @@ def test_a_v1_0_tool_with_no_hints_at_all_gets_them() -> None:
 
 @pytest.mark.fast
 def test_hints_written_as_a_list_are_extended_as_a_list() -> None:
-    """Straight at the helper: until `cwl_prepend_dockerFile_include_path` reads a list of hints,
-    none reaches it through `inline_artifact_runs`."""
+    """A packed tool writes its hints as a list of `{class: ...}` entries."""
     process = {'cwlVersion': 'v1.0', 'hints': [{'class': 'ResourceRequirement', 'ramMin': 8}]}
     extended = post_compile._keeping_version_defaults(process, 'tool.cwl')  # pylint: disable=protected-access
     assert extended['hints'] == [{'class': 'LoadListingRequirement', 'loadListing': 'deep_listing'},

@@ -346,6 +346,16 @@ WINDOWS_EXCLUDED: Final = frozenset({
     # document carries an ontology of Sophios's own is checked on every leg by `test_emit.py`.
     'tests/core/test_provenance.py::test_a_wic_with_its_own_edam_schemas_entry_runs_with_provenance',
     'tests/core/test_provenance.py::test_an_embedded_tool_with_its_own_edam_schemas_entry_runs_with_provenance',
+    # Packed tools run through the command line: one or two `cat`-sized steps each, by cwltool
+    # and, where a runner could differ, by Toil, in about thirty seconds together. What is packed,
+    # and that the compile reads no file it should not, is checked on every leg by the file's
+    # other tests; only a runner shows that the written description runs.
+    'tests/core/test_packing.py::test_a_packed_tool_runs_from_the_tree_and_embedded_twice',
+    'tests/core/test_packing.py::test_a_schemadef_tool_with_an_import_is_written_runnable',
+    'tests/core/test_packing.py::test_a_packed_tool_keeps_the_partial_failure_rewrite_written_and_embedded',
+    'tests/core/test_packing.py::test_a_packed_tool_and_one_as_written_run_wired_by_inference',
+    'tests/core/test_packing.py::test_one_basepath_runs_two_echo_cwl_and_two_config_txt_with_provenance',
+    'tests/core/test_packing.py::test_nothing_outside_the_basepath_is_written_or_changed',
 })
 
 

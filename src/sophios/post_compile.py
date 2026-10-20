@@ -413,13 +413,10 @@ def inline_artifact_runs(artifact: CompilationArtifact) -> CompilationArtifact:
         for child in children:
             step_id = child.namespace[-1]
             step = next(item for item in cwl['steps'] if item.get('id') == step_id)
-            # An embedded process has no location of its own, so a relative
-            # `$include` would resolve against whichever document embeds it.
             # Its own version's defaults and the list form of its secondary
             # files are written out first, because dropping `cwlVersion` below
             # takes the upgrade cwltool would have made with it.
-            step['run'] = _secondary_files_as_lists(_keeping_version_defaults(
-                plugins.cwl_prepend_dockerFile_include_path(child.cwl, child.run_path), child.run_path))
+            step['run'] = _secondary_files_as_lists(_keeping_version_defaults(child.cwl, child.run_path))
             # A prefix and an ontology must be declared in the document that
             # uses them, so these move up. `cwlVersion` is dropped instead:
             # the parent already names one, and a second on an embedded

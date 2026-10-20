@@ -8,7 +8,6 @@ edited. Nothing here serialises YAML.
 from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass, field
-import os
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +30,8 @@ from ..lang import (
 from ..python_cwl_adapter import generate_CWL_CommandLineTool, get_module
 from ..utils_cwl import desugar_into_canonical_normal_form, tool_process
 from ..wic_types import StepId, Tool, Tools
-from .resolve import (RegistrySnapshot, generated_process_id, inline_run_name, is_run_path, run_path_name,
-                      step_sidecar)
+from .resolve import (RegistrySnapshot, generated_process_id, inline_run_name, is_run_path, path_from_root,
+                      run_path_name, step_sidecar)
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,22 +194,18 @@ def _register_run(step: Step, namespace: str, document_dir: Path, reading: _Read
     """
     run = dict(step.interpreted).get('run')
     if isinstance(run, dict):
-        name = inline_run_name(step)
+        name = inline_run_name(step, path_from_root(document_dir, reading.root_directory))
         assert name is not None
         body = desugar_into_canonical_normal_form({**deepcopy(run), 'cwlVersion': CWL_VERSION})
-        # Named as its step: the name is what the emitted `run:` file is called.
-        reading.generated[StepId(name, namespace)] = Tool(f'{Path(step.id).stem}.cwl', body)
+        # Written in the document, so its relative references are read beside it, as the step's own file would be.
+        reading.generated[StepId(name, namespace)] = Tool(str(document_dir / f'{Path(step.id).stem}.cwl'), body)
         return True
     if not isinstance(run, str) or not is_run_path(run):
         return False
     target = (document_dir / run).resolve()
     if not target.is_file():
         return False
-    try:
-        identity = os.path.relpath(target, reading.root_directory)
-    except ValueError:  # Windows: the file and the root directory are on different drives
-        identity = target.as_posix()
-    name = run_path_name(run, identity)
+    name = run_path_name(run, path_from_root(target, reading.root_directory))
     reading.run_names[(document_dir, run)] = name
     if run.endswith('.cwl'):
         with open(target, mode='r', encoding='utf-8') as handle:

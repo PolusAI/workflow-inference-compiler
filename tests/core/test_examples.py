@@ -288,7 +288,6 @@ def run_workflows(
     artifact = _compiled_for_run(yml_path, args, registry)
     yaml_stem = artifact.name
 
-    artifact = sophios.plugins.cwl_prepend_dockerFile_include_path_artifact(artifact)
     # As the CLI writes them: a relative path is read beside the workflow.
     artifact = replace(artifact, job_inputs=absolute_paths(
         normalize_artifact_job_inputs(artifact, artifact.job_inputs), Path(args.yaml).parent.absolute()))
@@ -418,14 +417,11 @@ def test_emitted_cwl_says_nothing_cwl_cannot_read(yml_path_str: str, yml_path: P
                 assert field not in node, (
                     f'{path} is embedded and declares {field}, which belongs to '
                     'the document it was embedded into')
-            # Nor does it keep its location: a relative `$include` resolves
-            # against the embedding document, which is somewhere else.
-            include = node.get('hints', {}).get('DockerRequirement', {}).get(
-                'dockerFile', {}).get('$include')
-            if include is not None:
-                assert Path(include).is_absolute() and Path(include).is_file(), (
-                    f'{path} is embedded and includes {include}, which does not '
-                    'name a file wherever the document is written')
+            # Nor does it include a file: a relative `$include` resolves
+            # against the embedding document, which is somewhere else, so a
+            # tool that includes one is embedded packed.
+            assert '"$include"' not in json.dumps(node), (
+                f'{path} is embedded and still includes a file by its path')
         for step in node.get('steps', []) or []:
             embedded(step.get('run'), depth + 1, f'{path}/{step.get("id")}')
 
@@ -656,8 +652,7 @@ def test_flatten_keeps_meaning(yml_path_str: str, yml_path: Path, corpus_registr
 
 def _check_flatten_validates_as_cwl(yml_path_str: str, yml_path: Path, tmp_path: Path,
                                     corpus_registry: CorpusRegistry) -> None:
-    nested = sophios.plugins.cwl_prepend_dockerFile_include_path_artifact(
-        _compile_corpus_workflow(yml_path_str, yml_path, corpus_registry))
+    nested = _compile_corpus_workflow(yml_path_str, yml_path, corpus_registry)
     flat = post_compile.flatten_subworkflows(nested)
     for form, artifact in (('flat', flat), ('flat_embedded', inline_artifact_runs(flat))):
         sophios.input_output.write_artifacts_to_disk(artifact, tmp_path / form)
@@ -741,8 +736,7 @@ def test_embedding_keeps_runtime_defaults(yml_path_str: str, yml_path: Path, tmp
     listing; embedded in a v1.2 document with no `cwlVersion` of its own it
     was run without either, and every download in the weekly lane failed.
     """
-    nested = sophios.plugins.cwl_prepend_dockerFile_include_path_artifact(
-        _compile_corpus_workflow(yml_path_str, yml_path, corpus_registry))
+    nested = _compile_corpus_workflow(yml_path_str, yml_path, corpus_registry)
     sophios.input_output.write_artifacts_to_disk(nested, tmp_path / 'nested')
     sophios.input_output.write_artifacts_to_disk(inline_artifact_runs(nested), tmp_path / 'embedded')
     root = f'{nested.name}.cwl'
