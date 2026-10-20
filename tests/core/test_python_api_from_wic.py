@@ -505,8 +505,7 @@ IN_REPO: Final = (REPO_ROOT / 'docs' / 'tutorials', REPO_ROOT / 'examples')
 def _in_repo_registry() -> tuple[WorkflowPaths, Tools]:
     """The `.wic` files this repository ships and the tools it ships, read from nothing else."""
     workflow_paths = {'global': {path.stem: path for directory in IN_REPO for path in directory.glob('*.wic')}}
-    tools = sophios.plugins.get_tools_cwl({'search_paths_cwl': {'global': [str(REPO_ROOT / 'cwl_adapters')]}},
-                                          quiet=True)
+    tools = sophios.plugins.get_tools_cwl({'search_paths_cwl': {'global': [str(REPO_ROOT / 'cwl_adapters')]}})
     return workflow_paths, tools
 
 

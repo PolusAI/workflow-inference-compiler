@@ -77,7 +77,7 @@ def _get_corpus_env() -> _CorpusEnv:
         args = sophios.cli.get_args()
         config_path = args.config_file or io.default_config_file(Path(args.homedir))
         config = io.read_config_from_disk(config_path) if config_path.exists() else io.get_basic_config()
-        tools = sophios.plugins.get_tools_cwl(config, quiet=True)
+        tools = sophios.plugins.get_tools_cwl(config)
         yml_paths = sophios.plugins.get_yml_paths(config)
         _corpus_env = _CorpusEnv(tools, yml_paths)
     return _corpus_env

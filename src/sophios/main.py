@@ -346,7 +346,7 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         return
     global_config: Json = io.get_config(args.config_file, Path(args.homedir))
 
-    tools_cwl = plugins.get_tools_cwl(global_config, args.validate_plugins, args.quiet, args.basepath)
+    tools_cwl = plugins.get_tools_cwl(global_config, args.validate_plugins, args.basepath)
     # pass around config object instead of reading from the disk!
     yml_paths = plugins.get_yml_paths(global_config, args.basepath)
 
