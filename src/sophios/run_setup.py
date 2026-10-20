@@ -78,5 +78,7 @@ def prepare(artifact: CompilationArtifact, analyses: tuple[realtime.Analysis, ..
     preflight.prepare(list(documents), settings.run, jobs)
     if settings.remove_entrypoints:
         artifact = post_compile.remove_artifact_entrypoints(settings.run.container_engine, artifact)
+        # The images are built from the ones the pre-flight pulled, so the rewrite is written over the first write.
+        input_output.write_artifacts_to_disk(artifact, basepath, settings.inputs_file)
         plans = realtime.write(realtime.without_entrypoints(analyses), basepath, artifact.name, settings.root_dir)
     return Prepared(artifact, plans, documents)

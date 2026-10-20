@@ -241,6 +241,12 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   to get black, and pass it where you relied on white. With the flag an
   explicit edge is a lighter blue (`lightskyblue`), which reads on a dark
   background where `blue` does not.
+- `--docker_remove_entrypoints` (and `docker_remove_entrypoints` in
+  `Workflow.run()`) runs the `-noentrypoint` images it builds. The run used to
+  read the CWL written before the images were renamed, so it ran the original
+  images; and a `DockerRequirement` under `hints`, or in a tool embedded in an
+  inlined document, was never renamed. An image from a registry with a port
+  (`localhost:5000/img:tag`) no longer fails the run.
 
 ### Python API and embedding
 
