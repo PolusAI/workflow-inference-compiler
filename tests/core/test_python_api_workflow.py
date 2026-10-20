@@ -6,6 +6,7 @@ import decimal
 import json
 import os
 import pickle
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -222,6 +223,22 @@ def test_compiled_workflow_carries_the_inference_notes() -> None:
     (note,) = compiled.diagnostics
     assert "note [wic043]" in note
     assert "'cat'" in note and "step 1 'first' output 'file'" in note
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("name", ["a~b", "a@2", "a#b", ".hidden", ".."])
+def test_a_step_name_outside_the_allowed_characters_is_refused(name: str) -> None:
+    """A step's name is an id of the compiled CWL and part of the names made from it, as in a `.wic`."""
+    refusal = f"step name {name!r} is not a name Sophios can write: use letters"
+    with pytest.raises(ValueError, match="^" + re.escape(refusal)):
+        Step(clt_path=_adapter("touch"), step_name=name)
+
+
+@pytest.mark.fast
+def test_a_workflow_named_dot_dot_is_refused() -> None:
+    """A workflow's name is the stem of the files it is written to, and `..` would name the directory above."""
+    with pytest.raises(ValueError, match="^" + re.escape("workflow name '..' is not a name Sophios can write")):
+        Workflow([Step(clt_path=_adapter("touch"))], "..")
 
 
 @pytest.mark.fast

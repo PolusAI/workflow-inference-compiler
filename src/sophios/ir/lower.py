@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from ..lang.cwl import CWL_VERSION
 from ..lang.diagnostics import Diagnostics, Locator
 from ..lang.error_codes import SophiosErrorCode
+from ..lang.names import check_written_name
 from ..lang.nodes import CwlRecord, Document, EdgeRef, InputValue, Step, UnresolvedName
 from ..lang.parser import Grammar
 from ..lang.spans import SourceSpan
@@ -90,6 +91,7 @@ def _lower_resolved(document: ResolvedDocument,
     identities = _step_identities(document.source, here, diagnostics)
     if identities is None or not _every_name_is_present(document.source, diagnostics):
         return Lowered(None, diagnostics)
+    _check_written_names(document, namespace is None, diagnostics)
     defined_anywhere = _edge_definitions(
         identities, Document(steps=tuple(step.source for step in document.steps)), diagnostics)
     defined_so_far: dict[str, PortId] = {}
@@ -472,6 +474,26 @@ def _every_name_is_present(document: Document, diagnostics: Diagnostics) -> bool
                                   Locator(step=step.id, index=index, port=binding.name))
                 found = True
     return not found
+
+
+def _check_written_names(document: ResolvedDocument, root: bool, diagnostics: Diagnostics) -> None:
+    """Report each step id, workflow input and output, and the root's own name that
+    `sophios.lang.names` does not let a document write."""
+    source = document.source
+    for index, step in enumerate(source.steps, start=1):
+        if (problem := check_written_name(step.id)) is not None:
+            diagnostics.error(SophiosErrorCode.INVALID_NAME, f'step id {step.id!r} {problem}', step.span,
+                              Locator(step=step.id, index=index))
+    passthrough = dict(source.passthrough)
+    for side, what in (('inputs', 'input'), ('outputs', 'output')):
+        declared = passthrough.get(side)
+        for name in declared if isinstance(declared, dict) else ():
+            if (problem := check_written_name(str(name))) is not None:
+                diagnostics.error(SophiosErrorCode.INVALID_NAME, f'workflow {what} {str(name)!r} {problem}',
+                                  source.span)
+    if root and (problem := check_written_name(document.name)) is not None:
+        diagnostics.error(SophiosErrorCode.INVALID_NAME, f'workflow name {document.name!r} {problem}',
+                          source.span)
 
 
 def _edge_definitions(identities: tuple[StepId, ...], document: Document,
