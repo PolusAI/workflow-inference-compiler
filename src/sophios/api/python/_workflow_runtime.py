@@ -21,7 +21,8 @@ from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 
 from sophios import compiler, drawing, input_output, plugins, post_compile as pc, preflight, realtime, run_local as rl
-from sophios.ir.artifacts import CompilationResult
+from sophios import run_setup
+from sophios.ir.artifacts import CompilationArtifact, CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.locations import absolute_paths
 from sophios.ir.realtime import ADAPTER
@@ -53,6 +54,7 @@ ParameterT = TypeVar("ParameterT")
 _RUN_ARG_BOOLEAN_FLAGS = {
     "docker_remove_entrypoints",
     "generate_run_script",
+    "no_provenance",
     "quiet",
 }
 
@@ -498,24 +500,28 @@ def draw_workflow(
     return drawing.draw(result, bundle, settings, bundle.name, background=background)
 
 
+def _one_document(workflow: "Workflow", result: CompilationResult) -> CompilationArtifact:
+    """The one document `compile()` returns and `run()` runs: every process embedded,
+    and only the outputs the workflow declares, when it declares any."""
+    artifact = pc.inline_artifact_runs(result.artifact)
+    if not workflow._outputs:
+        return artifact
+    match artifact.cwl.get("outputs"):
+        case dict() as outputs:
+            declared = {output.name: outputs[output.name] for output in workflow._outputs if output.name in outputs}
+            return replace(artifact, cwl={**artifact.cwl, "outputs": declared})
+    return artifact
+
+
 def compiled_workflow_from_result(
     workflow: "Workflow",
     result: CompilationResult,
 ) -> CompiledWorkflow:
     """Build the public boundary from the typed internal result."""
-    artifact = pc.inline_artifact_runs(result.artifact)
-    cwl_workflow = normalize_artifact_cwl(artifact)
-    if workflow._outputs:
-        match cwl_workflow.get("outputs"):
-            case dict() as outputs:
-                cwl_workflow["outputs"] = {
-                    output.name: outputs[output.name]
-                    for output in workflow._outputs
-                    if output.name in outputs
-                }
+    artifact = _one_document(workflow, result)
     return CompiledWorkflow(
         name=workflow.process_name,
-        cwl_workflow=cwl_workflow,
+        cwl_workflow=normalize_artifact_cwl(artifact),
         cwl_job_inputs=normalize_artifact_job_inputs(artifact, artifact.job_inputs),
         lang_version=result.lang_version,
         diagnostics=tuple(str(diagnostic) for diagnostic in result.diagnostics),
@@ -553,11 +559,11 @@ def compiled_workflow(
 def _run_args(overrides: dict[str, str] | None) -> dict[str, str]:
     """The default local-run settings with `overrides` applied.
 
-    `quiet` is on unless the caller turns it off. It and `generate_run_script` are
-    normalised to the `yes`/`no` that `run_local` reads.
+    `quiet` is on unless the caller turns it off. It, `no_provenance` and
+    `generate_run_script` are normalised to the `yes`/`no` that `run_local` reads.
     """
     resolved = {**DEFAULT_RUN_ARGS, **(overrides or {})}
-    for switch in ("quiet", "generate_run_script"):
+    for switch in ("quiet", "no_provenance", "generate_run_script"):
         if switch in resolved:
             resolved[switch] = "yes" if _enabled(resolved[switch]) else "no"
     return resolved
@@ -604,33 +610,23 @@ def run_workflow(
     analyses = realtime.compile_analyses(
         result.realtime, {namespace: dict(paths) for namespace, paths in (workflow_paths or {}).items()},
         _merged_known_tools(workflow, tool_registry), compiler_options(inference))
-    artifact = pc.inline_artifact_runs(result.artifact)
     if (problem := preflight.unwritable(Path(basepath), "the workflow and its run",
                                         "pass run() a basepath you can write to")) is not None:
         raise SophiosError([problem])
     outdir = resolved_run_args.get("outdir")
     writes = ((Path(outdir), "the run's outputs", "give run() an outdir you can write to"),) if outdir else ()
-    # The values as the runner gets them, in which an output-target Directory is a name for the run to create.
-    bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
-    artifact = replace(artifact, job_inputs=absolute_paths(bound, Path.cwd()))
-    inputs_file = resolved_run_args.get("inputs_file", "")
-    input_output.write_artifacts_to_disk(artifact, Path(basepath), inputs_file)
-    plans = realtime.write(analyses, Path(basepath), workflow.process_name, Path.cwd())
-    extra = normalize_artifact_job_inputs(artifact, input_output.read_inputs_file(inputs_file)) if inputs_file else {}
-    # The inputs file wins over a value bound in Python for the same input when the job is written.
-    jobs = (preflight.Job({key: value for key, value in bound.items() if key not in extra}, Path.cwd(), "the workflow"),
-            *((preflight.Job(extra, Path(inputs_file).parent.absolute(), "inputs_file"),) if inputs_file else ()))
-    preflight.prepare(
-        [Path(basepath) / f"{workflow.process_name}.cwl", *realtime.documents(analyses, Path(basepath))],
-        preflight.RunSettings(resolved_run_args["container_engine"], resolved_run_args["pull_dir"],
-                              runner=resolved_run_args["cwl_runner"],
-                              run_script=_enabled(resolved_run_args.get("generate_run_script", "no")), writes=writes),
-        jobs)
-    if _enabled(resolved_run_args.get("docker_remove_entrypoints")):
-        artifact = pc.remove_artifact_entrypoints(
-            resolved_run_args["container_engine"], artifact)
-        plans = realtime.write(realtime.without_entrypoints(analyses), Path(basepath), workflow.process_name,
-                               Path.cwd())
+    # One document, the workflow's and each analysis's, as `compile()` returns it.
+    prepared = run_setup.prepare(
+        _one_document(workflow, result),
+        tuple(replace(analysis, artifact=pc.inline_artifact_runs(analysis.artifact)) for analysis in analyses),
+        Path(basepath),
+        run_setup.Settings(
+            preflight.RunSettings(resolved_run_args["container_engine"], resolved_run_args["pull_dir"],
+                                  runner=resolved_run_args["cwl_runner"],
+                                  run_script=_enabled(resolved_run_args.get("generate_run_script", "no")),
+                                  writes=writes),
+            Path.cwd(), resolved_run_args.get("inputs_file", ""), inputs_file_named="inputs_file",
+            remove_entrypoints=_enabled(resolved_run_args.get("docker_remove_entrypoints"))))
     user_args = convert_args_dict_to_args_list(
         resolved_run_args,
         boolean_flags=_RUN_ARG_BOOLEAN_FLAGS,
@@ -644,7 +640,7 @@ def run_workflow(
         basepath=basepath,
         passthrough_args=unknown_args,
         user_env_vars=dict(user_env_vars or {}),
-        realtime_plans=plans,
+        realtime_plans=prepared.plans,
     )
     if retval != 0:
         raise WorkflowRunError(workflow.process_name, retval)

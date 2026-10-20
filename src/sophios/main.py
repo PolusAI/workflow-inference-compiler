@@ -5,7 +5,6 @@ import shutil
 import subprocess as sub
 import traceback
 import json
-from dataclasses import replace
 from collections.abc import Iterable
 from typing import Final, Iterator
 
@@ -16,13 +15,11 @@ from sophios.lang import wic_schema
 from sophios.lang.diagnostics import Diagnostic, Diagnostics, SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
 from sophios.ir.artifacts import CompilationResult
-from sophios.runtime_inputs import normalize_artifact_job_inputs
 from . import input_output as io
 from . import post_compile as pc
-from . import cli, compiler, drawing, plugins, preflight, realtime, run_local
+from . import cli, compiler, drawing, plugins, preflight, realtime, run_local, run_setup
 from .ir import frontdoor
 from .ir.frontdoor import SourceBundle
-from .ir.locations import absolute_paths
 from .wic_types import CompilerOptions, Json, Tools
 
 
@@ -217,6 +214,7 @@ def _run(args: argparse.Namespace, unknown_args: list[str], workflow_name: str,
     run_args_dict['outdir'] = args.outdir
     run_args_dict['generate_run_script'] = 'yes' if args.generate_run_script else 'no'
     run_args_dict['quiet'] = 'yes' if args.quiet else 'no'
+    run_args_dict['no_provenance'] = 'yes' if args.no_provenance else 'no'
     try:
         retval = run_local.run_local(run_args_dict, False,
                                      workflow_name=workflow_name, passthrough_args=unknown_args,
@@ -383,31 +381,15 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
                           Path(args.basepath)), args.diagnostics)
 
     if _is_local_run(args):
-        # The pre-flight reads the CWL the runner will get, so it is written first.
-        basepath = args.basepath
-        # As the runner gets them, in which an output-target Directory is a name for the run to create.
-        bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
-        # The runner reads the job from `basepath`, so a relative path is written absolute: read beside the workflow.
-        artifact = replace(artifact, job_inputs=absolute_paths(bound, root_dir))
-        io.write_artifacts_to_disk(artifact, Path(basepath), args.inputs_file)
-        plans = realtime.write(analyses, Path(basepath), artifact.name, root_dir)
+        prepared = run_setup.prepare(artifact, analyses, Path(args.basepath), run_setup.Settings(
+            _run_settings(args), root_dir, args.inputs_file, check=args.check,
+            remove_entrypoints=args.docker_remove_entrypoints))
         draw_after_write()
-        # Check the machine, then pull the container images, the real-time analyses' too: they run with --disable-pull
-        extra = (normalize_artifact_job_inputs(artifact, io.read_inputs_file(args.inputs_file))
-                 if args.inputs_file else {})
-        # --inputs_file wins over a `!ii` value of the same input when the job is written.
-        jobs = (preflight.Job({key: value for key, value in bound.items() if key not in extra},
-                              root_dir, 'the workflow'),
-                *((preflight.Job(extra, Path(args.inputs_file).parent.absolute(), '--inputs_file'),)
-                  if args.inputs_file else ()))
-        if not _preflight(args, [Path(basepath) / f'{yaml_stem}.cwl', *realtime.documents(analyses, Path(basepath))],
-                          jobs):
+        if args.check:
+            print(f'Checked {prepared.documents[0]}: nothing in the way of a local run on this machine. '
+                  'Nothing was pulled or run.')
             return
-        if args.docker_remove_entrypoints:
-            artifact = pc.remove_artifact_entrypoints(args.container_engine, artifact)
-            plans = realtime.write(realtime.without_entrypoints(analyses), Path(basepath), artifact.name, root_dir)
-        # No need to re-write to disk as nothing of the cwl or yaml_inputs has changed!
-        _run(args, unknown_args, artifact.name, realtime_plans=plans)
+        _run(args, unknown_args, prepared.artifact.name, realtime_plans=prepared.plans)
 
     elif args.generate_cwl_workflow:
         io.write_artifacts_to_disk(artifact, Path(args.basepath), args.inputs_file)
