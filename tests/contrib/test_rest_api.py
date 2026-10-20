@@ -236,3 +236,27 @@ def test_rest_compile_says_a_real_time_analysis_is_not_in_the_returned_workflow(
     assert list(res["steps"]) == ["touch", "append@2", "append@4"]
     assert ("Real-time analysis runs only with --run_local; the returned workflow has no step for touch"
             in capsys.readouterr().err)
+
+
+def test_rest_compile_returns_an_inline_tool_packed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A node's inline tool that includes a file is returned with the file's text: the request is compiled in
+    the working directory, so that is where `s.sh` is read."""
+    (tmp_path / "s.sh").write_text("echo from-include\n", encoding="utf-8")
+    run = {"cwlVersion": "v1.2", "class": "CommandLineTool", "baseCommand": ["sh", "s.sh"],
+           "requirements": {"InitialWorkDirRequirement": {
+               "listing": [{"entryname": "s.sh", "entry": {"$include": "s.sh"}}]}},
+           "inputs": {}, "outputs": {}}
+    node = {"id": 1, "x": 0, "y": 0, "z": 1, "name": "say", "pluginId": "say", "height": 50, "width": 250,
+            "settings": {}, "run": run, "internal": False}
+    payload = tmp_path / "packed.json"
+    payload.write_text(json.dumps({"state": {"nodes": [node], "links": [], "selection": []}, "plugins": []}),
+                       encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    res = prepare_call_rest_api(payload)
+
+    assert int(res["retval"]) == 0
+    requirements = res["steps"]["say"]["run"]["requirements"]
+    listing = (requirements["InitialWorkDirRequirement"] if isinstance(requirements, dict)
+               else next(item for item in requirements if item["class"] == "InitialWorkDirRequirement"))["listing"]
+    assert listing == [{"entryname": "s.sh", "entry": "echo from-include\n"}]

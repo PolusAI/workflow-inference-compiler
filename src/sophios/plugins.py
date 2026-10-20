@@ -371,37 +371,6 @@ def dockerPull_append_noentrypoint_artifact(
     )
 
 
-def cwl_prepend_dockerFile_include_path(cwl: Cwl, cwl_path: str) -> Cwl:
-    """Prepends (original) cwl_path to the dockerFile $include path
-
-    Args:
-        cwl (Cwl): A CWL CommandLineTool
-        cwl_path : Specifies the absolute path of .cwl file
-    Returns:
-        Cwl: A CWL CommandLineTool, with correct filepath prepended
-    """
-    cwl_mod = copy.deepcopy(cwl)
-    requirement = _docker_requirement(cwl_mod, 'hints')
-    docker_file = requirement.get('dockerFile') if requirement is not None else None
-    if isinstance(docker_file, dict) and docker_file.get('$include'):
-        # cwl_path is an absolute path including (original) filename .cwl
-        # we just need to prepend the dir of cwl_path to the inc_path.
-        # An absolute inc_path is left as is, so applying this twice is harmless.
-        docker_file['$include'] = str(Path(cwl_path).parent / docker_file['$include'])
-    return cwl_mod
-
-
-def cwl_prepend_dockerFile_include_path_artifact(
-        artifact: CompilationArtifact) -> CompilationArtifact:
-    """Resolve Dockerfile includes throughout an artifact tree."""
-    return replace(
-        artifact,
-        cwl=cwl_prepend_dockerFile_include_path(artifact.cwl, artifact.run_path),
-        children=tuple(cwl_prepend_dockerFile_include_path_artifact(child)
-                       for child in artifact.children),
-    )
-
-
 def get_workflow_paths(config: Json, extension: str,
                        basepath: str | Path = DEFAULT_BASEPATH) -> dict[str, dict[str, Path]]:
     """Uses glob() to recursively find all of the yml workflow definition files

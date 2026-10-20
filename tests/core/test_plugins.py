@@ -45,7 +45,7 @@ def test_partial_failure_makes_outputs_optional() -> None:
 
 
 def _docker(spelling: str, **fields: Any) -> Yaml | list[Yaml]:
-    """A fresh `hints` or `requirements` holding one `DockerRequirement`: a mapping
+    """A fresh `requirements` holding one `DockerRequirement`: a mapping
     keyed by class (hand-written adapters) or a list of `{class: ...}` entries (cwl_utils)."""
     if spelling == 'map-form':
         return {'DockerRequirement': fields}
@@ -54,22 +54,9 @@ def _docker(spelling: str, **fields: Any) -> Yaml | list[Yaml]:
 
 @pytest.mark.fast
 @pytest.mark.parametrize('spelling', ['map-form', 'list-form'])
-def test_a_dockerfile_include_is_resolved_in_either_hints_spelling(spelling: str) -> None:
-    """cwl_utils renders `hints` as a list; hand-written adapters use a mapping.
-    The list crashed `Workflow.compile()` on every hinted tool_builder tool."""
-    tool: Yaml = {'class': 'CommandLineTool', 'baseCommand': 'true', 'inputs': {}, 'outputs': {},
-                  'hints': _docker(spelling, dockerFile={'$include': 'Dockerfile_x'}, dockerImageId='x')}
-    before = copy.deepcopy(tool)
-    updated = sophios.plugins.cwl_prepend_dockerFile_include_path(tool, '/adapters/t.cwl')
-    assert updated['hints'] == _docker(spelling, dockerFile={'$include': '/adapters/Dockerfile_x'},
-                                       dockerImageId='x')
-    assert tool == before, 'the input document is not mutated'
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize('spelling', ['map-form', 'list-form'])
 def test_the_noentrypoint_tag_is_appended_in_either_requirements_spelling(spelling: str) -> None:
-    """The same two spellings of `requirements`, under `--docker_remove_entrypoints`."""
+    """cwl_utils renders `requirements` as a list; hand-written adapters use a mapping.
+    Either gets the tag under `--docker_remove_entrypoints`."""
     tool: Yaml = {'class': 'CommandLineTool', 'baseCommand': 'true', 'inputs': {}, 'outputs': {},
                   'requirements': _docker(spelling, dockerPull='docker.io/bash:4.4')}
     before = copy.deepcopy(tool)

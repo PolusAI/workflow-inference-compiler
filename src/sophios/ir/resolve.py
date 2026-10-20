@@ -12,6 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any, Iterable, Mapping
@@ -313,21 +314,33 @@ def _own_run_name(step: Step, registry: RegistrySnapshot, directory: Path | None
     """The name the front door registered a step's own ``run:`` under, if it registered one."""
     run = dict(step.interpreted).get('run')
     if isinstance(run, dict):
-        return inline_run_name(step)
+        assert directory is not None and registry.root_directory is not None, 'an inline body was read from a document'
+        return inline_run_name(step, path_from_root(directory, registry.root_directory))
     return registry.run_name(directory, run) if isinstance(run, str) else None
 
 
-def inline_run_name(step: Step) -> str | None:
+def path_from_root(path: Path, root: Path) -> str:
+    """``path`` from the root document's directory, so a name made from it does not depend on where the checkout is."""
+    try:
+        return os.path.relpath(path, root)
+    except ValueError:  # Windows: the path and the root directory are on different drives
+        return path.as_posix()
+
+
+def inline_run_name(step: Step, document_dir: str) -> str | None:
     """The registry name of an inline ``run:`` body, or None for any other step.
 
-    A body is identified by its content, so two steps with the same id but
-    different bodies are different processes. It is identified as it is
-    registered, in ``CWL_VERSION``: a ``cwlVersion`` inside it is ignored.
+    A body is identified by its content and by the directory of the document
+    that writes it (``document_dir``, from the root document's), so two steps
+    with the same id but different bodies are different processes, and so are
+    two copies of one body in two directories, whose relative references name
+    different files. It is identified as it is registered, in ``CWL_VERSION``:
+    a ``cwlVersion`` inside it is ignored.
     """
     run = dict(step.interpreted).get('run')
     if not isinstance(run, dict):
         return None
-    identity = json.dumps({**run, 'cwlVersion': CWL_VERSION}, sort_keys=True, default=str)
+    identity = json.dumps([document_dir, {**run, 'cwlVersion': CWL_VERSION}], sort_keys=True, default=str)
     return _hashed(_stem(step.id), identity)
 
 

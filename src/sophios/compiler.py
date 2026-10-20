@@ -2,7 +2,12 @@
 import re
 import sys
 from copy import deepcopy
+from pathlib import Path
 from typing import Final
+
+import yaml
+
+from . import utils_cwl
 
 from .ir.complete import complete
 from .ir.artifacts import CompilationArtifact, CompilationResult
@@ -13,15 +18,15 @@ from .ir.namespaces import declare_namespaces
 from .ir.frontdoor import SourceBundle
 from .ir.pipeline import front_end
 from .ir.realtime import extract
-from .ir.resolve import RegistrySnapshot
+from .ir.resolve import RegistrySnapshot, ToolDefinition
 from .ir.names import NAMESPACE_SEPARATOR, Names
-from .ir.types import WorkflowGraph
+from .ir.types import RegistryKey, StepNode, WorkflowGraph
 from .lang import versions
 from .lang.diagnostics import Locator, SophiosError
 from .lang.nodes import CwlRecord, UnresolvedName
 from .lang.parser import Grammar
 from .lang.error_codes import SophiosErrorCode
-from .wic_types import CompilerOptions
+from .wic_types import CompilerOptions, Cwl
 
 
 # pylint: disable-next=too-many-locals
@@ -70,7 +75,7 @@ def compile_source(bundle: SourceBundle,
     names = Names.of(graph)
     for note in dict.fromkeys(_when_notes(graph, names)):
         print(note, file=sys.stderr)
-    artifact = _artifact_tree(graph, graph.name, names, bundle.registry,
+    artifact = _artifact_tree(graph, graph.name, names, _Descriptions(bundle.registry),
                               partial_failure=compiler_options['partial_failure_enable'])
     if not testing:
         print('finishing compilation of', bundle.name)
@@ -166,7 +171,7 @@ def _check_unresolved_names(graph: WorkflowGraph, allow_raw_cwl: bool,
         _check_unresolved_names(child, allow_raw_cwl, names)
 
 
-def _artifact_tree(graph: WorkflowGraph, name: str, names: Names, registry: RegistrySnapshot, *,
+def _artifact_tree(graph: WorkflowGraph, name: str, names: Names, descriptions: '_Descriptions', *,
                    partial_failure: bool) -> CompilationArtifact:
     """One artifact per emitted document, each surfaced exactly once, a child
     named as the `run:` its parent emits, so the file written is the one it runs."""
@@ -176,19 +181,13 @@ def _artifact_tree(graph: WorkflowGraph, name: str, names: Names, registry: Regi
         assert step.run is not None
         child = step.run.child
         if child is not None:
-            children.append(_artifact_tree(child, names.file(step.id), names, registry,
+            children.append(_artifact_tree(child, names.file(step.id), names, descriptions,
                                            partial_failure=partial_failure))
             continue
-        key = step.run.process_id
-        definition = registry.tool(key)
-        if definition is None:
-            raise SophiosError.error(
-                SophiosErrorCode.SUBWORKFLOW_INVALID,
-                f'process {key.namespace}/{key.name} disappeared after resolution')
+        tool = descriptions.tool(step)
         # Named by the `run:` the parent emits, so the file written is the one it runs.
         children.append(CompilationArtifact(
-            (names.step(step.id),), names.file(step.id),
-            definition.run_path, deepcopy(definition.cwl), {}, None,
+            (names.step(step.id),), names.file(step.id), tool.run_path, descriptions.of(step, tool), {}, None,
         ))
 
     return CompilationArtifact(
@@ -200,3 +199,48 @@ def _artifact_tree(graph: WorkflowGraph, name: str, names: Names, registry: Regi
         graph,
         tuple(children),
     )
+
+
+class _Descriptions:
+    """The tool each step runs, as its artifact carries it, for one compile.
+
+    As read, unless it refers to a file by a path relative to where it was
+    written: then packed by cwltool there, once however many steps run it, so
+    it means the same wherever it is written. Inference and linking have
+    already read every tool as written.
+    """
+
+    def __init__(self, registry: RegistrySnapshot) -> None:
+        self._registry = registry
+        self._packed: dict[RegistryKey, Cwl] = {}
+
+    def tool(self, step: StepNode) -> ToolDefinition:
+        """The registry's definition of the tool `step` runs."""
+        assert step.run is not None
+        key = step.run.process_id
+        definition = self._registry.tool(key)
+        if definition is None:
+            raise SophiosError.error(
+                SophiosErrorCode.SUBWORKFLOW_INVALID,
+                f'process {key.namespace}/{key.name} disappeared after resolution')
+        return definition
+
+    def of(self, step: StepNode, tool: ToolDefinition) -> Cwl:
+        """The description written for `step`, which runs `tool`.
+
+        Raises:
+            SophiosError: `wic013` at the step, with cwltool's message, when cwltool cannot pack the tool.
+        """
+        if not utils_cwl.has_relative_reference(tool.cwl):
+            return deepcopy(tool.cwl)
+        if tool.key not in self._packed:
+            try:
+                self._packed[tool.key] = utils_cwl.packed(yaml.safe_dump(tool.cwl, sort_keys=False),
+                                                          Path(tool.run_path).absolute().as_uri())
+            except utils_cwl.PackError as error:
+                raise SophiosError.error(
+                    SophiosErrorCode.SUBWORKFLOW_INVALID,
+                    f'step {step.id.name!r} runs {tool.run_path}, which refers to files relative to itself, '
+                    f'and cwltool cannot read them:\n{error}',
+                    span=step.span, locator=Locator(step=step.id.name, index=step.id.index)) from error
+        return deepcopy(self._packed[tool.key])

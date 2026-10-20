@@ -364,10 +364,6 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
     root_dir = Path(args.yaml).parent.absolute()
     artifact = compilation.artifact
 
-    artifact = plugins.cwl_prepend_dockerFile_include_path_artifact(artifact)
-    analyses = tuple(replace(analysis, artifact=plugins.cwl_prepend_dockerFile_include_path_artifact(analysis.artifact))
-                     for analysis in analyses)
-
     if args.partial_failure_enable:
         artifact = plugins.cwl_update_outputs_optional_artifact(
             artifact, args.partial_failure_success_codes_range,

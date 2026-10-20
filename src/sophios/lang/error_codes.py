@@ -207,7 +207,8 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         Kind.DOCUMENT,
         "A workflow or a step's process cannot be used: no steps, a tool or subworkflow not found, a CWL `Workflow` "
         "as a step, a packed `$graph` with no `main`, subworkflows that call each other in a cycle, "
-        "`implementations` with none chosen, or ports only the CWL runner can read.",
+        "`implementations` with none chosen, ports only the CWL runner can read, or a tool's relative files "
+        "(`$include`, `$import`, a relative `location`) that cwltool cannot read.",
         'Do what the message names: put the tool or `.wic` file on a search path of the config (`search_paths_cwl`, '
         '`search_paths_wic`), give the workflow steps, or break the cycle (.wic reference §2.3).'),
     SophiosErrorCode.SCRIPT_ARGUMENT_MISMATCH: Explanation(
