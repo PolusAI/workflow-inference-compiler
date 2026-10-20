@@ -129,7 +129,7 @@ def _analysis_command(container_cmd: str) -> realtime.Command:
 def build_cmd(workflow_name: str, basepath: str, cwl_runner: str,
               container_cmd: str, passthrough_args: list[str], outdir: str | None = None,
               quiet: bool = True, documents: tuple[str, ...] | None = None,
-              cachedir: str | None = None) -> list[str]:
+              cachedir: str | None = None, provenance: bool = True) -> list[str]:
     """Build the command to run the workflow in an environment
 
     Args:
@@ -145,6 +145,8 @@ def build_cmd(workflow_name: str, basepath: str, cwl_runner: str,
         cachedir (str | None): Give cwltool this directory as `--cachedir`, so a job whose tool
         and inputs are unchanged reuses its cached outputs. None: no cache. Toil keeps its own
         job store and is not given it.
+        provenance (bool): Have the runner write a research object under `<basepath>/provenance/`.
+        Toil writes none under Slurm.
     Returns:
         cmd (list[str]): The command to run the workflow
     """
@@ -160,7 +162,7 @@ def build_cmd(workflow_name: str, basepath: str, cwl_runner: str,
     # However, cwltool does not appear to cache these files, so it will attempt to download them repeatedly.
     # These ~30 second timeouts will eventually add up to >6 hours, which will cause github to terminate the CI Action!
     skip_schemas = ['--skip-schemas']
-    provenance = ['--provenance', f'{basepath}/provenance/{workflow_name}']
+    provenance_flags = ['--provenance', f'{basepath}/provenance/{workflow_name}'] if provenance else []
     container_cmd_ = _container_flags(container_cmd)
     write_summary = ['--write-summary',
                      f'{basepath}/output_{workflow_name}.json']
@@ -174,7 +176,7 @@ def build_cmd(workflow_name: str, basepath: str, cwl_runner: str,
     # Use cwl-docker-extract to pull images
     container_pull = ['--disable-pull']
     script = 'cwltool_filterlog' if cwl_runner == 'cwltool' else cwl_runner
-    cmd = [script] + container_pull + quiet_flags + provenance + \
+    cmd = [script] + container_pull + quiet_flags + provenance_flags + \
         container_cmd_ + write_summary + skip_schemas + path_check
     if cwl_runner == 'cwltool':
         cmd += ['--move-outputs', '--enable-ext',
@@ -186,7 +188,7 @@ def build_cmd(workflow_name: str, basepath: str, cwl_runner: str,
     elif cwl_runner == 'toil-cwl-runner':
         cmd = [script] + container_cmd_ + path_check
         if 'slurm' not in passthrough_args:
-            cmd += provenance
+            cmd += provenance_flags
 
         cmd += ['--outdir', runner_outdir,
                 # NOTE: This is the equivalent of --cachedir
@@ -305,8 +307,8 @@ def run_local(run_args_dict: dict[str, str], use_subprocess: bool,
 
     Args:
         run_args_dict (dict[str,str]): The command line arguments dict for run_local.
-        Its 'quiet' is 'yes' (the default) or 'no'. Its 'cachedir', when not empty, is
-        passed to cwltool as `--cachedir`.
+        Its 'quiet' is 'yes' (the default) or 'no', and so is its 'no_provenance' ('no' by
+        default). Its 'cachedir', when not empty, is passed to cwltool as `--cachedir`.
         use_subprocess (bool): When using cwltool, determines whether to use subprocess.run(...)
         or use the cwltool python api.
         basepath (str): The path at which the workflow to be executed
@@ -335,7 +337,7 @@ def run_local(run_args_dict: dict[str, str], use_subprocess: bool,
     cmd = build_cmd(workflow_name, basepath, cwl_runner,
                     container_engine, passthrough_args, run_args_dict.get('outdir') or None,
                     quiet=run_args_dict.get('quiet', 'yes') == 'yes', documents=documents,
-                    cachedir=cachedir or None)
+                    cachedir=cachedir or None, provenance=run_args_dict.get('no_provenance', 'no') != 'yes')
     cmdline = shlex.join(cmd)
     exec_env = create_safe_env(user_env_vars or {})
 

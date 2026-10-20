@@ -38,6 +38,7 @@ async def run_cwl_workflow(
         list(passthrough_args or []),
         run_args.get("outdir") or None,
         quiet=run_args.get("quiet", "yes") == "yes",
+        provenance=run_args.get("no_provenance", "no") != "yes",
     )
     cmdline = " ".join(cmd)
     exec_env = create_safe_env(dict(user_env))
