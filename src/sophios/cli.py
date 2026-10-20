@@ -74,9 +74,9 @@ parser.add_argument('--parallel', default=False, action="store_true",
                     help='''When running locally, execute independent steps in parallel.
                     \nThis may cause issues with hanging (particularly when scattering).''')
 parser.add_argument('--quiet', default=False, action="store_true",
-                    help='''Disable verbose output. This will not print out the commands used for each step,
-                    and it will capture all stdout/stderr into log files for each step.
-                    With --run_local or --generate_run_script, cwltool is also given --quiet.''')
+                    help='''With --run_local or --generate_run_script: hide cwltool's own log (cwltool is
+                    given --quiet). Each tool's own messages still print as the run goes.
+                    The compiled CWL is the same with or without it.''')
 parser.add_argument('--cwl_runner', type=str, required=False, default='cwltool', choices=['cwltool', 'toil-cwl-runner'],
                     help='The CWL runner to use for running workflows locally.')
 parser.add_argument('--lang_version', type=str, default=None,

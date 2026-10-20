@@ -356,6 +356,11 @@ WINDOWS_EXCLUDED: Final = frozenset({
     'tests/core/test_packing.py::test_a_packed_tool_and_one_as_written_run_wired_by_inference',
     'tests/core/test_packing.py::test_one_basepath_runs_two_echo_cwl_and_two_config_txt_with_provenance',
     'tests/core/test_packing.py::test_nothing_outside_the_basepath_is_written_or_changed',
+    # Two quiet runs through the command line by cwltool, a failing step in a call and a tool that names
+    # the file it writes as its stdout, in a few seconds together. What a quiet run writes and gives the
+    # runner is checked on every leg by the file's other tests.
+    'tests/core/test_quiet.py::test_a_failing_step_is_named_with_its_status_below_its_own_messages',
+    'tests/core/test_quiet.py::test_a_quiet_run_keeps_a_file_the_tool_names_as_its_stdout',
 })
 
 

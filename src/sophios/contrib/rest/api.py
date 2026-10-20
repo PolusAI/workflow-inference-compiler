@@ -73,7 +73,7 @@ async def compile_wf(request: Request) -> Json:
     # The default list
     tools_cwl: Tools = {}
     global_config = input_output.get_config(args.config_file, Path(args.homedir))
-    tools_cwl = plugins.get_tools_cwl(global_config, args.validate_plugins, args.quiet)
+    tools_cwl = plugins.get_tools_cwl(global_config, args.validate_plugins)
 
     # From the arguments this endpoint actually built, not a fresh default
     # parse: re-deriving configuration that is already in hand is how the two drift.
