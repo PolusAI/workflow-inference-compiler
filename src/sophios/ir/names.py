@@ -62,8 +62,9 @@ class Names:
           input or output is called it: then it is `<id>@<index>`, the
           position the author wrote it at, which `(index, id)` names (a step
           Infer inserted is numbered after every authored one);
-        - a derived name is `<step>~<port>` (an input and an output may share
-          a name, as CWL allows).
+        - a derived name is `<step>~<port>`, which no authored name is: none
+          contains `~` (`sophios.lang.names`). An input and an output may
+          share a name, as CWL allows.
 
         Every document of the tree is written beside the root, named by the
         root and the step that runs it (`file`): a tool once per step that

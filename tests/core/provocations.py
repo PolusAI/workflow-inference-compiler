@@ -471,6 +471,14 @@ def _provoke_realtime_declaration() -> None:
 COMPILED.update({SophiosErrorCode.REALTIME_DECLARATION: _provoke_realtime_declaration})
 
 
+def _provoke_invalid_name() -> None:
+    """A step id with a `~`, which the compiled CWL joins names with."""
+    _compile_minimal({'steps': [{'id': 'a~b', 'run': 'touch', 'in': {'filename': {'wic_inline_input': 'x'}}}]})
+
+
+COMPILED.update({SophiosErrorCode.INVALID_NAME: _provoke_invalid_name})
+
+
 def _provoke_program_missing() -> None:
     import tempfile  # pylint: disable=import-outside-toplevel
     from pathlib import Path  # pylint: disable=import-outside-toplevel

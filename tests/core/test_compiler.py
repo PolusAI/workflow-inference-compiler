@@ -6,7 +6,7 @@ import pytest
 from sophios.lang.diagnostics import SophiosError
 from sophios.wic_types import StepId, Yaml
 
-from .hermetic import compile_hermetic_cwl
+from .hermetic import compile_hermetic_cwl, subworkflow_step
 from .synthetic_tools import SYNTHETIC_NS, SYNTHETIC_TOOLS
 
 
@@ -114,3 +114,26 @@ def test_a_when_that_reads_an_input_the_step_lacks_is_named_and_still_compiles(
     compiled = compile_hermetic_cwl({'steps': [{**_mk_file(), 'when': expression}]})
     assert compiled['steps'][0]['when'] == expression
     assert ('in `when:`, which its process does not declare' in capsys.readouterr().err) is prints
+
+
+def _call_when(expression: str) -> Yaml:
+    """A call to `child.wic`, whose `mk_file` leaves `name` for the caller, made conditional on `expression`."""
+    return {'steps': [{**subworkflow_step('child.wic', {'steps': [{'id': 'mk_file'}]}),
+                       'parentargs': {'when': expression}}]}
+
+
+@pytest.mark.fast
+def test_a_when_in_bracket_form_on_a_call_draws_no_note(capsys: pytest.CaptureFixture[str]) -> None:
+    """A call declares the names its child exposes, `mk_file~name` among them, and the bracket form reads it."""
+    compiled = compile_hermetic_cwl(_call_when('$(inputs["mk_file~name"] != null)'))
+    assert 'mk_file~name' in compiled['steps'][0]['in']
+    assert 'Warning!' not in capsys.readouterr().err
+
+
+@pytest.mark.fast
+def test_a_when_that_reads_a_made_name_dotted_is_told_the_bracket_form(capsys: pytest.CaptureFixture[str]) -> None:
+    """`inputs.mk_file~name` is `inputs.mk_file`, then `~name`: the note names the input and how to read it."""
+    compile_hermetic_cwl(_call_when('$(inputs.mk_file~name != null)'))
+    assert capsys.readouterr().err.splitlines() == [
+        "Warning! oracle.wic: step 'child.wic' reads inputs.mk_file in `when:`, which its process does not "
+        'declare; CWL evaluates it as null. Write inputs[\'mk_file~name\'] to read one it declares.']

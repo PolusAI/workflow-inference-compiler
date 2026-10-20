@@ -357,8 +357,14 @@ def _unique_entries(node: yaml.nodes.MappingNode, file: str, diags: Diagnostics,
     Applied at every mapping boundary the language owns, so downstream code
     may rely on uniqueness after this point.
     """
+    return [(key, value_node) for _key_node, key, value_node in _unique_keyed_entries(node, file, diags, what)]
+
+
+def _unique_keyed_entries(node: yaml.nodes.MappingNode, file: str, diags: Diagnostics,
+                          what: str) -> list[tuple[yaml.nodes.Node, str, yaml.nodes.Node]]:
+    """`_unique_entries`, each entry with the key's node, for a span that starts at the key."""
     seen: set[str] = set()
-    kept: list[tuple[str, yaml.nodes.Node]] = []
+    kept: list[tuple[yaml.nodes.Node, str, yaml.nodes.Node]] = []
     for key_node, value_node in node.value:
         key = _key_text(key_node, file, diags)
         if key in seen:
@@ -367,7 +373,7 @@ def _unique_entries(node: yaml.nodes.MappingNode, file: str, diags: Diagnostics,
                         SourceSpan.of(file, key_node))
             continue
         seen.add(key)
-        kept.append((key, value_node))
+        kept.append((key_node, key, value_node))
     return kept
 
 
@@ -447,8 +453,8 @@ def _steps(node: yaml.nodes.Node, file: str, diags: Diagnostics) -> tuple[tuple[
     """Parse `steps:`, which may be a mapping or a sequence, into the same AST."""
     match node:
         case yaml.nodes.MappingNode():
-            entries = _unique_entries(node, file, diags, 'step')
-            return tuple(_step(name, v, file, diags) for name, v in entries), True
+            entries = _unique_keyed_entries(node, file, diags, 'step')
+            return tuple(_step(name, v, file, diags, key_node) for key_node, name, v in entries), True
         case yaml.nodes.SequenceNode():
             return tuple(_sequence_step(item, file, diags) for item in node.value), False
         case _:
@@ -534,13 +540,15 @@ def _rejected_step(
     return Step(id='', span=span)
 
 
-def _step(step_id: str, node: yaml.nodes.Node, file: str, diags: Diagnostics) -> Step:
-    """Parse a step body, keyed by its id.
+def _step(step_id: str, node: yaml.nodes.Node, file: str, diags: Diagnostics,
+          key_node: yaml.nodes.Node | None = None) -> Step:
+    """Parse a step body, keyed by its id; the step's span starts at `key_node`, the id, when given.
 
     A step may legitimately have no body at all (`some_step.wic:` with nothing
     under it), which YAML resolves to null.
     """
-    span = SourceSpan.of(file, node)
+    span = (SourceSpan.from_marks(file, key_node.start_mark, node.end_mark) if key_node is not None
+            else SourceSpan.of(file, node))
     if node.tag == 'tag:yaml.org,2002:null':
         return Step(id=step_id, span=span)
     if not isinstance(node, yaml.nodes.MappingNode):

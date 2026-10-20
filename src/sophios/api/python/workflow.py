@@ -16,6 +16,7 @@ from sophios.lang import CwlRecord, EdgeRef, InputValue, OpaqueCwl, UnresolvedNa
 from sophios.lang.compatibility import TypeRelation, reference_relation
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
+from sophios.lang.names import check_written_name
 from sophios.lang.spans import SourceSpan
 from sophios.lang.versions import KNOWN_VERSIONS
 from sophios.wic_types import DEFAULT_BASEPATH, Tools
@@ -90,6 +91,13 @@ __all__ = [
     "Workflow",
     "WorkflowRunError",
 ]
+
+
+def _written_name(name: str, what: str) -> str:
+    """`name`, which a step or workflow will be called in the compiled CWL, if a document may write it."""
+    if (problem := check_written_name(name)) is not None:
+        raise ValueError(f"{what} {name!r} {problem}")
+    return name
 
 
 def _tool_builder_source_name(value: Any) -> str | None:
@@ -461,6 +469,8 @@ class Step(_ProcessBase):
 
         Raises:
             TypeError: If the source or step_inputs_file uses an unsupported type.
+            ValueError: If the step's name has a character other than letters, digits,
+                ``_``, ``.`` and ``-``, or starts with ``.``.
             InvalidCLTError: If the CWL tool cannot be loaded from disk or the registry.
 
         Returns:
@@ -536,6 +546,8 @@ class Step(_ProcessBase):
 
         Raises:
             TypeError: If ``run_path`` uses an unsupported type.
+            ValueError: If ``process_name`` has a character other than letters, digits,
+                ``_``, ``.`` and ``-``, or starts with ``.``.
             InvalidCLTError: If the CWL document cannot be parsed.
 
         Returns:
@@ -571,7 +583,7 @@ class Step(_ProcessBase):
     ) -> None:
         # pylint: disable=too-many-arguments
         """Populate a step from an already parsed CLT and optional step inputs."""
-        resolved_name = process_name or clt_path.stem
+        resolved_name = _written_name(process_name, "step name") if process_name else clt_path.stem
 
         self.clt = clt
         self.clt_path = clt_path
@@ -775,11 +787,17 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
             steps (Sequence[Step | Workflow]): Child workflow nodes in execution order.
             workflow_name (str): User-facing workflow name.
 
+        Raises:
+            ValueError: If the name, with ``/`` and spaces made ``_``, has a character other
+                than letters, digits, ``_``, ``.`` and ``-``, or starts with ``.``.
+
         Returns:
             None: The workflow is initialized in place.
         """
         self.steps = list(steps)
         self.process_name = _normalize_workflow_name(workflow_name)
+        if (problem := check_written_name(self.process_name)) is not None:
+            raise ValueError(f"workflow name {workflow_name!r} {problem}")
         self._span = _caller_span()
         self._inputs = ParameterStore()
         self._outputs = ParameterStore()

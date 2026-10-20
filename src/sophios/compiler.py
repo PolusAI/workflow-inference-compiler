@@ -14,7 +14,7 @@ from .ir.frontdoor import SourceBundle
 from .ir.pipeline import front_end
 from .ir.realtime import extract
 from .ir.resolve import RegistrySnapshot
-from .ir.names import Names
+from .ir.names import NAMESPACE_SEPARATOR, Names
 from .ir.types import WorkflowGraph
 from .lang import versions
 from .lang.diagnostics import Locator, SophiosError
@@ -67,7 +67,10 @@ def compile_source(bundle: SourceBundle,
     if inferred.graph is None:
         raise SophiosError(inferred.diagnostics)
     graph = declare_namespaces(complete(inferred.graph), bundle.registry)
-    artifact = _artifact_tree(graph, graph.name, Names.of(graph), bundle.registry,
+    names = Names.of(graph)
+    for note in dict.fromkeys(_when_notes(graph, names)):
+        print(note, file=sys.stderr)
+    artifact = _artifact_tree(graph, graph.name, names, bundle.registry,
                               partial_failure=compiler_options['partial_failure_enable'])
     if not testing:
         print('finishing compilation of', bundle.name)
@@ -86,13 +89,11 @@ def _expression_inputs(expression: object) -> tuple[str, ...]:
 
 
 def _authored_spelling_notes(graph: WorkflowGraph) -> list[str]:
-    """One plain line for each place a document addresses a step or an input ambiguously.
+    """One plain line for each `outputSource` that names a step by an id more than one step
+    has: it means the first.
 
     Such a spelling still compiles, so nothing here fails the compile; each line says what
-    to write instead. Two places are checked: an `outputSource` that names a step by an id
-    more than one step has (it means the first), and a `when:` that reads an input its step
-    does not declare (CWL evaluates it as null).
-    A document the Python API built names the script that built it.
+    to write instead. A document the Python API built names the script that built it.
     """
     notes: list[str] = []
     spans = [step.span for step in graph.steps if step.span is not None]
@@ -109,14 +110,35 @@ def _authored_spelling_notes(graph: WorkflowGraph) -> list[str]:
         notes.append(f"Warning! {file}: output {str(name)!r} has outputSource '{sources[name]}', but "
                      f'{ids.count(source.step.name)} steps have the id {written!r} and it means the first. '
                      f"Write '({position}, {source.step.name})/{source.port}' to say so.")
-    for step in graph.steps:
-        declared = {str(port.id.port) for port in step.inputs}
-        for read in _expression_inputs(dict(step.interpreted).get('when')):
-            if read not in declared:
-                notes.append(f"Warning! {file}: step {step.id.name!r} reads inputs.{read} in `when:`, which "
-                             'its process does not declare; CWL evaluates it as null.')
     for child in graph.children:
         notes.extend(_authored_spelling_notes(child))
+    return notes
+
+
+def _when_notes(graph: WorkflowGraph, names: Names) -> list[str]:
+    """One plain line for each `when:` that reads an input its step does not declare: CWL
+    evaluates it as null.
+
+    Read from the finished graph, where a call declares every name its child exposes, as
+    `names` spells it. A dotted read of a made name (`inputs.touch~filename`) reads
+    `inputs.touch`; the line names the bracket form.
+    """
+    notes: list[str] = []
+    spans = [step.span for step in graph.steps if step.span is not None]
+    if not spans:
+        return [note for child in graph.children for note in _when_notes(child, names)]
+    file = spans[0].file
+    for step in graph.steps:
+        declared = [names.port(port.id.port) for port in step.inputs]
+        for read in _expression_inputs(dict(step.interpreted).get('when')):
+            if read not in declared:
+                made = [name for name in declared if name.startswith(f'{read}{NAMESPACE_SEPARATOR}')]
+                hint = f" Write {' or '.join(f'inputs[{name!r}]' for name in made)} to read one it declares." \
+                    if made else ''
+                notes.append(f"Warning! {file}: step {step.id.name!r} reads inputs.{read} in `when:`, which "
+                             f'its process does not declare; CWL evaluates it as null.{hint}')
+    for child in graph.children:
+        notes.extend(_when_notes(child, names))
     return notes
 
 

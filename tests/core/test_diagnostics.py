@@ -1315,3 +1315,56 @@ def test_check_loads_and_imports_nothing(engine: Callable[..., list[list[str]]],
     preflight.check(preflight.needs([tool]), preflight.RunSettings('docker', str(tmp_path)))
     assert not [cmd for cmd in calls if len(cmd) > 1 and cmd[1] in ('load', 'import')]
     assert not _pulled(calls)
+
+
+_UNWRITABLE: Final = ['a~b', 'echo@2', 'a/b', 'a b', 'a#b', '.', '..', '.hidden']
+_STEP_FORMS: Final = {
+    'sequence': "steps:\n- id: mk_file\n  in:\n    name: !ii a\n"
+                "- id: '{name}'\n  run: mk_file\n  in:\n    name: !ii b\n",
+    'mapping': "steps:\n  mk_file:\n    in:\n      name: !ii a\n"
+               "  '{name}':\n    run: mk_file\n    in:\n      name: !ii b\n",
+}
+
+
+def _refusals(text: str, name: str = 'oracle') -> list[Diagnostic]:
+    with pytest.raises(SophiosError) as caught:
+        compile_hermetic_source(text, name)
+    return list(caught.value.diagnostics)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('form', sorted(_STEP_FORMS))
+@pytest.mark.parametrize('name', _UNWRITABLE)
+def test_a_step_id_outside_the_allowed_characters_is_refused_at_its_line(name: str, form: str) -> None:
+    """A step id is part of the compiled ids, of the names made with `~` and `@`, and of a file name."""
+    found = _refusals(_STEP_FORMS[form].format(name=name))
+    assert [(d.code, str(d.span)) for d in found] == [(SophiosErrorCode.INVALID_NAME, 'oracle.wic:5:3')]
+    assert f'step id {name!r} is not a name Sophios can write' in found[0].message
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('side, declaration', [('inputs', 'string'), ('outputs', '{outputSource: mk_file/file}')])
+@pytest.mark.parametrize('name', ['a~b', '.hidden'])
+def test_a_workflow_input_or_output_outside_the_allowed_characters_is_refused(
+        name: str, side: str, declaration: str) -> None:
+    """A workflow input or output is an id of the compiled CWL, as a step is."""
+    found = _refusals(f"{side}:\n  '{name}': {declaration}\nsteps:\n- id: mk_file\n  in:\n    name: !ii a\n")
+    assert [(d.code, d.span.file if d.span else None) for d in found] == [
+        (SophiosErrorCode.INVALID_NAME, 'oracle.wic')]
+    assert f'workflow {side[:-1]} {name!r} is not a name Sophios can write' in found[0].message
+
+
+@pytest.mark.fast
+def test_a_workflow_named_outside_the_allowed_characters_is_refused() -> None:
+    """A workflow's name is the stem of the files it is written to."""
+    found = _refusals("steps:\n- id: mk_file\n  in:\n    name: !ii a\n", 'a~b')
+    assert [d.code for d in found] == [SophiosErrorCode.INVALID_NAME]
+    assert "workflow name 'a~b' is not a name Sophios can write" in found[0].message
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize('name', ['con', 'aux', 'nul', 'com1'])
+def test_a_step_named_like_a_windows_device_compiles(name: str) -> None:
+    """A step's file name always starts with its workflow's, so no step name is a device name alone."""
+    compiled = compile_hermetic_source(_STEP_FORMS['sequence'].format(name=name))
+    assert [step['id'] for step in compiled.artifact.cwl['steps']] == ['mk_file', name]

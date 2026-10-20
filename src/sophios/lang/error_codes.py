@@ -99,6 +99,11 @@ class SophiosErrorCode(StrEnum):
     #: not well formed, or whose analysis does not compile.
     REALTIME_DECLARATION = 'wic044'
 
+    #: A step id, workflow input or output, or workflow name spelled with a
+    #: character outside `[A-Za-z0-9_.-]`, or starting with `.`
+    #: (`sophios.lang.names`).
+    INVALID_NAME = 'wic045'
+
     #: --- Python API. The document is valid; the call was not. ---
     INVALID_INPUT_VALUE = 'api001'
     INVALID_STEP = 'api002'
@@ -337,6 +342,12 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         'the wrong shape, or whose analysis does not compile.',
         'Write each input of the step as a literal of the shape the message names, and fix the analysis it names '
         '(docs/realtime-analysis.md).'),
+    SophiosErrorCode.INVALID_NAME: Explanation(
+        Kind.DOCUMENT,
+        'A step id, workflow input or output, or workflow name with a character other than letters, digits, '
+        '`_`, `.` and `-`, or starting with `.`.',
+        'Rename it with letters, digits, `_`, `.` and `-`: the name becomes part of file names and of the names '
+        'Sophios makes with `~` and `@`.'),
     SophiosErrorCode.INVALID_INPUT_VALUE: Explanation(
         Kind.CALL,
         'A value bound to a step input that the input cannot take.',
