@@ -341,6 +341,11 @@ WINDOWS_EXCLUDED: Final = frozenset({
     # and by Toil with provenance, in about twenty seconds. Which files are written is checked on
     # every leg by `test_names_emitted.py`; only a runner shows what its snapshot holds.
     'tests/core/test_provenance.py::test_every_step_file_is_in_the_provenance_snapshot',
+    # One echo step run through the command line by cwltool and by Toil with provenance, its
+    # `.wic` or its tool declaring EDAM from another URL, in about five seconds each. That no
+    # document carries an ontology of Sophios's own is checked on every leg by `test_emit.py`.
+    'tests/core/test_provenance.py::test_a_wic_with_its_own_edam_schemas_entry_runs_with_provenance',
+    'tests/core/test_provenance.py::test_an_embedded_tool_with_its_own_edam_schemas_entry_runs_with_provenance',
 })
 
 

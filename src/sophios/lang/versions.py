@@ -15,12 +15,6 @@ KNOWN_VERSIONS: Final[tuple[str, ...]] = ('0.0.1',)
 #: The newest version — what untagged sources resolve to.
 LANG_VERSION: Final[str] = KNOWN_VERSIONS[-1]
 
-#: The namespace under which the resolved version is annotated in emitted CWL,
-#: so the annotation is a declared extension field and the output stays valid.
-ANNOTATION_NAMESPACE: Final[str] = 'sophios'
-ANNOTATION_NAMESPACE_URI: Final[str] = 'https://github.com/PolusAI/sophios#'
-ANNOTATION_KEY: Final[str] = f'{ANNOTATION_NAMESPACE}:lang_version'
-
 
 def resolve(requested: str | None = None,
             pins: tuple[str, ...] = (),

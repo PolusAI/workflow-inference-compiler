@@ -6,7 +6,7 @@ without a reason is a place for a real difference to hide.
 
     IDENTICAL          nothing is ignored.
     UP_TO_ORDER        mapping key order is ignored.
-    UP_TO_EMBEDDING    `run:` paths are ignored.
+    UP_TO_EMBEDDING    `run:` paths, `$namespaces` and `$schemas` are ignored.
     UP_TO_RENAMING     namespaced names are ignored; the DAG must match.
 
 A lattice. What each strength forgives is declared on `equivalent`.
@@ -135,12 +135,11 @@ def equivalent(left: Yaml, right: Yaml, strength: Strength) -> Divergence | None
         case Strength.UP_TO_ORDER:
             return _first_difference(left, right, strength, '', ordered=False)
         case Strength.UP_TO_EMBEDDING:
-            # `$namespaces` goes with `run:`, and not as a convenience. A
-            # prefix must be declared in the document that uses it, so
-            # embedding a child moves the child's declarations up into its
-            # parent (`post_compile.inline_artifact_runs`). Deleting `run:`
-            # alone therefore does not erase what embedding changed: it erases
-            # the child and leaves the prefixes the child brought with it.
+            # `$namespaces` and `$schemas` go with `run:`: a prefix and an
+            # ontology are declared in the document that uses them, so embedding
+            # moves a child's up into its parent (`inline_artifact_runs`), and
+            # deleting `run:` alone would leave what the child brought. A root
+            # sees only its own, so a caller holding the tree checks `$schemas`.
             return _first_difference(_without_embedding(left),
                                      _without_embedding(right),
                                      strength, '', ordered=False)
@@ -150,8 +149,8 @@ def equivalent(left: Yaml, right: Yaml, strength: Strength) -> Divergence | None
 
 def _without_embedding(document: Any) -> Any:
     """A document with everything embedding decides removed."""
-    return recursively_delete_dict_key(
-        '$namespaces', recursively_delete_dict_key('run', document))
+    return recursively_delete_dict_key('$schemas', recursively_delete_dict_key(
+        '$namespaces', recursively_delete_dict_key('run', document)))
 
 
 def _first_difference(left: Any, right: Any, strength: Strength, path: str, *,

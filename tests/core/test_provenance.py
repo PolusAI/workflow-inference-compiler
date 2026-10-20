@@ -84,3 +84,32 @@ def test_every_step_file_is_in_the_provenance_snapshot(monkeypatch: pytest.Monke
     for root, files in expected.items():
         assert files <= _snapshot(root), sorted(files - _snapshot(root))
 
+
+#: The ontology from edamontology's default branch: a URL Sophios never wrote, with the basename of the one it did.
+EDAM_MAIN = 'https://raw.githubusercontent.com/edamontology/edamontology/main/EDAM_dev.owl'
+
+
+@pytest.mark.needs_cwltool
+@pytest.mark.parametrize('runner', ['cwltool', 'toil-cwl-runner'])
+def test_a_wic_with_its_own_edam_schemas_entry_runs_with_provenance(monkeypatch: pytest.MonkeyPatch,
+                                                                    tmp_path: Path, runner: str) -> None:
+    """The root's `$schemas` is the `.wic`'s, so no second `EDAM_dev.owl` meets it in the provenance record."""
+    (tmp_path / 'say.cwl').write_text(SAY, encoding='utf-8')
+    (tmp_path / 'wf.wic').write_text(f"$schemas: ['{EDAM_MAIN}']\nsteps:\n- id: hi\n  run: say.cwl\n"
+                                     '  in: {message: !ii hi}\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    _run(tmp_path / 'wf.wic', '--cwl_runner', runner)   # exits on a failed run
+    assert 'wf.cwl' in _snapshot('wf')
+
+
+@pytest.mark.needs_cwltool
+@pytest.mark.parametrize('runner', ['cwltool', 'toil-cwl-runner'])
+def test_an_embedded_tool_with_its_own_edam_schemas_entry_runs_with_provenance(monkeypatch: pytest.MonkeyPatch,
+                                                                               tmp_path: Path, runner: str) -> None:
+    """Embedded, a tool's `$schemas` moves up to the one document, which holds no other `EDAM_dev.owl`."""
+    (tmp_path / 'say.cwl').write_text(f"$namespaces: {{edam: https://edamontology.org/}}\n$schemas: ['{EDAM_MAIN}']\n"
+                                      + SAY, encoding='utf-8')
+    (tmp_path / 'wf.wic').write_text('steps:\n- id: hi\n  run: say.cwl\n  in: {message: !ii hi}\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    _run(tmp_path / 'wf.wic', '--cwl_runner', runner, '--cwl_inline_runtag')
+    assert 'wf.cwl' in _snapshot('wf')

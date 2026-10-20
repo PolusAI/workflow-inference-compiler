@@ -396,7 +396,8 @@ def flatten_subworkflows(artifact: CompilationArtifact) -> CompilationArtifact:
     assert root is not None, 'a dissolved call has read the root requirements'
     if all(child.cwl.get('class') != 'Workflow' for child in children):
         root.pop('SubworkflowFeatureRequirement', None)
-    for key, value in (('requirements', root), ('$schemas', cwl.get('$schemas'))):
+    for key, value in (('requirements', root), ('$namespaces', cwl.get('$namespaces')),
+                       ('$schemas', cwl.get('$schemas'))):
         if value:
             cwl[key] = value
         else:
@@ -429,8 +430,9 @@ def inline_artifact_runs(artifact: CompilationArtifact) -> CompilationArtifact:
                 '$namespaces', {})
             cwl['$schemas'] = list(dict.fromkeys(
                 list(cwl.get('$schemas', [])) + list(step['run'].get('$schemas', []))))
-            if not cwl['$schemas']:
-                cwl.pop('$schemas')
+            for field in ('$namespaces', '$schemas'):
+                if not cwl[field]:
+                    cwl.pop(field)
             for field in DOCUMENT_FIELDS:
                 step['run'].pop(field, None)
     return replace(artifact, cwl=cwl, children=())

@@ -7,23 +7,25 @@ handle an exception.
 
 READS THE AST AND NOTHING ELSE -- no registry, no filesystem, no config.
 Resolving a step's tool against the environment is `Resolve`'s job, so a port's
-type is what the document declared and inference has not run.
+type is what the document declared and inference has not run. The one fact of
+the environment here is the document's directory, which Resolve recorded: a
+relative location in a `default:` is read against it.
 """
 import difflib
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Final
-from dataclasses import dataclass
 
 from ..lang.cwl import CWL_VERSION
 from ..lang.diagnostics import Diagnostics, Locator
 from ..lang.error_codes import SophiosErrorCode
 from ..lang.names import check_written_name
-from ..lang.nodes import CwlRecord, Document, EdgeRef, InputValue, Step, UnresolvedName
+from ..lang.nodes import CwlRecord, Document, EdgeRef, InputValue, OpaqueCwl, Step, UnresolvedName
 from ..lang.parser import Grammar
 from ..lang.spans import SourceSpan
-from ..lang.versions import (ANNOTATION_KEY, ANNOTATION_NAMESPACE,
-                             ANNOTATION_NAMESPACE_URI)
 from .declarations import port_declaration
+from .locations import absolute_paths
 from .resolve import ResolvedDocument, ResolvedStep
 from .types import (
     AuthoredName,
@@ -103,7 +105,7 @@ def _lower_resolved(document: ResolvedDocument,
         child = (_lower_resolved(resolved_step.process.child, here.child(identity))
                  if resolved_step.process.child is not None else None)
         node = _resolved_step_node(identity, resolved_step, defined_so_far,
-                                   defined_anywhere, diagnostics)
+                                   defined_anywhere, diagnostics, document.directory)
         nodes.append(node)
         for authored in resolved_step.source.outputs:
             if authored.edge_def is not None:
@@ -118,9 +120,11 @@ def _lower_resolved(document: ResolvedDocument,
 
     passthrough = dict(document.source.passthrough)
     workflow_inputs = _workflow_ports(passthrough.get('inputs', {}), output=False,
-                                      diagnostics=diagnostics, document_span=document.source.span)
+                                      diagnostics=diagnostics, document_span=document.source.span,
+                                      directory=document.directory)
     workflow_outputs = _workflow_ports(passthrough.get('outputs', {}), output=True,
-                                       diagnostics=diagnostics, document_span=document.source.span)
+                                       diagnostics=diagnostics, document_span=document.source.span,
+                                       directory=document.directory)
     workflow_input_names = {port.name for port in workflow_inputs}
     input_mapping = tuple(
         (name, tuple(binding.sink for node in nodes for binding in node.bindings
@@ -134,9 +138,7 @@ def _lower_resolved(document: ResolvedDocument,
             output_mapping.append((port.name, source))
     namespaces_raw = passthrough.get('$namespaces', {})
     namespaces = tuple(namespaces_raw.items()) if isinstance(namespaces_raw, dict) else ()
-    namespaces = tuple((str(key), value) for key, value in namespaces
-                       if key != ANNOTATION_NAMESPACE) + (
-                           (ANNOTATION_NAMESPACE, ANNOTATION_NAMESPACE_URI),)
+    namespaces = tuple((str(key), value) for key, value in namespaces)
     schemas_raw = passthrough.get('$schemas', ())
     schemas = tuple(schemas_raw) if isinstance(schemas_raw, list) else ()
     # Only the mapping form of `requirements:` is modeled; any other shape (a list
@@ -145,8 +147,7 @@ def _lower_resolved(document: ResolvedDocument,
     requirements_raw = passthrough.get('requirements', {})
     requirements = (tuple(requirements_raw.items())
                     if isinstance(requirements_raw, dict) else ())
-    reserved = {'inputs', 'outputs', '$namespaces', '$schemas',
-                'cwlVersion', 'class', ANNOTATION_KEY}
+    reserved = {'inputs', 'outputs', '$namespaces', '$schemas', 'cwlVersion', 'class'}
     if isinstance(requirements_raw, dict):
         reserved.add('requirements')
     opaque = tuple((key, value) for key, value in document.source.passthrough
@@ -205,9 +206,10 @@ def _record_only_inputs(resolved: ResolvedStep, declared: Mapping[AuthoredName, 
                  if isinstance(value, CwlRecord) and AuthoredName(name) not in declared)
 
 
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
 def _resolved_step_node(identity: StepId, resolved: ResolvedStep,
                         defined_so_far: dict[str, PortId], defined_anywhere: dict[str, PortId],
-                        diagnostics: Diagnostics) -> StepNode:
+                        diagnostics: Diagnostics, directory: Path | None) -> StepNode:
     source = resolved.source
     declared_inputs = {AuthoredName(port.name): port.declaration for port in resolved.process.inputs}
     declared_outputs = {AuthoredName(port.name): port.declaration for port in resolved.process.outputs}
@@ -241,7 +243,7 @@ def _resolved_step_node(identity: StepId, resolved: ResolvedStep,
                          declaration, source.span)
                     for name, declaration in declared_outputs.items())
     by_input = {port.id.port: port for port in inputs}
-    bindings = tuple(Binding(port.id, value,
+    bindings = tuple(Binding(port.id, _with_defaults_resolved(value, directory),
                              _resolve(value, port, defined_so_far, defined_anywhere, diagnostics))
                      for name, value in source.inputs
                      if (port := by_input.get(AuthoredName(name))) is not None)
@@ -311,12 +313,29 @@ def _unknown_scatter(step: str, text: str, ports: list[str], calls_workflow: boo
 _SHOWN_NAMES: Final = 8
 
 
+def _resolved_default(default: OpaqueCwl, directory: Path | None) -> OpaqueCwl:
+    """A `default:` with each relative File or Directory location in it read against `directory`, the
+    document's own, and written absolute: the document is written elsewhere. As written when no file
+    holds the document."""
+    return default if directory is None else absolute_paths({'default': default}, directory)['default']
+
+
+def _with_defaults_resolved(value: InputValue, directory: Path | None) -> InputValue:
+    """A step input, its `!cwl {default: ...}` resolved as `_resolved_default` resolves one."""
+    if not isinstance(value, CwlRecord):
+        return value
+    return replace(value, fields=tuple((key, _resolved_default(field, directory) if key == 'default' else field)
+                                       for key, field in value.fields))
+
+
 def _workflow_ports(raw: object, *, output: bool, diagnostics: Diagnostics,
-                    document_span: SourceSpan | None) -> tuple[WorkflowPort, ...]:
+                    document_span: SourceSpan | None, directory: Path | None) -> tuple[WorkflowPort, ...]:
     if not isinstance(raw, dict):
         return ()
     ports: list[WorkflowPort] = []
     for name, declaration_raw in raw.items():
+        if isinstance(declaration_raw, dict) and 'default' in declaration_raw:
+            declaration_raw = {**declaration_raw, 'default': _resolved_default(declaration_raw['default'], directory)}
         if output and isinstance(declaration_raw, dict):
             rejected = sorted(key for key in ('linkMerge', 'pickValue') if key in declaration_raw)
             if isinstance(declaration_raw.get('outputSource'), list):

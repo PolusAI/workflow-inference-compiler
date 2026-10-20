@@ -22,6 +22,7 @@ from . import post_compile as pc
 from . import cli, compiler, drawing, plugins, preflight, realtime, run_local
 from .ir import frontdoor
 from .ir.frontdoor import SourceBundle
+from .ir.locations import absolute_paths
 from .wic_types import CompilerOptions, Json, Tools
 
 
@@ -391,7 +392,7 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         # As the runner gets them, in which an output-target Directory is a name for the run to create.
         bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
         # The runner reads the job from `basepath`, so a relative path is written absolute: read beside the workflow.
-        artifact = replace(artifact, job_inputs=io.absolute_paths(bound, root_dir))
+        artifact = replace(artifact, job_inputs=absolute_paths(bound, root_dir))
         io.write_artifacts_to_disk(artifact, Path(basepath), args.inputs_file)
         plans = realtime.write(analyses, Path(basepath), artifact.name, root_dir)
         draw_after_write()

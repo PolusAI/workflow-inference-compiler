@@ -22,8 +22,8 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
-from ..lang import CwlRecord, versions
-from ..lang.versions import ANNOTATION_NAMESPACE, ANNOTATION_NAMESPACE_URI
+from ..lang import CwlRecord
+from ..lang.nodes import OpaqueCwl
 from ..wic_types import Cwl
 from .declarations import required
 from .names import Names
@@ -32,7 +32,6 @@ from .types import (DerivedName, EmissionDocument, EmittedValue, Expression, Por
                     Source, StepNode, StepOutputRef, WorkflowGraph, WorkflowPort)
 
 EDAM_NAMESPACE = ('edam', 'https://edamontology.org/')
-EDAM_SCHEMA = 'https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl'
 
 
 def _step_spelling(step: StepNode, names: Names, partial_failure: bool) -> StepNode:
@@ -57,9 +56,10 @@ def _step_spelling(step: StepNode, names: Names, partial_failure: bool) -> StepN
 def surface(graph: WorkflowGraph, names: Names, *, partial_failure: bool = False) -> EmissionDocument:
     """Spell `graph`'s facts as the document Emit renders, for this graph alone.
 
-    Requirements implied by the steps, the EDAM namespace and schema, a step's
-    `run:` path and the order fields appear in: none is a fact about the
-    workflow, and none is read by any phase. They are computed here, once per
+    Requirements implied by the steps, the EDAM namespace (only for a
+    document that spells a format `edam:`), a step's `run:` path and the
+    order fields appear in: none is a fact about the workflow, and none is
+    read by any phase. They are computed here, once per
     emitted document, rather than in `complete`, which runs whenever a phase
     needs the facts current.
 
@@ -93,13 +93,9 @@ def surface(graph: WorkflowGraph, names: Names, *, partial_failure: bool = False
             requirements[requirement] = {}
     requirements = dict(sorted(requirements.items()))
 
-    namespaces = {name: value for name, value in graph.namespaces
-                  if name not in {EDAM_NAMESPACE[0], ANNOTATION_NAMESPACE}}
-    namespaces[EDAM_NAMESPACE[0]] = EDAM_NAMESPACE[1]
-    namespaces[ANNOTATION_NAMESPACE] = ANNOTATION_NAMESPACE_URI
-    schemas = list(graph.schemas)
-    if EDAM_SCHEMA not in schemas:
-        schemas.append(EDAM_SCHEMA)
+    namespaces = dict(graph.namespaces)
+    if _uses_edam(graph):
+        namespaces[EDAM_NAMESPACE[0]] = EDAM_NAMESPACE[1]
     positions = {step.id: index for index, step in enumerate(steps)}
 
     def boundary_order(name: PortName) -> tuple[int, int]:
@@ -119,7 +115,34 @@ def surface(graph: WorkflowGraph, names: Names, *, partial_failure: bool = False
     return EmissionDocument(replace(
         graph, steps=tuple(steps), requirements=tuple(requirements.items()),
         workflow_inputs=workflow_inputs, job_bindings=job_bindings,
-        namespaces=tuple(namespaces.items()), schemas=tuple(schemas)))
+        namespaces=tuple(namespaces.items())))
+
+
+def _uses_edam(graph: WorkflowGraph) -> bool:
+    """Whether a `format:` of `graph`'s inputs or outputs, or of a File in its job or a `default:`, is an `edam:` CURIE.
+
+    The job and the defaults count because a runner reads their CURIEs against the workflow's `$namespaces`.
+    """
+    ports = (*graph.workflow_inputs, *graph.workflow_outputs)
+    formats = [port.declaration.format for port in ports if port.declaration.has_format]
+    formats += [found for port in ports if port.declaration.has_default
+                for found in _job_formats(port.declaration.default)]
+    formats += [found for step in graph.steps for binding in step.bindings if isinstance(binding.value, CwlRecord)
+                for key, value in binding.value.fields if key == 'default' for found in _job_formats(value)]
+    formats += [found for binding in graph.job_bindings for found in _job_formats(binding.value)]
+    return any(isinstance(text, str) and text.startswith(f'{EDAM_NAMESPACE[0]}:')
+               for value in formats for text in (value if isinstance(value, list) else [value]))
+
+
+def _job_formats(value: OpaqueCwl) -> list[OpaqueCwl]:
+    """Every `format` a job value holds, at any depth: a File's, a File's in a list or a record."""
+    match value:
+        case dict():
+            own = [value['format']] if 'format' in value else []
+            return own + [found for item in value.values() for found in _job_formats(item)]
+        case list():
+            return [found for item in value for found in _job_formats(item)]
+    return []
 
 
 def _implied_requirements(graph: WorkflowGraph, steps: list[StepNode]) -> tuple[str, ...]:
@@ -152,14 +175,14 @@ def emit(graph: EmissionDocument, names: Names) -> Cwl:
         'steps': [_emit_step(step, ins[step.id], names) for step in graph.steps],
         'cwlVersion': graph.cwl_version,
         'class': 'Workflow',
-        '$namespaces': {name: deepcopy(value) for name, value in graph.namespaces},
-        '$schemas': deepcopy(list(graph.schemas)),
-        'inputs': {names.port(port.name): _emit_port(port, names)
-                   for port in graph.workflow_inputs},
-        versions.ANNOTATION_KEY: graph.lang_version,
-        'outputs': {names.port(port.name): _emit_port(port, names)
-                    for port in graph.workflow_outputs},
     }
+    if graph.namespaces:
+        known['$namespaces'] = {name: deepcopy(value) for name, value in graph.namespaces}
+    if graph.schemas:
+        # An ontology is a dependency of the document: only its author adds one.
+        known['$schemas'] = deepcopy(list(graph.schemas))
+    known['inputs'] = {names.port(port.name): _emit_port(port, names) for port in graph.workflow_inputs}
+    known['outputs'] = {names.port(port.name): _emit_port(port, names) for port in graph.workflow_outputs}
     if graph.requirements:
         known['requirements'] = {name: deepcopy(value) for name, value in graph.requirements}
     known.update({name: deepcopy(value) for name, value in graph.passthrough})

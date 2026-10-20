@@ -149,6 +149,9 @@ class ResolvedDocument:
     source: Document
     steps: tuple[ResolvedStep, ...]
     lang_version: str
+    #: Where its file is, which a relative location it writes is read against;
+    #: None for a document no file holds, which the Python API builds.
+    directory: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +198,7 @@ def _resolve_document(document: Document, registry: RegistrySnapshot, name: str,
                                    directory)
         if process is not None:
             steps.append(ResolvedStep(step, process, sidecar))
-    return ResolvedDocument(name, document, tuple(steps), version), diagnostics
+    return ResolvedDocument(name, document, tuple(steps), version, directory), diagnostics
 
 
 # pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals

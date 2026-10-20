@@ -23,9 +23,11 @@ from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 from sophios import compiler, drawing, input_output, plugins, post_compile as pc, preflight, realtime, run_local as rl
 from sophios.ir.artifacts import CompilationResult
 from sophios.ir.frontdoor import SourceBundle
+from sophios.ir.locations import absolute_paths
 from sophios.ir.realtime import ADAPTER
 from sophios.ir.resolve import RegistrySnapshot
-from sophios.lang import Diagnostics, Document, ParseResult, SophiosError, render
+from sophios.lang import CwlRecord, Diagnostics, Document, ParseResult, SophiosError, render
+from sophios.lang import Step as LangStep
 from sophios.cli import default_compilation_settings, get_known_and_unknown_args
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils import convert_args_dict_to_args_list
@@ -284,11 +286,21 @@ def workflow_document(workflow: "Workflow") -> Document:
     workflow_outputs: dict[str, Any] = {parameter.name: parameter.to_workflow_output(workflow.steps)
                                         for parameter in workflow._outputs}
     return Document(
-        steps=tuple(step._as_workflow_step() for step in workflow.steps),
+        steps=tuple(_with_defaults_resolved(step._as_workflow_step(), Path.cwd()) for step in workflow.steps),
         passthrough=tuple((key, value) for key, value in
                           (("inputs", workflow_inputs), ("outputs", workflow_outputs)) if value),
         span=workflow._span,
     )
+
+
+def _with_defaults_resolved(step: LangStep, base: Path) -> LangStep:
+    """`step` with each relative File or Directory location in a `StepInput(default=...)` read against
+    `base` and written absolute, as a bound path is: the document is written elsewhere."""
+    return replace(step, inputs=tuple(
+        (name, replace(value, fields=tuple(
+            (key, absolute_paths({"default": field}, base)["default"] if key == "default" else field)
+            for key, field in value.fields)) if isinstance(value, CwlRecord) else value)
+        for name, value in step.inputs))
 
 
 def _read_by_a_record(workflow: "Workflow", parameter: InputParameter) -> bool:
@@ -600,7 +612,7 @@ def run_workflow(
     writes = ((Path(outdir), "the run's outputs", "give run() an outdir you can write to"),) if outdir else ()
     # The values as the runner gets them, in which an output-target Directory is a name for the run to create.
     bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
-    artifact = replace(artifact, job_inputs=input_output.absolute_paths(bound, Path.cwd()))
+    artifact = replace(artifact, job_inputs=absolute_paths(bound, Path.cwd()))
     inputs_file = resolved_run_args.get("inputs_file", "")
     input_output.write_artifacts_to_disk(artifact, Path(basepath), inputs_file)
     plans = realtime.write(analyses, Path(basepath), workflow.process_name, Path.cwd())

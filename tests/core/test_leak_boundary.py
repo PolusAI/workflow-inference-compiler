@@ -178,17 +178,17 @@ def test_a_root_inputs_or_outputs_list_holding_an_import_is_not_carried_into_the
 
 @pytest.mark.skip_pypi_ci
 @pytest.mark.fast
-def test_user_namespaces_survive_except_edam() -> None:
-    """`$namespaces` keeps every user binding but the reserved `edam`.
-
-    The compiler merges `{'edam': the canonical URL}` over the user's
-    mapping, so a user binding of the `edam` prefix specifically is replaced.
-    Pinned as the actual behaviour; if merging ever becomes pure passthrough,
-    this test should fail and be inverted deliberately, not silently.
+def test_user_namespaces_survive_and_edam_is_edams_where_a_format_says_it() -> None:
+    """`$namespaces` keeps every user binding. In a document whose formats say
+    `edam:`, the compiler reads those CURIEs as EDAM's and binds `edam` to the
+    canonical URL over the user's; in one whose formats do not, the user's
+    `edam` binding is theirs and survives too.
     """
-    compiled = _compile(_touch_workflow({}, {'$namespaces': {'mine': 'https://mine/', 'edam': 'https://not-edam/'}}))
-    assert compiled['$namespaces']['mine'] == 'https://mine/'
-    assert compiled['$namespaces']['edam'] == 'https://edamontology.org/'  # user's binding lost
+    bindings = {'$namespaces': {'mine': 'https://mine/', 'edam': 'https://not-edam/'}}
+    unused = _compile(_touch_workflow({}, bindings))
+    assert unused['$namespaces'] == {'mine': 'https://mine/', 'edam': 'https://not-edam/'}
+    used = _compile(_touch_workflow({}, {**bindings, 'inputs': {'f': {'type': 'File', 'format': 'edam:format_2330'}}}))
+    assert used['$namespaces'] == {'mine': 'https://mine/', 'edam': 'https://edamontology.org/'}
 
 
 @pytest.mark.skip_pypi_ci
