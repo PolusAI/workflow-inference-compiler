@@ -259,6 +259,27 @@ def test_python_script_resolves_without_writing_a_file(tmp_path: Path,
 
 
 @pytest.mark.fast
+def test_a_python_script_tool_declares_no_schemas_of_sophios_own(tmp_path: Path,
+                                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    """The tool generated for a script names the EDAM prefix its formats use, and no ontology: a document
+    depends only on what its author wrote."""
+    types = tmp_path / 'sophios' / 'examples' / 'scripts'
+    types.mkdir(parents=True)
+    (types / 'workflow_types.py').write_text(
+        "string = {'type': 'string', 'format': 'edam:format_2330'}\n", encoding='utf-8')
+    work = tmp_path / 'work'
+    work.mkdir()
+    (work / 'my_script.py').write_text(PYTHON_SCRIPT, encoding='utf-8')
+    (work / 'root.wic').write_text('steps:\n- id: python_script\n  in:\n    script: !ii my_script.py\n'
+                                   '    name: !ii made.txt\n', encoding='utf-8')
+    monkeypatch.chdir(work)
+    artifact = _compile(bundle_from_disk(work / 'root.wic', {'global': {}}, SYNTHETIC_TOOLS)).artifact
+    (tool,) = artifact.children
+    assert tool.cwl['$namespaces'] == {'edam': 'https://edamontology.org/'}
+    assert '$schemas' not in tool.cwl and '$schemas' not in artifact.cwl
+
+
+@pytest.mark.fast
 def test_the_parser_is_the_gate_a_file_passes_as_it_is_read(tmp_path: Path) -> None:
     """A document with a `wic:` key the language does not have is refused as
     it is read, at the key, and by the parser.

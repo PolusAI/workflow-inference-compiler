@@ -1652,6 +1652,18 @@ def _job_written_by_run(monkeypatch: pytest.MonkeyPatch, workflow: Workflow) -> 
 
 
 @pytest.mark.fast
+def test_a_step_input_default_path_is_resolved_against_the_working_directory(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A `StepInput(default=...)` names the file a bound value of the same text would: the one here, written
+    absolute when the document is built, wherever the document is then written."""
+    monkeypatch.chdir(tmp_path)
+    cat = _cat()
+    cat.inputs.f = StepInput(default={'class': 'File', 'location': 'data.txt'})
+    (step,) = Workflow([cat], 'wf').compile().cwl_workflow['steps']
+    assert step['in']['f']['default'] == {'class': 'File', 'location': (tmp_path / 'data.txt').as_uri()}
+
+
+@pytest.mark.fast
 def test_a_relative_path_bound_in_python_is_read_from_the_working_directory(
         monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The job names it absolute: the runner reads the job from the basepath, not from here."""
@@ -1660,7 +1672,7 @@ def test_a_relative_path_bound_in_python_is_read_from_the_working_directory(
     cat = _cat()
     cat.inputs.f = 'data.txt'
     job = _job_written_by_run(monkeypatch, Workflow([cat], 'wf'))
-    assert job['cat~f'] == {'class': 'File', 'location': str(Path.cwd() / 'data.txt')}
+    assert job['cat~f'] == {'class': 'File', 'location': (Path.cwd() / 'data.txt').as_uri()}
 
 
 def _missing_paths(monkeypatch: pytest.MonkeyPatch, workflow: Workflow) -> list[str]:
@@ -1759,7 +1771,7 @@ def test_a_relative_path_in_a_step_inputs_file_is_read_from_the_working_director
     Path('inputs/cat.yml').write_text('f: {class: File, location: data.txt}\n', encoding='utf-8')
     cat = Step(clt_path=_cat_tool(tmp_path), step_inputs_file='inputs/cat.yml')
     job = _job_written_by_run(monkeypatch, Workflow([cat], 'wf'))
-    assert job['cat~f'] == {'class': 'File', 'location': str(Path.cwd() / 'data.txt')}
+    assert job['cat~f'] == {'class': 'File', 'location': (Path.cwd() / 'data.txt').as_uri()}
 
 
 def _interrupted(_args: list[str]) -> int:

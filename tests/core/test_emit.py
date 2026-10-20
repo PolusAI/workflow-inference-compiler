@@ -44,7 +44,6 @@ from sophios.ir.types import AuthoredName, StepOutputRef
 from sophios.lang.cwl import CWL_VERSION
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
-from sophios.lang.versions import ANNOTATION_KEY, ANNOTATION_NAMESPACE, ANNOTATION_NAMESPACE_URI
 from sophios.wic_types import StepId as LegacyStepId, Tool, Tools, Yaml
 
 from . import ast_strategies as strat
@@ -96,7 +95,8 @@ def test_a_hand_built_graph_emits_without_a_compiler_adapter() -> None:
     """The graph projection cannot be green only through compiler construction.
 
     Hand-built and surfaced, so this states the document the compiler ships:
-    the `run:` path, the file beside the root named by the root and the step, and EDAM declared.
+    the `run:` path, the file beside the root named by the root and the step, and nothing of the
+    compiler's own: no format says `edam:`, so no EDAM namespace either.
     """
     namespace = Namespace()
     step_id = StepId(namespace, 1, 'write')
@@ -118,7 +118,6 @@ def test_a_hand_built_graph_emits_without_a_compiler_adapter() -> None:
                          StepOutputRef(step_id, AuthoredName('file')), True),),
         job_bindings=(JobBinding(AuthoredName('message'), 'hello'),),
         input_mapping=((AuthoredName('message'), (input_id,)),),
-        namespaces=((ANNOTATION_NAMESPACE, ANNOTATION_NAMESPACE_URI),),
     )
     names = Names.of(graph)
     document = surface(graph, names)
@@ -127,11 +126,7 @@ def test_a_hand_built_graph_emits_without_a_compiler_adapter() -> None:
                    'run': 'handmade~write.cwl', 'out': ['file']}],
         'cwlVersion': CWL_VERSION,
         'class': 'Workflow',
-        '$namespaces': {'edam': 'https://edamontology.org/',
-                        ANNOTATION_NAMESPACE: ANNOTATION_NAMESPACE_URI},
-        '$schemas': ['https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl'],
         'inputs': {'message': {'type': 'string'}},
-        ANNOTATION_KEY: '0.0.1',
         'outputs': {'file': {'type': 'File',
                              'outputSource': 'write/file'}},
     }
@@ -574,8 +569,7 @@ def test_a_clash_on_a_prefix_no_promoted_format_uses_is_no_error(
     control = compile_hermetic_cwl(workflow, tools=_tools_with_probe(
         {'f': probe_port}, {}, {'myns': _MYNS}, tools=_tools_with_probe({'g': {'type': 'File'}}, {}, stem='other')))
     assert compiled == control
-    assert compiled['$namespaces'] == {**declared, 'edam': 'https://edamontology.org/',
-                                       ANNOTATION_NAMESPACE: ANNOTATION_NAMESPACE_URI}
+    assert compiled.get('$namespaces', {}) == declared
     assert capsys.readouterr() == ('', '')
 
 
@@ -600,8 +594,7 @@ def test_a_step_promoting_no_format_with_a_prefix_is_no_source_for_it_wherever_i
     beside = compile_hermetic_cwl({'steps': [{'id': 'probe'}, {'id': 'other'}]}, tools=tools)
     beneath = compile_hermetic_cwl(
         {'steps': [{'id': 'probe'}, subworkflow_step('c.wic', {'steps': [{'id': 'other'}]})]}, tools=tools)
-    expected = {'myns': _MYNS, **declared, 'edam': 'https://edamontology.org/',
-                ANNOTATION_NAMESPACE: ANNOTATION_NAMESPACE_URI}
+    expected = {'myns': _MYNS, **declared}
     assert beside['$namespaces'] == expected
     assert beneath['$namespaces'] == expected
 
@@ -719,3 +712,12 @@ def test_emitted_inputs_list_authored_names_first_then_derived_in_step_order() -
                   {'id': 'mk_text', 'in': {'name': {'wic_inline_input': 'a'}}}]})
     assert list(compiled['inputs']) == ['zeta', 'alpha',
                                         'mk_file~name', 'mk_text~name']
+
+
+@pytest.mark.fast
+def test_a_workflows_schemas_are_what_its_author_wrote() -> None:
+    """A document depends on the ontologies its author named, and on none of Sophios's choosing."""
+    mine = 'https://example.org/ontologies/mine.owl'
+    authored = compile_hermetic({'$schemas': [mine], 'steps': [{'id': 'mk_file'}]}).artifact.cwl
+    assert authored['$schemas'] == [mine]
+    assert '$schemas' not in compile_hermetic({'steps': [{'id': 'mk_file'}]}).artifact.cwl

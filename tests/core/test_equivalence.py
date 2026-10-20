@@ -395,6 +395,18 @@ def test_up_to_renaming_forgives_nothing_inside_a_step_but_names_and_paths(
 
 
 @pytest.mark.fast
+def test_embedding_may_move_a_childs_ontology_into_its_parent() -> None:
+    """An embedded tool's `$schemas` can only be declared by the document
+    holding it, so embedding moves it up, as it moves `$namespaces`."""
+    nested: Yaml = {'class': 'Workflow', 'steps': [{'id': 'echo', 'run': 'greeting~echo.cwl', 'out': []}]}
+    embedded: Yaml = {'class': 'Workflow', '$schemas': ['https://example.org/EDAM.owl'],
+                      '$namespaces': {'edam': 'https://edamontology.org/'},
+                      'steps': [{'id': 'echo', 'run': {'class': 'CommandLineTool'}, 'out': []}]}
+    assert equivalent(nested, embedded, Strength.UP_TO_EMBEDDING) is None
+    assert equivalent(nested, embedded, Strength.UP_TO_ORDER) is not None
+
+
+@pytest.mark.fast
 def test_only_identical_compares_key_order() -> None:
     """IDENTICAL is a claim about bytes; the weaker strengths are claims about
     a workflow, and a YAML mapping is unordered by its own specification.

@@ -25,6 +25,7 @@ from sophios import post_compile, preflight, realtime
 from sophios import auto_gen_header
 from sophios.cli import get_args
 from sophios.utils_yaml import Key
+from sophios.ir.locations import absolute_paths
 from sophios.post_compile import apply_inline_options, inline_artifact_runs, remove_artifact_entrypoints
 from sophios.runtime_inputs import normalize_artifact_job_inputs
 from sophios.lang import parse
@@ -35,14 +36,13 @@ from sophios.ir.types import WorkflowGraph
 from sophios.wic_types import Json
 
 # pylint: disable-next=unused-import  # `corpus_registry` is a pytest fixture
-from .test_setup import (CorpusRegistry, corpus_registry, workflow_paths,
-                         yml_path_is_workflow)
+from .test_setup import CorpusRegistry, corpus_registry, workflow_paths, yml_path_is_workflow
 from .cwl_validation import validate_cwl
 from .equivalence import Strength, equivalent, flatten_model
+from .test_metadata_emitted import DECLARATIONS, declared_beneath
 
 yml_paths = workflow_paths()
-yml_paths_tuples = [(name, path) for paths in yml_paths.values()
-                    for name, path in paths.items()]
+yml_paths_tuples = [(name, path) for paths in yml_paths.values() for name, path in paths.items()]
 
 # Look in each directory of search_paths_wic tag in global_config.json
 # for separate config_ci.json files and combine them.
@@ -81,10 +81,8 @@ def _is_workflow_document(yml_path: Path) -> bool:
             or (document.sidecar is not None and 'implementations' in dict(document.sidecar.entries)))
 
 
-yml_paths_tuples_not_large = [
-    (s, p) for (s, p) in yml_paths_tuples
-    if s not in large_workflows and _is_workflow_document(p) and yml_path_is_workflow(p)
-]
+yml_paths_tuples_not_large = [(s, p) for (s, p) in yml_paths_tuples
+                              if s not in large_workflows and _is_workflow_document(p) and yml_path_is_workflow(p)]
 
 # Library workflows: each reads an input or an edge that a parent workflow supplies,
 # so none of them runs alone ("Missing required input parameter").
@@ -98,8 +96,7 @@ yml_paths_tuples_weekly = [(s, p) for (s, p) in yml_paths_tuples if s in intensi
 yml_paths_tuples_on_push = [(s, p) for (s, p) in yml_paths_tuples
                             if s not in fragments and s not in intensive and s not in run_partial_failures]
 
-yml_paths_partial_failure = [(s, p) for (s, p) in yml_paths_tuples
-                             if s in run_partial_failures]
+yml_paths_partial_failure = [(s, p) for (s, p) in yml_paths_tuples if s in run_partial_failures]
 
 
 def is_isomorphic_with_timeout(g_m: isomorphism.GraphMatcher, yml_path_str: str) -> None:
@@ -293,7 +290,7 @@ def run_workflows(
 
     artifact = sophios.plugins.cwl_prepend_dockerFile_include_path_artifact(artifact)
     # As the CLI writes them: a relative path is read beside the workflow.
-    artifact = replace(artifact, job_inputs=sophios.input_output.absolute_paths(
+    artifact = replace(artifact, job_inputs=absolute_paths(
         normalize_artifact_job_inputs(artifact, artifact.job_inputs), Path(args.yaml).parent.absolute()))
     sophios.input_output.write_artifacts_to_disk(
         artifact, Path(basepath), args.inputs_file)
@@ -599,6 +596,8 @@ def _check_embedding_keeps_meaning(yml_path_str: str, yml_path: Path, corpus_reg
     embedded = inline_artifact_runs(nested)
     divergence = equivalent(nested.cwl, embedded.cwl, Strength.UP_TO_EMBEDDING)
     assert divergence is None, divergence
+    # What UP_TO_EMBEDDING forgives in `$namespaces` and `$schemas` is the move up.
+    assert {field: embedded.cwl[field] for field in DECLARATIONS if field in embedded.cwl} == declared_beneath(nested)
 
 
 @pytest.mark.serial

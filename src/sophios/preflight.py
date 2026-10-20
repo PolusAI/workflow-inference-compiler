@@ -27,7 +27,7 @@ import cwl_utils.parser as cwl
 import requests
 
 from . import run_local
-from .input_output import input_paths
+from .ir.locations import input_paths
 from .lang.diagnostics import Diagnostic, Severity, SophiosError
 from .lang.error_codes import SophiosErrorCode
 from .wic_types import Yaml

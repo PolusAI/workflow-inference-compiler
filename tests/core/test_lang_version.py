@@ -3,7 +3,7 @@
 The claims under test, one property each: the resolved version is the highest
 that satisfies the source; no lower version is ever silently selected;
 untagged files resolve rather than fail; every successful compile reports a
-resolved version; the artifact annotation is present and keeps the CWL valid;
+resolved version, while the compiled CWL carries no `sophios` key or prefix;
 an explicit setting always beats a file tag; and one compilation yields
 exactly one version, tree-wide.
 
@@ -11,8 +11,10 @@ The mechanism is exercised against fabricated version histories as well as the
 real single-entry list — `sophios.lang.versions` states why, once. The claims
 under test have their normative home in the language spec, §6.
 """
+import sys
 from pathlib import Path
 import pytest
+import yaml
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -20,11 +22,16 @@ from sophios.ir.frontdoor import bundle_from_disk
 from sophios.lang import LANG_VERSION, resolve_lang_version
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
-from sophios.lang.versions import ANNOTATION_KEY, ANNOTATION_NAMESPACE_URI
+import sophios.cli
+import sophios.main
 from sophios.wic_types import Yaml
 
-from .compile_harness import FAST, TOUCH, compile_cwl
+from .compile_harness import FAST, TOUCH, compile_cwl, compile_info
 from .hermetic import subworkflow_step
+from .test_setup import load_test_registry
+
+#: The key earlier Sophios versions annotated compiled CWL with.
+ANNOTATION_KEY = 'sophios:lang_version'
 
 #: Fabricated, ordered version histories: what the resolver will face someday.
 histories = st.lists(
@@ -144,19 +151,21 @@ def test_an_inline_implementation_body_pin_is_collected() -> None:
 
 # --------------------------------------------------------------------------
 # The resolved version is never a secret: every compile reports
-# it (CLI, Python API), and the emitted CWL carries it as a namespaced
-# annotation that keeps the artifact valid
+# it (CLI, Python API), and the compiled CWL stays plain CWL
 # --------------------------------------------------------------------------
 
 
 @pytest.mark.skip_pypi_ci
 @pytest.mark.fast
 def test_every_compile_reports_its_version() -> None:
-    """The emitted artifact carries the resolved version, and so does the
-    tagged and the explicitly-pinned compile."""
-    assert _compile(TOUCH)[ANNOTATION_KEY] == LANG_VERSION
-    assert _compile({'wic': {'lang_version': '0.0.1'}, **TOUCH})[ANNOTATION_KEY] == '0.0.1'
-    assert _compile(TOUCH, lang_version='0.0.1')[ANNOTATION_KEY] == '0.0.1'
+    """The result names the resolved version, untagged, tagged and explicitly
+    pinned alike, and the CWL it carries has no annotation of its own."""
+    tagged = {'wic': {'lang_version': '0.0.1'}, **TOUCH}
+    for yml, explicit, expected in ((TOUCH, None, LANG_VERSION), (tagged, None, '0.0.1'), (TOUCH, '0.0.1', '0.0.1')):
+        result = compile_info(yml, 'lang_version', lang_version=explicit)
+        assert result.lang_version == expected
+        assert ANNOTATION_KEY not in result.artifact.cwl
+        assert 'sophios' not in result.artifact.cwl.get('$namespaces', {})
 
 
 @pytest.mark.skip_pypi_ci
@@ -175,20 +184,34 @@ def test_the_python_api_surfaces_the_version() -> None:
     step.inputs.message = 'hello'
     compiled = Workflow([step], 'p18_version').compile()
     assert compiled.lang_version == LANG_VERSION
-    assert compiled.cwl_workflow[ANNOTATION_KEY] == LANG_VERSION
+    assert ANNOTATION_KEY not in compiled.cwl_workflow
 
 
 @pytest.mark.skip_pypi_ci
 @pytest.mark.fast
-def test_the_sophios_namespace_prefix_is_reserved() -> None:
-    """A user binding of the `sophios` prefix is replaced by the canonical
-    one, exactly like `edam` (language spec §1.2): the annotation's
-    meaning cannot be redirected by rebinding its namespace. Every other
-    binding survives. Pinned as the actual behaviour."""
-    compiled = _compile({'$namespaces': {'sophios': 'https://not-sophios/', 'mine': 'https://mine/'},
-                         **TOUCH})
-    assert compiled['$namespaces']['sophios'] == ANNOTATION_NAMESPACE_URI
-    assert compiled['$namespaces']['mine'] == 'https://mine/'
+def test_a_pinned_file_reports_its_version_and_writes_plain_cwl(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """A `wic: lang_version:` pin still compiles and the command line prints the
+    version; a Python workflow, which pins per compile, names it in
+    `CompiledWorkflow.lang_version`; neither CWL carries a `sophios` key or prefix."""
+    from sophios.api.python.workflow import Workflow  # pylint: disable=import-outside-toplevel
+
+    source = tmp_path / 'pinned.wic'
+    source.write_text(f'wic:\n  lang_version: {LANG_VERSION}\n'
+                      'steps:\n- id: touch\n  in:\n    filename: !ii empty.txt\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, 'argv', ['sophios', '--yaml', str(source), '--generate_cwl_workflow'])
+    sophios.main._main(*sophios.cli.parser.parse_known_args())  # pylint: disable=protected-access
+    assert f'Sophios lang_version: {LANG_VERSION}' in capsys.readouterr().out
+    written = yaml.safe_load((tmp_path / 'autogenerated' / 'pinned.cwl').read_text(encoding='utf-8'))
+    assert ANNOTATION_KEY not in written and 'sophios' not in written.get('$namespaces', {})
+
+    unpinned = tmp_path / 'unpinned.wic'
+    unpinned.write_text('steps:\n- id: touch\n  in:\n    filename: !ii empty.txt\n', encoding='utf-8')
+    tools = load_test_registry().tools
+    compiled = Workflow.from_wic(unpinned, tool_registry=tools).compile(tool_registry=tools, lang_version=LANG_VERSION)
+    assert compiled.lang_version == LANG_VERSION
+    assert ANNOTATION_KEY not in compiled.cwl_workflow
 
 
 @pytest.mark.fast
@@ -238,8 +261,6 @@ def test_the_cli_flag_reaches_the_compiler() -> None:
     a TypeError and a mypy failure rather than a silent compile with defaults.
     The guarantee moved from a test into the signature.
     """
-    import sophios.cli
-
     supplied = sophios.cli.get_args('wf.wic', ['--lang_version', '9.9.9'])
     options, _graph_settings = sophios.cli.get_dicts_for_compilation(supplied)
     assert options['lang_version'] == '9.9.9', 'the flag never reached the compiler'
