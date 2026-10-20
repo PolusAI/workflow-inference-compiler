@@ -327,29 +327,44 @@ def _docker_requirement(cwl: Cwl, section: str) -> dict[str, Any] | None:
     return None
 
 
+def _noentrypoint_tag(image: str) -> str:
+    """`image` with -noentrypoint appended to its tag; `latest` when it names none.
+
+    The tag is read from the last path segment only, so a registry port is not a tag.
+    A digest-pinned image has no tag and no built variant, so it is returned unchanged.
+    """
+    if '@' in image:
+        return image
+    path, _, name = image.rpartition('/')
+    repo, _, tag = name.partition(':')
+    if tag.endswith('-noentrypoint'):
+        return image
+    prefix = f'{path}/' if path else ''
+    return f"{prefix}{repo}:{tag or 'latest'}-noentrypoint"
+
+
+def _append_noentrypoint_in_place(process: Cwl) -> None:
+    """Tag every `DockerRequirement` of `process` and of each process embedded in its steps."""
+    for section in ('requirements', 'hints'):
+        requirement = _docker_requirement(process, section)
+        if requirement is not None and requirement.get('dockerPull'):
+            requirement['dockerPull'] = _noentrypoint_tag(requirement['dockerPull'])
+    steps = process.get('steps', [])
+    for step in steps.values() if isinstance(steps, dict) else steps:
+        if isinstance(step, dict) and isinstance(step.get('run'), dict):
+            _append_noentrypoint_in_place(step['run'])
+
+
 def dockerPull_append_noentrypoint(cwl: Cwl) -> Cwl:
-    """Appends -noentrypoint to the dockerPull version tag (if any)
+    """`cwl` naming the no-entrypoint images `--docker_remove_entrypoints` builds.
 
-    Args:
-        cwl (Cwl): A CWL CommandLineTool
-
-    Returns:
-        Cwl: A CWL CommandLineTool, with -noentrypoint appended to the dockerPull version tag (if any)
+    Every `dockerPull` the runner reads gets -noentrypoint appended to its tag: under
+    `requirements` or `hints`, of the document and of every process embedded in its
+    steps, at any depth. `cwl` itself is not changed.
     """
     cwl_noentrypoint = copy.deepcopy(cwl)
-    requirement = _docker_requirement(cwl_noentrypoint, 'requirements')
-    docker_image: str = requirement.get('dockerPull', '') if requirement is not None else ''
-    if docker_image:
-        print('docker_image', docker_image)
-    if ':' in docker_image:
-        repo, tag = docker_image.split(':')
-    else:
-        repo, tag = docker_image, 'latest'
-    if requirement is not None and repo and tag and not tag.endswith('-noentrypoint'):
-        print('repo, tag', repo, tag)
-        requirement['dockerPull'] = repo + ':' + tag + '-noentrypoint'
-        return cwl_noentrypoint
-    return cwl
+    _append_noentrypoint_in_place(cwl_noentrypoint)
+    return cwl_noentrypoint
 
 
 def dockerPull_append_noentrypoint_artifact(
