@@ -166,10 +166,17 @@ def test_network_access_other_than_the_literal_true_is_rejected_by_name(section:
         _lower(workflow, run)
 
 
+REJECTED_CLASSES = sorted(
+    name for name, row in REQUIREMENT_CLASSES["CommandLineTool"].items() if row.state is State.REJECTED
+)
+
+
 @pytest.mark.fast
-def test_a_rejected_requirement_class_is_a_finding_whose_message_is_its_note() -> None:
+@pytest.mark.parametrize("section", ["requirements", "hints"])
+@pytest.mark.parametrize("name", REJECTED_CLASSES)
+def test_a_rejected_requirement_class_is_a_finding_whose_message_is_its_note(section: str, name: str) -> None:
     workflow, run = _documents()
-    run["requirements"] = {"SoftwareRequirement": {"packages": []}}
-    note = REQUIREMENT_CLASSES["CommandLineTool"]["SoftwareRequirement"].note
-    with pytest.raises(ValueError, match=re.escape(f"steps[0].run.requirements.SoftwareRequirement: {note}")):
+    run[section] = {name: {}}
+    finding = re.escape(f"- steps[0].run.{section}.{name}: {REQUIREMENT_CLASSES['CommandLineTool'][name].note}")
+    with pytest.raises(ValueError, match=rf"{finding}(\n|\Z)"):
         _lower(workflow, run)
