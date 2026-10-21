@@ -9,6 +9,7 @@ Topology; §7 for the stub every process carries.
 from dataclasses import replace
 import json
 from pathlib import Path
+import re
 import subprocess
 from typing import Any
 
@@ -167,6 +168,16 @@ workflow {{
             assert outcome[1].startswith(f"Sophios workflow input 'c{index}' must be {failed}, not "), outcome
         else:
             assert outcome == [True, expected], (value, declared)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("declared", ["File?", "Directory?"])
+def test_no_model_holds_an_absent_path_the_entry_check_stops(declared: str) -> None:
+    """Sophios never writes a parameter value its own entry check stops, read by a step or not."""
+    workflow = runtime_workflow()
+    with pytest.raises(ValueError, match=re.escape(f"workflow input 'unread' is an absent optional {declared},")):
+        replace(workflow, params={**workflow.params, "unread": []},
+                param_types={**workflow.param_types, "unread": declared})
 
 
 def _echo_flow(when: str | None = None) -> Workflow:
