@@ -21,7 +21,7 @@ from sophios.api.python.tool_builder import (
     Outputs,
     cwl,
 )
-from sophios.api.python.workflow import CompiledWorkflow, Step, Workflow
+from sophios.api.python.workflow import CompiledWorkflow, Step, StepInput, Workflow
 from sophios.cli import default_compilation_settings
 from sophios.input_output_nf import render_nextflow
 from sophios.ir.artifacts import CompilationResult
@@ -2074,6 +2074,65 @@ def test_a_resolved_subworkflow_output_reaches_a_downstream_outer_step() -> None
 def test_resolved_nesting_deeper_than_one_level_projects_recursively() -> None:
     workflow = compiled_source_to_nextflow(_deep_nested_result())
     assert [process.name for process in workflow.processes] == ["write", "middle_leaf_inner_copy"]
+
+
+def _capability_findings(result: CompilationResult) -> list[str]:
+    with pytest.raises(ValueError) as error:
+        compiled_source_to_nextflow(result)
+    header, *lines = str(error.value).splitlines()
+    assert header == "Nextflow capability analysis failed:"
+    return [line.removeprefix("- ") for line in lines]
+
+
+def _merged_steps() -> list[Step]:
+    """The cookbook's record.wic: two step outputs merged into one File[] input."""
+    touch = Step(clt_path=REPO_ROOT / "cwl_adapters" / "touch.cwl")
+    touch.inputs.filename = "empty.txt"
+    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
+    echo.inputs.message = "Hello"
+    concat = Step.from_cwl_document({
+        "class": "CommandLineTool",
+        "cwlVersion": "v1.2",
+        "baseCommand": "cat",
+        "inputs": {"files": {"type": "File[]", "inputBinding": {"position": 1}}},
+        "outputs": {"joined": {"type": "File", "outputBinding": {"glob": "joined.txt"}}},
+        "stdout": "joined.txt",
+    }, process_name="concat")
+    concat.inputs.files = StepInput(source=[touch.outputs.file, echo.outputs.stdout], link_merge="merge_flattened")
+    return [touch, echo, concat]
+
+
+@pytest.mark.fast
+def test_a_step_input_with_a_list_of_sources_is_rejected_by_name() -> None:
+    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
+    picked = Workflow([echo], "picked")
+    echo.inputs.message = StepInput(
+        source=[picked.inputs.a.as_type("string?"), picked.inputs.b.as_type("string?")], pick_value="first_non_null"
+    )
+    assert _capability_findings(compile_workflow_result(Workflow(_merged_steps(), "record"))) == [
+        "workflow.steps[2].in.files.source: a list of sources is not supported"
+    ]
+    assert "workflow.steps[0].run.steps[2].in.files.source: a list of sources is not supported" in (
+        _capability_findings(compile_workflow_result(Workflow([Workflow(_merged_steps(), "child")], "root")))
+    )
+    assert _capability_findings(compile_workflow_result(picked)) == [
+        "workflow.steps[0].in.message.source: a list of sources is not supported"
+    ]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("when", [None, "$(inputs.enabled)"], ids=["unread", "read-by-when"])
+def test_a_step_input_its_tool_does_not_declare_is_rejected_by_name(when: str | None) -> None:
+    """The cookbook's when.wic: a step-only input that a when reads."""
+    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
+    echo.inputs.message = "Hello"
+    flow = Workflow([echo], "when")
+    echo.inputs.enabled = StepInput(source=flow.inputs.loud.as_type("boolean?"))
+    if when is not None:
+        echo.when = when
+    assert _capability_findings(compile_workflow_result(flow)) == [
+        "steps[0].in.enabled: an input the step's tool does not declare is not supported"
+    ]
 
 
 @pytest.mark.fast

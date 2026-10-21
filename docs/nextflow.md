@@ -455,7 +455,7 @@ result bound to an `int` input, fails the task. A computed
 ## Conditional steps
 
 A `CommandLineTool` step's `when` may be a boolean-typed safe-subset
-expression over that step's own bound inputs. Beside the numeric subset it may
+expression over the inputs the step binds and its tool declares. Beside the numeric subset it may
 compare (`== != === !== < <= > >=`), combine (`! && ||`), and use string,
 boolean and `null` literals; ordered comparisons take numbers. A true condition runs the
 process; a false condition runs no task, and the step's outputs are `null`,
@@ -475,10 +475,11 @@ rejected by name — a non-optional port, a `path` consumer, an array-typed
 port, or an array-typed output of a conditional step outside scatter.
 
 `when` on a step whose `run` is a workflow is rejected, since skipping an
-inlined sub-DAG is not this lowering's single-process shape. `pickValue` is
-rejected everywhere. A conditional step
-needs at least one input to gate on, so `when` on a tool that declares no
-inputs is rejected.
+inlined sub-DAG is not this lowering's single-process shape. A step input the
+step's tool does not declare, which CWL allows so that a `when` can read it, is
+rejected. A step input with a list of sources is rejected, and with it
+`linkMerge` and `pickValue`. A conditional step needs at least one input to
+gate on, so `when` on a tool that declares no inputs is rejected.
 
 ## Current limits
 

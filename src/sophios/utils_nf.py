@@ -1646,9 +1646,15 @@ def _nested_workflow_capability_findings(
     for index, (step, emitted, child_artifact) in enumerate(
         zip(graph.steps, emitted_steps, artifact.children, strict=True)
     ):
+        step_path = f"{path}.steps[{index}]"
+        for raw_name, definition in _as_mapping(
+            emitted.get("in", {}), error="compiled step inputs must be a mapping"
+        ).items():
+            match definition:
+                case {"source": [_, _, *_]}:  # the projection joins one source per input
+                    findings.append(f"{step_path}.in.{raw_name}.source: a list of sources is not supported")
         if step.run is None or step.run.child is None:
             continue
-        step_path = f"{path}.steps[{index}]"
         if emitted.get("when") is not None:
             findings.append(
                 f"{step_path}.when: a when on a nested-workflow step is not supported; "
@@ -1737,6 +1743,15 @@ def _tool_capability_findings(
             f"{path}.when: a conditional step needs at least one input to gate on, "
             "and this step's tool declares none"
         )
+    match step.get("in", {}), tool.get("inputs", {}):
+        case Mapping() as step_inputs, Mapping() as tool_inputs:
+            findings.extend(
+                f"{path}.in.{raw_name}: an input the step's tool does not declare is not supported"
+                for raw_name in step_inputs
+                if raw_name not in tool_inputs
+            )
+        case _:
+            pass
 
     match tool.get("class"):
         case "CommandLineTool":
@@ -3072,7 +3087,11 @@ def compiled_source_to_nextflow(
             source.graph,
             source.artifact,
         )
-        compiled = compilation_result_source(source)
+        try:
+            compiled = compilation_result_source(source)
+        except ValueError:
+            _raise_capability_findings(nested_findings)  # a finding names what the projection cannot carry
+            raise
     elif isinstance(source, CompiledNextflowSource):
         nested_findings = []
         compiled = source
