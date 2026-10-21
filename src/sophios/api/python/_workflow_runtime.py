@@ -568,12 +568,14 @@ def nextflow_workflow(
     *,
     tool_registry: Tools | None = None,
     lang_version: str | None = None,
+    inference: Inference = Inference(),
 ) -> ExecutableNextflowWorkflow:
     """Compile once through the core semantic pipeline and lower to Nextflow."""
     result = compile_workflow_result(
         workflow,
         tool_registry=tool_registry,
         lang_version=lang_version,
+        inference=inference,
     )
     return compiled_source_to_nextflow(result)
 
@@ -584,6 +586,7 @@ def write_nextflow_workflow(
     *,
     tool_registry: Tools | None = None,
     lang_version: str | None = None,
+    inference: Inference = Inference(),
 ) -> tuple[Path, Path, Path, Path]:
     """Compile once and write the versioned IR plus executable artifacts."""
     remove_nextflow_artifacts(outdir)
@@ -592,6 +595,7 @@ def write_nextflow_workflow(
             workflow,
             tool_registry=tool_registry,
             lang_version=lang_version,
+            inference=inference,
         ),
         outdir,
     )

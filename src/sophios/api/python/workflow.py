@@ -1096,6 +1096,7 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         target: Literal["nextflow"],
         tool_registry: Tools | None = None,
         lang_version: str | None = None,
+        inference: Inference = Inference(),
     ) -> ExecutableNextflowWorkflow:
         ...
 
@@ -1130,11 +1131,8 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
             return _compiled_workflow(self, tool_registry=tool_registry, lang_version=lang_version,
                                       inference=inference)
         if target == "nextflow":
-            return _nextflow_workflow(
-                self,
-                tool_registry=tool_registry,
-                lang_version=lang_version,
-            )
+            return _nextflow_workflow(self, tool_registry=tool_registry, lang_version=lang_version,
+                                      inference=inference)
         raise ValueError(f"unsupported compilation target {target!r}")
 
     def to_nextflow(
@@ -1143,14 +1141,14 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         *,
         tool_registry: Tools | None = None,
         lang_version: str | None = None,
+        inference: Inference = Inference(),
     ) -> tuple[Path, Path, Path, Path]:
-        """Compile once and write the four supported Nextflow artifacts."""
-        return _write_nextflow_workflow(
-            self,
-            outdir,
-            tool_registry=tool_registry,
-            lang_version=lang_version,
-        )
+        """Compile once and write the four supported Nextflow artifacts.
+
+        ``inference`` connects unbound inputs as :meth:`compile` does.
+        """
+        return _write_nextflow_workflow(self, outdir, tool_registry=tool_registry, lang_version=lang_version,
+                                        inference=inference)
 
     def draw(  # pylint: disable=too-many-arguments
         self,

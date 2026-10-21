@@ -11,6 +11,7 @@ from sophios import main as cli
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 from sophios.api.python.workflow import (Inference, InvalidInferenceError, RunResult, RunState, SophiosError,
                                          SophiosErrorCode, Step, Workflow)
+from sophios.nf_types import NfProcessConnection
 from sophios.wic_types import Json, StepId, Tool
 
 from .synthetic_tools import clt
@@ -100,6 +101,18 @@ def test_disabled_inference_leaves_the_input_unconnected_as_the_cli_does(
 
     assert _feeds(off.cwl_workflow) == _feeds(from_cli) == [{}]
     assert _feeds(off.cwl_workflow) != _feeds(_workflow("file").compile().cwl_workflow)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("inference", [Inference(), Inference(naming_conventions=True, renamings=RENAMINGS)])
+def test_the_nextflow_target_connects_an_input_as_the_cwl_target_does(inference: Inference) -> None:
+    """`compile(target="nextflow", inference=)` lowers the edge `compile(inference=)` infers."""
+    workflow = _workflow("data")
+    [feed] = _feeds(workflow.compile(inference=inference).cwl_workflow)
+    lowered = workflow.compile(target="nextflow", inference=inference)
+
+    assert [f"{edge.from_process}/{edge.from_port}" for edge in lowered.connections
+            if isinstance(edge, NfProcessConnection)] == [feed["data"]]
 
 
 @pytest.mark.fast
