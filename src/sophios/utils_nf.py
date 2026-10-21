@@ -1093,9 +1093,6 @@ _SUPPORTED_REQUIREMENTS = consumed(REQUIREMENT_CLASSES["CommandLineTool"])
 _SUPPORTED_WORKFLOW_REQUIREMENTS = consumed(REQUIREMENT_CLASSES["Workflow"])
 _TOOL_CONSUMED_FIELDS = consumed(FIELDS["CommandLineTool"]) | _DOCUMENT_KEYS
 _WORKFLOW_CONSUMED_FIELDS = consumed(FIELDS["Workflow"]) | _DOCUMENT_KEYS | {"sophios:lang_version"}
-# Inlining replaces a nested workflow's input with the calling step's binding,
-# where CWL would apply the input's default to a null one.
-_NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS = consumed(FIELDS["WorkflowInputParameter"]) - {"default"}
 # The outputBinding fields that declare capture behavior, as opposed to naming
 # the file to capture.
 _OUTPUT_CAPTURE_FIELDS = frozenset({"loadContents", "outputEval"})
@@ -1603,9 +1600,9 @@ def _nested_workflow_capability_findings(
             _unconsumed_field_findings(child_document, "Workflow", path=child_path, kept=_WORKFLOW_CONSUMED_FIELDS)
         )
         findings.extend(_workflow_requirement_findings(child_document, path=child_path))
-        for section_name, cwl_class, schema_class, kept in (
-            ("inputs", "WorkflowInputParameter", "InputArraySchema", _NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS),
-            ("outputs", "WorkflowOutputParameter", "OutputArraySchema", None),
+        for section_name, cwl_class, schema_class in (
+            ("inputs", "WorkflowInputParameter", "InputArraySchema"),
+            ("outputs", "WorkflowOutputParameter", "OutputArraySchema"),
         ):
             section = child_document.get(section_name, {})
             if not isinstance(section, Mapping):
@@ -1619,8 +1616,13 @@ def _nested_workflow_capability_findings(
                 findings.extend(_number_type_findings(definition, path=port_path))
                 findings.extend(_array_schema_findings(definition, schema_class, path=port_path))
                 if isinstance(definition, Mapping):
-                    findings.extend(
-                        _unconsumed_field_findings(definition, cwl_class, path=port_path, kept=kept)
+                    findings.extend(_unconsumed_field_findings(definition, cwl_class, path=port_path))
+                # Inlining replaces a nested workflow's input with the calling step's binding,
+                # where CWL would apply the input's default to a null one.
+                if section_name == "inputs" and isinstance(definition, Mapping) and "default" in definition:
+                    findings.append(
+                        f"{port_path}.default: a nested workflow input's default is not supported: "
+                        "bind the input on the calling step"
                     )
         findings.extend(
             _nested_workflow_capability_findings(
