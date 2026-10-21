@@ -56,9 +56,11 @@ _PORT = re.compile(
     r"(?:,\s*optional:\s*(?P<optional>true))?"
     r"(?:,\s*emit:\s*(?P<emit>\S+))?$"
 )
-# The one input option read from text: an array-typed path input declares its arity.
+# The one input with options read from text: an array-typed path input, which
+# declares its arity and stages each file in a numbered directory.
 _ARRAY_PATH_INPUT = re.compile(
-    rf"^path\s+(?P<target>[^\s,]+),\s*arity:\s*'{re.escape(NF_ARRAY_PATH_ARITY)}'$"
+    rf"^path\s+(?P<target>[^\s,]+),\s*arity:\s*'{re.escape(NF_ARRAY_PATH_ARITY)}',"
+    r"\s*stageAs:\s*'gather_(?P=target)_\*/\*'$"
 )
 # The one generated val-output form: file-text capture over the emitted helper.
 _TEXT_CAPTURE_OUTPUT = re.compile(

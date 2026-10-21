@@ -756,10 +756,15 @@ def test_array_of_files_stages_every_element_for_one_process_call(
     expected: str,
     tmp_path: Path,
 ) -> None:
-    """R2.7: an array of File values stages every element for a single process invocation."""
+    """R2.7: an array of File values stages every element for a single process invocation.
+
+    The files share one basename in different directories, as cwltool allows,
+    and a metacharacter in it names a file, not a pattern.
+    """
     sources = []
     for index, text in enumerate(contents):
-        source = tmp_path / f"source[{index}]*.txt"  # a metacharacter names a file, not a pattern
+        source = tmp_path / str(index) / "source[0]*.txt"
+        source.parent.mkdir()
         source.write_text(text, encoding="utf-8")
         sources.append(str(source))
     process = NfProcess(
@@ -806,7 +811,7 @@ def test_array_of_directories_stages_every_element_for_one_process_call(count: i
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     outputs = list((tmp_path / "run" / "work").rglob("names.txt"))
     assert [path.read_text(encoding="utf-8") for path in outputs] == [
-        " ".join(f"source_{index}" for index in range(count)) + "\n"
+        " ".join(f"gather_sources_{index + 1}/source_{index}" for index in range(count)) + "\n"
     ]
 
 

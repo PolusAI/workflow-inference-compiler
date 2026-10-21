@@ -303,20 +303,18 @@ def _process_input(port: NfPort, *, tuple_element: bool = False) -> str:
     return f"{port.qualifier} {port.name}"
 
 
-def _unscattered_input(port: NfPort, gathered_ports: frozenset[str]) -> str:
-    # A gathered File array holds one file per invocation, and a list a step
-    # input joins one or more per source, often all with the same basename;
-    # each is staged in its own numbered directory, as cwltool does, so the
-    # names cannot collide. Nextflow numbers the directories per port, so the
-    # port name in the pattern keeps two such ports apart.
-    if port.name in gathered_ports and port.qualifier == "path":
+def _unscattered_input(port: NfPort) -> str:
+    # The files of an array, whether a workflow input, a gather or a step
+    # input, may share a basename; each is staged in its own numbered
+    # directory, as cwltool does, so the names cannot collide. Nextflow
+    # numbers the directories per port, so the port name in the pattern keeps
+    # two such ports apart.
+    if port.is_array and port.qualifier == "path":
         return _path_input(port, f"gather_{port.name}_*/*")
     return _process_input(port)
 
 
-def _render_process(
-    process: NfProcess, multi_input_ports: tuple[str, ...] = (), gathered_ports: frozenset[str] = frozenset()
-) -> str:
+def _render_process(process: NfProcess, multi_input_ports: tuple[str, ...] = ()) -> str:
     lines = [f"process {process.name} {{"]
     if process.container is not None:
         lines.append(f"    container {groovy_literal(process.container)}")
@@ -335,9 +333,9 @@ def _render_process(
                 + [_process_input(port, tuple_element=True) for port in scattered]
             )
             lines.append(f"    tuple {tuple_elements}")
-            lines.extend(f"    {_unscattered_input(port, gathered_ports)}" for port in other)
+            lines.extend(f"    {_unscattered_input(port)}" for port in other)
         else:
-            lines.extend(f"    {_unscattered_input(port, gathered_ports)}" for port in process.inputs)
+            lines.extend(f"    {_unscattered_input(port)}" for port in process.inputs)
     if process.outputs:
         lines.extend(["", "    output:"])
         if multi_input_ports:
@@ -814,17 +812,7 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
     if any(isinstance(connection, NfStepInputConnection) for connection in workflow.connections):
         sections.append(NF_STEP_INPUT_FUNCTION)
     sections.extend(
-        _render_process(
-            process,
-            tuple(name for name, _, _ in _multi_input_sources(workflow, process)),
-            frozenset(
-                connection.to_port
-                for connection in workflow.connections
-                if (isinstance(connection, NfProcessConnection) and connection.adapter == "gather"
-                    or isinstance(connection, NfStepInputConnection) and connection.gives_list)
-                and connection.to_process == process.name
-            ),
-        )
+        _render_process(process, tuple(name for name, _, _ in _multi_input_sources(workflow, process)))
         for process in workflow.processes
     )
     sections.append(_render_named_workflow(workflow))

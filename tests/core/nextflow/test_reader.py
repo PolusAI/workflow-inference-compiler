@@ -577,6 +577,9 @@ def test_array_of_paths_artifacts_parse_and_promote(tmp_path: Path) -> None:
     assert parsed.opaque_regions == ()
     assert [(port.name, port.qualifier) for port in parsed.processes[0].inputs] == [("sources", "path")]
     assert promote_nextflow_document(parsed) == expected
+    # Without the adjacent model, the text alone reads the same port.
+    text = parse_nf_text((tmp_path / "workflow.nf").read_text(encoding="utf-8"))
+    assert [(port.name, port.qualifier) for port in text.processes[0].inputs] == [("sources", "path")]
 
 
 def _text_capture_workflow() -> ExecutableNextflowWorkflow:
