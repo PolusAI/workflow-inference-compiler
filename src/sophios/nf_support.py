@@ -44,6 +44,9 @@ _SECONDARY_FILES = Row(_R, 'secondaryFiles are not supported: stage each file as
 _LOAD_CONTENTS = Row(_R, "loadContents on an input is not supported: an input's contents would have to "
                          'become a value channel read at staging time')
 _LOAD_LISTING = Row(_R, 'loadListing is not supported: a Directory is staged whole')
+_ARRAY_TYPE = Row(_L, '`array`')
+_ARRAY_ITEMS = Row(_L, 'the element type: one the parameter could declare itself, not an array')
+_ARRAY_NAME = Row(_R, "an array schema's name is not supported")
 
 FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
     'Workflow': MappingProxyType({
@@ -96,6 +99,13 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'streamable': _STREAMABLE,
         'type': Row(_L, "the parameter's channel: `path` for `File` and `Directory`, `val` otherwise"),
     }),
+    'InputArraySchema': MappingProxyType({
+        'doc': _DOC,
+        'items': _ARRAY_ITEMS,
+        'label': _DOC,
+        'name': _ARRAY_NAME,
+        'type': _ARRAY_TYPE,
+    }),
     'WorkflowOutputParameter': MappingProxyType({
         'doc': _DOC,
         'format': _FORMAT,
@@ -107,6 +117,13 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'secondaryFiles': _SECONDARY_FILES,
         'streamable': _STREAMABLE,
         'type': Row(_L, "the emitted value's type"),
+    }),
+    'OutputArraySchema': MappingProxyType({
+        'doc': _DOC,
+        'items': _ARRAY_ITEMS,
+        'label': _DOC,
+        'name': _ARRAY_NAME,
+        'type': _ARRAY_TYPE,
     }),
     'CommandLineTool': MappingProxyType({
         'arguments': Row(_L, 'command tokens, ordered as CWL orders them'),
@@ -141,6 +158,14 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'streamable': _STREAMABLE,
         'type': Row(_L, "the port's qualifier: `path` for `File` and `Directory`, "
                     '`val` for `int`, `float`, `string` and `boolean`'),
+    }),
+    'CommandInputArraySchema': MappingProxyType({
+        'doc': _DOC,
+        'inputBinding': Row(_R, 'per-item array element bindings are not supported: bind the array as a whole'),
+        'items': _ARRAY_ITEMS,
+        'label': _DOC,
+        'name': _ARRAY_NAME,
+        'type': _ARRAY_TYPE,
     }),
     'CommandLineBinding': MappingProxyType({
         'itemSeparator': Row(_R, 'itemSeparator is not supported: an array binding gives each element its own word'),
@@ -180,6 +205,11 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
     'InitialWorkDirRequirement': MappingProxyType({
         'class': Row(_L, "stages the inputs a listing names"),
         'listing': Row(_L, 'entries naming one `File` or `Directory` input, under its basename or a literal name'),
+    }),
+    'Dirent': MappingProxyType({
+        'entry': Row(_L, '`$(inputs.<name>)` of one `File` or `Directory` input'),
+        'entryname': Row(_L, "the input's own basename, or literal text"),
+        'writable': Row(_L, 'the literal `false` only; `true` is rejected'),
     }),
     'InlineJavascriptRequirement': MappingProxyType({
         'class': Row(_L, 'a declaration only; each expression is judged where it appears'),

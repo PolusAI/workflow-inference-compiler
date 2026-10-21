@@ -240,15 +240,11 @@ def _array_item_type(array_type: Any) -> Any:
 
     Only a bare scalar type name, or a single-key ``{"type": <scalar>}``
     mapping, is representable. Nested arrays and a per-item ``inputBinding``
-    are explicitly deferred rather than silently mishandled.
-
-    CWL spells a per-item binding two ways -- inside ``items``, and on the
-    array schema itself beside ``items`` -- and only the second is the
-    common form. Both are rejected here; accepting the array-level one
-    would silently drop the per-item prefix cwltool renders.
+    inside ``items`` are explicitly deferred rather than silently mishandled.
+    The array schema's own fields, a per-item ``inputBinding`` beside
+    ``items`` among them, are checked against the support table by
+    :func:`_array_schema_findings`.
     """
-    if isinstance(array_type, Mapping) and "inputBinding" in array_type:
-        raise ValueError("per-item array element bindings are deferred beyond this lowering")
     items = array_type.get("items") if isinstance(array_type, Mapping) else None
     match items:
         case "array":
@@ -523,7 +519,6 @@ def _array_binding(
     return NfArrayBinding(name, prefix)
 
 
-_IWDR_DIRENT_FIELDS = frozenset({"class", "entry", "entryname", "writable"})
 _IWDR_ENTRY_PATTERN = re.compile(r"^\$\(\s*inputs\.([A-Za-z_][A-Za-z0-9_]*)\s*\)$")
 
 
@@ -588,9 +583,6 @@ def _iwdr_listing_item(item: Any, *, tool_inputs: Mapping[str, Any]) -> tuple[st
             raw_name = _iwdr_entry_reference(bare)
             rename = None
         case Mapping() as dirent:
-            extra = set(dirent) - _IWDR_DIRENT_FIELDS
-            if extra:
-                raise ValueError(f"has unsupported Dirent fields: {', '.join(sorted(extra))}")
             if dirent.get("writable") is True:
                 raise ValueError("writable: true is deferred; copy-and-mutate staging is not supported")
             raw_name = _iwdr_entry_reference(dirent.get("entry"))
@@ -633,6 +625,11 @@ def _iwdr_listing_findings(
     renamed_by: dict[str, set[str]] = {}
     listed_at: dict[str, int] = {}
     for index, item in enumerate(listing):
+        if isinstance(item, Mapping) and (
+            dirent_findings := _unconsumed_field_findings(item, "Dirent", path=f"{path}.listing[{index}]")
+        ):
+            findings.extend(dirent_findings)
+            continue
         try:
             name, rename = _iwdr_listing_item(item, tool_inputs=tool_inputs)
         except ValueError as exc:
@@ -1147,6 +1144,28 @@ def _unconsumed_field_findings(
     ]
 
 
+def _array_schema_findings(definition: Any, cwl_class: str, *, path: str) -> list[str]:
+    """Reject the fields of each array schema a parameter's type declares that the lowering does not consume.
+
+    Args:
+        definition (Any): The parameter, or its bare type.
+        cwl_class (str): The array schema's class, a key of `FIELDS`.
+        path (str): Where the parameter sits, for the finding.
+
+    Returns:
+        list[str]: One finding per field, with its row's note.
+    """
+    cwl_type: Any = definition.get("type") if isinstance(definition, Mapping) else definition
+    members = (
+        [(f"{path}.type[{index}]", member) for index, member in enumerate(cwl_type)]
+        if isinstance(cwl_type, list) else [(f"{path}.type", cwl_type)]
+    )
+    return [
+        finding for member_path, member in members if _is_array_type(member)
+        for finding in _unconsumed_field_findings(member, cwl_class, path=member_path)
+    ]
+
+
 def _local_locations_as_paths(value: Any) -> Any:
     """Rewrite a File or Directory object's plain local ``location`` as its ``path``, and drop a File's ``format``.
 
@@ -1584,9 +1603,9 @@ def _nested_workflow_capability_findings(
             _unconsumed_field_findings(child_document, "Workflow", path=child_path, kept=_WORKFLOW_CONSUMED_FIELDS)
         )
         findings.extend(_workflow_requirement_findings(child_document, path=child_path))
-        for section_name, cwl_class, kept in (
-            ("inputs", "WorkflowInputParameter", _NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS),
-            ("outputs", "WorkflowOutputParameter", None),
+        for section_name, cwl_class, schema_class, kept in (
+            ("inputs", "WorkflowInputParameter", "InputArraySchema", _NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS),
+            ("outputs", "WorkflowOutputParameter", "OutputArraySchema", None),
         ):
             section = child_document.get(section_name, {})
             if not isinstance(section, Mapping):
@@ -1598,6 +1617,7 @@ def _nested_workflow_capability_findings(
             for raw_name, definition in section.items():
                 port_path = f"{child_path}.{section_name}.{raw_name}"
                 findings.extend(_number_type_findings(definition, path=port_path))
+                findings.extend(_array_schema_findings(definition, schema_class, path=port_path))
                 if isinstance(definition, Mapping):
                     findings.extend(
                         _unconsumed_field_findings(definition, cwl_class, path=port_path, kept=kept)
@@ -1712,6 +1732,7 @@ def _tool_capability_findings(
                     continue
                 input_path = f"{path}.run.inputs.{raw_name}"
                 findings.extend(_number_type_findings(raw_definition, path=input_path))
+                findings.extend(_array_schema_findings(raw_definition, "CommandInputArraySchema", path=input_path))
                 findings.extend(
                     _unconsumed_field_findings(raw_definition, "CommandInputParameter", path=input_path)
                 )
@@ -1841,6 +1862,7 @@ def _workflow_capability_findings(
             for raw_name, definition in inputs.items():
                 input_path = f"workflow.inputs.{raw_name}"
                 findings.extend(_number_type_findings(definition, path=input_path))
+                findings.extend(_array_schema_findings(definition, "InputArraySchema", path=input_path))
                 if isinstance(definition, Mapping):
                     findings.extend(
                         _unconsumed_field_findings(definition, "WorkflowInputParameter", path=input_path)
@@ -1886,6 +1908,9 @@ def _workflow_capability_findings(
             )
             for raw_name, definition in outputs.items():
                 findings.extend(_number_type_findings(definition, path=f"workflow.outputs.{raw_name}"))
+                findings.extend(
+                    _array_schema_findings(definition, "OutputArraySchema", path=f"workflow.outputs.{raw_name}")
+                )
                 if isinstance(definition, Mapping):
                     findings.extend(
                         _unconsumed_field_findings(
