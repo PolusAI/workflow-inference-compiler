@@ -402,9 +402,11 @@ idiom over the step input's values, and none runs JavaScript:
   that are not null`.
 
 Every source is one value: a workflow input, a gathered scatter output, or an
-unscattered step's output. A `pickValue` gives a value that is not `null`, so
-a conditional step's output may reach any port through one. These are
-rejected by name: a `pickValue` on one source with no `linkMerge`; a
+unscattered step's output. Each file of a joined list is staged in its own
+numbered directory, as a gathered file is, so same-named files never collide.
+A `pickValue` gives a value that is not `null`, so a conditional step's output
+may reach any port through one. These are rejected by name: a `pickValue` on
+one source with no `linkMerge`; a
 `default` beside a `linkMerge` or a `pickValue`, which never applies; a
 `pickValue` over an array source, since `[]` stands for both `null` and an
 empty array; `merge_nested` over an array source, which would nest arrays; a

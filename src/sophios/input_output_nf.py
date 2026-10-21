@@ -297,10 +297,11 @@ def _process_input(port: NfPort, *, tuple_element: bool = False) -> str:
 
 
 def _unscattered_input(port: NfPort, gathered_ports: frozenset[str]) -> str:
-    # A gathered File array holds one file per invocation, usually all with the
-    # same basename; each is staged in its own numbered directory, as cwltool
-    # does, so the names cannot collide. Nextflow numbers the directories per
-    # port, so the port name in the pattern keeps two gathered ports apart.
+    # A gathered File array holds one file per invocation, and a list a step
+    # input joins one or more per source, often all with the same basename;
+    # each is staged in its own numbered directory, as cwltool does, so the
+    # names cannot collide. Nextflow numbers the directories per port, so the
+    # port name in the pattern keeps two such ports apart.
     if port.name in gathered_ports and port.qualifier == "path":
         return _path_input(port, f"gather_{port.name}_*/*")
     return _process_input(port)
@@ -824,9 +825,9 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
             frozenset(
                 connection.to_port
                 for connection in workflow.connections
-                if isinstance(connection, NfProcessConnection)
+                if (isinstance(connection, NfProcessConnection) and connection.adapter == "gather"
+                    or isinstance(connection, NfStepInputConnection) and connection.gives_list)
                 and connection.to_process == process.name
-                and connection.adapter == "gather"
             ),
         )
         for process in workflow.processes
