@@ -212,8 +212,14 @@ _A, _B = ("string", "a"), ("string", "b")
     ({"source": ["a", "b"], "pickValue": "first_non_null"}, _STRINGS, {"a": _A, "b": _B},
      "steps[0].in.words: the step input gives one value, but its tool input declares "
      "{'type': 'array', 'items': 'string'}"),
+    ({"source": ["a", "b"], "pickValue": "first_non_null"}, "File", {"a": ("File?", None), "b": ("File", "b.txt")},
+     "workflow: workflow input 'a' is an absent optional File?, which has no lowering; give it a value"),
+    ({"source": "a", "default": "b.txt"}, "File", {"a": ("File?", "a.txt")},
+     "steps[0].in.words.default: a step-input default of a File or Directory input is not supported; give the "
+     "path as a workflow input"),
 ], ids=["link-merge", "pick-value", "pick-one-source", "default-beside-merge", "array-default", "mistyped-default",
-        "pick-over-array", "default-over-array", "nested-array", "null-element", "list-to-scalar", "one-to-list"])
+        "pick-over-array", "default-over-array", "nested-array", "null-element", "list-to-scalar", "one-to-list",
+        "pick-over-absent-path", "path-default"])
 def test_each_step_input_the_idioms_cannot_take_is_rejected_by_name(
     step_input: Any, port_type: Any, inputs: dict[str, Any], finding: str
 ) -> None:

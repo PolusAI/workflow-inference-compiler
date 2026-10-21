@@ -389,8 +389,8 @@ idiom over the step input's values, and none runs JavaScript:
 
 - `default` is the value when the step input has no source, and takes the
   place of a source that is `null`. It is a JSON scalar of the tool input's
-  type, and it becomes a pipeline parameter named `<step>~<port>` like a tool
-  default.
+  type, which is a `string`, `int`, `float` or `boolean`, and it becomes a
+  pipeline parameter named `<step>~<port>` like a tool default.
 - `linkMerge` joins the sources in the order the step input names them, one
   source included. `merge_nested` makes a list with one element per source;
   `merge_flattened` splices an array source's elements and adds any other
@@ -407,8 +407,8 @@ Every source is one value: a workflow input, a gathered scatter output, or an
 unscattered step's output. Each file of a joined list is staged in its own
 numbered directory, as a gathered file is, so same-named files never collide.
 A `pickValue` gives a value that is not `null`, so a conditional step's output
-may reach any port through one. These are rejected by name: a `pickValue` on
-one source with no `linkMerge`; a
+may reach any port through one. These are rejected by name: a `default` of a
+`File` or `Directory` input; a `pickValue` on one source with no `linkMerge`; a
 `default` beside a `linkMerge` or a `pickValue`, which never applies; a
 `pickValue` over an array source, since `[]` stands for both `null` and an
 empty array; `merge_nested` over an array source, which would nest arrays; a
