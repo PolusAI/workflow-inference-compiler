@@ -482,6 +482,8 @@ gate on, so `when` on a tool that declares no inputs is rejected.
 ## Current limits
 
 - Processes must be `CommandLineTool`-equivalent.
+- The number types are `int` and `float`. A `long` or `double`, wherever it
+  is declared, is rejected by name.
 - Fractional CPU requirements reject before lowering; they are not silently
   rounded.
 - The reader does not interpret arbitrary Groovy, channel operators, or `exec`

@@ -2629,7 +2629,7 @@ def test_file_text_capture_requires_load_contents_true() -> None:
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize("declared", ["int", "float", "long", "double"])
+@pytest.mark.parametrize("declared", ["int", "float"])
 def test_a_numeric_file_text_capture_is_rejected_because_parsing_is_computation(
     declared: str,
 ) -> None:
@@ -2833,3 +2833,39 @@ def test_a_step_consuming_an_optional_output_is_a_finding() -> None:
         "workflow: connection _MAYBE.o -> _CONSUME.source consumes an optional output, which may be null; "
         "only a workflow output can take it"
     ]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("number", ["long", "double"])
+@pytest.mark.parametrize(("where", "path"), [
+    ("tool input", "steps[0].run.inputs.n"),
+    ("array item", "steps[0].run.inputs.n"),
+    ("tool output", "steps[0].run.outputs.out"),
+    ("workflow input", "workflow.inputs.n"),
+    ("workflow output", "workflow.outputs.out"),
+])
+def test_long_and_double_are_rejected_naming_the_type(number: str, where: str, path: str) -> None:
+    declared = {"tool input": number, "array item": {"type": "array", "items": number}}.get(where, "int")
+    out = number if where == "tool output" else "File"
+    produce = tool(
+        "PRODUCE",
+        inputs={"n": {"type": declared, "inputBinding": {"position": 1}}},
+        outputs={"out": {"type": out, "outputBinding": {"glob": "out.txt"}}},
+    )
+    workflow = workflow_doc(
+        [step("PRODUCE", **{"in": {"n": "n"}, "out": ["out"]})],
+        inputs={"n": {"type": number if where == "workflow input" else declared}},
+        outputs={"out": {"type": number if where == "workflow output" else out, "outputSource": "PRODUCE/out"}},
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{path}.type: {number} is not supported")):
+        compiled_source_to_nextflow(synthetic_source(workflow, [produce], workflow_inputs={}))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("section", ["inputs", "outputs"])
+def test_long_on_a_nested_workflow_port_is_rejected_naming_the_type(section: str) -> None:
+    result = copy.deepcopy(_nested_result())
+    name, definition = next(iter(_nested_artifacts(result)[0].cwl[section].items()))
+    definition["type"] = "long"
+    with pytest.raises(ValueError, match=re.escape(f".run.{section}.{name}.type: long is not supported")):
+        compiled_source_to_nextflow(result)

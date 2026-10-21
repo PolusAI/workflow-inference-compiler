@@ -20,8 +20,7 @@ BOOLEAN = "boolean"
 STRING = "string"
 NULL = "null"
 
-_NUMERIC_TYPES = frozenset({"int", "long", "float", "double"})
-_SCALAR_TYPES = {**{name: NUMBER for name in _NUMERIC_TYPES}, "boolean": BOOLEAN, "string": STRING}
+_SCALAR_TYPES = {"int": NUMBER, "float": NUMBER, "boolean": BOOLEAN, "string": STRING}
 _UNARY = frozenset({"!", "-", "+"})
 # JavaScript precedence, loosest first; every level is left-associative.
 _BINARY_LEVELS: tuple[frozenset[str], ...] = (
