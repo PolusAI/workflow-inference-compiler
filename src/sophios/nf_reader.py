@@ -17,6 +17,7 @@ from .nf_types import (
     NfLiteral,
     NfConnection,
     NfProcessConnection,
+    NfStepInputConnection,
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
     process_dependencies,
@@ -33,6 +34,7 @@ from .input_output_nf import (
     NF_LOAD_CONTENTS_FUNCTION,
     NF_NEST_FUNCTION,
     NF_SHELL_QUOTE_FUNCTION,
+    NF_STEP_INPUT_FUNCTION,
     NF_STUB_LINES,
     render_nextflow,
     render_number,
@@ -465,7 +467,8 @@ def parse_nf_text(text: str, *, params: Mapping[str, Any] | None = None) -> Next
     for _name, block_start, block_end in [*process_blocks, *workflow_blocks]:
         covered.update(range(block_start, block_end + 1))
     for helper in (
-        NF_SHELL_QUOTE_FUNCTION, NF_INPUT_FUNCTION, NF_LOAD_CONTENTS_FUNCTION, NF_EXPRESSION_FUNCTIONS, NF_NEST_FUNCTION,
+        NF_SHELL_QUOTE_FUNCTION, NF_INPUT_FUNCTION, NF_LOAD_CONTENTS_FUNCTION, NF_EXPRESSION_FUNCTIONS,
+        NF_NEST_FUNCTION, NF_STEP_INPUT_FUNCTION,
     ):
         helper_lines = _lines(helper)
         for helper_start in range(len(lines) - len(helper_lines) + 1):
@@ -722,29 +725,33 @@ def nextflow_to_cwl(workflow: NextflowDocument) -> tuple[dict[str, Any], list[di
 
     incoming: dict[
         tuple[str, str],
-        NfWorkflowInputConnection | NfProcessConnection,
+        NfWorkflowInputConnection | NfProcessConnection | NfStepInputConnection,
     ] = {}
     for connection in workflow.connections:
-        if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection)):
+        if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection, NfStepInputConnection)):
             incoming[(connection.to_process, connection.to_port)] = connection
     steps: list[dict[str, Any]] = []
     workflow_inputs: dict[str, Any] = {}
+
+    def source(edge: NfWorkflowInputConnection | NfProcessConnection, cwl_type: Any) -> str:
+        if isinstance(edge, NfWorkflowInputConnection):
+            workflow_inputs.setdefault(edge.from_port, {"type": cwl_type})
+            return edge.from_port
+        return f"{edge.from_process}/{edge.from_port}"
+
     for process in workflow.processes:
-        step_inputs: dict[str, str] = {}
+        step_inputs: dict[str, Any] = {}
         for port in process.inputs:
             incoming_connection = incoming.get((process.name, port.name))
-            if incoming_connection is None:
-                continue
-            if isinstance(incoming_connection, NfWorkflowInputConnection):
-                step_inputs[port.name] = incoming_connection.from_port
-                workflow_inputs.setdefault(
-                    incoming_connection.from_port,
-                    {"type": _cwl_type(port)},
-                )
-            else:
-                step_inputs[port.name] = (
-                    f"{incoming_connection.from_process}/{incoming_connection.from_port}"
-                )
+            if isinstance(incoming_connection, NfStepInputConnection):
+                # A source's own type is not the merged port's.
+                step_inputs[port.name] = {
+                    "source": [source(edge, "Any") for edge in incoming_connection.sources],
+                    "linkMerge": incoming_connection.link_merge,
+                    **({"pickValue": incoming_connection.pick_value} if incoming_connection.pick_value else {}),
+                }
+            elif incoming_connection is not None:
+                step_inputs[port.name] = source(incoming_connection, _cwl_type(port))
         steps.append({
             "id": process.name,
             "in": step_inputs,
@@ -791,7 +798,7 @@ def import_nextflow(path: str | Path) -> "Workflow":
         Workflow: A Sophios workflow reconstructing the representable
             processes, connections, and bound parameter values.
     """
-    from .api.python.workflow import Step, Workflow  # Avoid a public API import cycle.
+    from .api.python.workflow import Step, StepInput, Workflow  # Avoid a public API import cycle.
 
     nf_workflow = parse_nf_file(path)
     _cwl_workflow, tool_documents = nextflow_to_cwl(nf_workflow)
@@ -814,21 +821,29 @@ def import_nextflow(path: str | Path) -> "Workflow":
     step_by_name = {step.process_name: step for step in steps}
     workflow = Workflow(steps, nf_workflow.name)
     process_by_name = {process.name: process for process in nf_workflow.processes}
+
+    def bound(edge: NfWorkflowInputConnection | NfProcessConnection, cwl_type: Any) -> Any:
+        if isinstance(edge, NfProcessConnection):
+            return getattr(step_by_name[edge.from_process].outputs, edge.from_port)
+        reference = getattr(workflow.inputs, edge.from_port).as_type(cwl_type)
+        if edge.from_port in nf_workflow.params:
+            setattr(workflow.inputs, edge.from_port, nf_workflow.params[edge.from_port])
+        return reference
+
     for connection in nf_workflow.connections:
         if isinstance(connection, NfWorkflowOutputConnection):
             source = getattr(step_by_name[connection.from_process].outputs, connection.from_port)
             setattr(workflow.outputs, connection.to_port, source)
             continue
         destination = step_by_name[connection.to_process]
-        if isinstance(connection, NfWorkflowInputConnection):
-            destination_process = process_by_name[connection.to_process]
-            destination_port = next(
-                port for port in destination_process.inputs if port.name == connection.to_port
+        if isinstance(connection, NfStepInputConnection):
+            # A source's own type is not the joined port's.
+            source = StepInput(
+                source=[bound(edge, "Any") for edge in connection.sources],
+                link_merge=connection.link_merge, pick_value=connection.pick_value,
             )
-            source = getattr(workflow.inputs, connection.from_port).as_type(_cwl_type(destination_port))
-            if connection.from_port in nf_workflow.params:
-                setattr(workflow.inputs, connection.from_port, nf_workflow.params[connection.from_port])
         else:
-            source = getattr(step_by_name[connection.from_process].outputs, connection.from_port)
+            ports = process_by_name[connection.to_process].inputs
+            source = bound(connection, _cwl_type(next(port for port in ports if port.name == connection.to_port)))
         setattr(destination.inputs, connection.to_port, source)
     return workflow

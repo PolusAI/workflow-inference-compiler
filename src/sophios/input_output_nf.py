@@ -14,6 +14,7 @@ from .nf_expr import (
 from .nf_types import (
     NF_INPUT_HELPER,
     NF_NEST_HELPER,
+    NF_STEP_INPUT_HELPER,
     MULTI_INPUT_ADAPTERS,
     ExecutableNextflowWorkflow,
     NF_LOAD_CONTENTS_HELPER,
@@ -22,7 +23,6 @@ from .nf_types import (
     NF_SHELL_QUOTE_HELPER,
     NfArrayBinding,
     NfBasenameReference,
-    NfConnection,
     NfFlag,
     NfInputReference,
     NfLiteral,
@@ -30,10 +30,11 @@ from .nf_types import (
     NfProcess,
     NfProcessConnection,
     NfShellLiteral,
+    NfStepInputConnection,
     NfTemplate,
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
-    channel_construction,
+    param_channel,
     process_dependencies,
     topological_order,
 )
@@ -94,6 +95,25 @@ NF_INPUT_FUNCTION = f'''def {NF_INPUT_HELPER}(String name, value, String type) {
     }}
     throw new IllegalArgumentException("Sophios workflow input '" + name + "' must be " + type + ", not " +
         value.inspect())
+}}'''
+# The step-input idioms over one step input's values, in the order it names
+# them (design §6, Topology, Step inputs): merge_flattened splices an array
+# source's elements, pickValue picks from the joined list with [] as null,
+# and a pick that finds no value, or the_only_non_null that finds several,
+# stops the run naming the step input.
+NF_STEP_INPUT_FUNCTION = f'''def {NF_STEP_INPUT_HELPER}(String name, List values, List arrays, String linkMerge,
+    pickValue) {{
+    def joined = linkMerge == 'merge_nested' ? values :
+        [values, arrays].transpose().collectMany {{ pair -> pair[1] ? pair[0] : [pair[0]] }}
+    def present = joined.findAll {{ value -> value != [] }}
+    if( pickValue == null )
+        return joined
+    if( pickValue == 'all_non_null' )
+        return present
+    if( pickValue == 'first_non_null' && present || pickValue == 'the_only_non_null' && present.size() == 1 )
+        return present[0]
+    throw new IllegalStateException("Sophios step input " + name + ": " + pickValue + " finds " + present.size() +
+        " values that are not null")
 }}'''
 # CWL v1.2 loadContents semantics, verbatim: read the whole file, fail above
 # the byte limit, and decode UTF-8 strictly. CharsetDecoder.decode reports
@@ -445,12 +465,15 @@ def _process_map(workflow: ExecutableNextflowWorkflow) -> dict[str, NfProcess]:
     return {process.name: process for process in workflow.processes}
 
 
-def _incoming_connections(workflow: ExecutableNextflowWorkflow) -> dict[tuple[str, str], NfConnection]:
+_Incoming = NfWorkflowInputConnection | NfProcessConnection | NfStepInputConnection
+
+
+def _incoming_connections(workflow: ExecutableNextflowWorkflow) -> dict[tuple[str, str], _Incoming]:
     # The executable IR rejects multiple sources per input at construction.
     return {
         (connection.to_process, connection.to_port): connection
         for connection in workflow.connections
-        if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection))
+        if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection, NfStepInputConnection))
     }
 
 
@@ -573,7 +596,10 @@ def _render_multi_input_channel(
     ])
 
 
-def _source_expression(connection: NfConnection, processes: Mapping[str, NfProcess]) -> str:
+def _source_expression(
+    connection: NfWorkflowInputConnection | NfProcessConnection | NfWorkflowOutputConnection,
+    processes: Mapping[str, NfProcess],
+) -> str:
     match connection:
         case NfWorkflowInputConnection(from_port, _, _, _):
             return from_port
@@ -590,7 +616,11 @@ def _source_expression(connection: NfConnection, processes: Mapping[str, NfProce
             return f"{process.name}.out.{emit}"
 
 
-def _broadcast(connection: NfConnection, processes: Mapping[str, NfProcess], methods: Mapping[str, str]) -> str:
+def _broadcast(
+    connection: NfWorkflowInputConnection | NfProcessConnection,
+    processes: Mapping[str, NfProcess],
+    methods: Mapping[str, str],
+) -> str:
     """An unscattered input of a scattered process, as one value every task reads.
 
     An unscattered process emits one element per output; taken as it is, that
@@ -599,6 +629,46 @@ def _broadcast(connection: NfConnection, processes: Mapping[str, NfProcess], met
     expression = _source_expression(connection, processes)
     unscattered_source = isinstance(connection, NfProcessConnection) and connection.from_process not in methods
     return f"{expression}.first()" if unscattered_source else expression
+
+
+def _step_input_expression(workflow: ExecutableNextflowWorkflow, connection: NfStepInputConnection) -> str:
+    """The idioms over a step input's values: one value, as every source is (design §6, Topology, Step inputs).
+
+    Each source is boxed so ``combine`` carries a list value whole; the joined
+    item is then the list of the step input's values, in order.
+    """
+    processes = _process_map(workflow)
+    channels = [f"{_source_expression(source, processes)}.map {{ [it] }}" for source in connection.sources]
+    arrays = [
+        param_channel(workflow.param_types[source.from_port]).carries_list
+        if isinstance(source, NfWorkflowInputConnection) else source.adapter == "gather"
+        for source in connection.sources
+    ]
+    combined = channels[0] + "".join(f".combine({channel})" for channel in channels[1:])
+    arguments = ", ".join([
+        groovy_literal(f"{connection.to_process}.{connection.to_port}"),
+        "__values",
+        f"[{', '.join('true' if array else 'false' for array in arrays)}]",
+        groovy_literal(connection.link_merge),
+        "null" if connection.pick_value is None else groovy_literal(connection.pick_value),
+    ])
+    return f"{combined}.map {{ __values -> {NF_STEP_INPUT_HELPER}({arguments}) }}.first()"
+
+
+def _argument(
+    workflow: ExecutableNextflowWorkflow, connection: _Incoming, methods: Mapping[str, str] | None = None
+) -> str:
+    """The channel a process input is called with.
+
+    ``methods`` maps every multi-input-scattered process to its method when
+    the input broadcasts to the tasks of a scattered one.
+    """
+    if isinstance(connection, NfStepInputConnection):
+        return _step_input_expression(workflow, connection)
+    processes = _process_map(workflow)
+    if methods is None:
+        return _source_expression(connection, processes)
+    return _broadcast(connection, processes, methods)
 
 
 def _ordered_processes(workflow: ExecutableNextflowWorkflow) -> list[NfProcess]:
@@ -614,9 +684,10 @@ def _ordered_processes(workflow: ExecutableNextflowWorkflow) -> list[NfProcess]:
 
 def _workflow_input_names(workflow: ExecutableNextflowWorkflow) -> list[str]:
     return list(dict.fromkeys(
-        connection.from_port
+        edge.from_port
         for connection in workflow.connections
-        if isinstance(connection, NfWorkflowInputConnection)
+        for edge in (connection.sources if isinstance(connection, NfStepInputConnection) else (connection,))
+        if isinstance(edge, NfWorkflowInputConnection)
     ))
 
 
@@ -641,13 +712,13 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
             ))
             other_ports = [port for port in process.inputs if port.name not in multi_input_names]
             arguments = [channel_name] + [
-                _broadcast(incoming[(process.name, port.name)], processes, methods)
+                _argument(workflow, incoming[(process.name, port.name)], methods)
                 for port in other_ports
             ]
         else:
             # The executable IR guarantees every process input is connected.
             arguments = [
-                _source_expression(incoming[(process.name, port.name)], processes)
+                _argument(workflow, incoming[(process.name, port.name)])
                 for port in process.inputs
             ]
         if process.condition is None:
@@ -692,28 +763,13 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
     return "\n".join(lines)
 
 
-def _workflow_input_sink(
-    workflow: ExecutableNextflowWorkflow,
-    name: str,
-) -> tuple[NfPort, str | None]:
-    """One sink port of a workflow parameter, and the adapter on its connection."""
-    processes = _process_map(workflow)
-    for connection in workflow.connections:
-        if isinstance(connection, NfWorkflowInputConnection) and connection.from_port == name:
-            process = processes[connection.to_process]
-            port = next(port for port in process.inputs if port.name == connection.to_port)
-            return port, connection.adapter
-    raise ValueError(f"workflow input {name!r} is not connected")
-
-
 def _checked_parameter(workflow: ExecutableNextflowWorkflow, name: str) -> str:
     return f"{NF_INPUT_HELPER}({groovy_literal(name)}, params.{name}, {groovy_literal(workflow.param_types[name])})"
 
 
 def _parameter_expression(workflow: ExecutableNextflowWorkflow, name: str) -> str:
-    # The graph validator keeps every sink of one parameter in agreement on
-    # this construction, so one sink decides it for all of them.
-    channel = channel_construction(*_workflow_input_sink(workflow, name))
+    # The graph validator holds every sink of the parameter to this channel.
+    channel = param_channel(workflow.param_types[name])
     checked = _checked_parameter(workflow, name)
     if channel.path_kind is None:
         return f"Channel.value({checked})"
@@ -759,6 +815,8 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
         sections.append(NF_EXPRESSION_FUNCTIONS)
     if "nested_crossproduct" in _multi_input_methods(workflow).values():
         sections.append(NF_NEST_FUNCTION)
+    if any(isinstance(connection, NfStepInputConnection) for connection in workflow.connections):
+        sections.append(NF_STEP_INPUT_FUNCTION)
     sections.extend(
         _render_process(
             process,

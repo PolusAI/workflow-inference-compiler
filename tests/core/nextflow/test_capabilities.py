@@ -867,39 +867,19 @@ def test_resolved_nesting_deeper_than_one_level_projects_recursively() -> None:
     assert [process.name for process in workflow.processes] == ["write", "middle_leaf_inner_copy"]
 
 
-def _merged_steps() -> list[Step]:
-    """The cookbook's record.wic: two step outputs merged into one File[] input."""
-    touch = Step(clt_path=REPO_ROOT / "cwl_adapters" / "touch.cwl")
-    touch.inputs.filename = "empty.txt"
-    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
-    echo.inputs.message = "Hello"
-    concat = Step.from_cwl_document({
-        "class": "CommandLineTool",
-        "cwlVersion": "v1.2",
-        "baseCommand": "cat",
-        "inputs": {"files": {"type": "File[]", "inputBinding": {"position": 1}}},
-        "outputs": {"joined": {"type": "File", "outputBinding": {"glob": "joined.txt"}}},
-        "stdout": "joined.txt",
-    }, process_name="concat")
-    concat.inputs.files = StepInput(source=[touch.outputs.file, echo.outputs.stdout], link_merge="merge_flattened")
-    return [touch, echo, concat]
-
-
 @pytest.mark.fast
-def test_a_step_input_with_a_list_of_sources_is_rejected_by_name() -> None:
-    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
-    picked = Workflow([echo], "picked")
-    echo.inputs.message = StepInput(
-        source=[picked.inputs.a.as_type("string?"), picked.inputs.b.as_type("string?")], pick_value="first_non_null"
-    )
-    assert _findings(compile_workflow_result(Workflow(_merged_steps(), "record"))) == [
-        "workflow.steps[2].in.files.source: a list of sources is not supported"
-    ]
-    assert "workflow.steps[0].run.steps[2].in.files.source: a list of sources is not supported" in (
-        _findings(compile_workflow_result(Workflow([Workflow(_merged_steps(), "child")], "root")))
-    )
-    assert _findings(compile_workflow_result(picked)) == [
-        "workflow.steps[0].in.message.source: a list of sources is not supported"
+def test_a_nested_workflow_steps_input_takes_one_source_as_it_is() -> None:
+    """The core compiler joins one source to each input a nested workflow step binds."""
+    result = _nested_result()
+    wrapper = result.artifact.cwl["steps"][_workflow_call_index(result)]
+    name, definition = next(iter(wrapper["in"].items()))
+    source = definition["source"] if isinstance(definition, Mapping) else definition
+    record = {"source": [source, source], "linkMerge": "merge_nested", "pickValue": "first_non_null", "default": 1}
+    findings = _findings(_with_wrapper_semantic(result, **{"in": {**wrapper["in"], name: record}}))
+    assert [finding for finding in findings if "takes one source" in finding] == [
+        f"workflow.steps[1].in.{name}.{field}: a nested workflow step's input takes one source as it is; "
+        "merge on a step inside the nested workflow"
+        for field in ("default", "linkMerge", "pickValue", "source")
     ]
 
 
@@ -933,9 +913,10 @@ def test_inner_input_source_is_taken_from_the_resolved_graph(
 
 
 @pytest.mark.fast
-def test_accepts_an_inert_nested_subworkflow_feature_requirement() -> None:
+@pytest.mark.parametrize("requirement", ["SubworkflowFeatureRequirement", "MultipleInputFeatureRequirement"])
+def test_accepts_an_inert_nested_workflow_feature_requirement(requirement: str) -> None:
     result = copy.deepcopy(_nested_result())
-    _nested_artifacts(result)[0].cwl["requirements"] = {"SubworkflowFeatureRequirement": {}}
+    _nested_artifacts(result)[0].cwl["requirements"] = {requirement: {}}
     assert compiled_source_to_nextflow(result).processes
 
 
@@ -1832,8 +1813,8 @@ MATCHES = [
         "a when on a nested-workflow step is not supported", id="when_on_a_resolved_subworkflow_call",
     ),
     pytest.param(
-        lambda: _with_child(lambda cwl: cwl.update(requirements={"MultipleInputFeatureRequirement": {}})),
-        "MultipleInputFeatureRequirement is not supported", id="unsupported_nested_workflow_requirements",
+        lambda: _with_child(lambda cwl: cwl.update(requirements={"StepInputExpressionRequirement": {}})),
+        "StepInputExpressionRequirement is not supported", id="unsupported_nested_workflow_requirements",
     ),
     pytest.param(
         lambda: _with_child(lambda cwl: cwl.update(hints={"ResourceRequirement": {}})),

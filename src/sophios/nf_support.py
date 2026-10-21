@@ -74,14 +74,14 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'when': Row(_L, 'the safe JavaScript subset, evaluated per invocation'),
     }),
     'WorkflowStepInput': MappingProxyType({
-        'default': Row(_R, "a step input's default is not supported"),
+        'default': Row(_L, 'a JSON scalar: the value when there is no source, or in place of a null source'),
         'id': Row(_L, 'the tool input it binds'),
         'label': _DOC,
-        'linkMerge': Row(_R, "a step input's linkMerge is not supported"),
+        'linkMerge': Row(_L, 'joins the sources in order, `merge_nested` or `merge_flattened`'),
         'loadContents': Row(_R, "a step input's loadContents is not supported"),
         'loadListing': Row(_R, "a step input's loadListing is not supported"),
-        'pickValue': Row(_R, "a step input's pickValue is not supported"),
-        'source': Row(_L, 'one workflow input or step output'),
+        'pickValue': Row(_L, '`first_non_null`, `the_only_non_null` or `all_non_null`, over the joined sources'),
+        'source': Row(_L, 'workflow inputs and step outputs, each one value'),
         'valueFrom': Row(_R, "a step input's valueFrom is not supported"),
     }),
     'WorkflowInputParameter': MappingProxyType({
@@ -215,6 +215,9 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'class': Row(_L, 'a declaration only; each expression is judged where it appears'),
         'expressionLib': Row(_R, 'expressionLib is not supported: the safe JavaScript subset has no functions'),
     }),
+    'MultipleInputFeatureRequirement': MappingProxyType({
+        'class': Row(_L, 'a declaration only; each step input is joined where it is bound'),
+    }),
     'NetworkAccess': MappingProxyType({
         'class': Row(_C, 'a Nextflow task has network access'),
         'networkAccess': Row(_C, 'the literal `true` only; any other value is rejected'),
@@ -252,6 +255,7 @@ REQUIREMENT_CLASSES: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'InitialWorkDirRequirement': Row(_L, 'input staging'),
         'InlineJavascriptRequirement': Row(_L, 'a declaration only'),
         'LoadListingRequirement': Row(_R, 'LoadListingRequirement is not supported: a Directory is staged whole'),
+        'MultipleInputFeatureRequirement': Row(_R, f'MultipleInputFeatureRequirement {_WORKFLOW_FEATURE}'),
         'NetworkAccess': Row(_C, '`networkAccess: true` only'),
         'ResourceRequirement': Row(_L, 'the `cpus` and `memory` directives'),
         'ScatterFeatureRequirement': Row(_R, f'ScatterFeatureRequirement {_WORKFLOW_FEATURE}'),
@@ -261,6 +265,7 @@ REQUIREMENT_CLASSES: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
     }),
     'Workflow': MappingProxyType({
         'InlineJavascriptRequirement': Row(_L, 'a declaration only; Sophios adds it for every `when`'),
+        'MultipleInputFeatureRequirement': Row(_L, 'a declaration only'),
         'ScatterFeatureRequirement': Row(_L, 'a declaration only'),
         'SubworkflowFeatureRequirement': Row(_L, 'a declaration only'),
     }),

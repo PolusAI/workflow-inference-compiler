@@ -19,6 +19,7 @@ from sophios.nf_types import (
     ExecutableNextflowWorkflow,
     NfPort,
     NfProcess,
+    NfProcessConnection,
     NfResources,
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
@@ -27,6 +28,8 @@ from sophios.nf_types import (
 from .test_composition import _PAIR_THEN_USE_PARAMS, _composed, _pair_then_use
 from .test_conditions import _when_workflow
 from .test_dotproduct import _scatter_with_file_array, _sleep_then_pair, _text_port
+from .test_step_inputs import _GATHERED, _ONE, _XS, _merged
+from .testkit import command, output_port
 
 
 def _scattered(
@@ -57,6 +60,14 @@ BUILDERS: dict[str, Callable[[], ExecutableNextflowWorkflow]] = {
     "gather and rescatter": lambda: _composed({"as": ["a"], "bs": ["b"], "n": 1, "gs": ["/tmp/g.txt"]}),
     "gather into a scattered step's array of paths": lambda: _pair_then_use("dotproduct", _PAIR_THEN_USE_PARAMS),
     "array of paths beside a scatter": lambda: _scatter_with_file_array("flat_crossproduct", ["/tmp/s.txt"]),
+    "step-input idioms": lambda: _merged(_GATHERED, _ONE, _XS),
+    "an unscattered output into a scatter": lambda: ExecutableNextflowWorkflow(
+        "PIPELINE",
+        [NfProcess("A", [], [output_port("f", "a.txt")], command("true")),
+         NfProcess("EACH", [NfPort("item", "val"), NfPort("f", "path")], [], command("true"))],
+        [NfWorkflowInputConnection("items", "EACH", "item", "dotproduct"), NfProcessConnection("A", "f", "EACH", "f")],
+        {"items": ["x"]}, {"items": "string[]"},
+    ),
 }
 
 
