@@ -1,10 +1,12 @@
-"""All 36 Phase 3 acceptance cells, each authored with the Python API and run under pinned Nextflow.
+"""The Phase 3 acceptance cells, each authored with the Python API and run under pinned Nextflow.
 
 Cells are defined in the offline Phase 3 design; the lowerings in
 design_docs/sophios_nextflow_backend.md §6. Expected values are what node
 computes, printed as JSON. Compatible cells share one run to
 keep the runtime lane lean; ``CELLS`` maps every cell to the test that runs it,
 and ``test_every_cell_is_claimed_by_a_runtime_test`` keeps that map total.
+A10, a computed ``valueFrom`` reaching a tool argument, has no runtime
+test: the backend rejects a computed ``valueFrom``.
 """
 
 # pylint: disable=missing-function-docstring
@@ -73,7 +75,7 @@ def _scatter_step(name: str, method: str, values: dict[str, Any]) -> Step:
     return step
 
 
-# A1-A10 ------------------------------------------------------------------
+# A1-A9 -------------------------------------------------------------------
 
 CALCULATIONS = {
     "A1": ["$(inputs.i + 0.5)", "$(3)"],
@@ -108,13 +110,20 @@ def _calc_workflow(whens: list[str], name: str) -> Workflow:
 @pytest.mark.nextflow
 @pytest.mark.serial
 def test_calculator(tmp_path: Path) -> None:
-    """A1-A10: each calculation, compared in a when with what node computes, runs its step."""
+    """A1-A9: each calculation, compared in a when with what node computes, runs its step.
+
+    Compared with twice that value, which no calculation yields since none is zero, it skips its step.
+    """
     expressions = [text for texts in CALCULATIONS.values() for text in texts]
     expected = CALCULATED.split()
-    whens = [f"$(({text[2:-1]}) === {value})" for text, value in zip(expressions, expected, strict=True)]
+    whens = [
+        f"$(({text[2:-1]}) === {value}{scale})"
+        for scale in ("", " * 2") for text, value in zip(expressions, expected, strict=True)
+    ]
     result, _ = _run(_calc_workflow(whens, "calc_cells"), tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert [_ran(tmp_path, f"c{index}.txt") for index in range(len(whens))] == [True] * len(whens)
+    ran = [_ran(tmp_path, f"c{index}.txt") for index in range(len(whens))]
+    assert ran == [True] * len(expected) + [False] * len(expected)
 
 
 @pytest.mark.nextflow
@@ -361,7 +370,7 @@ def test_gather_rescatter_and_composition(tmp_path: Path) -> None:
 
 
 CELLS = {
-    **{cell: test_calculator for cell in ("A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10")},
+    **{f"A{index}": test_calculator for index in range(1, 10)},
     "A11": test_calculator_failures,
     **{f"W{index}": test_predicates for index in range(1, 8)},
     "W8": test_skipped_step_yields_null_and_downstream_completes,
@@ -387,7 +396,9 @@ CELLS = {
 
 @pytest.mark.fast
 def test_every_cell_is_claimed_by_a_runtime_test() -> None:
-    expected = {f"A{n}" for n in range(1, 12)} | {f"W{n}" for n in range(1, 12)} | {f"S{n}" for n in range(1, 15)}
+    expected = (
+        {f"A{n}" for n in (*range(1, 10), 11)} | {f"W{n}" for n in range(1, 12)} | {f"S{n}" for n in range(1, 15)}
+    )
     assert set(CELLS) == expected
     module = sys.modules[__name__]
     for test in set(CELLS.values()):
