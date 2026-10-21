@@ -653,9 +653,11 @@ def _argument(
 
     ``methods`` maps every multi-input-scattered process to its method when
     the input broadcasts to the tasks of a scattered one. An unscattered
-    process emits one element per output; taken as it is, that queue would
-    pair with the first invocation only, so it is taken as one value
-    (design §6, Topology, Collection cardinality).
+    process emits one element per output. The output is a queue when one of
+    the process's inputs is, such as a conditional step's output, and taken
+    as it is that queue would pair with the first invocation only; on a value
+    channel ``.first()`` changes nothing (design §6, Topology, Collection
+    cardinality).
     """
     if isinstance(connection, NfStepInputConnection):
         return _step_input_expression(workflow, connection)
