@@ -2028,13 +2028,13 @@ def _scatter_findings(
 
 
 def _scatter_edge_findings(steps: list[Mapping[str, Any]]) -> list[str]:
-    """Reject every process edge whose cardinality a scattered step changes.
+    """Reject every process edge whose cardinality a scattered step changes and no lowering keeps.
 
-    A scattered step's output is a queue channel of one value per task, which
-    drives N downstream invocations where CWL gives the consumer one
-    invocation receiving an array; and a process output feeding a scattered
-    step is itself a queue channel, which would truncate the scatter to one
-    task instead of N.
+    A scattered step's output is gathered, in invocation order, into one
+    array; a nested_crossproduct result reaches workflow outputs only. An
+    unscattered step's output reaches a scattered step as one value: it
+    broadcasts to every task, and it is not an array to scatter over, since
+    no tool output is an array.
     """
     findings: list[str] = []
     indices = _step_indices_by_id(steps)
@@ -2054,11 +2054,10 @@ def _scatter_edge_findings(steps: list[Mapping[str, Any]]) -> list[str]:
                         f"steps[{step_index}].in.{raw_name}: {source!r} is a nested_crossproduct "
                         "result, which reaches workflow outputs only"
                     )
-            elif step_index in scattered:
+            elif raw_name in scattered.get(step_index, set()):
                 findings.append(
-                    f"steps[{step_index}].in.{raw_name}: a scattered step takes inputs from "
-                    f"workflow inputs or scattered steps; {source!r}, from a step that is not "
-                    "scattered, would truncate the scatter to one task"
+                    f"steps[{step_index}].in.{raw_name}: a scattered input needs an array-typed source; "
+                    f"{source!r}, from a step that is not scattered, is one value"
                 )
     return findings
 

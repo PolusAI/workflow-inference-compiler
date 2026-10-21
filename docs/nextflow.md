@@ -336,10 +336,10 @@ so same-named files never collide, and the input receives a list even when a
 single file was gathered. A gathered array may itself be a scatter
 source. A scattered step may carry a `when`, evaluated per invocation; the
 gathered result keeps `null` at each skipped position, so a conditional
-scatter's outputs can only reach a workflow output. A scattered step's
-inputs must come from workflow inputs or from a gathered scatter output — any
-other process output would truncate the scatter to one task. Scattering over
-an array-typed port, over a non-array source, and scattering a nested
+scatter's outputs can only reach a workflow output. An unscattered step's
+output reaches a scattered step as one value, which every task reads; it is
+not an array to scatter over, since no tool output is an array. Scattering
+over an array-typed port, over a non-array source, and scattering a nested
 workflow step are all rejected.
 
 An output named like one of the task's own staged inputs overwrites that
