@@ -7,6 +7,7 @@ already-inferred workflow graph without running inference a second time.
 
 The target fails closed: a CWL field, type, requirement or hint it does not
 consume is rejected by name, before any artifact is written, never dropped.
+[Field support](#field-support) lists what it does with each one.
 `target="nextflow"` accepts no user-written Groovy; every string you write is
 rendered as data.
 
@@ -495,3 +496,16 @@ gate on, so `when` on a tool that declares no inputs is rejected.
 - Structurally imported scripts remain opaque. CWL/Sophios import preserves representable
   names, ports, resources, and topology but does not promise executable
   equivalence for arbitrary shell or Groovy semantics.
+
+## Field support
+
+Every field the Nextflow target considers is in one of three states.
+*Lowered*: the generated pipeline carries it. *Compile-time*: Sophios uses it
+while compiling, and the Nextflow output carries nothing for it. *Rejected*:
+compiling stops, naming the field with the note as the reason, and writes no
+artifacts. A field or class missing from these tables is rejected too. For
+Sophios's own classes, the *Sophios* column is what Sophios does with the
+field when it compiles to CWL: *native* when Sophios reads it and acts on it,
+*passthrough* when it copies it out unchanged.
+
+<!-- nf-support-table -->
