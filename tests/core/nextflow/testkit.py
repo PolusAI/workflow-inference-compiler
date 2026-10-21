@@ -210,21 +210,19 @@ def single_process_workflow(
 
 def execute_nextflow(
     directory: Path,
-    *,
+    *arguments: str,
     timeout: int = 90,
-    preview: bool = False,
 ) -> "subprocess.CompletedProcess[str]":
-    """Run the generated artifacts in ``directory`` under pinned harness rules."""
+    """Run the generated artifacts in ``directory`` under pinned harness rules, with extra ``arguments``."""
     run_env = dict(os.environ)
     run_env.update({
         "NXF_ANSI_LOG": "false",
         "NXF_HOME": str(directory / ".nxf-home"),
         "NXF_OFFLINE": "true",
     })
-    run_command = ["nextflow", "run"]
-    if preview:
-        run_command.append("-preview")
-    run_command.extend([
+    run_command = [
+        "nextflow",
+        "run",
         "workflow.nf",
         "-params-file",
         "nextflow_params.json",
@@ -232,7 +230,8 @@ def execute_nextflow(
         "nextflow.config",
         "-work-dir",
         str(directory / "work"),
-    ])
+        *arguments,
+    ]
     return subprocess.run(
         run_command,
         cwd=directory,

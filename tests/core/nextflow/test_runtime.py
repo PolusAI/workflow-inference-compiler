@@ -188,7 +188,7 @@ def test_large_memory_directive_is_valid_nextflow_syntax(tmp_path: Path) -> None
     )
     write_nextflow_artifacts(workflow, tmp_path)
 
-    result = execute_nextflow(tmp_path, preview=True)
+    result = execute_nextflow(tmp_path, "-preview")
 
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 

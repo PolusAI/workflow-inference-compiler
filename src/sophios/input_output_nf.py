@@ -44,6 +44,16 @@ NEXTFLOW_PARAMS = "nextflow_params.json"
 # The arity an array-typed path input declares: any number of files, none
 # included, always delivered to the script as a list.
 NF_ARRAY_PATH_ARITY = "0..*"
+NF_STUB_MESSAGE = "Sophios-generated Nextflow does not support dry runs (-stub-run)"
+# Every process ends with this stub block, so -stub-run stops at its first task
+# instead of running the real command, which a process with no stub would do.
+NF_STUB_LINES = (
+    "stub:",
+    '"""',
+    f"echo '{NF_STUB_MESSAGE}' >&2",
+    "exit 1",
+    '"""',
+)
 NF_SHELL_QUOTE_FUNCTION = f'''def {NF_SHELL_QUOTE_HELPER}(value) {{
     return "'" + value.toString().replace("'", "'\\\"'\\\"'") + "'"
 }}'''
@@ -290,7 +300,7 @@ def _render_process(
         lines.extend(["    (", f"    {command}", f"    ){redirects}"])
     else:
         lines.append(f"    {command}{redirects}")
-    lines.extend(['    \"\"\"', "}"])
+    lines.extend(['    \"\"\"', "", *(f"    {line}" for line in NF_STUB_LINES), "}"])
     return "\n".join(lines)
 
 
