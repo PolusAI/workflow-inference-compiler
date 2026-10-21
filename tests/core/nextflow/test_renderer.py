@@ -81,7 +81,7 @@ def test_renders_real_compiled_source_with_typed_glob(
 ) -> None:
     rendered = render_nextflow(compiled_source_to_nextflow(real_supported_result))
     assert "path \"${filename}\", arity: '1', emit: result" in rendered
-    assert "wf__step__2__copy(wf__step__1__touch.out.result)" in rendered
+    assert "copy(touch.out.result)" in rendered
 
 
 @pytest.mark.serial

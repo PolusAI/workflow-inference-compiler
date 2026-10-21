@@ -90,12 +90,12 @@ def _identifier(value: Any, *, context: str, variable: bool = True) -> str:
     return identifier
 
 
-def _normalized_identifiers(values: Iterable[Any], *, context: str) -> dict[Any, str]:
+def _normalized_identifiers(values: Iterable[Any], *, context: str, variable: bool = True) -> dict[Any, str]:
     """Normalize source identifiers and reject every many-to-one mapping."""
     normalized_by_source: dict[Any, str] = {}
     sources_by_normalized: dict[str, list[Any]] = {}
     for source in values:
-        normalized = _identifier(source, context=f"{context} identifier")
+        normalized = _identifier(source, context=f"{context} identifier", variable=variable)
         normalized_by_source[source] = normalized
         sources_by_normalized.setdefault(normalized, []).append(source)
 
@@ -118,10 +118,11 @@ def _identifier_normalization_findings(
     *,
     context: str,
     path: str,
+    variable: bool = True,
 ) -> list[str]:
     """Return a capability finding when source names collapse during normalization."""
     try:
-        _normalized_identifiers(values, context=context)
+        _normalized_identifiers(values, context=context, variable=variable)
     except ValueError as exc:
         return [f"{path}: {exc}"]
     return []
@@ -2025,6 +2026,14 @@ def _workflow_capability_findings(
         case _:
             pass
 
+    findings.extend(
+        _identifier_normalization_findings(
+            [step.get("id") for step in steps],
+            context="workflow step",
+            path="workflow.steps",
+            variable=False,
+        )
+    )
     for step_index, step in enumerate(steps):
         step_path = f"steps[{step_index}]"
         findings.extend(
@@ -2911,6 +2920,7 @@ def _default_bindings(
     steps: list[Mapping[str, Any]],
     tools: tuple[Mapping[str, Any], ...],
     processes: list[NfProcess],
+    workflow_inputs: Iterable[str],
 ) -> tuple[list[NfWorkflowInputConnection], dict[str, Any]]:
     """Synthesize workflow-input connections for every unwired process input.
 
@@ -2918,9 +2928,12 @@ def _default_bindings(
     with no default. Capability analysis has already proven any remaining
     unwired, no-default optional input is a safe absence, so this always
     contributes a null value for those rather than re-deriving safety.
+
+    Each parameter is made as the compiler makes a name, `<step>~<port>`, and
+    normalized; one that normalizes like another or like a workflow input is
+    rejected, naming both.
     """
-    connections: list[NfWorkflowInputConnection] = []
-    params: dict[str, Any] = {}
+    made: list[tuple[str, str, str, Any]] = []
     for step, tool, process in zip(steps, tools, processes, strict=True):
         bound = _as_mapping(step.get("in", {}), error="compiled step inputs must be a mapping")
         inputs = _as_mapping(tool.get("inputs", {}), error="tool inputs must be a mapping")
@@ -2938,10 +2951,12 @@ def _default_bindings(
             else:
                 continue
             port_name = _identifier(raw_name, context="defaulted process input")
-            param_name = _identifier(f"{process.name}___{port_name}", context="default parameter")
-            connections.append(NfWorkflowInputConnection(param_name, process.name, port_name))
-            params[param_name] = value
-    return connections, params
+            made.append((f"{step['id']}~{raw_name}", process.name, port_name, value))
+    names = _normalized_identifiers([*workflow_inputs, *(name for name, *_ in made)], context="workflow parameter")
+    return (
+        [NfWorkflowInputConnection(names[name], process, port) for name, process, port, _value in made],
+        {names[name]: value for name, _process, _port, value in made},
+    )
 
 
 def _json_value(value: Any) -> Any:
@@ -3086,13 +3101,8 @@ def compiled_source_to_nextflow(
     findings.extend(_container_policy_findings(tools))
     _raise_capability_findings(findings)
     try:
-        default_connections, default_params = _default_bindings(steps, tools, processes)
         params = _workflow_params(workflow, compiled.params)
-        if collisions := sorted(set(params) & set(default_params)):
-            raise ValueError(
-                "lowered workflow parameter names collide: "
-                f"{', '.join(collisions)}"
-            )
+        default_connections, default_params = _default_bindings(steps, tools, processes, workflow.get("inputs", {}))
         params.update(default_params)
         return ExecutableNextflowWorkflow(
             name=_identifier(compiled.name, context="workflow name", variable=False),

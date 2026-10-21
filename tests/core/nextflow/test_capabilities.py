@@ -601,6 +601,20 @@ def test_aggregates_workflow_input_collisions_with_other_findings() -> None:
 
 
 @pytest.mark.fast
+def test_rejects_step_identifier_collisions_naming_both_steps() -> None:
+    """A repeated id carries `@<position>`; it and an authored id may normalize alike."""
+    rose = synthetic_source(
+        workflow_doc([step("touch@2"), step("touch_2")]),
+        [tool("touch@2"), tool("touch_2")],
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"workflow\.steps: workflow step identifiers 'touch@2', 'touch_2' normalize to 'touch_2'",
+    ):
+        compiled_source_to_nextflow(rose)
+
+
+@pytest.mark.fast
 def test_rejects_tool_port_identifier_collisions() -> None:
     collision = tool(
         "COLLISION",
@@ -2028,7 +2042,7 @@ def test_resolved_subworkflow_projects_to_a_namespaced_process(
     real_nested_result: CompilationResult,
 ) -> None:
     names = [process.name for process in compiled_source_to_nextflow(real_nested_result).processes]
-    assert any("child_wic___child__step__1__inner_copy" in name for name in names)
+    assert "child_inner_copy" in names
 
 
 @pytest.mark.fast
@@ -2059,9 +2073,7 @@ def test_a_resolved_subworkflow_output_reaches_a_downstream_outer_step() -> None
 @pytest.mark.fast
 def test_resolved_nesting_deeper_than_one_level_projects_recursively() -> None:
     workflow = compiled_source_to_nextflow(_deep_nested_result())
-    assert len([process for process in workflow.processes if "inner_copy" in process.name]) == 1
-    assert any("middle_wic" in process.name and "leaf_wic" in process.name
-               for process in workflow.processes)
+    assert [process.name for process in workflow.processes] == ["write", "middle_leaf_inner_copy"]
 
 
 @pytest.mark.fast
@@ -2637,8 +2649,8 @@ def test_lowering_rejections_aggregate_with_every_other_finding_by_step() -> Non
     rose = synthetic_source(
         workflow_doc(
             [
-                step("GATED", **{"in": {"a": "a"}, "when": "$(inputs.a ** 2 > 1)"}),
-                step("GATED", **{"in": {"a": "a"}, "when": "$(inputs.a + 1)"}),
+                step("GATED@1", **{"in": {"a": "a"}, "when": "$(inputs.a ** 2 > 1)"}),
+                step("GATED@2", **{"in": {"a": "a"}, "when": "$(inputs.a + 1)"}),
                 step("UNSUPPORTED"),
             ],
             inputs={"a": "int"},

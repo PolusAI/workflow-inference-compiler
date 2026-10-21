@@ -57,6 +57,18 @@ with a CWL-only option such as `--generate_cwl_workflow`, `--run_local`,
 `--generate_run_script`, `--inputs_file`, `--outdir`, `--graphviz` or
 `--partial_failure_enable`.
 
+## Names
+
+Process and parameter names come from the step ids of the compiled CWL. A
+step id is as written, and a repeated id carries `@<position>`. A name
+Sophios makes joins the step and the port with `~`, as `touch~filename`, and
+a step in a nested workflow is named through the step that calls it, as
+`child~inner_copy`. Characters Nextflow does not allow in a name become `_`,
+so these become the parameter `touch_filename` and the process
+`child_inner_copy`; a name Nextflow would read as something else, such as a
+reserved word, gains a leading `_`. Two names that become the same are
+rejected, and the message names both as written.
+
 ## Importing supported DSL2
 
 ```python
@@ -323,10 +335,9 @@ root = Workflow([write, child], "root")
 
 The core compiler resolves composition, validates workflow boundaries, and
 connects each nested input and output before backend lowering. The Nextflow
-backend recursively projects the resolved leaf steps as processes, named from
-their full Sophios namespace with `___`, so separate instantiations never
-collide. The generated artifacts are flat; nested DSL2 `workflow` blocks are
-not emitted.
+backend recursively projects the resolved leaf steps as processes, named as
+[Names](#names) says. The generated artifacts are flat; nested DSL2
+`workflow` blocks are not emitted.
 
 The core semantic pipeline rejects invalid boundary declarations, including
 unbound subworkflow inputs and outputs that do not resolve to a child step.
