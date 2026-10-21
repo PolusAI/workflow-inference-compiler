@@ -436,32 +436,30 @@ another process is rejected, because every process output before this one
 carried the `path` qualifier and the executable graph has no qualifier
 agreement check for process edges yet.
 
-## Computed values
-
-A `valueFrom` on an `arguments` entry or a scalar `inputBinding` may compute a
-number with the safe JavaScript subset: numbers, `inputs.<name>` references to
-required scalar inputs, parentheses, unary `+ -`, `* / % + -`, and
-`Math.abs`, `sqrt`, `floor`, `ceil`, `round`, `pow`, `min`, `max`. Numbers are
-binary64 as in JavaScript, so integers are exact only within ±2^53. The whole
-field must be one `$( … )`. Anything outside the subset is rejected by name.
-
-A NaN or ±Infinity anywhere in the computation, such as division by zero,
-fails the task with the step, field, expression, subexpression, and input
-values; CWL would instead carry the value on. The result is printed as cwltool
-prints it; a result that would need exponent notation, or a non-integral
-result bound to an `int` input, fails the task. A computed
-`valueFrom` on an optional input, or beside `separate: false`, is rejected.
-
 ## Conditional steps
 
-A `CommandLineTool` step's `when` may be a boolean-typed safe-subset
-expression over the inputs the step binds and its tool declares. Beside the numeric subset it may
-compare (`== != === !== < <= > >=`), combine (`! && ||`), and use string,
-boolean and `null` literals; ordered comparisons take numbers. A true condition runs the
-process; a false condition runs no task, and the step's outputs are `null`,
-carried by the same `[]` sentinel the absent-optional lowering uses, so a
-skipped invocation still emits exactly one element per output and downstream
-channels never hang.
+A `CommandLineTool` step's `when` may be a boolean-typed expression in the
+safe JavaScript subset, over the inputs the step binds and its tool declares.
+The whole field is one `$( … )`. It may use numbers, `true`, `false`, `null`
+and quoted strings; `inputs.<name>` of a `boolean`, `int`, `float` or
+`string` input; parentheses; `! - +`; `* / % + -`; `== != === !== < <= > >=`;
+`&& ||`; and `Math.abs`, `sqrt`, `floor`, `ceil`, `round`, `pow`, `min` and
+`max`. Arithmetic and ordered comparisons take numbers, and `+` never joins
+strings. Numbers are binary64 as in JavaScript, so integers are exact only
+within ±2^53. A NaN or ±Infinity anywhere in the evaluation, such as a
+division by zero, fails the run; the Nextflow log names the step, the
+expression, the subexpression and the input values. CWL would carry the value
+on. Anything outside the subset is rejected by name.
+
+`when` is the only field that may compute. A `valueFrom` on an `arguments`
+entry or an `inputBinding` is literal text or a `$(inputs.<name>)` reference
+(with `.path` or `.basename` on a `File` or `Directory` input); a computed
+`valueFrom` is rejected by name.
+
+A true condition runs the process; a false condition runs no task, and the
+step's outputs are `null`, carried by the same `[]` sentinel the
+absent-optional lowering uses, so a skipped invocation still emits exactly one
+element per output and downstream channels never hang.
 
 A null check on an optional input, `inputs.x === null` or `inputs.x !== null`,
 tests for that sentinel too: `=== null` is true for an absent input or for a

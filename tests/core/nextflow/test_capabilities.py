@@ -2728,7 +2728,7 @@ def test_lowering_rejections_aggregate_with_every_other_finding_by_step() -> Non
 @pytest.mark.parametrize(("inputs", "message"), [
     ({"b": {"type": "boolean", "inputBinding": {"prefix": ""}}}, "prefix for 'b' must be a non-empty string"),
     ({"s": {"type": "string", "inputBinding": {"separate": False}}}, "separate cannot be specified without a prefix"),
-    ({"xs": {"type": {"type": "array", "items": "string"}, "inputBinding": {"valueFrom": "$(self)"}}}, "valueFrom"),
+    ({"xs": {"type": {"type": "array", "items": "string"}, "inputBinding": {"valueFrom": "x"}}}, "valueFrom"),
 ], ids=["empty-boolean-prefix", "separate-without-prefix", "array-valuefrom"])
 def test_a_lowering_only_rejection_is_a_finding_at_its_step(inputs: Any, message: str) -> None:
     values = {"b": True, "s": "x", "xs": ["x"]}

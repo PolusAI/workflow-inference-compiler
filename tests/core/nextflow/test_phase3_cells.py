@@ -2,7 +2,7 @@
 
 Cells are defined in the offline Phase 3 design; the lowerings in
 design_docs/sophios_nextflow_backend.md §6. Expected values are what node
-computes, printed as cwltool prints them. Compatible cells share one run to
+computes, printed as JSON. Compatible cells share one run to
 keep the runtime lane lean; ``CELLS`` maps every cell to the test that runs it,
 and ``test_every_cell_is_claimed_by_a_runtime_test`` keeps that map total.
 """
@@ -89,47 +89,44 @@ CALCULATIONS = {
 CALCULATED = "7.5 3 5.75 3.9375 -1 3 49 0.4444444444444444 -27 10 5 -2 10000000000000000000 1 2.25"
 
 
+def _calc_tool(name: str) -> CommandLineTool:
+    tool = CommandLineTool(name, Inputs(i=Input(cwl.int), x=Input(cwl.float)),
+                           Outputs(out=Output(cwl.file, glob=f"{name}.txt")))
+    return tool.base_command("touch").argument(f"{name}.txt", position=1)
+
+
+def _calc_workflow(whens: list[str], name: str) -> Workflow:
+    steps = []
+    for index, when in enumerate(whens):
+        step = Step(_calc_tool(f"c{index}"), step_name=f"c{index}")
+        step.inputs.i, step.inputs.x = 7, 2.25
+        step.when = when
+        steps.append(step)
+    return Workflow(steps, name)
+
+
 @pytest.mark.nextflow
 @pytest.mark.serial
 def test_calculator(tmp_path: Path) -> None:
-    tool = CommandLineTool("calc", Inputs(i=Input(cwl.int), x=Input(cwl.float)), Outputs(line=_text_output()))
-    tool = tool.base_command("printf").stdout("out.txt").argument("%s " * 14 + "%s", position=0)
+    """A1-A10: each calculation, compared in a when with what node computes, runs its step."""
     expressions = [text for texts in CALCULATIONS.values() for text in texts]
-    for position, text in enumerate(expressions, start=1):
-        tool = tool.argument(text, position=position)
-    step = Step(tool, step_name="calc")
-    step.inputs.i, step.inputs.x = 7, 2.25
-    root = Workflow([step], "calc_cells")
-    root.outputs.line = step.outputs.line
-    result, observed = _run(root, tmp_path, "line")
+    expected = CALCULATED.split()
+    whens = [f"$(({text[2:-1]}) === {value})" for text, value in zip(expressions, expected, strict=True)]
+    result, _ = _run(_calc_workflow(whens, "calc_cells"), tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert observed["line"] == [CALCULATED]
+    assert [_ran(tmp_path, f"c{index}.txt") for index in range(len(whens))] == [True] * len(whens)
 
 
 @pytest.mark.nextflow
 @pytest.mark.serial
-@pytest.mark.parametrize(("binding", "message"), [
-    ({"argument": "$(inputs.i / (inputs.i - 7))"}, "(inputs.i / (inputs.i - 7)) is Infinity"),
-    ({"value_from": "$(inputs.x / 3)"}, "is not integral but binds an integer port"),
-    ({"argument": "$(inputs.x / 1e20)"}, "needs exponent notation, which is not supported"),
-])
-def test_calculator_failures(binding: dict[str, str], message: str, tmp_path: Path) -> None:
-    """A11: each failure is deterministic and named; no task output is produced."""
-    ports = {"i": Input(cwl.int), "x": Input(cwl.float)}
-    if "value_from" in binding:
-        ports["n"] = Input(cwl.int, position=1, value_from=binding["value_from"])
-    tool = CommandLineTool("fail", Inputs(**ports), Outputs(out=Output(cwl.file, glob="out.txt")))
-    tool = tool.base_command("echo").stdout("out.txt")
-    if "argument" in binding:
-        tool = tool.argument(binding["argument"], position=2)
-    step = Step(tool, step_name="fail")
-    step.inputs.i, step.inputs.x = 7, 2.25
-    if "value_from" in binding:
-        step.inputs.n = 1
-    result, _ = _run(Workflow([step], "fail_cells"), tmp_path)
+def test_calculator_failures(tmp_path: Path) -> None:
+    """A11: a non-finite subexpression fails the run, named; no task output is produced."""
+    result, _ = _run(_calc_workflow(["$(inputs.i / (inputs.i - 7) > 0)"], "fail_cells"), tmp_path)
     assert result.returncode != 0
-    assert message in result.stdout + result.stderr
-    assert not _ran(tmp_path, "out.txt")
+    # A when is evaluated by an operator, not a task, so Nextflow logs the cause.
+    log = (tmp_path / ".nextflow.log").read_text(encoding="utf-8")
+    assert "Sophios expression c0 when ((inputs.i / (inputs.i - 7)) > 0): (inputs.i / (inputs.i - 7)) is Infinity" in log
+    assert not _ran(tmp_path, "c0.txt")
 
 
 # W1-W11 ------------------------------------------------------------------
@@ -327,12 +324,12 @@ def test_file_arrays_scatter_and_a_file_broadcasts(tmp_path: Path) -> None:
 @pytest.mark.nextflow
 @pytest.mark.serial
 def test_gather_rescatter_and_composition(tmp_path: Path) -> None:
-    """S12, S13, S14: calculator binding and dotproduct, gathered into a later scatter over Files,
+    """S12, S13, S14: a templated argument and dotproduct, gathered into a later scatter over Files,
     gathered again into one step and, independently, into a second consumer; each gather keeps order."""
     pair = CommandLineTool(
         "pair", Inputs(a=Input(cwl.string, position=1), b=Input(cwl.string, position=2), n=Input(cwl.int)),
         Outputs(out=Output(cwl.file, glob="out.txt")),
-    ).base_command("echo").stdout("out.txt").argument("$(inputs.n * 10)", position=3)
+    ).base_command("echo").stdout("out.txt").argument("$(inputs.n)0", position=3)
     join = CommandLineTool(
         "join", Inputs(f=Input(cwl.file, position=1), g=Input(cwl.file, position=2)),
         Outputs(out=Output(cwl.file, glob="joined.txt")),
