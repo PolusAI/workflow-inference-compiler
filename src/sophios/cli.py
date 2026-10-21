@@ -94,7 +94,8 @@ neutral.add_argument('--diagnostics', choices=['text', 'json'], default='text',
                      help='''How diagnostics are printed on stderr: text, or one JSON object per line
                      for programs and agents (see docs/error_codes.md)''')
 neutral.add_argument('--basepath', type=str, required=False, default=DEFAULT_BASEPATH,
-                     help='Directory, relative to the working directory, for the compiled workflow, the job file, '
+                     help='Directory, relative to the working directory, for the compiled workflow and the job file, '
+                     'or under --target nextflow the Nextflow files, '
                      'the real-time plans, provenance, the drawings, the schema and the default --outdir. '
                      'Workflow.run(basepath=) in Python is the same')
 
