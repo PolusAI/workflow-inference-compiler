@@ -683,8 +683,8 @@ def test_rejects_a_gathered_output_rescattered_into_an_array_marked_port(method:
 
 
 @pytest.mark.fast
-def test_rejects_one_parameter_adapted_at_only_some_sinks() -> None:
-    """The adapter is part of the channel contract, like path_kind and is_array."""
+def test_rejects_one_parameter_scattered_at_one_sink_and_taken_as_a_scalar_at_another() -> None:
+    """A scattered sink takes the whole array, so the parameter carries a list there and a scalar here."""
     scattered = NfProcess("SCATTER", [NfPort("item", "val")], [], command("true"))
     whole = NfProcess("WHOLE", [NfPort("item", "val")], [], command("true"))
     with pytest.raises(ValueError, match="incompatible channel qualifiers"):
@@ -697,6 +697,28 @@ def test_rejects_one_parameter_adapted_at_only_some_sinks() -> None:
             ],
             {"items": ["a", "b"]},
         )
+
+
+@pytest.mark.fast
+def test_one_array_parameter_may_be_scattered_differently_and_taken_whole() -> None:
+    """An adapter belongs to its scattered process; every sink here takes the whole array (design §5.2)."""
+    pair = NfProcess("PAIR", [NfPort("item", "val"), NfPort("tag", "val")], [], command("true"))
+    each = NfProcess("EACH", [NfPort("item", "val")], [], command("true"))
+    whole = NfProcess(
+        "WHOLE", [NfPort("items", "val", is_array=True)], [],
+        NfCommand((NfTemplate((NfLiteral("echo"),)), NfArrayBinding("items"))),
+    )
+    ExecutableNextflowWorkflow(
+        "wf",
+        [pair, each, whole],
+        [
+            NfWorkflowInputConnection("items", "PAIR", "item", "flat_crossproduct"),
+            NfWorkflowInputConnection("tags", "PAIR", "tag", "flat_crossproduct"),
+            NfWorkflowInputConnection("items", "EACH", "item", "dotproduct"),
+            NfWorkflowInputConnection("items", "WHOLE", "items"),
+        ],
+        {"items": ["a", "b"], "tags": ["t"]},
+    )
 
 
 @pytest.mark.fast

@@ -32,6 +32,7 @@ from .nf_types import (
     NfTemplate,
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
+    channel_construction,
     process_dependencies,
     topological_order,
 )
@@ -646,24 +647,24 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
 def _workflow_input_sink(
     workflow: ExecutableNextflowWorkflow,
     name: str,
-) -> tuple[NfWorkflowInputConnection, NfPort]:
+) -> tuple[NfPort, str | None]:
+    """One sink port of a workflow parameter, and the adapter on its connection."""
     processes = _process_map(workflow)
     for connection in workflow.connections:
         if isinstance(connection, NfWorkflowInputConnection) and connection.from_port == name:
             process = processes[connection.to_process]
             port = next(port for port in process.inputs if port.name == connection.to_port)
-            return connection, port
+            return port, connection.adapter
     raise ValueError(f"workflow input {name!r} is not connected")
 
 
 def _parameter_expression(workflow: ExecutableNextflowWorkflow, name: str) -> str:
-    connection, port = _workflow_input_sink(workflow, name)
-    # A scattered parameter carries the whole source array; the graph validator keeps every sink of one parameter in
-    # agreement, so one sink decides the construction for all of them.
-    carries_list = port.is_array or connection.adapter is not None
-    if port.qualifier == "path":
-        path_type = "dir" if port.path_kind == "directory" else "file"
-        if carries_list:
+    # The graph validator keeps every sink of one parameter in agreement on
+    # this construction, so one sink decides it for all of them.
+    channel = channel_construction(*_workflow_input_sink(workflow, name))
+    if channel.path_kind is not None:
+        path_type = "dir" if channel.path_kind == "directory" else "file"
+        if channel.carries_list:
             # One Channel.value(...) element holding a Groovy list, so
             # Nextflow stages every element for a single process call
             # instead of fanning the channel out over several calls.
