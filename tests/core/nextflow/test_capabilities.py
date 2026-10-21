@@ -5,6 +5,7 @@
 import copy
 from collections.abc import Mapping
 from dataclasses import replace
+from pathlib import Path
 import re
 from typing import Any, cast
 
@@ -119,10 +120,29 @@ def test_rejects_every_unconsumed_tool_field_before_lowering() -> None:
     message = str(error.value)
     assert "steps[0].run.successCodes" in message
     assert "steps[0].run.inputs.reference.secondaryFiles" in message
-    assert "steps[0].run.inputs.reference.format" in message
+    assert "steps[0].run.inputs.reference.format" not in message  # compile-time: read by EDAM inference
     assert "steps[0].run.inputs.reference.inputBinding.itemSeparator" in message
     assert "steps[0].run.inputs.reference.inputBinding.loadContents" in message
     assert "steps[0].run.requirements.DockerRequirement.dockerOutputDirectory" in message
+
+
+@pytest.mark.fast
+def test_a_literal_file_into_a_format_declaring_input_lowers_to_its_path(tmp_path: Path) -> None:
+    """Sophios writes the input's `format` on the File value; like the input's, it is compile-time (design §3)."""
+    source = tmp_path / "in.mdin"
+    source.write_text("x", encoding="utf-8")
+    fmt = CommandLineTool(
+        "fmt",
+        Inputs(src=Input(cwl.file, position=1, format="edam:format_2330")),
+        Outputs(out=Output(cwl.file, glob="out.txt")),
+    ).base_command("cat")
+    step_ = Step(fmt, step_name="fmt")
+    step_.inputs.src = str(source)
+    result = compile_workflow_result(Workflow([step_], "wf"))
+    assert list(result.artifact.job_inputs.values()) == [
+        {"class": "File", "location": str(source), "format": "edam:format_2330"}
+    ]
+    assert list(compiled_source_to_nextflow(result).params.values()) == [{"class": "File", "path": str(source)}]
 
 
 @pytest.mark.fast
@@ -1561,7 +1581,7 @@ def test_rejects_value_from_on_an_array_binding() -> None:
 @pytest.mark.fast
 def test_rejects_item_separator_on_an_array_binding() -> None:
     rose = _array_rose("string", ["a", "b"], itemSeparator=",")
-    with pytest.raises(ValueError, match=r"itemSeparator.*not consumed by the Nextflow lowering"):
+    with pytest.raises(ValueError, match=r"inputBinding\.itemSeparator: itemSeparator is not supported"):
         compiled_source_to_nextflow(rose)
 
 
@@ -2256,7 +2276,7 @@ def test_rejects_unsupported_nested_workflow_requirements() -> None:
 def test_rejects_every_unconsumed_nested_workflow_field() -> None:
     result = copy.deepcopy(_nested_result())
     _nested_artifacts(result)[0].cwl["hints"] = {"ResourceRequirement": {}}
-    with pytest.raises(ValueError, match=r"\.run\.hints: hints is not consumed"):
+    with pytest.raises(ValueError, match=r"\.run\.hints: workflow hints are not supported"):
         compiled_source_to_nextflow(result)
 
 
@@ -2268,8 +2288,8 @@ def test_rejects_unconsumed_nested_workflow_port_fields() -> None:
     next(iter(child["outputs"].values()))["pickValue"] = "first_non_null"
     with pytest.raises(ValueError) as error:
         compiled_source_to_nextflow(result)
-    assert "secondaryFiles is not consumed" in str(error.value)
-    assert "pickValue is not consumed" in str(error.value)
+    assert "secondaryFiles are not supported" in str(error.value)
+    assert "a workflow output's pickValue is not supported" in str(error.value)
 
 
 @pytest.mark.fast
@@ -2294,7 +2314,7 @@ def test_rejects_unconsumed_workflow_call_input_semantics() -> None:
         for name, definition in wrapper["in"].items()
     }
     result = _with_wrapper_semantic(result, **{"in": inputs})
-    with pytest.raises(ValueError, match="valueFrom is not consumed"):
+    with pytest.raises(ValueError, match="a step input's valueFrom is not supported"):
         compiled_source_to_nextflow(result)
 
 
@@ -2305,7 +2325,7 @@ def test_nested_capability_findings_aggregate_across_workflow_calls() -> None:
         child.cwl["hints"] = {"ResourceRequirement": {}}
     with pytest.raises(ValueError) as error:
         compiled_source_to_nextflow(result)
-    assert str(error.value).count("hints is not consumed") == 2
+    assert str(error.value).count("workflow hints are not supported") == 2
 
 
 @pytest.mark.fast
@@ -2704,7 +2724,7 @@ def test_a_captured_value_cannot_feed_another_process() -> None:
 @pytest.mark.fast
 def test_lowering_rejections_aggregate_with_every_other_finding_by_step() -> None:
     gated = tool("GATED", inputs={"a": {"type": "int"}}, baseCommand="true")
-    unsupported = tool("UNSUPPORTED", requirements={"NetworkAccess": {"networkAccess": True}})
+    unsupported = tool("UNSUPPORTED", requirements={"ToolTimeLimit": {"timelimit": 60}})
     rose = synthetic_source(
         workflow_doc(
             [
@@ -2719,7 +2739,7 @@ def test_lowering_rejections_aggregate_with_every_other_finding_by_step() -> Non
     )
     findings = _findings(rose)
     assert [finding.split(":", 1)[0] for finding in findings] == [
-        "steps[0]", "steps[1]", "steps[2].run.requirements.NetworkAccess",
+        "steps[0]", "steps[1]", "steps[2].run.requirements.ToolTimeLimit",
     ]
     assert "must compute a boolean" in findings[1]
 

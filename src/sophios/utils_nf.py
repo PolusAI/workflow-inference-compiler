@@ -15,6 +15,7 @@ from .ir.types import Direction, Edge, PortId, StepNode, WorkflowGraph
 from .nf_expr import (
     Expr, check as check_safe_subset, is_safe_subset_text, parse as parse_safe_subset, references,
 )
+from .nf_support import FIELDS, REQUIREMENT_CLASSES, Row, State, consumed
 from .nf_symbols import normalize_nextflow_identifier
 from .nf_types import (
     ExecutableNextflowWorkflow,
@@ -981,11 +982,6 @@ _NAMED_OUTPUT_EVAL_REJECTIONS: Mapping[str, str] = MappingProxyType({
     "$(self[0].secondaryFiles)": "secondary files have no approved lowering",
     "$(self[0].format)": "output format annotations have no approved lowering",
 })
-_LOAD_CONTENTS_INPUT_REASON = (
-    "loadContents on an input is a separate lowering from the output capture form and "
-    "is not implemented: an input's contents would have to become a value channel read "
-    "at staging time"
-)
 
 
 def _output_capture(raw_name: Any, definition: Mapping[str, Any]) -> str | None:
@@ -1094,113 +1090,18 @@ def _output_capture(raw_name: Any, definition: Mapping[str, Any]) -> str | None:
     return capture
 
 
-_SUPPORTED_REQUIREMENTS = frozenset({
-    "DockerRequirement",
-    "InitialWorkDirRequirement",
-    "InlineJavascriptRequirement",
-    "ResourceRequirement",
-    "ShellCommandRequirement",
-})
-
-_INERT_DOCUMENTATION_FIELDS = frozenset({"doc", "label"})
-_TOOL_CONSUMED_FIELDS = frozenset({
-    "$namespaces",
-    "$schemas",
-    "arguments",
-    "baseCommand",
-    "class",
-    "cwlVersion",
-    "hints",
-    "id",
-    "inputs",
-    "outputs",
-    "requirements",
-    "stderr",
-    "stdin",
-    "stdout",
-}) | _INERT_DOCUMENTATION_FIELDS
-_INPUT_CONSUMED_FIELDS = (
-    frozenset({"default", "inputBinding", "loadContents", "type"})
-    | _INERT_DOCUMENTATION_FIELDS
-)
-_INPUT_BINDING_CONSUMED_FIELDS = frozenset({
-    "loadContents",
-    "position",
-    "prefix",
-    "separate",
-    "shellQuote",
-    "valueFrom",
-})
-_OUTPUT_CONSUMED_FIELDS = (
-    frozenset({"outputBinding", "type"}) | _INERT_DOCUMENTATION_FIELDS
-)
-# loadContents and outputEval are analyzed by _output_capture rather than
-# reported by the generic unconsumed-field pass, so they are consumed here.
-_OUTPUT_BINDING_CONSUMED_FIELDS = frozenset({"glob", "loadContents", "outputEval"})
+# Keys a compiled CWL document carries beside its class's fields.
+_DOCUMENT_KEYS = frozenset({"$namespaces", "$schemas"})
+_SUPPORTED_REQUIREMENTS = consumed(REQUIREMENT_CLASSES["CommandLineTool"])
+_SUPPORTED_WORKFLOW_REQUIREMENTS = consumed(REQUIREMENT_CLASSES["Workflow"])
+_TOOL_CONSUMED_FIELDS = consumed(FIELDS["CommandLineTool"]) | _DOCUMENT_KEYS
+_WORKFLOW_CONSUMED_FIELDS = consumed(FIELDS["Workflow"]) | _DOCUMENT_KEYS | {"sophios:lang_version"}
+# Inlining replaces a nested workflow's input with the calling step's binding,
+# where CWL would apply the input's default to a null one.
+_NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS = consumed(FIELDS["WorkflowInputParameter"]) - {"default"}
 # The outputBinding fields that declare capture behavior, as opposed to naming
 # the file to capture.
 _OUTPUT_CAPTURE_FIELDS = frozenset({"loadContents", "outputEval"})
-_ARGUMENT_CONSUMED_FIELDS = frozenset({
-    "position",
-    "prefix",
-    "separate",
-    "shellQuote",
-    "valueFrom",
-})
-_SUPPORTED_REQUIREMENT_FIELDS = {
-    "DockerRequirement": frozenset({"class", "dockerImageId", "dockerPull"}),
-    "InitialWorkDirRequirement": frozenset({"class", "listing"}),
-    "InlineJavascriptRequirement": frozenset({"class"}),
-    "ResourceRequirement": frozenset({
-        "class",
-        "coresMax",
-        "coresMin",
-        "ramMax",
-        "ramMin",
-    }),
-    "ShellCommandRequirement": frozenset({"class"}),
-}
-_WORKFLOW_CONSUMED_FIELDS = frozenset({
-    "$namespaces",
-    "$schemas",
-    "class",
-    "cwlVersion",
-    "id",
-    "inputs",
-    "outputs",
-    "requirements",
-    "sophios:lang_version",
-    "steps",
-}) | _INERT_DOCUMENTATION_FIELDS
-# Workflow-level requirements that only declare a feature whose lowering is
-# decided per step, so they are consumed as inert no-ops. Sophios adds
-# InlineJavascriptRequirement for every `when`; declaring it is not the use
-# of JavaScript, and each expression is judged where it appears.
-_SUPPORTED_WORKFLOW_REQUIREMENTS = frozenset({
-    "InlineJavascriptRequirement",
-    "ScatterFeatureRequirement",
-    "SubworkflowFeatureRequirement",
-})
-_WORKFLOW_INPUT_CONSUMED_FIELDS = (
-    frozenset({"default", "type"}) | _INERT_DOCUMENTATION_FIELDS
-)
-_NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS = (
-    frozenset({"type"}) | _INERT_DOCUMENTATION_FIELDS
-)
-_WORKFLOW_OUTPUT_CONSUMED_FIELDS = (
-    frozenset({"outputSource", "type"}) | _INERT_DOCUMENTATION_FIELDS
-)
-_STEP_CORE_FIELDS = frozenset({
-    "id",
-    "in",
-    "out",
-    "run",
-    "scatter",
-    "scatterMethod",
-    "when",
-})
-_STEP_CONSUMED_FIELDS = _STEP_CORE_FIELDS | _INERT_DOCUMENTATION_FIELDS
-_STEP_INPUT_CONSUMED_FIELDS = frozenset({"source"})
 
 
 def _default_value_findings(definition: Mapping[str, Any], *, path: str) -> list[str]:
@@ -1215,27 +1116,48 @@ def _default_value_findings(definition: Mapping[str, Any], *, path: str) -> list
     return []
 
 
+def _rejection(rows: Mapping[str, Row], name: str, *, otherwise: str) -> str:
+    """Why `name` is rejected: its row's note, or `otherwise` when the table has no rejected row for it."""
+    row = rows.get(name)
+    return row.note if row is not None and row.state is State.REJECTED else otherwise
+
+
 def _unconsumed_field_findings(
     value: Mapping[str, Any],
+    cwl_class: str,
     *,
-    consumed: frozenset[str],
     path: str,
+    kept: frozenset[str] | None = None,
 ) -> list[str]:
-    """Reject source fields that the lowering does not consume."""
+    """Reject the fields of a `cwl_class` value the lowering does not consume.
+
+    Args:
+        value (Mapping[str, Any]): The CWL value.
+        cwl_class (str): Its class, a key of `FIELDS`.
+        path (str): Where the value sits, for the finding.
+        kept (frozenset[str] | None): The fields consumed, when not exactly the class's unrejected rows.
+
+    Returns:
+        list[str]: One finding per field, with its row's note.
+    """
+    rows = FIELDS[cwl_class]
     return [
-        f"{path}.{field_name}: {field_name} is not consumed by the Nextflow lowering"
-        for field_name in sorted(set(value) - consumed)
+        f"{path}.{name}: {_rejection(rows, name, otherwise=f'{name} is not consumed by the Nextflow lowering')}"
+        for name in sorted(set(value) - (consumed(rows) if kept is None else kept))
     ]
 
 
 def _local_locations_as_paths(value: Any) -> Any:
-    """Rewrite a File or Directory object's plain local ``location`` as its ``path``.
+    """Rewrite a File or Directory object's plain local ``location`` as its ``path``, and drop a File's ``format``.
 
     The Python API writes file values in CWL's ``location`` form; for a local
     path with no URI scheme the two keys mean the same file. A URI keeps its
     ``location`` and stays rejected, since the model does not represent schemes.
+    A File value's ``format`` is compile-time, as the input's is (design §3).
     """
     match value:
+        case {"class": "File", "format": _}:
+            return _local_locations_as_paths({key: item for key, item in value.items() if key != "format"})
         case {"class": "File" | "Directory", "location": str() as location} if (
             set(value) == {"class", "location"} and "://" not in location
         ):
@@ -1646,37 +1568,25 @@ def _nested_workflow_capability_findings(
                 f"{step_path}.scatterMethod: scatterMethod without scatter is not executable"
             )
         findings.extend(
-            _unconsumed_field_findings(
-                {name: value for name, value in emitted.items() if name not in _STEP_CORE_FIELDS},
-                consumed=_INERT_DOCUMENTATION_FIELDS,
-                path=step_path,
-            )
+            _unconsumed_field_findings(emitted, "WorkflowStep", path=step_path)
         )
         for raw_name, definition in _as_mapping(
             emitted.get("in", {}), error="compiled step inputs must be a mapping"
         ).items():
             if isinstance(definition, Mapping):
                 findings.extend(
-                    _unconsumed_field_findings(
-                        definition,
-                        consumed=_STEP_INPUT_CONSUMED_FIELDS,
-                        path=f"{step_path}.in.{raw_name}",
-                    )
+                    _unconsumed_field_findings(definition, "WorkflowStepInput", path=f"{step_path}.in.{raw_name}")
                 )
 
         child_path = f"{step_path}.run"
         child_document = child_artifact.cwl
         findings.extend(
-            _unconsumed_field_findings(
-                child_document,
-                consumed=_WORKFLOW_CONSUMED_FIELDS,
-                path=child_path,
-            )
+            _unconsumed_field_findings(child_document, "Workflow", path=child_path, kept=_WORKFLOW_CONSUMED_FIELDS)
         )
         findings.extend(_workflow_requirement_findings(child_document, path=child_path))
-        for section_name, consumed in (
-            ("inputs", _NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS),
-            ("outputs", _WORKFLOW_OUTPUT_CONSUMED_FIELDS),
+        for section_name, cwl_class, kept in (
+            ("inputs", "WorkflowInputParameter", _NESTED_WORKFLOW_INPUT_CONSUMED_FIELDS),
+            ("outputs", "WorkflowOutputParameter", None),
         ):
             section = child_document.get(section_name, {})
             if not isinstance(section, Mapping):
@@ -1690,11 +1600,7 @@ def _nested_workflow_capability_findings(
                 findings.extend(_number_type_findings(definition, path=port_path))
                 if isinstance(definition, Mapping):
                     findings.extend(
-                        _unconsumed_field_findings(
-                            definition,
-                            consumed=consumed,
-                            path=port_path,
-                        )
+                        _unconsumed_field_findings(definition, cwl_class, path=port_path, kept=kept)
                     )
         findings.extend(
             _nested_workflow_capability_findings(
@@ -1740,11 +1646,7 @@ def _tool_capability_findings(
             return findings
 
     findings.extend(
-        _unconsumed_field_findings(
-            tool,
-            consumed=_TOOL_CONSUMED_FIELDS,
-            path=f"{path}.run",
-        )
+        _unconsumed_field_findings(tool, "CommandLineTool", path=f"{path}.run", kept=_TOOL_CONSUMED_FIELDS)
     )
     findings.extend(_path_reference_findings(tool, path=path))
 
@@ -1755,8 +1657,17 @@ def _tool_capability_findings(
             if not class_name:
                 findings.append(f"{requirement_path}: {_CLASSLESS_REQUIREMENT}")
             elif class_name not in _SUPPORTED_REQUIREMENTS:
+                reason = _rejection(
+                    REQUIREMENT_CLASSES["CommandLineTool"], class_name,
+                    otherwise=f"{class_name} is not supported by the Nextflow target",
+                )
+                findings.append(f"{requirement_path}: {reason}")
+            elif class_name == "NetworkAccess" and (
+                _requirement_definition(section, class_name=class_name, suffix=suffix) or {}
+            ).get("networkAccess") is not True:
                 findings.append(
-                    f"{requirement_path}: {class_name} is not supported by the Nextflow target"
+                    f"{requirement_path}.networkAccess: only the literal true is supported: a Nextflow "
+                    "task has network access, and the generated pipeline cannot withhold it"
                 )
             elif definition := _requirement_definition(
                 section,
@@ -1764,11 +1675,7 @@ def _tool_capability_findings(
                 suffix=suffix,
             ):
                 findings.extend(
-                    _unconsumed_field_findings(
-                        definition,
-                        consumed=_SUPPORTED_REQUIREMENT_FIELDS[class_name],
-                        path=requirement_path,
-                    )
+                    _unconsumed_field_findings(definition, class_name, path=requirement_path)
                 )
                 if class_name == "ResourceRequirement":
                     findings.extend(
@@ -1806,32 +1713,16 @@ def _tool_capability_findings(
                 input_path = f"{path}.run.inputs.{raw_name}"
                 findings.extend(_number_type_findings(raw_definition, path=input_path))
                 findings.extend(
-                    _unconsumed_field_findings(
-                        raw_definition,
-                        consumed=_INPUT_CONSUMED_FIELDS,
-                        path=input_path,
-                    )
+                    _unconsumed_field_findings(raw_definition, "CommandInputParameter", path=input_path)
                 )
                 findings.extend(_default_value_findings(raw_definition, path=input_path))
-                if "loadContents" in raw_definition:
-                    findings.append(
-                        f"{input_path}.loadContents: {_LOAD_CONTENTS_INPUT_REASON}"
-                    )
                 binding = raw_definition.get("inputBinding")
                 if not isinstance(binding, Mapping):
                     continue
                 input_binding_path = f"{input_path}.inputBinding"
                 findings.extend(
-                    _unconsumed_field_findings(
-                        binding,
-                        consumed=_INPUT_BINDING_CONSUMED_FIELDS,
-                        path=input_binding_path,
-                    )
+                    _unconsumed_field_findings(binding, "CommandLineBinding", path=input_binding_path)
                 )
-                if "loadContents" in binding:
-                    findings.append(
-                        f"{input_binding_path}.loadContents: {_LOAD_CONTENTS_INPUT_REASON}"
-                    )
                 if binding.get("shellQuote") is False:
                     try:
                         _shell_literal_value(raw_name, binding, shell_mode=shell_mode_active)
@@ -1862,11 +1753,7 @@ def _tool_capability_findings(
                     continue
                 argument_path = f"{path}.run.arguments[{argument_index}]"
                 findings.extend(
-                    _unconsumed_field_findings(
-                        argument,
-                        consumed=_ARGUMENT_CONSUMED_FIELDS,
-                        path=argument_path,
-                    )
+                    _unconsumed_field_findings(argument, "CommandLineBinding", path=argument_path)
                 )
                 if argument.get("shellQuote") is False:
                     try:
@@ -1895,11 +1782,7 @@ def _tool_capability_findings(
                 output_path = f"{path}.run.outputs.{raw_name}"
                 findings.extend(_number_type_findings(raw_definition, path=output_path))
                 findings.extend(
-                    _unconsumed_field_findings(
-                        raw_definition,
-                        consumed=_OUTPUT_CONSUMED_FIELDS,
-                        path=output_path,
-                    )
+                    _unconsumed_field_findings(raw_definition, "CommandOutputParameter", path=output_path)
                 )
                 binding = raw_definition.get("outputBinding")
                 # An outputBinding that declares capture behavior is diagnosed
@@ -1922,11 +1805,7 @@ def _tool_capability_findings(
                     continue
                 output_binding_path = f"{output_path}.outputBinding"
                 findings.extend(
-                    _unconsumed_field_findings(
-                        binding,
-                        consumed=_OUTPUT_BINDING_CONSUMED_FIELDS,
-                        path=output_binding_path,
-                    )
+                    _unconsumed_field_findings(binding, "CommandOutputBinding", path=output_binding_path)
                 )
                 try:
                     _output_capture(raw_name, raw_definition)
@@ -1943,11 +1822,7 @@ def _workflow_capability_findings(
     steps: list[Mapping[str, Any]],
 ) -> list[str]:
     """Apply closed-world analysis to workflow, step, and boundary values."""
-    findings = _unconsumed_field_findings(
-        workflow,
-        consumed=_WORKFLOW_CONSUMED_FIELDS,
-        path="workflow",
-    )
+    findings = _unconsumed_field_findings(workflow, "Workflow", path="workflow", kept=_WORKFLOW_CONSUMED_FIELDS)
     findings.extend(_workflow_requirement_findings(workflow))
     provided = _as_mapping(
         provided_params,
@@ -1968,11 +1843,7 @@ def _workflow_capability_findings(
                 findings.extend(_number_type_findings(definition, path=input_path))
                 if isinstance(definition, Mapping):
                     findings.extend(
-                        _unconsumed_field_findings(
-                            definition,
-                            consumed=_WORKFLOW_INPUT_CONSUMED_FIELDS,
-                            path=input_path,
-                        )
+                        _unconsumed_field_findings(definition, "WorkflowInputParameter", path=input_path)
                     )
                     has_default = "default" in definition
                     cwl_type = definition.get("type")
@@ -2018,9 +1889,7 @@ def _workflow_capability_findings(
                 if isinstance(definition, Mapping):
                     findings.extend(
                         _unconsumed_field_findings(
-                            definition,
-                            consumed=_WORKFLOW_OUTPUT_CONSUMED_FIELDS,
-                            path=f"workflow.outputs.{raw_name}",
+                            definition, "WorkflowOutputParameter", path=f"workflow.outputs.{raw_name}"
                         )
                     )
         case _:
@@ -2037,11 +1906,7 @@ def _workflow_capability_findings(
     for step_index, step in enumerate(steps):
         step_path = f"steps[{step_index}]"
         findings.extend(
-            _unconsumed_field_findings(
-                step,
-                consumed=_STEP_CONSUMED_FIELDS,
-                path=step_path,
-            )
+            _unconsumed_field_findings(step, "WorkflowStep", path=step_path)
         )
         if "scatterMethod" in step and "scatter" not in step:
             findings.append(
@@ -2053,9 +1918,7 @@ def _workflow_capability_findings(
                     if isinstance(definition, Mapping):
                         findings.extend(
                             _unconsumed_field_findings(
-                                definition,
-                                consumed=_STEP_INPUT_CONSUMED_FIELDS,
-                                path=f"{step_path}.in.{raw_name}",
+                                definition, "WorkflowStepInput", path=f"{step_path}.in.{raw_name}"
                             )
                         )
             case _:
@@ -2083,16 +1946,14 @@ def _workflow_requirement_findings(
         if not class_name:
             findings.append(f"{requirement_path}: {_CLASSLESS_REQUIREMENT}")
         elif class_name not in _SUPPORTED_WORKFLOW_REQUIREMENTS:
-            findings.append(
-                f"{requirement_path}: {class_name} is not supported at the Nextflow workflow level"
+            reason = _rejection(
+                REQUIREMENT_CLASSES["Workflow"], class_name,
+                otherwise=f"{class_name} is not supported at the Nextflow workflow level",
             )
+            findings.append(f"{requirement_path}: {reason}")
         elif definition := _requirement_definition(section, class_name=class_name, suffix=suffix):
             findings.extend(
-                _unconsumed_field_findings(
-                    definition,
-                    consumed=frozenset({"class"}),
-                    path=requirement_path,
-                )
+                _unconsumed_field_findings(definition, class_name, path=requirement_path)
             )
     return findings
 
@@ -2780,7 +2641,7 @@ def _source_values(value: Any, *, context: str) -> list[str]:
                         raise ValueError(f"{context} must be a source string or list of source strings")
             return normalized
         case {"source": source} as source_definition:
-            unsupported = set(source_definition) - {"source"}
+            unsupported = set(source_definition) - consumed(FIELDS["WorkflowStepInput"])
             if unsupported:
                 raise ValueError(f"unsupported {context} fields: {', '.join(sorted(unsupported))}")
             return _source_values(source, context=context)
