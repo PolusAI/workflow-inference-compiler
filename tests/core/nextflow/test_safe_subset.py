@@ -14,7 +14,9 @@ from sophios.utils_nf import compiled_source_to_nextflow
 from .test_conditions import _when_workflow
 from .testkit import step, synthetic_source, tool, workflow_doc
 
-TYPES = {"a": "int", "b": "float", "s": "string", "flag": "boolean", "maybe": ["null", "int"]}
+TYPES = {
+    "a": "int", "b": "float", "s": "string", "flag": "boolean", "maybe": ["null", "int"], "n": "long", "d": "double",
+}
 
 
 def _calc_workflow(arguments: list[Any], params: dict[str, Any], **inputs: Any) -> ExecutableNextflowWorkflow:
@@ -76,6 +78,8 @@ def test_admitted_expressions_type_check(text: str, expected: str) -> None:
     ("$(08)", "number literal '08' is not a strict-mode decimal"),
     ("$(\u0663)", "unsupported character"),
     ("$(inputs.nope)", "inputs.nope is not an input of this tool"),
+    ("$(inputs.n > 1)", "inputs.n has type 'long'; only scalar inputs are admitted"),
+    ("$(inputs.d > 1)", "inputs.d has type 'double'; only scalar inputs are admitted"),
     ("$(\"a\\\"b\")", "unsupported character"),
 ])
 def test_constructs_outside_the_subset_are_rejected_by_name(text: str, message: str) -> None:
