@@ -112,6 +112,15 @@ def test_source_without_verified_ir_cannot_be_promoted() -> None:
 
 
 @pytest.mark.fast
+def test_only_the_generated_stub_is_read() -> None:
+    source = render_nextflow(runtime_workflow())
+    assert parse_nf_text(source).opaque_regions == ()
+    changed = parse_nf_text(source.replace("    exit 1\n", "    exit 0\n", 1))
+    assert [region.split(":", 1)[0] for region in changed.opaque_regions] == ["process PRODUCE"]
+    assert changed.opaque_regions[0].endswith("exit 0")
+
+
+@pytest.mark.fast
 def test_promotion_rechecks_provenance_instead_of_trusting_field_name() -> None:
     parsed = parse_nf_text(render_nextflow(runtime_workflow()))
     different = ExecutableNextflowWorkflow("DIFFERENT", (), (), {})

@@ -9,6 +9,7 @@ import pytest
 
 from sophios.input_output_nf import (
     NF_LOAD_CONTENTS_FUNCTION,
+    NF_STUB_LINES,
     render_nextflow,
     render_nextflow_config,
     write_nextflow_artifacts,
@@ -73,6 +74,13 @@ def test_renders_named_workflow_and_entry_wrapper() -> None:
     assert "COPY(PRODUCE.out.result)" in rendered
     assert "result = COPY.out.copy" in rendered
     assert "workflow {\n    PIPELINE(Channel.value(params.message))\n}" in rendered
+
+
+@pytest.mark.fast
+def test_every_process_ends_with_the_stub_that_refuses_a_dry_run() -> None:
+    rendered = render_nextflow(runtime_workflow())
+    stub = "".join(f"\n    {line}" for line in NF_STUB_LINES)
+    assert rendered.count(f'    """\n{stub}\n}}') == rendered.count("process ") == 2
 
 
 @pytest.mark.serial

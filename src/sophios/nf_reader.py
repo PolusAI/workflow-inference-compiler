@@ -32,6 +32,7 @@ from .input_output_nf import (
     NF_LOAD_CONTENTS_FUNCTION,
     NF_NEST_FUNCTION,
     NF_SHELL_QUOTE_FUNCTION,
+    NF_STUB_LINES,
     render_nextflow,
     render_number,
 )
@@ -217,6 +218,7 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
     cpus: str | None = None
     memory: str | None = None
     script: list[str] = []
+    stub: list[str] = []
     unparsed: list[str] = []
     section = "directives"
     in_script = False
@@ -225,17 +227,17 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
         stripped = raw_line.strip()
         if not stripped:
             continue
-        if stripped in {"input:", "output:", "script:"}:
+        if stripped in {"input:", "output:", "script:", "stub:"}:
             section = stripped[:-1]
             continue
         if stripped == '"""':
-            if section != "script":
+            if section not in {"script", "stub"}:
                 unparsed.append(stripped)
             else:
                 in_script = not in_script
             continue
         if in_script:
-            script.append(raw_line[4:] if raw_line.startswith("    ") else raw_line)
+            (script if section == "script" else stub).append(raw_line[4:] if raw_line.startswith("    ") else raw_line)
             continue
         if section == "input":
             if array_path := _ARRAY_PATH_INPUT.match(stripped):
@@ -296,6 +298,8 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
 
     if not script:
         raise ValueError(f"process {name!r} does not contain a supported script block")
+    if stub and tuple(stub) != NF_STUB_LINES[2:-1]:
+        unparsed.append("stub: " + "\n".join(stub))  # only the generated stub is read
     return (
         NextflowProcess(name, tuple(inputs), tuple(outputs), "\n".join(script), container, cpus, memory),
         tuple(unparsed),
