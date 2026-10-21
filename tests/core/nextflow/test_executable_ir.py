@@ -11,7 +11,9 @@ import pytest
 from sophios.input_output_nf import render_nextflow
 from sophios.nf_expr import parse
 from sophios.nf_reader import parse_nf_text
-from sophios.nf_symbols import NEXTFLOW_SCRIPT_NAMES, is_nextflow_identifier, normalize_nextflow_identifier
+from sophios.nf_symbols import (
+    NEXTFLOW_SCRIPT_DECLARED_NAMES, NEXTFLOW_SCRIPT_NAMES, is_nextflow_identifier, normalize_nextflow_identifier,
+)
 from sophios.nf_types import (
     ExecutableNextflowWorkflow,
     NfArrayBinding,
@@ -1306,9 +1308,27 @@ def test_hydration_refuses_a_malformed_condition_or_port(field: str, value: Any)
 
 @pytest.mark.fast
 @pytest.mark.parametrize("name", sorted(NEXTFLOW_SCRIPT_NAMES) + ["Math", "Élan"])
-def test_a_script_variable_never_takes_a_name_the_script_resolves(name: str) -> None:
+def test_no_name_takes_a_name_the_script_resolves(name: str) -> None:
     assert normalize_nextflow_identifier(name) == f"_{name}"
-    assert normalize_nextflow_identifier(name, variable=False) == name
+    assert normalize_nextflow_identifier(name, variable=False) == f"_{name}"
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("name", sorted(NEXTFLOW_SCRIPT_DECLARED_NAMES - NEXTFLOW_SCRIPT_NAMES))
+def test_only_a_process_or_workflow_avoids_a_name_every_script_declares(name: str) -> None:
+    assert normalize_nextflow_identifier(name, variable=False) == f"_{name}"
+    assert normalize_nextflow_identifier(name) == name
+    with pytest.raises(ValueError, match="already declared by every Nextflow script"):
+        NfProcess(name, [], [output_port("o", "o.txt")], command("true"))
+    with pytest.raises(ValueError, match="already declared by every Nextflow script"):
+        ExecutableNextflowWorkflow(name, [], [], {})
+
+
+@pytest.mark.fast
+def test_the_workflow_name_is_never_a_process_name() -> None:
+    process = NfProcess("echo", [], [output_port("o", "o.txt")], command("true"))
+    with pytest.raises(ValueError, match="workflow name 'echo' is also a process name"):
+        ExecutableNextflowWorkflow("echo", [process], [], {})
 
 
 def _optional_producer() -> NfProcess:

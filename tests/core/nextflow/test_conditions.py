@@ -104,8 +104,8 @@ def test_a_conditional_process_with_no_inputs_is_rejected_at_the_ir_boundary() -
 def test_hydration_rejects_a_conditional_process_with_no_inputs() -> None:
     payload = _when_workflow("$(true)", {"a": 1}, a="int").to_dict()
     payload["processes"][0]["inputs"] = []
-    payload["connections"] = [item for item in payload["connections"] if item.get("to_process") != "PRODUCE"]
-    with pytest.raises(ValueError, match="process 'PRODUCE' has a condition but no inputs"):
+    payload["connections"] = [item for item in payload["connections"] if item.get("to_process") != "_PRODUCE"]
+    with pytest.raises(ValueError, match="process '_PRODUCE' has a condition but no inputs"):
         ExecutableNextflowWorkflow.from_dict(payload)
 
 

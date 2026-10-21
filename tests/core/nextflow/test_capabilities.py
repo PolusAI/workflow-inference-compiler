@@ -941,8 +941,8 @@ def test_accepts_two_input_dotproduct_scatter() -> None:
     workflow = compiled_source_to_nextflow(_two_input_scatter_rose(scatterMethod="dotproduct"))
 
     assert set(workflow.connections) >= {
-        NfWorkflowInputConnection("firsts", "SCATTER", "first", "dotproduct"),
-        NfWorkflowInputConnection("seconds", "SCATTER", "second", "dotproduct"),
+        NfWorkflowInputConnection("firsts", "_SCATTER", "first", "dotproduct"),
+        NfWorkflowInputConnection("seconds", "_SCATTER", "second", "dotproduct"),
     }
 
 
@@ -981,7 +981,7 @@ def test_accepts_an_inert_scatter_method_at_one_scattered_input(
     workflow = compiled_source_to_nextflow(_scatter_rose(**step_fields))
 
     assert workflow.connections == (
-        NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
+        NfWorkflowInputConnection("items", "_SCATTER", "item", "dotproduct"),
     )
 
 
@@ -991,7 +991,7 @@ def test_accepts_both_single_input_scatter_spellings(scatter: Any) -> None:
     workflow = compiled_source_to_nextflow(_scatter_rose(scatter=scatter))
 
     assert workflow.connections == (
-        NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
+        NfWorkflowInputConnection("items", "_SCATTER", "item", "dotproduct"),
     )
 
 
@@ -1154,7 +1154,7 @@ def test_accepts_a_workflow_output_of_a_scattered_step() -> None:
 
     workflow = compiled_source_to_nextflow(rose)
 
-    assert NfWorkflowOutputConnection("SCATTER", "result", "each") in workflow.connections
+    assert NfWorkflowOutputConnection("_SCATTER", "result", "each") in workflow.connections
 
 
 @pytest.mark.fast
@@ -1190,7 +1190,7 @@ def test_accepts_inert_workflow_level_scatter_requirement(requirements: Any) -> 
     cast(dict[str, Any], rose.workflow)["requirements"] = requirements
 
     assert compiled_source_to_nextflow(rose).connections == (
-        NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
+        NfWorkflowInputConnection("items", "_SCATTER", "item", "dotproduct"),
     )
 
 
@@ -2771,6 +2771,6 @@ def test_a_step_consuming_an_optional_output_is_a_finding() -> None:
         [maybe, consume],
     )
     assert _findings(rose) == [
-        "workflow: connection MAYBE.o -> CONSUME.source consumes an optional output, which may be null; "
+        "workflow: connection _MAYBE.o -> _CONSUME.source consumes an optional output, which may be null; "
         "only a workflow output can take it"
     ]

@@ -65,9 +65,13 @@ Sophios makes joins the step and the port with `~`, as `touch~filename`, and
 a step in a nested workflow is named through the step that calls it, as
 `child~inner_copy`. Characters Nextflow does not allow in a name become `_`,
 so these become the parameter `touch_filename` and the process
-`child_inner_copy`; a name Nextflow would read as something else, such as a
-reserved word, gains a leading `_`. Two names that become the same are
-rejected, and the message names both as written.
+`child_inner_copy`. A name Nextflow would read as something else gains a
+leading `_`: a reserved word, a name that starts with a capital letter (Groovy
+reads it as a class), `task`, `log` and `channel`, and, for a process or the
+workflow, a name every Nextflow script declares, such as `file`, `params` or
+`main`. A workflow named like one of its steps gains a leading `_` as well.
+Two names that become the same are rejected, and the message names both as
+written.
 
 ## Importing supported DSL2
 

@@ -376,6 +376,24 @@ def test_symbol_contract_matches_actual_v2_parser(tmp_path: Path) -> None:
 
 
 @pytest.mark.nextflow
+@pytest.mark.serial
+@pytest.mark.parametrize(
+    ("step_name", "workflow_name"),
+    [("echo", "echo"), ("file", "wf"), ("Math", "main")],
+    ids=["workflow-name", "script-function", "class-and-entry-name"],
+)
+def test_a_step_or_workflow_named_like_a_script_name_runs(
+    step_name: str, workflow_name: str, tmp_path: Path,
+) -> None:
+    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl", step_name=step_name)
+    echo.inputs.message = "hi"
+    Workflow([echo], workflow_name).to_nextflow(tmp_path)
+    result = execute_nextflow(tmp_path)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    assert [path.read_text(encoding="utf-8") for path in (tmp_path / "work").rglob("stdout")] == ["hi\n"]
+
+
+@pytest.mark.nextflow
 @pytest.mark.docker
 @pytest.mark.serial
 def test_cli_generates_and_executes_nextflow_artifacts(tmp_path: Path) -> None:

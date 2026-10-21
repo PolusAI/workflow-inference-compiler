@@ -3104,8 +3104,11 @@ def compiled_source_to_nextflow(
         params = _workflow_params(workflow, compiled.params)
         default_connections, default_params = _default_bindings(steps, tools, processes, workflow.get("inputs", {}))
         params.update(default_params)
+        name = _identifier(compiled.name, context="workflow name", variable=False)
+        while name in {process.name for process in processes}:  # a step may share the workflow's name
+            name = f"_{name}"
         return ExecutableNextflowWorkflow(
-            name=_identifier(compiled.name, context="workflow name", variable=False),
+            name=name,
             processes=processes,
             connections=[*_connections(workflow, list(steps), processes), *default_connections],
             params=_apply_absent_sentinel(params),

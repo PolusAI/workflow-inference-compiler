@@ -125,8 +125,8 @@ def test_a_nested_step_over_gathered_arrays_regroups_its_output_by_the_recorded_
     rendered = render_nextflow(_gathered_into_nested_join(second))
     assert f"def {NF_NEST_HELPER}(List flat, List shape) {{" in rendered
     assert (
-        "all = JOIN.out.out.toSortedList { it[0] }.map { [it.collect { row -> row[1] }] }"
-        f".combine(ch_JOIN_shape).flatMap {{ flat, shape -> {NF_NEST_HELPER}(flat, shape) }}"
+        "all = _JOIN.out.out.toSortedList { it[0] }.map { [it.collect { row -> row[1] }] }"
+        f".combine(ch__JOIN_shape).flatMap {{ flat, shape -> {NF_NEST_HELPER}(flat, shape) }}"
     ) in rendered
 
 

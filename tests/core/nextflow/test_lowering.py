@@ -454,7 +454,7 @@ def test_absent_optional_scalar_lowers_to_the_sentinel_parameter() -> None:
     workflow = compiled_source_to_nextflow(rose)
 
     assert workflow.params == {"note": []}
-    assert NfWorkflowInputConnection("note", "PASSTHROUGH", "note") in workflow.connections
+    assert NfWorkflowInputConnection("note", "_PASSTHROUGH", "note") in workflow.connections
 
 
 @pytest.mark.fast
@@ -501,7 +501,7 @@ def test_applies_unwired_scalar_default_before_lowering() -> None:
     )
     workflow = compiled_source_to_nextflow(rose)
     assert workflow.params == {"_DEFAULT_message": "hello default"}
-    assert NfWorkflowInputConnection("_DEFAULT_message", "DEFAULT", "message") in workflow.connections
+    assert NfWorkflowInputConnection("_DEFAULT_message", "_DEFAULT", "message") in workflow.connections
     assert "Channel.value(params._DEFAULT_message)" in render_nextflow(workflow)
 
 
@@ -603,7 +603,7 @@ def test_preserves_fanout() -> None:
         edge
         for edge in connections
         if isinstance(edge, NfProcessConnection)
-        and edge.from_process == "A"
+        and edge.from_process == "_A"
         and edge.from_port == "out"
     ]) == 2
 

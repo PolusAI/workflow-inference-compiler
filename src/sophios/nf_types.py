@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Any, ClassVar, Generic, Self, TypeVar, get_args
 
 from .nf_expr import NF_FINITE_HELPER, NF_NUMBER_TEXT_HELPER, NF_ROUND_HELPER, Expr, references, validate
-from .nf_symbols import validate_nextflow_identifier
+from .nf_symbols import NEXTFLOW_SCRIPT_DECLARED_NAMES, validate_nextflow_identifier
 
 
 _T = TypeVar("_T")
@@ -30,6 +30,13 @@ def _validate_ir_identifier(value: object, *, field_name: str) -> str:
     identifier = validate_nextflow_identifier(value, field_name=field_name)
     if identifier in NF_INTERNAL_IDENTIFIERS:
         raise ValueError(f"{field_name} collides with a reserved Nextflow backend identifier")
+    return identifier
+
+
+def _validate_ir_declaration(value: object, *, field_name: str) -> str:
+    identifier = _validate_ir_identifier(value, field_name=field_name)
+    if identifier in NEXTFLOW_SCRIPT_DECLARED_NAMES:
+        raise ValueError(f"{field_name} {identifier!r} is already declared by every Nextflow script")
     return identifier
 
 
@@ -770,7 +777,7 @@ class NfProcess:
     condition: Expr | None = None
 
     def __post_init__(self) -> None:
-        _validate_ir_identifier(self.name, field_name="process name")
+        _validate_ir_declaration(self.name, field_name="process name")
         inputs = tuple(self.inputs)
         outputs = tuple(self.outputs)
         if not all(isinstance(port, NfPort) for port in (*inputs, *outputs)):
@@ -1223,7 +1230,7 @@ class ExecutableNextflowWorkflow:
     params: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        _validate_ir_identifier(self.name, field_name="workflow name")
+        _validate_ir_declaration(self.name, field_name="workflow name")
         processes = tuple(self.processes)
         connections = tuple(self.connections)
         if not all(isinstance(process, NfProcess) for process in processes):
@@ -1267,6 +1274,8 @@ class ExecutableNextflowWorkflow:
         process_by_name = {process.name: process for process in self.processes}
         if len(process_by_name) != len(self.processes):
             raise ValueError("workflow contains a duplicate process name")
+        if self.name in process_by_name:
+            raise ValueError(f"workflow name {self.name!r} is also a process name")
         if len(set(self.connections)) != len(self.connections):
             raise ValueError("workflow contains a duplicate connection")
 
