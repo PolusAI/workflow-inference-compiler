@@ -1252,6 +1252,12 @@ class ExecutableNextflowWorkflow:
             )
         if unknown := sorted(set(self.param_types.values()) - PARAM_TYPES):
             raise ValueError(f"workflow param_types must be one of PARAM_TYPES, not {', '.join(map(repr, unknown))}")
+        # The entry check stops a [] given for a File? or a Directory?: no path
+        # parameter has a lowering of an absent value.
+        if absent := sorted(name for name, declared in self.param_types.items()
+                            if declared in ("File?", "Directory?") and frozen_params[name] == ()):
+            raise ValueError(f"workflow input {absent[0]!r} is an absent optional {self.param_types[absent[0]]}, "
+                             "which has no lowering; give it a value")
         object.__setattr__(self, "param_types", FrozenMapping(self.param_types))
         self._validate_graph()
 
