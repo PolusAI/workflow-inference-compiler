@@ -190,6 +190,30 @@ def cwl_type_to_nf_qualifier(cwl_type: Any) -> str:
             raise ValueError(f"unsupported CWL type for the Nextflow target: {cwl_type!r}")
 
 
+# The safe subset's number rules (design §6, Expressions) cover int and float only.
+_UNSUPPORTED_NUMBER_TYPES = frozenset({"long", "double"})
+
+
+def _type_names(cwl_type: Any) -> set[str]:
+    """Every type name in a CWL type, or in a parameter that declares one, optional and array forms included."""
+    match cwl_type:
+        case str():
+            return {cwl_type.removesuffix("?").removesuffix("[]")}
+        case list():
+            return set().union(*map(_type_names, cwl_type))
+        case Mapping():
+            return _type_names(cwl_type.get("type")) | _type_names(cwl_type.get("items"))
+    return set()
+
+
+def _number_type_findings(definition: Any, *, path: str) -> list[str]:
+    """Name each long or double a declared type uses."""
+    return [
+        f"{path}.type: {name} is not supported: the Nextflow target lowers int and float; declare one of those"
+        for name in sorted(_type_names(definition) & _UNSUPPORTED_NUMBER_TYPES)
+    ]
+
+
 _PATH_KINDS = {"File": "file", "Directory": "directory"}
 
 
@@ -938,7 +962,7 @@ _LOAD_CONTENTS_CAPTURES = frozenset({"text"})
 # The one CWL output type file-text capture is admitted on. Parsing text into a
 # number is computation, so int and float are refused rather than deferred.
 _TEXT_CAPTURE_TYPE = "string"
-_NUMERIC_TEXT_CAPTURE_TYPES = frozenset({"int", "float", "double", "long"})
+_NUMERIC_TEXT_CAPTURE_TYPES = frozenset({"int", "float"})
 # outputEval shapes refused by name rather than by a generic table miss, so the
 # diagnostic says why the shape is unattractive rather than merely absent.
 _PERMANENT_PROJECTION_REASON = (
@@ -1662,12 +1686,14 @@ def _nested_workflow_capability_findings(
                 )
                 continue
             for raw_name, definition in section.items():
+                port_path = f"{child_path}.{section_name}.{raw_name}"
+                findings.extend(_number_type_findings(definition, path=port_path))
                 if isinstance(definition, Mapping):
                     findings.extend(
                         _unconsumed_field_findings(
                             definition,
                             consumed=consumed,
-                            path=f"{child_path}.{section_name}.{raw_name}",
+                            path=port_path,
                         )
                     )
         findings.extend(
@@ -1778,6 +1804,7 @@ def _tool_capability_findings(
                 if not isinstance(raw_definition, Mapping):
                     continue
                 input_path = f"{path}.run.inputs.{raw_name}"
+                findings.extend(_number_type_findings(raw_definition, path=input_path))
                 findings.extend(
                     _unconsumed_field_findings(
                         raw_definition,
@@ -1866,6 +1893,7 @@ def _tool_capability_findings(
                 if not isinstance(raw_definition, Mapping):
                     continue
                 output_path = f"{path}.run.outputs.{raw_name}"
+                findings.extend(_number_type_findings(raw_definition, path=output_path))
                 findings.extend(
                     _unconsumed_field_findings(
                         raw_definition,
@@ -1937,6 +1965,7 @@ def _workflow_capability_findings(
             declared_names = {str(name) for name in inputs}
             for raw_name, definition in inputs.items():
                 input_path = f"workflow.inputs.{raw_name}"
+                findings.extend(_number_type_findings(definition, path=input_path))
                 if isinstance(definition, Mapping):
                     findings.extend(
                         _unconsumed_field_findings(
@@ -1985,6 +2014,7 @@ def _workflow_capability_findings(
                 )
             )
             for raw_name, definition in outputs.items():
+                findings.extend(_number_type_findings(definition, path=f"workflow.outputs.{raw_name}"))
                 if isinstance(definition, Mapping):
                     findings.extend(
                         _unconsumed_field_findings(
