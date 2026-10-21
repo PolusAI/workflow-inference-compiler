@@ -6,7 +6,7 @@ from graphlib import CycleError, TopologicalSorter
 import json
 import math
 from types import MappingProxyType
-from typing import Any, ClassVar, Generic, Self, TypeVar, get_args
+from typing import Any, ClassVar, Generic, Self, TypeVar, cast, get_args
 
 from .nf_expr import NF_FINITE_HELPER, NF_ROUND_HELPER, Expr, references, validate
 from .nf_symbols import NEXTFLOW_SCRIPT_DECLARED_NAMES, validate_nextflow_identifier
@@ -18,9 +18,10 @@ NF_LOAD_CONTENTS_HELPER = "__sophios_load_contents_9f72e"
 NF_SCATTER_INDEX_NAME = "__sophios_scatter_index_9f72e"
 NF_NEST_HELPER = "__sophios_nest_9f72e"
 NF_INPUT_HELPER = "__sophios_input_9f72e"
+NF_STEP_INPUT_HELPER = "__sophios_step_input_9f72e"
 NF_INTERNAL_IDENTIFIERS = frozenset({
     NF_SHELL_QUOTE_HELPER, NF_LOAD_CONTENTS_HELPER, NF_FINITE_HELPER, NF_ROUND_HELPER,
-    NF_SCATTER_INDEX_NAME, NF_NEST_HELPER, NF_INPUT_HELPER,
+    NF_SCATTER_INDEX_NAME, NF_NEST_HELPER, NF_INPUT_HELPER, NF_STEP_INPUT_HELPER,
 })
 _PATH_KINDS = {"File": "file", "Directory": "directory"}
 # A workflow parameter's declared type, which the generated pipeline checks
@@ -882,7 +883,7 @@ MULTI_INPUT_ADAPTERS = frozenset({"dotproduct", "flat_crossproduct", "nested_cro
 
 @dataclass(frozen=True, slots=True)
 class NfChannel:
-    """How a workflow parameter's channel is built for one sink (design §5.2).
+    """How a workflow parameter's channel is built (design §5.2).
 
     ``path_kind`` is the kind each value is staged as, or None for a value;
     ``carries_list`` is whether the parameter holds a list: an array port's,
@@ -904,7 +905,7 @@ def param_channel(param_type: str) -> NfChannel:
 
 
 def channel_construction(port: NfPort, adapter: str | None) -> NfChannel:
-    """The channel a workflow parameter needs for one sink; the graph validator compares it and the renderer builds it.
+    """The channel a workflow parameter needs for one sink; the graph validator holds it to the declared one.
 
     The adapter belongs to the scattered process, not to the parameter, so
     it counts only as taking the whole array.
@@ -1030,7 +1031,70 @@ class NfWorkflowOutputConnection:
         }
 
 
-NfConnection = NfWorkflowInputConnection | NfProcessConnection | NfWorkflowOutputConnection
+LINK_MERGES = frozenset({"merge_nested", "merge_flattened"})
+PICK_VALUES = frozenset({"first_non_null", "the_only_non_null", "all_non_null"})
+
+
+@dataclass(frozen=True, slots=True)
+class NfStepInputConnection:
+    """Connect one step input's bound values to one process input through the step-input idioms.
+
+    ``sources`` are the values the step input binds, in the order it names
+    them, each a connection into this process input. ``link_merge`` joins
+    them into one list, and ``pick_value``, when set, picks from that list
+    (design §6, Topology, Step inputs). Each source is one value, so the
+    idioms combine values, never queue channels.
+    """
+
+    sources: Sequence[NfWorkflowInputConnection | NfProcessConnection]
+    link_merge: str
+    pick_value: str | None = None
+
+    def __post_init__(self) -> None:
+        sources = tuple(self.sources)
+        if not sources or not all(isinstance(source, (NfWorkflowInputConnection, NfProcessConnection))
+                                  for source in sources):
+            raise TypeError("step input sources must be one or more workflow input or process connections")
+        if len({(source.to_process, source.to_port) for source in sources}) != 1:
+            raise ValueError("step input sources must all reach one process input")
+        if any(source.adapter not in (None, "gather") for source in sources):
+            raise ValueError("a step input's sources cannot be scattered")
+        if self.link_merge not in LINK_MERGES:
+            raise ValueError(f"linkMerge must be one of {', '.join(sorted(LINK_MERGES))}, got {self.link_merge!r}")
+        if self.pick_value is not None and self.pick_value not in PICK_VALUES:
+            raise ValueError(f"pickValue must be one of {', '.join(sorted(PICK_VALUES))}, got {self.pick_value!r}")
+        object.__setattr__(self, "sources", sources)
+
+    @property
+    def to_process(self) -> str:
+        """The process the step input belongs to."""
+        return self.sources[0].to_process
+
+    @property
+    def to_port(self) -> str:
+        """The process input the step input binds."""
+        return self.sources[0].to_port
+
+    @property
+    def gives_list(self) -> bool:
+        """Whether the idioms give a list: every linkMerge does, unless a pickValue picks one value."""
+        return self.pick_value not in ("first_non_null", "the_only_non_null")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible representation.
+
+        Returns:
+            dict[str, Any]: The connection with kind ``"step_input"``.
+        """
+        return {
+            "kind": "step_input",
+            "sources": [source.to_dict() for source in self.sources],
+            "link_merge": self.link_merge,
+            "pick_value": self.pick_value,
+        }
+
+
+NfConnection = NfWorkflowInputConnection | NfProcessConnection | NfWorkflowOutputConnection | NfStepInputConnection
 
 
 def process_dependencies(
@@ -1049,8 +1113,9 @@ def process_dependencies(
     """
     dependencies: dict[str, set[str]] = {name: set() for name in names}
     for connection in connections:
-        if isinstance(connection, NfProcessConnection):
-            dependencies[connection.to_process].add(connection.from_process)
+        for edge in connection.sources if isinstance(connection, NfStepInputConnection) else (connection,):
+            if isinstance(edge, NfProcessConnection):
+                dependencies[edge.to_process].add(edge.from_process)
     return dependencies
 
 
@@ -1118,6 +1183,17 @@ def _connection_from_dict(value: Mapping[str, Any]) -> NfConnection:
                 required={"kind", "from_process", "from_port", "to_port"},
             )
             return NfWorkflowOutputConnection(item["from_process"], item["from_port"], item["to_port"])
+        case "step_input":
+            _fields(
+                item, type_name="NfStepInputConnection", required={"kind", "sources", "link_merge", "pick_value"}
+            )
+            if not isinstance(item["sources"], list):
+                raise TypeError("NfStepInputConnection sources must be a list")
+            return NfStepInputConnection(
+                tuple(cast(Any, _connection_from_dict(source)) for source in item["sources"]),
+                item["link_merge"],
+                item["pick_value"],
+            )
         case kind:
             raise ValueError(f"NfConnection has unsupported kind {kind!r}")
 
@@ -1150,6 +1226,7 @@ class ExecutableNextflowWorkflow:
             NfWorkflowInputConnection,
             NfProcessConnection,
             NfWorkflowOutputConnection,
+            NfStepInputConnection,
         )
         if not all(isinstance(connection, connection_types) for connection in connections):
             raise TypeError("workflow connections must use a typed connection variant")
@@ -1212,103 +1289,124 @@ class ExecutableNextflowWorkflow:
                 raise ValueError(f"scattered process {name!r} cannot have the optional outputs {', '.join(optional)}")
 
         for connection in self.connections:
-            match connection:
-                case NfWorkflowInputConnection(from_port, to_process, to_port, adapter):
-                    if from_port not in self.params:
-                        raise ValueError(f"connection references unknown workflow input {from_port!r}")
-                    destination = self._destination_port(process_by_name, to_process, to_port)
-                    if adapter is not None and destination.is_array:
-                        raise ValueError(
-                            f"channel adapter {adapter!r} cannot target the array-marked port "
-                            f"{to_process}.{to_port}"
-                        )
-                    # The renderer builds one channel per parameter, from its
-                    # declared type, so every sink must need that one channel:
-                    # connection order never picks it.
-                    channel = channel_construction(destination, adapter)
-                    declared = self.param_types[from_port]
-                    if channel != param_channel(declared):
-                        raise ValueError(
-                            f"workflow input {from_port!r} of type {declared!r} cannot feed {to_process}.{to_port}: "
-                            f"incompatible channel qualifiers {str(param_channel(declared))!r} and {str(channel)!r}"
-                        )
-                    if adapter is not None:
-                        adapters_by_process.setdefault(to_process, set()).add(adapter)
-                    self._record_incoming(incoming, to_process, to_port)
-                case NfProcessConnection(from_process, from_port, to_process, to_port, adapter):
-                    source = self._source_port(process_by_name, from_process, from_port)
-                    destination = self._destination_port(process_by_name, to_process, to_port)
-                    # Only a multi-input-scattered source carries the hidden
-                    # invocation index a gather sorts by, so the adapter is
-                    # present exactly when the source is one.
-                    if (adapter is not None) != (from_process in multi_scattered):
-                        raise ValueError(
-                            f"connection {from_process}.{from_port} -> {to_process}.{to_port} must carry "
-                            "a gather adapter exactly when its source is a multi-input scatter"
-                        )
-                    if adapter is not None and process_by_name[from_process].condition is not None:
-                        # A skipped invocation gathers as the [] null sentinel.
-                        # A workflow output reports it as null; a step's input
-                        # cannot hold it (a path array fails inside Nextflow).
-                        raise ValueError(
-                            f"connection {from_process}.{from_port} -> {to_process}.{to_port} gathers "
-                            f"the skipped positions of conditional process {from_process!r}; its outputs "
-                            "can only reach a workflow output"
-                        )
-                    if adapter is not None and multi_scattered.get(from_process) == "nested_crossproduct":
-                        raise ValueError(
-                            f"connection {from_process}.{from_port} -> {to_process}.{to_port} consumes a "
-                            "nested_crossproduct result, which reaches workflow outputs only"
-                        )
-                    if adapter == "gather" and not destination.is_array:
-                        raise ValueError(
-                            f"connection {from_process}.{from_port} -> {to_process}.{to_port} gathers "
-                            "into a port that is not array-typed"
-                        )
-                    if adapter in MULTI_INPUT_ADAPTERS:
-                        if destination.is_array:
+            merge = connection if isinstance(connection, NfStepInputConnection) else None
+            if merge is not None:
+                destination = self._destination_port(process_by_name, merge.to_process, merge.to_port)
+                if merge.gives_list != destination.is_array:
+                    raise ValueError(
+                        f"step input {merge.to_process}.{merge.to_port} gives "
+                        f"{'a list' if merge.gives_list else 'one value'} to a port that "
+                        f"{'is not' if merge.gives_list else 'is'} array-typed"
+                    )
+                self._record_incoming(incoming, merge.to_process, merge.to_port)
+            for edge in merge.sources if merge is not None else (connection,):
+                match edge:
+                    case NfWorkflowInputConnection(from_port, to_process, to_port, adapter):
+                        if from_port not in self.params:
+                            raise ValueError(f"connection references unknown workflow input {from_port!r}")
+                        destination = self._destination_port(process_by_name, to_process, to_port)
+                        if adapter is not None and destination.is_array:
                             raise ValueError(
                                 f"channel adapter {adapter!r} cannot target the array-marked port "
                                 f"{to_process}.{to_port}"
                             )
-                        adapters_by_process.setdefault(to_process, set()).add(adapter)
-                    # Cardinality is half the channel contract, so it is
-                    # checked on a process edge too: a scalar output driving
-                    # an array-marked port renders list operations against a
-                    # single value, failing inside Nextflow rather than here.
-                    # A gather is the one approved scalar-to-array edge.
-                    if adapter is None and source.is_array != destination.is_array:
-                        raise ValueError(
-                            f"connection {from_process}.{from_port} -> {to_process}.{to_port} "
-                            "joins incompatible channel cardinalities"
-                        )
-                    if source.optional:
-                        # Null has one representation, the [] sentinel, and no path port
-                        # has an approved lowering of it; a workflow output reports it.
-                        raise ValueError(
-                            f"connection {from_process}.{from_port} -> {to_process}.{to_port} consumes an "
-                            "optional output, which may be null; only a workflow output can take it"
-                        )
-                    if source.capture == "text" and process_by_name[from_process].condition is None:
-                        # The qualifier axis still has no general agreement
-                        # check for process edges, because every process
-                        # output carried the path qualifier until this one; a
-                        # captured value's only approved sink is a workflow
-                        # output. A conditional step's captured-text output is
-                        # the one proven exception (design §6, Topology): its
-                        # value is either the captured string or the []
-                        # sentinel, never colliding with a real string, so it
-                        # may reach a later step's admitted optional val port.
-                        raise ValueError(
-                            f"process output {from_process}.{from_port} captures file text; "
-                            "its only approved sink is a workflow output"
-                        )
-                    self._record_incoming(incoming, to_process, to_port)
-                case NfWorkflowOutputConnection(from_process, from_port, to_port):
-                    self._source_port(process_by_name, from_process, from_port)
-                    if to_port in workflow_outputs:
-                        raise ValueError(f"workflow contains duplicate output emit name {to_port!r}")
-                    workflow_outputs.add(to_port)
+                        # The renderer builds one channel per parameter, from its
+                        # declared type, so every sink must need that one channel:
+                        # connection order never picks it. A step input's idioms
+                        # take the parameter's own value.
+                        declared = param_channel(self.param_types[from_port])
+                        if merge is not None:
+                            self._check_merged(merge, f"workflow input {from_port!r}", declared, destination)
+                            continue
+                        if (channel := channel_construction(destination, adapter)) != declared:
+                            raise ValueError(
+                                f"workflow input {from_port!r} of type {self.param_types[from_port]!r} cannot feed "
+                                f"{to_process}.{to_port}: incompatible channel qualifiers "
+                                f"{str(declared)!r} and {str(channel)!r}"
+                            )
+                        if adapter is not None:
+                            adapters_by_process.setdefault(to_process, set()).add(adapter)
+                        self._record_incoming(incoming, to_process, to_port)
+                    case NfProcessConnection(from_process, from_port, to_process, to_port, adapter):
+                        source = self._source_port(process_by_name, from_process, from_port)
+                        destination = self._destination_port(process_by_name, to_process, to_port)
+                        # Only a multi-input-scattered source carries the hidden
+                        # invocation index a gather sorts by, so the adapter is
+                        # present exactly when the source is one.
+                        if (adapter is not None) != (from_process in multi_scattered):
+                            raise ValueError(
+                                f"connection {from_process}.{from_port} -> {to_process}.{to_port} must carry "
+                                "a gather adapter exactly when its source is a multi-input scatter"
+                            )
+                        if adapter is not None and process_by_name[from_process].condition is not None:
+                            # A skipped invocation gathers as the [] null sentinel.
+                            # A workflow output reports it as null; a step's input
+                            # cannot hold it (a path array fails inside Nextflow).
+                            raise ValueError(
+                                f"connection {from_process}.{from_port} -> {to_process}.{to_port} gathers "
+                                f"the skipped positions of conditional process {from_process!r}; its outputs "
+                                "can only reach a workflow output"
+                            )
+                        if adapter is not None and multi_scattered.get(from_process) == "nested_crossproduct":
+                            raise ValueError(
+                                f"connection {from_process}.{from_port} -> {to_process}.{to_port} consumes a "
+                                "nested_crossproduct result, which reaches workflow outputs only"
+                            )
+                        if adapter == "gather" and merge is None and not destination.is_array:
+                            raise ValueError(
+                                f"connection {from_process}.{from_port} -> {to_process}.{to_port} gathers "
+                                "into a port that is not array-typed"
+                            )
+                        if adapter in MULTI_INPUT_ADAPTERS:
+                            if destination.is_array:
+                                raise ValueError(
+                                    f"channel adapter {adapter!r} cannot target the array-marked port "
+                                    f"{to_process}.{to_port}"
+                                )
+                            adapters_by_process.setdefault(to_process, set()).add(adapter)
+                        # Cardinality is half the channel contract, so it is
+                        # checked on a process edge too: a scalar output driving
+                        # an array-marked port renders list operations against a
+                        # single value, failing inside Nextflow rather than here.
+                        # A gather is the one approved scalar-to-array edge.
+                        if adapter is None and merge is None and source.is_array != destination.is_array:
+                            raise ValueError(
+                                f"connection {from_process}.{from_port} -> {to_process}.{to_port} "
+                                "joins incompatible channel cardinalities"
+                            )
+                        if source.optional:
+                            # Null has one representation, the [] sentinel, and no path port
+                            # has an approved lowering of it; a workflow output reports it.
+                            raise ValueError(
+                                f"connection {from_process}.{from_port} -> {to_process}.{to_port} consumes an "
+                                "optional output, which may be null; only a workflow output can take it"
+                            )
+                        if source.capture == "text" and process_by_name[from_process].condition is None:
+                            # The qualifier axis still has no general agreement
+                            # check for process edges, because every process
+                            # output carried the path qualifier until this one; a
+                            # captured value's only approved sink is a workflow
+                            # output. A conditional step's captured-text output is
+                            # the one proven exception (design §6, Topology): its
+                            # value is either the captured string or the []
+                            # sentinel, never colliding with a real string, so it
+                            # may reach a later step's admitted optional val port.
+                            raise ValueError(
+                                f"process output {from_process}.{from_port} captures file text; "
+                                "its only approved sink is a workflow output"
+                            )
+                        if merge is not None:
+                            self._check_merged(
+                                merge, f"process output {from_process}.{from_port}",
+                                NfChannel(source.path_kind, adapter == "gather"), destination,
+                            )
+                        else:
+                            self._record_incoming(incoming, to_process, to_port)
+                    case NfWorkflowOutputConnection(from_process, from_port, to_port):
+                        self._source_port(process_by_name, from_process, from_port)
+                        if to_port in workflow_outputs:
+                            raise ValueError(f"workflow contains duplicate output emit name {to_port!r}")
+                        workflow_outputs.add(to_port)
 
         for process_name, adapters in adapters_by_process.items():
             if len(adapters) > 1:
@@ -1328,6 +1426,16 @@ class ExecutableNextflowWorkflow:
         if missing := expected_inputs - incoming:
             process_name, port_name = sorted(missing)[0]
             raise ValueError(f"process input {process_name}.{port_name} is not connected")
+
+    @staticmethod
+    def _check_merged(merge: NfStepInputConnection, source: str, channel: NfChannel, destination: NfPort) -> None:
+        """A step input's source has its port's path kind, and is an array only where the idioms keep one level."""
+        where = f"step input {merge.to_process}.{merge.to_port}"
+        if channel.path_kind != destination.path_kind:
+            raise ValueError(f"{where}: {source} is {channel}, which its port's {destination.qualifier} cannot take")
+        if channel.carries_list and (merge.link_merge != "merge_flattened" or merge.pick_value is not None):
+            # merge_nested would nest arrays, and [] stands for both a null and an empty array.
+            raise ValueError(f"{where}: an array source joins only by merge_flattened with no pickValue")
 
     @staticmethod
     def _destination_port(

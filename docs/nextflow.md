@@ -374,10 +374,44 @@ is not supported. A scattered leaf step *inside* a subworkflow is not a
 special case: after projection it follows the scatter rules above.
 
 Workflow-level `ScatterFeatureRequirement`, `SubworkflowFeatureRequirement`,
-and `InlineJavascriptRequirement` (which Sophios adds for `when`) are accepted
-as inert declarations, at the
-outer and subworkflow level alike; every other workflow-level requirement is
-rejected by name.
+`MultipleInputFeatureRequirement` and `InlineJavascriptRequirement` (which
+Sophios adds for `when`) are accepted as inert declarations, at the outer and
+subworkflow level alike; every other workflow-level requirement is rejected by
+name.
+
+## Step inputs
+
+A step input written as a `!cwl {...}` record, or a `StepInput` in Python,
+may carry `default`, `linkMerge` and `pickValue`. Each is one fixed Groovy
+idiom over the step input's values, and none runs JavaScript:
+
+- `default` is the value when the step input has no source, and takes the
+  place of a source that is `null`. It is a JSON scalar of the tool input's
+  type, and it becomes a pipeline parameter named `<step>~<port>` like a tool
+  default.
+- `linkMerge` joins the sources in the order the step input names them, one
+  source included. `merge_nested` makes a list with one element per source;
+  `merge_flattened` splices an array source's elements and adds any other
+  source as one element. Two or more sources with no `linkMerge` join as
+  `merge_nested`.
+- `pickValue` picks from the joined list: `first_non_null` takes the first
+  value that is not `null`, `the_only_non_null` the one such value, and
+  `all_non_null` the list without its `null`s. `first_non_null` that finds no
+  value, and `the_only_non_null` that finds none or several, stop the run
+  with `Sophios step input <process>.<port>: <pickValue> finds <n> values
+  that are not null`.
+
+Every source is one value: a workflow input, a gathered scatter output, or an
+unscattered step's output. A `pickValue` gives a value that is not `null`, so
+a conditional step's output may reach any port through one. These are
+rejected by name: a `pickValue` on one source with no `linkMerge`; a
+`default` beside a `linkMerge` or a `pickValue`, which never applies; a
+`pickValue` over an array source, since `[]` stands for both `null` and an
+empty array; `merge_nested` over an array source, which would nest arrays; a
+source that may be `null` in a joined list with no `pickValue`; a scattered
+input with any of these fields; and any of them on the input of a nested
+workflow step. `label` is documentation. `valueFrom`, `loadContents` and
+`loadListing` on a step input are rejected.
 
 ## Output cardinality
 
@@ -498,9 +532,8 @@ port, or an array-typed output of a conditional step outside scatter.
 `when` on a step whose `run` is a workflow is rejected, since skipping an
 inlined sub-DAG is not this lowering's single-process shape. A step input the
 step's tool does not declare, which CWL allows so that a `when` can read it, is
-rejected. A step input with a list of sources is rejected, and with it
-`linkMerge` and `pickValue`. A conditional step needs at least one input to
-gate on, so `when` on a tool that declares no inputs is rejected.
+rejected. A conditional step needs at least one input to gate on, so `when`
+on a tool that declares no inputs is rejected.
 
 ## Current limits
 
@@ -514,7 +547,8 @@ gate on, so `when` on a tool that declares no inputs is rejected.
 - Read beside its generated `nextflow_workflow.json`, every generated workflow
   — scatter, conditions, gather — reads back exactly and promotes to the model
   that produced it. Read alone, the reader recognizes only the plain call
-  subset, so generated scatter and conditional wiring stay opaque regions.
+  subset, so generated scatter, conditional and step-input wiring stay
+  opaque regions.
 - Structurally imported scripts remain opaque. CWL/Sophios import preserves representable
   names, ports, resources, and topology but does not promise executable
   equivalence for arbitrary shell or Groovy semantics.

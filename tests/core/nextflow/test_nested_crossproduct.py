@@ -94,6 +94,32 @@ def test_a_nested_result_feeding_a_later_step_is_rejected_by_name() -> None:
         )
 
 
+def _single_input_join(**method: str) -> ExecutableNextflowWorkflow:
+    """JOIN scatters over PAIR's gathered output alone, and CONCAT gathers JOIN's."""
+    steps = [
+        step("PAIR", **{
+            "in": {"a": "xs", "b": "ys", "n": "n"}, "out": ["out"],
+            "scatter": ["a", "b"], "scatterMethod": "dotproduct",
+        }),
+        step("JOIN", **{"in": {"f": "PAIR/out", "g": "g"}, "out": ["out"], "scatter": ["f"], **method}),
+        step("CONCAT", **{"in": {"files": "JOIN/out"}, "out": ["all"]}),
+    ]
+    workflow = workflow_doc(
+        steps,
+        inputs={"xs": {"type": STRINGS}, "ys": {"type": STRINGS}, "n": {"type": "int"}, "g": {"type": "File"}},
+        outputs={"all": {"type": "File", "outputSource": "CONCAT/all"}},
+    )
+    params = {"xs": ["a"], "ys": ["b"], "n": 1, "g": "/tmp/g"}
+    return compiled_source_to_nextflow(synthetic_source(workflow, _tools(), workflow_inputs=params))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("method", ["dotproduct", "flat_crossproduct", "nested_crossproduct"])
+def test_a_single_input_scatter_over_a_gathered_source_lowers_alike_under_each_method(method: str) -> None:
+    """At one scattered input the three methods coincide, as over a workflow input (design §6, Topology)."""
+    assert _single_input_join(scatterMethod=method).connections == _single_input_join().connections
+
+
 def _gathered_into_nested_join(second: str) -> ExecutableNextflowWorkflow:
     """JOIN nests over PAIR's gathered outputs ``f`` and ``second``: PAIR's again or the ``gs`` input."""
     steps = [

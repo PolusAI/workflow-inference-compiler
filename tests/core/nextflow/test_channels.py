@@ -27,9 +27,9 @@ from .testkit import execute_nextflow, runtime_workflow
 
 
 def _lower(flow: Workflow, params: dict[str, Any] | None = None) -> ExecutableNextflowWorkflow:
-    """Lower ``flow``, with ``params`` as its workflow input values when given."""
+    """Lower ``flow``, with ``params`` among its workflow input values."""
     source = compilation_result_source(compile_workflow_result(flow))
-    return compiled_source_to_nextflow(source if params is None else replace(source, params=params))
+    return compiled_source_to_nextflow(replace(source, params={**source.params, **(params or {})}))
 
 
 def _run(

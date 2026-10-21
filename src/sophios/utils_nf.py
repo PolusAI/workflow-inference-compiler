@@ -11,7 +11,7 @@ from typing import Any
 
 from .ir.artifacts import CompilationArtifact, CompilationResult
 from .ir.names import Names
-from .ir.types import Direction, Edge, PortId, StepNode, WorkflowGraph
+from .ir.types import Direction, Edge, PortId, SourceList, StepNode, WorkflowGraph
 from .nf_expr import (
     Expr, check as check_safe_subset, is_safe_subset_text, parse as parse_safe_subset, references,
 )
@@ -20,6 +20,8 @@ from .nf_symbols import normalize_nextflow_identifier
 from .nf_types import (
     ExecutableNextflowWorkflow,
     GLOB_WILDCARDS,
+    LINK_MERGES,
+    PICK_VALUES,
     NF_INTERNAL_IDENTIFIERS,
     NfArrayBinding,
     NfBasenameReference,
@@ -34,6 +36,7 @@ from .nf_types import (
     NfProcessConnection,
     NfResources,
     NfShellLiteral,
+    NfStepInputConnection,
     NfTemplate,
     NfTemplateSegment,
     NfWorkflowInputConnection,
@@ -1060,6 +1063,10 @@ def _output_capture(raw_name: Any, definition: Mapping[str, Any]) -> str | None:
 _DOCUMENT_KEYS = frozenset({"$namespaces", "$schemas"})
 _TOOL_CONSUMED_FIELDS = consumed(FIELDS["CommandLineTool"]) | _DOCUMENT_KEYS
 _WORKFLOW_CONSUMED_FIELDS = consumed(FIELDS["Workflow"]) | _DOCUMENT_KEYS | {"sophios:lang_version"}
+# The step-input fields the fixed idioms lower (design §6, Topology, Step inputs).
+_STEP_INPUT_IDIOM_FIELDS = frozenset({"default", "linkMerge", "pickValue"})
+# The pickValue methods that give one value rather than a list.
+_PICKS_ONE = frozenset({"first_non_null", "the_only_non_null"})
 # The outputBinding fields that declare capture behavior, as opposed to naming
 # the file to capture.
 _OUTPUT_CAPTURE_FIELDS = frozenset({"loadContents", "outputEval"})
@@ -1419,11 +1426,57 @@ def _source_port_name(port_id: PortId, leaf_names: Mapping[Any, str], names: Nam
     return f"{process}/{names.port(port_id.port)}"
 
 
-def _replace_step_source(raw: Any, source: str) -> Any:
-    """Retain completed step-input metadata while replacing its resolved source."""
+def _replace_step_source(raw: Any, source: str | list[str]) -> Any:
+    """Retain completed step-input metadata while replacing its resolved source, or sources in order."""
     if isinstance(raw, Mapping):
         return {**copy.deepcopy(dict(raw)), "source": source}
     return source
+
+
+def _record_sources(
+    step: StepNode,
+    *,
+    names: Names,
+    leaf_names: Mapping[Any, str],
+    all_steps: Mapping[Any, StepNode],
+    feeders: Mapping[PortId, str | PortId],
+) -> dict[PortId, list[str]]:
+    """The resolved sources of each of a leaf step's step-input records, in the order they were written.
+
+    An entry naming an input of the leaf's own workflow is fed through the
+    step that calls that workflow: by an edge, by a root input, or by that
+    step's own workflow's input in turn (``feeders``).
+    """
+    caller = step.id.namespace.parts[-1] if step.id.namespace.parts else None
+
+    def fed(port: PortId) -> str:
+        feeder = feeders.get(port)
+        if feeder is None:
+            raise ValueError(f"resolved input {port} has no source")
+        return feeder if isinstance(feeder, str) else fed(feeder)
+
+    def resolved(item: Any, written: Any) -> str:
+        match item:
+            case Edge(source=source):
+                expanded = _expanded_boundary_port(source, all_steps)
+                if len(expanded) != 1:
+                    raise ValueError(f"resolved edge source {source} is not singular")
+                return _source_port_name(expanded[0], leaf_names, names)
+            case None:
+                if caller is None:
+                    return names.port(written.name)
+                return fed(PortId(caller, Direction.INPUT, written.name))
+            case _:
+                raise ValueError(f"step input of {step.id} has an unresolved source")
+
+    return {
+        binding.sink: [
+            resolved(item, written)
+            for item, written in zip(binding.resolution.items, getattr(binding.value, "sources", ()), strict=True)
+        ]
+        for binding in step.bindings
+        if isinstance(binding.resolution, SourceList)
+    }
 
 
 def _leaf_step_document(
@@ -1433,6 +1486,7 @@ def _leaf_step_document(
     names: Names,
     edge_sources: Mapping[PortId, str],
     boundary_sources: Mapping[PortId, str],
+    record_sources: Mapping[PortId, list[str]],
 ) -> dict[str, Any]:
     """Project one resolved leaf step without repeating inference or inlining."""
     ports = {names.port(port.id.port): port for port in step.inputs}
@@ -1440,9 +1494,13 @@ def _leaf_step_document(
     inputs: dict[str, Any] = {}
     for port_name, raw in raw_inputs.items():
         port = ports.get(port_name)
-        source = None if port is None else edge_sources.get(
-            port.id, boundary_sources.get(port.id)
-        )
+        source: str | list[str] | None = None
+        if port is not None and port.id in record_sources:
+            ordered = record_sources[port.id]
+            # A record keeps the spelling it was written in: a list, or one source.
+            source = ordered if isinstance(raw.get("source"), list) else (ordered[0] if ordered else None)
+        elif port is not None:
+            source = edge_sources.get(port.id, boundary_sources.get(port.id))
         inputs[port_name] = copy.deepcopy(raw) if source is None else _replace_step_source(raw, source)
     document = copy.deepcopy(dict(emitted))
     document["id"] = names.qualified(step.id)
@@ -1457,6 +1515,13 @@ def compilation_result_source(result: CompilationResult) -> CompiledNextflowSour
     leaves = _graph_steps_with_artifacts(graph, result.artifact)
     all_steps = {step.id: step for step in graph.all_steps}
     leaf_names = {step.id: names.qualified(step.id) for step, _emitted, _artifact in leaves}
+    # A record's several sources reach one port; they are resolved in order below.
+    records = {
+        binding.sink for step, _emitted, _artifact in leaves for binding in step.bindings
+        if isinstance(binding.resolution, SourceList)
+    }
+    # What feeds each input of a nested workflow's calling step.
+    feeders: dict[PortId, str | PortId] = {}
 
     edge_sources: dict[PortId, str] = {}
     for edge in _graph_edges(graph):
@@ -1465,7 +1530,10 @@ def compilation_result_source(result: CompilationResult) -> CompiledNextflowSour
         if len(sources) != 1:
             raise ValueError(f"resolved edge source {edge.source} is not singular")
         source = _source_port_name(sources[0], leaf_names, names)
+        feeders[edge.sink] = source
         for sink in sinks:
+            if sink in records:
+                continue
             previous = edge_sources.setdefault(sink, source)
             if previous != source:
                 raise ValueError(f"resolved input {sink} has conflicting sources")
@@ -1473,10 +1541,18 @@ def compilation_result_source(result: CompilationResult) -> CompiledNextflowSour
     boundary_sources: dict[PortId, str] = {}
     for name, mapped_ports in graph.input_mapping:
         for mapped_port in mapped_ports:
+            feeders.setdefault(mapped_port, names.port(name))
             for sink in _expanded_boundary_port(mapped_port, all_steps):
+                if sink in records:
+                    continue
                 previous = boundary_sources.setdefault(sink, names.port(name))
                 if previous != names.port(name):
                     raise ValueError(f"resolved input {sink} has conflicting workflow parameters")
+    for caller in all_steps.values():
+        if caller.run is not None and caller.run.child is not None:
+            for name, mapped_ports in caller.run.child.input_mapping:
+                for mapped_port in mapped_ports:
+                    feeders.setdefault(mapped_port, PortId(caller.id, Direction.INPUT, name))
 
     workflow = copy.deepcopy(dict(result.artifact.cwl))
     workflow["steps"] = [
@@ -1486,6 +1562,9 @@ def compilation_result_source(result: CompilationResult) -> CompiledNextflowSour
             names=names,
             edge_sources=edge_sources,
             boundary_sources=boundary_sources,
+            record_sources=_record_sources(
+                step, names=names, leaf_names=leaf_names, all_steps=all_steps, feeders=feeders
+            ),
         )
         for step, emitted, _artifact in leaves
     ]
@@ -1536,12 +1615,6 @@ def _nested_workflow_capability_findings(
         zip(graph.steps, _workflow_steps(artifact.cwl), artifact.children, strict=True)
     ):
         step_path = f"{path}.steps[{index}]"
-        for raw_name, definition in _as_mapping(
-            emitted.get("in", {}), error="compiled step inputs must be a mapping"
-        ).items():
-            match definition:
-                case {"source": [_, _, *_]}:  # the projection joins one source per input
-                    findings.append(f"{step_path}.in.{raw_name}.source: a list of sources is not supported")
         if step.run is None or step.run.child is None:
             continue
         if emitted.get("when") is not None:
@@ -1566,9 +1639,17 @@ def _nested_workflow_capability_findings(
             emitted.get("in", {}), error="compiled step inputs must be a mapping"
         ).items():
             if isinstance(definition, Mapping):
+                input_path = f"{step_path}.in.{raw_name}"
+                # The projection joins one source to each input a nested workflow step binds.
+                merging = sorted(_STEP_INPUT_IDIOM_FIELDS & set(definition))
+                if isinstance(definition.get("source"), list) and len(definition["source"]) > 1:
+                    merging.append("source")
                 findings.extend(
-                    _unconsumed_field_findings(definition, "WorkflowStepInput", path=f"{step_path}.in.{raw_name}")
+                    f"{input_path}.{name}: a nested workflow step's input takes one source as it is; "
+                    "merge on a step inside the nested workflow"
+                    for name in merging
                 )
+                findings.extend(_unconsumed_field_findings(definition, "WorkflowStepInput", path=input_path))
 
         child_path = f"{step_path}.run"
         child_document = child_artifact.cwl
@@ -2049,7 +2130,7 @@ def _scatter_edge_findings(steps: list[Mapping[str, Any]]) -> list[str]:
             if producer is not None and producer in scattered:
                 # Every scatter is indexed, so its outputs are gathered once, in
                 # invocation order (design §6, Topology, Gather).
-                if steps[producer].get("scatterMethod") == "nested_crossproduct":
+                if steps[producer].get("scatterMethod") == "nested_crossproduct" and len(scattered[producer]) > 1:
                     findings.append(
                         f"steps[{step_index}].in.{raw_name}: {source!r} is a nested_crossproduct "
                         "result, which reaches workflow outputs only"
@@ -2059,6 +2140,96 @@ def _scatter_edge_findings(steps: list[Mapping[str, Any]]) -> list[str]:
                     f"steps[{step_index}].in.{raw_name}: a scattered input needs an array-typed source; "
                     f"{source!r}, from a step that is not scattered, is one value"
                 )
+    return findings
+
+
+def _step_input_findings(
+    workflow: Mapping[str, Any],
+    steps: list[Mapping[str, Any]],
+    tools: tuple[Mapping[str, Any], ...],
+) -> list[str]:
+    """Check each step input the fixed idioms lower: a default, a linkMerge, a pickValue, or two or more sources.
+
+    Each source is one value (design §6, Topology, Step inputs). Null is the
+    [] sentinel, so an idiom may not take an array source where [] would be
+    read as null, and a merged list may not hold a source that may be null.
+    """
+    findings: list[str] = []
+    source_types = _source_types(workflow, steps, tools)
+    indices = _step_indices_by_id(steps)
+    scattered = _scattered_names_by_index(steps)
+
+    def producer(source: str) -> int | None:
+        raw_process = source.rsplit("/", maxsplit=1)[0]
+        return indices.get(raw_process, indices.get(raw_process.rsplit("#", maxsplit=1)[-1]))
+
+    def is_array(source: str) -> bool:
+        if "/" in source:
+            return producer(source) in scattered  # a scatter's outputs are gathered
+        return _is_array_type(_required_type(source_types.get(source)))
+
+    def may_be_null(source: str) -> bool:
+        if "/" in source:
+            index = producer(source)
+            return index is not None and "when" in steps[index]
+        return _is_optional(source_types.get(source))
+
+    for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True)):
+        step_inputs, tool_inputs = step.get("in", {}), tool.get("inputs", {})
+        if not isinstance(step_inputs, Mapping) or not isinstance(tool_inputs, Mapping):
+            continue
+        for raw_name, definition in step_inputs.items():
+            path = f"steps[{step_index}].in.{raw_name}"
+            if not isinstance(definition, Mapping):
+                continue
+            try:
+                sources = _source_values(definition, context=path)
+            except ValueError:
+                continue  # reported by the unconsumed-fields pass
+            link_merge, pick_value = definition.get("linkMerge"), definition.get("pickValue")
+            if len(sources) < 2 and not _STEP_INPUT_IDIOM_FIELDS & set(definition):
+                continue
+            if raw_name in scattered.get(step_index, set()):
+                findings.append(f"{path}: a scattered input takes its one source as it is")
+                continue
+            merges = link_merge if link_merge is not None else ("merge_nested" if len(sources) > 1 else None)
+            if link_merge is not None and link_merge not in LINK_MERGES:
+                findings.append(f"{path}.linkMerge: unsupported linkMerge {link_merge!r}")
+                continue
+            if pick_value is not None and pick_value not in PICK_VALUES:
+                findings.append(f"{path}.pickValue: unsupported pickValue {pick_value!r}")
+                continue
+            if pick_value is not None and merges is None:
+                findings.append(
+                    f"{path}.pickValue: pickValue picks from a list; one source with no linkMerge is not one"
+                )
+            declared = tool_inputs.get(raw_name)
+            declared_type = declared.get("type") if isinstance(declared, Mapping) else declared
+            if "default" in definition:
+                default = definition["default"]
+                if sources and merges is not None:
+                    findings.append(f"{path}.default: a default never applies beside a linkMerge or a pickValue: "
+                                    "the joined value is not null")
+                elif default is None or isinstance(default, (Mapping, list)) or not _phase1_value_matches(
+                    declared_type, default
+                ):
+                    findings.append(f"{path}.default: the Nextflow target supports a JSON scalar default of "
+                                    "the tool input's type")
+            # A default is a JSON scalar, so it never sits beside an array source of its type.
+            arrays = [source for source in sources if is_array(source)]
+            if arrays and pick_value is not None:
+                findings.append(f"{path}: {arrays[0]!r} is an array, and [] stands for both a null and an empty "
+                                "array, so pickValue cannot take it")
+            elif arrays and merges == "merge_nested":
+                findings.append(f"{path}: merge_nested over the array {arrays[0]!r} makes a nested array, which is "
+                                "not supported")
+            if merges is not None and pick_value is None and (nullable := [s for s in sources if may_be_null(s)]):
+                findings.append(f"{path}: {nullable[0]!r} may be null, and a joined list has no lowering of a null "
+                                "element; pick from it with pickValue")
+            gives_list = pick_value not in _PICKS_ONE
+            if merges is not None and gives_list != _is_array_type(_required_type(declared_type)):
+                findings.append(f"{path}: the step input gives {'a list' if gives_list else 'one value'}, but its "
+                                f"tool input declares {declared_type!r}")
     return findings
 
 
@@ -2167,7 +2338,8 @@ def _absent_optional_findings(
                 except ValueError:
                     continue
                 boundary_sources = [source for source in sources if "/" not in source]
-                absent = any(
+                # A pickValue or a default gives a value that is not null.
+                absent = not _gives_non_null(raw_source) and any(
                     params.get(_identifier(source, context="workflow input source")) is None
                     for source in boundary_sources
                 )
@@ -2189,6 +2361,11 @@ def _absent_optional_findings(
                 detail = "resolves to an absent required value"
             findings.append(f"steps[{step_index}].run.inputs.{raw_name}: {detail}")
     return findings
+
+
+def _gives_non_null(step_input: Any) -> bool:
+    """Whether a step input's idioms give a value that is not null whatever its sources: a pickValue or a default."""
+    return isinstance(step_input, Mapping) and bool({"pickValue", "default"} & set(step_input))
 
 
 def _conditional_consumer_findings(
@@ -2225,12 +2402,12 @@ def _conditional_consumer_findings(
     if not conditional_ids:
         return findings
 
-    for step_index, raw_name, _raw_source, sources in _wired_inputs(steps):
+    for step_index, raw_name, raw_source, sources in _wired_inputs(steps):
         consumes_conditional = any(
             "/" in source and source.rsplit("/", maxsplit=1)[0] in conditional_ids
             for source in sources
         )
-        if not consumes_conditional:
+        if not consumes_conditional or _gives_non_null(raw_source):
             continue
         path = f"steps[{step_index}].in.{raw_name}"
         tool = tools[step_index]
@@ -2487,6 +2664,8 @@ def _source_values(value: Any, *, context: str) -> list[str]:
             if unsupported:
                 raise ValueError(f"unsupported {context} fields: {', '.join(sorted(unsupported))}")
             return _source_values(source, context=context)
+        case {"default": _} as source_definition if set(source_definition) <= {"default", "label"}:
+            return []  # the default is the value
         case Mapping():
             raise ValueError(f"{context} must define source")
         case _:
@@ -2528,6 +2707,7 @@ def _step_connections(
     steps: list[Mapping[str, Any]],
     processes: list[NfProcess],
     step_names: Mapping[str, str],
+    defaults: Mapping[tuple[str, str], NfWorkflowInputConnection],
 ) -> list[NfConnection]:
     connections: list[NfConnection] = []
     # Only a multi-input scatter carries the invocation index a gather sorts by.
@@ -2546,20 +2726,18 @@ def _step_connections(
             _identifier(raw_name, context="scattered input")
             for raw_name in (_scatter_names(step) if "scatter" in step else [])
         }
-        # Capability analysis already admitted only an approved method for two or more.
-        scatter_method = str(step.get("scatterMethod", "dotproduct"))
+        # Capability analysis already admitted only an approved method for two or more;
+        # at one scattered input the three methods coincide.
+        scatter_method = str(step.get("scatterMethod", "dotproduct")) if len(scattered) > 1 else "dotproduct"
         for raw_port, raw_source in raw_inputs.items():
             destination_port = _identifier(raw_port, context="process input destination")
+            sources: list[NfWorkflowInputConnection | NfProcessConnection] = []
             for source in _source_values(raw_source, context=f"step input {process.name}.{destination_port}"):
                 source_process, source_port = _source_endpoint(source, step_names)
                 if source_process is None:
-                    if destination_port in scattered:
-                        # Every scatter is indexed, so its gather keeps input order; at
-                        # one scattered input the three methods coincide.
-                        adapter = scatter_method if len(scattered) > 1 else "dotproduct"
-                    else:
-                        adapter = None
-                    connections.append(
+                    # Every scatter is indexed, so its gather keeps input order.
+                    adapter = scatter_method if destination_port in scattered else None
+                    sources.append(
                         NfWorkflowInputConnection(
                             source_port,
                             process.name,
@@ -2569,7 +2747,7 @@ def _step_connections(
                     )
                 else:
                     gathers = source_process in multi_scattered
-                    connections.append(
+                    sources.append(
                         NfProcessConnection(
                             source_process,
                             source_port,
@@ -2578,6 +2756,18 @@ def _step_connections(
                             (scatter_method if destination_port in scattered else "gather") if gathers else None,
                         )
                     )
+            # Capability analysis admitted only the step inputs the idioms lower.
+            fields = raw_source if isinstance(raw_source, Mapping) else {}
+            link_merge = fields.get("linkMerge", "merge_nested" if len(sources) > 1 else None)
+            pick_value = fields.get("pickValue")
+            if sources and "default" in fields:
+                # The default takes the place of a null source: the first value that is not null.
+                sources.append(defaults[(process.name, destination_port)])
+                link_merge, pick_value = "merge_nested", "first_non_null"
+            if link_merge is None:
+                connections.extend(sources)
+            else:
+                connections.append(NfStepInputConnection(tuple(sources), link_merge, pick_value))
     return connections
 
 
@@ -2614,11 +2804,21 @@ def _connections(
     workflow: Mapping[str, Any],
     steps: list[Mapping[str, Any]],
     processes: list[NfProcess],
+    defaults: list[NfWorkflowInputConnection],
 ) -> list[NfConnection]:
+    """Every connection: a default beside a source joins that step input, and every other default is its own."""
     step_names = _step_name_map(steps, processes)
+    step_connections = _step_connections(
+        steps, processes, step_names, {(default.to_process, default.to_port): default for default in defaults}
+    )
+    joined = {
+        (connection.to_process, connection.to_port)
+        for connection in step_connections if isinstance(connection, NfStepInputConnection)
+    }
     return [
-        *_step_connections(steps, processes, step_names),
+        *step_connections,
         *_workflow_output_connections(workflow, step_names),
+        *(default for default in defaults if (default.to_process, default.to_port) not in joined),
     ]
 
 
@@ -2628,12 +2828,15 @@ def _default_bindings(
     processes: list[NfProcess],
     workflow_inputs: Iterable[str],
 ) -> tuple[list[NfWorkflowInputConnection], dict[str, Any], dict[str, str]]:
-    """Synthesize workflow-input connections for every unwired process input.
+    """Synthesize a workflow parameter for every default, and a connection for every unwired process input.
 
-    Covers two cases: a declared CWL default, and an unwired optional input
-    with no default. Capability analysis has already proven any remaining
-    unwired, no-default optional input is a safe absence, so this always
-    contributes a null value for those rather than re-deriving safety.
+    Covers three cases: a step input's default, a declared CWL default on an
+    unwired input, and an unwired optional input with no default. Capability
+    analysis has already proven any remaining unwired, no-default optional
+    input is a safe absence, so this always contributes a null value for
+    those rather than re-deriving safety. A step input's default beside a
+    source is one of that step input's sources (``_step_connections``), so it
+    gets a parameter and no connection of its own.
 
     Each parameter is made as the compiler makes a name, `<step>~<port>`, and
     normalized; one that normalizes like another or like a workflow input is
@@ -2644,9 +2847,14 @@ def _default_bindings(
         bound = _as_mapping(step.get("in", {}), error="compiled step inputs must be a mapping")
         inputs = _as_mapping(tool.get("inputs", {}), error="tool inputs must be a mapping")
         for raw_name, definition in inputs.items():
-            if raw_name in bound or not isinstance(definition, Mapping):
+            step_input = bound.get(raw_name)
+            if not isinstance(definition, Mapping):
                 continue
-            if "default" in definition:
+            if isinstance(step_input, Mapping) and "default" in step_input:
+                value = _json_value(step_input["default"])
+            elif raw_name in bound:
+                continue
+            elif "default" in definition:
                 value = _json_value(definition["default"])
             elif _is_optional(definition.get("type")):
                 # Capability analysis has already proven this unwired,
@@ -2820,6 +3028,7 @@ def compiled_source_to_nextflow(
     findings.extend(_conditional_consumer_findings(list(steps), tools))
     findings.extend(_flag_source_findings(workflow, steps, tools))
     findings.extend(_scatter_findings(workflow, steps, tools))
+    findings.extend(_step_input_findings(workflow, steps, tools))
     findings.extend(_text_capture_sink_findings(steps, tools))
     findings.extend(_container_policy_findings(tools))
     _raise_capability_findings(findings)
@@ -2835,7 +3044,7 @@ def compiled_source_to_nextflow(
         return ExecutableNextflowWorkflow(
             name=name,
             processes=processes,
-            connections=[*_connections(workflow, list(steps), processes), *default_connections],
+            connections=_connections(workflow, list(steps), processes, default_connections),
             params=_apply_absent_sentinel(params),
             param_types={**_workflow_param_types(workflow), **default_types},
         )
