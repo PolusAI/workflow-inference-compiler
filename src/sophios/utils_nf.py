@@ -2210,6 +2210,9 @@ def _step_input_findings(
                 if sources and merges is not None:
                     findings.append(f"{path}.default: a default never applies beside a linkMerge or a pickValue: "
                                     "the joined value is not null")
+                elif _required_type(declared_type) in ("File", "Directory"):
+                    findings.append(f"{path}.default: a step-input default of a File or Directory input is not "
+                                    "supported; give the path as a workflow input")
                 elif default is None or isinstance(default, (Mapping, list)) or not _phase1_value_matches(
                     declared_type, default
                 ):

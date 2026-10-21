@@ -74,7 +74,8 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'when': Row(_L, 'the safe JavaScript subset, evaluated per invocation'),
     }),
     'WorkflowStepInput': MappingProxyType({
-        'default': Row(_L, 'a JSON scalar: the value when there is no source, or in place of a null source'),
+        'default': Row(_L, 'a string, int, float or boolean: the value when there is no source, or in place of a '
+                           'null source'),
         'id': Row(_L, 'the tool input it binds'),
         'label': _DOC,
         'linkMerge': Row(_L, 'joins the sources in order, `merge_nested` or `merge_flattened`'),
