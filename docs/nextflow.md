@@ -311,6 +311,11 @@ index before stripping it, so the gathered workflow output is always in
 invocation order, regardless of which task finishes first. Unscattered inputs,
 including File and Directory, still broadcast to every invocation.
 
+The steps that read one workflow input must agree on how its channel is
+built: `path` or `val`, the path kind, and whether it carries a list. A
+scattered input takes the whole array, so one array input may be scattered at
+one step, under any method, and passed whole to another step's array input.
+
 Every scatter, single-input included, carries an invocation index, so its
 outputs keep input order at a workflow output and can also feed later steps.
 Into an unscattered array-typed input they are gathered once, as one array in

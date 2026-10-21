@@ -870,6 +870,31 @@ MULTI_INPUT_ADAPTERS = frozenset({"dotproduct", "flat_crossproduct", "nested_cro
 
 
 @dataclass(frozen=True, slots=True)
+class NfChannel:
+    """How a workflow parameter's channel is built for one sink (design §5.2).
+
+    ``path_kind`` is the kind each value is staged as, or None for a value;
+    ``carries_list`` is whether the parameter holds a list: an array port's,
+    or the whole array a scatter adapter splits into tasks.
+    """
+
+    path_kind: str | None
+    carries_list: bool
+
+    def __str__(self) -> str:
+        return ("val" if self.path_kind is None else f"path[{self.path_kind}]") + ("[]" if self.carries_list else "")
+
+
+def channel_construction(port: NfPort, adapter: str | None) -> NfChannel:
+    """The channel a workflow parameter needs for one sink; the graph validator compares it and the renderer builds it.
+
+    The adapter belongs to the scattered process, not to the parameter, so
+    it counts only as taking the whole array.
+    """
+    return NfChannel(port.path_kind, port.is_array or adapter is not None)
+
+
+@dataclass(frozen=True, slots=True)
 class NfWorkflowInputConnection:
     """Connect one workflow parameter to one process input.
 
@@ -1138,7 +1163,7 @@ class ExecutableNextflowWorkflow:
             raise ValueError("workflow contains a duplicate connection")
 
         incoming: set[tuple[str, str]] = set()
-        workflow_input_qualifiers: dict[str, str] = {}
+        channels: dict[str, NfChannel] = {}
         param_destinations: dict[str, tuple[bool, str, str]] = {}
         workflow_outputs: set[str] = set()
         adapters_by_process: dict[str, set[str]] = {}
@@ -1164,29 +1189,16 @@ class ExecutableNextflowWorkflow:
                             f"channel adapter {adapter!r} cannot target the array-marked port "
                             f"{to_process}.{to_port}"
                         )
-                    # path_kind, is_array, and the adapter each select part of
-                    # the staging/cardinality policy, so all three are part of
-                    # the channel contract: connection order must never pick one.
-                    semantics = destination.qualifier + (
-                        f"[{destination.path_kind}]" if destination.path_kind else ""
-                    ) + ("[]" if destination.is_array else "") + (
-                        f"|{adapter}" if adapter else ""
-                    )
-                    previous = workflow_input_qualifiers.setdefault(from_port, semantics)
-                    if previous != semantics:
+                    # The renderer builds one channel per parameter, so every
+                    # sink must need the same one: connection order never picks it.
+                    channel = channel_construction(destination, adapter)
+                    previous = channels.setdefault(from_port, channel)
+                    if previous != channel:
                         raise ValueError(
                             f"workflow input {from_port!r} feeds incompatible channel qualifiers "
-                            f"{previous!r} and {semantics!r}"
+                            f"{str(previous)!r} and {str(channel)!r}"
                         )
-                    # An adapter exists to change cardinality between the
-                    # parameter and the port, so the value is judged against
-                    # what the adapter consumes rather than what the port
-                    # declares: a scatter takes the whole array and feeds one
-                    # element per invocation.
-                    expects_array = destination.is_array or adapter is not None
-                    param_destinations.setdefault(
-                        from_port, (expects_array, to_process, to_port)
-                    )
+                    param_destinations.setdefault(from_port, (channel.carries_list, to_process, to_port))
                     if adapter is not None:
                         adapters_by_process.setdefault(to_process, set()).add(adapter)
                     self._record_incoming(incoming, to_process, to_port)
