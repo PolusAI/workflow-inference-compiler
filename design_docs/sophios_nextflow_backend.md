@@ -36,6 +36,7 @@ The backend does not perform a second forward inference pass. Imported workflows
 - A Sophios-managed Nextflow runner in Phases 1 or 2.
 - Nextflow-native graph inference, until a successor design. The backend does not perform a second forward inference pass.
 - Backward compatibility for private, unversioned intermediate Python objects. Serialized schemas are versioned explicitly.
+- User-written Nextflow configuration. The generated `nextflow.config` is the only configuration Sophios supports.
 - User-written Groovy in a workflow compiled to Nextflow. `target="nextflow"` has no Groovy passthrough; the gate under which one could ever be admitted is stated in §6, Expressions.
 
 ---
@@ -334,13 +335,15 @@ It does not:
 
 For a valid executable model, rendering is total. Unsupported-user-input errors belong to capability analysis; renderer invariant failures are compiler defects.
 
+Dry runs are not supported. Every generated process carries a `stub:` block that prints that Sophios-generated Nextflow does not support dry runs (`-stub-run`) and exits 1, so a dry run stops at its first task: a process with no stub block would run its real command under `-stub-run`. The block is part of the fixed rendering of every process, and the generated-subset reader reads it as such.
+
 The artifact set is:
 
 | Artifact | Contract |
 |---|---|
 | `nextflow_workflow.json` | Versioned, validated executable IR. |
 | `workflow.nf` | Deterministic DSL2 generated solely from executable IR. |
-| `nextflow.config` | Deterministic supported configuration. |
+| `nextflow.config` | Deterministic supported configuration; the only Nextflow configuration Sophios supports. |
 | `nextflow_params.json` | Deterministic serialized workflow parameters. |
 
 Repeated rendering is byte-stable and does not mutate its input.
