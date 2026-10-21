@@ -227,6 +227,22 @@ def test_each_step_input_the_idioms_cannot_take_is_rejected_by_name(
 
 
 @pytest.mark.fast
+def test_a_step_inputs_producer_is_called_before_it_whatever_the_step_order() -> None:
+    produce = tool("P", inputs={"text": {"type": "string", "inputBinding": {"position": 1}}},
+                   outputs={"out": {"type": "File", "outputBinding": {"glob": "out.txt"}}}, stdout="out.txt")
+    join = tool("JOIN", inputs={"files": {"type": {"type": "array", "items": "File"}, "inputBinding": {"position": 1}}},
+                outputs={"out": {"type": "File", "outputBinding": {"glob": "all.txt"}}}, stdout="all.txt")
+    rendered = render_nextflow(compiled_source_to_nextflow(synthetic_source(
+        workflow_doc([step("JOIN", **{"in": {"files": {"source": ["P/out"], "linkMerge": "merge_flattened"}},
+                                      "out": ["out"]}),
+                      step("P", **{"in": {"text": "a"}, "out": ["out"]})],
+                     inputs={"a": {"type": "string"}}, outputs={"out": {"type": "File", "outputSource": "JOIN/out"}}),
+        [join, produce], workflow_inputs={"a": "a"},
+    )))
+    assert rendered.index("    _P(") < rendered.index("    _JOIN(")
+
+
+@pytest.mark.fast
 def test_a_scattered_input_takes_its_one_source_as_it_is() -> None:
     rose = _joined({"source": ["xs"], "linkMerge": "merge_flattened"}, "string", {"xs": (_STRINGS, ["x"])},
                    scatter=True)

@@ -24,7 +24,7 @@ from sophios.nf_types import (
 )
 from sophios.utils_nf import compilation_result_source, compiled_source_to_nextflow
 
-from .testkit import execute_nextflow, runtime_workflow
+from .testkit import execute_nextflow, flag_workflow, runtime_workflow
 
 
 def _lower(flow: Workflow, params: dict[str, Any] | None = None) -> ExecutableNextflowWorkflow:
@@ -110,6 +110,15 @@ def test_one_file_array_is_scattered_at_one_step_and_taken_whole_at_another(tmp_
     assert result.returncode == 0, result.stdout + result.stderr
     assert observed["each"] == ["a.txt\n", "b.txt\n"]
     assert observed["whole"] == ["a.txt\nb.txt\n"]
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+def test_a_relative_file_path_names_a_file_in_the_launch_directory(tmp_path: Path) -> None:
+    (tmp_path / "lines.txt").write_text("a\nb\n", encoding="utf-8")
+    result, observed = _run(flag_workflow(), tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert observed["result"] == ["b\na\n"]
 
 
 class _JsonNumber(str):
