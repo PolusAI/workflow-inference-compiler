@@ -500,12 +500,16 @@ gate on, so `when` on a tool that declares no inputs is rejected.
 ## Field support
 
 Every field the Nextflow target considers is in one of three states.
-*Lowered*: the generated pipeline carries it. *Compile-time*: Sophios uses it
-while compiling, and the Nextflow output carries nothing for it. *Rejected*:
-compiling stops, naming the field with the note as the reason, and writes no
-artifacts. A field or class missing from these tables is rejected too. For
-Sophios's own classes, the *Sophios* column is what Sophios does with the
-field when it compiles to CWL: *native* when Sophios reads it and acts on it,
-*passthrough* when it copies it out unchanged.
+*Lowered*: the lowering to Nextflow reads it; the note says what it becomes,
+and a declaration such as `ScatterFeatureRequirement` becomes nothing of its
+own. *Compile-time*: Sophios uses it while compiling, and the Nextflow output
+carries nothing for it. *Rejected*: compiling stops, naming the field with the
+note as the reason, and writes no artifacts. A field or class missing from
+these tables is rejected too, except the document keys Sophios writes:
+`$namespaces` and `$schemas` on a tool or workflow, and `sophios:lang_version`
+on a workflow, which the Nextflow output carries nothing for. For Sophios's
+own classes, the *Sophios* column is what Sophios does with the field when it
+compiles to CWL: *native* when Sophios reads it and acts on it, *passthrough*
+when it copies it out unchanged, and *rejected* when it refuses it.
 
 <!-- nf-support-table -->
