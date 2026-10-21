@@ -2301,7 +2301,7 @@ def test_rejects_a_nested_workflow_input_default_before_projection() -> None:
     result = copy.deepcopy(_nested_result())
     child = _nested_artifacts(result)[0].cwl
     next(iter(child["inputs"].values()))["default"] = "fallback.txt"
-    with pytest.raises(ValueError, match="default is not consumed"):
+    with pytest.raises(ValueError, match=r"\.run\.inputs\.\w+\.default: a nested workflow input's default is not"):
         compiled_source_to_nextflow(result)
 
 

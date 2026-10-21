@@ -87,7 +87,7 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'valueFrom': Row(_R, "a step input's valueFrom is not supported"),
     }),
     'WorkflowInputParameter': MappingProxyType({
-        'default': Row(_L, "the parameter's value when none is given; rejected on a nested workflow's input"),
+        'default': Row(_L, "the parameter's value when none is given; on a nested workflow's input it is rejected"),
         'doc': _DOC,
         'format': _FORMAT,
         'id': Row(_L, 'names the parameter'),
