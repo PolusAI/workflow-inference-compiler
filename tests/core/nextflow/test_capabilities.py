@@ -24,6 +24,7 @@ from sophios.api.python.tool_builder import (
 )
 from sophios.api.python.workflow import CompiledWorkflow, Step, StepInput, Workflow
 from sophios.cli import default_compilation_settings
+from sophios.input_output_nf import render_nextflow
 from sophios.ir.artifacts import CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.resolve import RegistrySnapshot
@@ -405,8 +406,8 @@ def _producer() -> Yaml:
 
 
 @pytest.mark.fast
-def test_rejects_scatter_over_a_process_output() -> None:
-    """No process output can carry an array, so a queue source truncates the scatter."""
+def test_rejects_scatter_over_an_unscattered_steps_output() -> None:
+    """An unscattered step's output is one value, and no tool output is an array to scatter over."""
     rose = synthetic_source(
         workflow_doc([
             step("PRODUCER", out=["out"]),
@@ -419,13 +420,13 @@ def test_rejects_scatter_over_a_process_output() -> None:
     )
 
     assert _findings(rose) == [
-        "steps[1].in.item: a scattered step takes inputs from workflow inputs or scattered steps; "
-        "'PRODUCER/out', from a step that is not scattered, would truncate the scatter to one task"
+        "steps[1].in.item: a scattered input needs an array-typed source; "
+        "'PRODUCER/out', from a step that is not scattered, is one value"
     ]
 
 
 @pytest.mark.fast
-def test_rejects_a_process_output_source_on_a_scattered_steps_other_input() -> None:
+def test_an_unscattered_steps_output_reaches_a_scattered_steps_other_input_as_one_value() -> None:
     scatter_tool = _scattered_tool(
         extra={"type": "File", "inputBinding": {"position": 2}},
     )
@@ -448,10 +449,9 @@ def test_rejects_a_process_output_source_on_a_scattered_steps_other_input() -> N
         workflow_inputs={"items": ["a"]},
     )
 
-    assert _findings(rose) == [
-        "steps[1].in.extra: a scattered step takes inputs from workflow inputs or scattered steps; "
-        "'PRODUCER/out', from a step that is not scattered, would truncate the scatter to one task"
-    ]
+    lowered = compiled_source_to_nextflow(rose)
+    assert NfProcessConnection("_PRODUCER", "out", "_SCATTER", "extra") in lowered.connections
+    assert "_SCATTER(ch__SCATTER_scatter, _PRODUCER.out.out.first())" in render_nextflow(lowered)
 
 
 @pytest.mark.fast

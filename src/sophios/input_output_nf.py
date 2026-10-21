@@ -590,6 +590,17 @@ def _source_expression(connection: NfConnection, processes: Mapping[str, NfProce
             return f"{process.name}.out.{emit}"
 
 
+def _broadcast(connection: NfConnection, processes: Mapping[str, NfProcess], methods: Mapping[str, str]) -> str:
+    """An unscattered input of a scattered process, as one value every task reads.
+
+    An unscattered process emits one element per output; taken as it is, that
+    queue would pair with the first invocation only.
+    """
+    expression = _source_expression(connection, processes)
+    unscattered_source = isinstance(connection, NfProcessConnection) and connection.from_process not in methods
+    return f"{expression}.first()" if unscattered_source else expression
+
+
 def _ordered_processes(workflow: ExecutableNextflowWorkflow) -> list[NfProcess]:
     """Return processes in stable topological order and reject cycles."""
     position = {process.name: index for index, process in enumerate(workflow.processes)}
@@ -630,7 +641,7 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
             ))
             other_ports = [port for port in process.inputs if port.name not in multi_input_names]
             arguments = [channel_name] + [
-                _source_expression(incoming[(process.name, port.name)], processes)
+                _broadcast(incoming[(process.name, port.name)], processes, methods)
                 for port in other_ports
             ]
         else:
