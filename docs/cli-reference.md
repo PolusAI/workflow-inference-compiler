@@ -40,7 +40,7 @@ standalone modes take no `--yaml`:
 | `--config_file FILE` | `~/wic/global_config.json` | the configuration to read; must exist, and is never generated |
 | `--homedir DIR` | your home directory | where the default configuration is, `DIR/wic/global_config.json`; for a run started from inside a tool, where CWL has cleared `HOME` |
 | `--lang_version VERSION` | inferred | pin the language version for this compilation; beats any `wic: lang_version` in the files |
-| `--allow_raw_cwl` | off | a `--yaml` file that is a plain CWL workflow is used as it is, not compiled; in a Sophios document, an untagged input value that names no workflow input is written into the CWL unchecked instead of being `wic011` |
+| `--allow_raw_cwl` | off | under `--target cwl`, a `--yaml` file that is a plain CWL workflow is used as it is, not compiled; in a Sophios document, an untagged input value that names no workflow input is written into the CWL unchecked instead of being `wic011` |
 
 ## Compiling
 

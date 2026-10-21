@@ -153,6 +153,28 @@ def test_an_unknown_argument_names_passthrough_flags_only_under_cwl(
 
 
 @pytest.mark.fast
+def test_a_plain_cwl_workflow_under_allow_raw_cwl_is_lowered_under_nextflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "raw.cwl").write_text(
+        "cwlVersion: v1.2\nclass: Workflow\ninputs:\n  msg: {type: string, default: hi}\noutputs: {}\n"
+        f"steps:\n  say:\n    run: {REPO_ROOT / 'cwl_adapters' / 'echo.cwl'}\n"
+        "    in: {message: msg}\n    out: [stdout]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit, match="1"):
+        sophios_main._main(cli.get_args("raw.cwl", ["--allow_raw_cwl", "--homedir", str(tmp_path)]), [])
+    assert "Please specify either --generate_cwl_workflow" in capsys.readouterr().out
+    sophios_main._main(cli.get_args("raw.cwl", [
+        "--allow_raw_cwl", "--homedir", str(tmp_path), "--target", "nextflow", "--basepath", "out",
+    ]), [])
+    assert {path.name for path in (tmp_path / "out").iterdir()} == {
+        "nextflow_workflow.json", "workflow.nf", "nextflow.config", "nextflow_params.json",
+    }
+
+
+@pytest.mark.fast
 def test_nextflow_documentation_uses_supported_public_entry_points() -> None:
     documentation = (REPO_ROOT / "docs" / "nextflow.md").read_text(encoding="utf-8")
 

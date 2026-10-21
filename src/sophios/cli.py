@@ -76,7 +76,7 @@ neutral.add_argument('--lang_version', type=str, default=None,
 neutral.add_argument('--allow_raw_cwl', default=False, action="store_true",
                      help='''Do not check whether the input to a workflow step refers to the workflow inputs: tag.
                      A --yaml file that is a plain CWL workflow (cwlVersion and class: Workflow, or a $graph
-                     whose main is a Workflow, and no Sophios syntax) is not compiled: it is used as it is''')
+                     whose main is a Workflow, and no Sophios syntax) is not compiled under --target cwl: it is used as it is''')
 neutral.add_argument('--target', choices=tuple(target_options), default='cwl',
                      help='Compilation artifact target. Defaults to cwl.')
 neutral.add_argument('--inference_disable', default=False, action="store_true",
