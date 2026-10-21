@@ -1,18 +1,18 @@
-"""The safe JavaScript subset in valueFrom (design §6, Expressions)."""
+"""The safe JavaScript subset, admitted only in a step's when (design §6, Expressions)."""
 
 # pylint: disable=missing-function-docstring
 
-from pathlib import Path
 import re
 from typing import Any
 
 import pytest
 
-from sophios.nf_expr import Expr, check, parse, render_groovy
-from sophios.nf_types import ExecutableNextflowWorkflow, NfComputed, NfTemplate
+from sophios.nf_expr import check, parse, render_groovy
+from sophios.nf_types import ExecutableNextflowWorkflow, NfTemplate
 from sophios.utils_nf import compiled_source_to_nextflow
 
-from .testkit import execute_nextflow, step, synthetic_source, tool, workflow_doc
+from .test_conditions import _when_workflow
+from .testkit import step, synthetic_source, tool, workflow_doc
 
 TYPES = {"a": "int", "b": "float", "s": "string", "flag": "boolean", "maybe": ["null", "int"]}
 
@@ -99,120 +99,58 @@ def test_a_control_character_in_where_never_reaches_the_groovy_source() -> None:
     assert "'CALC\\u000aarguments[0]\\u0009'" in rendered
 
 
-@pytest.mark.fast
-def test_computed_valuefrom_lowers_and_round_trips() -> None:
-    workflow = _calc_workflow(
-        [{"position": 1, "prefix": "-n", "valueFrom": "$(inputs.a * 2 + 1)"}],
-        {"a": 3},
-        a="int",
-    )
-    tokens = workflow.processes[0].command.tokens
-    computed = [token for token in tokens if isinstance(token, NfComputed)]
-    assert len(computed) == 1
-    assert computed[0].where == "CALC arguments[0].valueFrom $(inputs.a * 2 + 1)"
-    assert computed[0].integral is False
-    assert ExecutableNextflowWorkflow.from_json(workflow.to_json()) == workflow
+COMPUTED = ["$(inputs.a * 2 + 1)", "$(inputs.a > 1)", "$(Math.round(inputs.b))", "$(runtime.cores)", "${return 1}"]
 
 
 @pytest.mark.fast
-def test_computed_token_requires_schema_version_ten() -> None:
-    payload = _calc_workflow([{"valueFrom": "$(inputs.a + 1)"}], {"a": 3}, a="int").to_dict()
-    payload["schema_version"] = 9
-    with pytest.raises(ValueError, match="'computed' requires executable Nextflow schema version 10"):
-        ExecutableNextflowWorkflow.from_dict(payload)
+@pytest.mark.parametrize("value_from", COMPUTED)
+def test_a_computed_argument_valuefrom_is_rejected_by_name(value_from: str) -> None:
+    with pytest.raises(ValueError, match=re.escape("run.arguments[0].valueFrom: a computed valueFrom is not supported")):
+        _calc_workflow([{"prefix": "-n", "valueFrom": value_from}], {"a": 3, "b": 1.5}, a="int", b="float")
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize(("argument", "message"), [
-    ({"valueFrom": "$(inputs.a > 1)"}, "must compute a number, not a boolean"),
-    ({"valueFrom": "$(inputs.a ** 2)"}, "is outside the safe JavaScript subset: unsupported construct '\\*\\*'"),
-    (
-        {"prefix": "-n", "separate": False, "valueFrom": "$(inputs.a + 1)"},
-        "separate: false beside a computed valueFrom",
-    ),
-])
-def test_computed_argument_rejections(argument: dict[str, Any], message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        _calc_workflow([argument], {"a": 3}, a="int")
+@pytest.mark.parametrize("value_from", COMPUTED)
+def test_a_computed_input_binding_valuefrom_is_rejected_by_name(value_from: str) -> None:
+    binding = {"type": "int", "inputBinding": {"position": 1, "valueFrom": value_from}}
+    with pytest.raises(ValueError, match=re.escape("run.inputs.a.inputBinding.valueFrom: a computed valueFrom")):
+        _calc_workflow([], {"a": 3, "b": 1.5}, a=binding, b="float")
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize("value_from", ["7", "--n=$(inputs.a)", "$(inputs.a)"])
+def test_a_literal_or_projection_valuefrom_stays_a_template(value_from: str) -> None:
+    workflow = _calc_workflow([{"valueFrom": value_from}], {"a": 1}, a="int")
+    assert isinstance(workflow.processes[0].command.tokens[-1], NfTemplate)
+
+
 @pytest.mark.fast
 @pytest.mark.parametrize("value_from", ["$(inputs.a)-$(inputs.b)", "$(inputs.a).$(inputs.b)"])
 def test_two_projections_in_one_field_stay_a_template(value_from: str) -> None:
     workflow = _calc_workflow([{"valueFrom": value_from}], {"a": 1, "b": 2}, a="int", b="int")
-    value = workflow.processes[0].command.tokens[-1]
-    assert isinstance(value, NfTemplate)
-    assert not any(isinstance(token, NfComputed) for token in workflow.processes[0].command.tokens)
+    assert isinstance(workflow.processes[0].command.tokens[-1], NfTemplate)
 
 
 @pytest.mark.fast
-def test_a_hydrated_call_outside_the_closed_set_is_rejected() -> None:
-    payload = _calc_workflow([{"valueFrom": "$(Math.pow(inputs.a, 2))"}], {"a": 3}, a="int").to_dict()
-    tokens = payload["processes"][0]["command"]["tokens"]
-    token = next(item for item in tokens if item.get("kind") == "computed")
-    token["expression"]["op"] = "Runtime.getRuntime().exec"
-    with pytest.raises(ValueError, match="unsupported construct 'Runtime.getRuntime\\(\\)\\.exec'"):
+@pytest.mark.parametrize("version", [10, ExecutableNextflowWorkflow.SCHEMA_VERSION])
+def test_a_payload_carrying_the_removed_computed_token_is_refused_by_name(version: int) -> None:
+    payload = _calc_workflow([{"valueFrom": "$(inputs.a)"}], {"a": 3}, a="int").to_dict()
+    payload["schema_version"] = version
+    payload["processes"][0]["command"]["tokens"].append(
+        {"kind": "computed", "expression": {"op": "number", "value": "1"}, "where": "CALC", "integral": False}
+    )
+    with pytest.raises(ValueError, match="the 'computed' command token is removed"):
         ExecutableNextflowWorkflow.from_dict(payload)
 
 
 @pytest.mark.fast
-def test_a_hydrated_number_with_a_leading_zero_is_rejected() -> None:
-    with pytest.raises(ValueError, match="not a strict-mode decimal"):
-        NfComputed(Expr("number", value="010"), "tool field $(010)", False)
-
-
-@pytest.mark.fast
-def test_computed_valuefrom_on_an_optional_binding_is_rejected() -> None:
-    with pytest.raises(ValueError, match="computed valueFrom on optional input 'n'"):
-        _calc_workflow([], {"a": 3, "n": 1}, a="int", n={"type": ["null", "int"],
-                       "inputBinding": {"valueFrom": "$(inputs.a + 1)"}})
-
-
-def _run(workflow: ExecutableNextflowWorkflow, directory: Path) -> tuple[int, str, str]:
-    from sophios.input_output_nf import write_nextflow_artifacts  # pylint: disable=import-outside-toplevel
-    write_nextflow_artifacts(workflow, directory)
-    result = execute_nextflow(directory)
-    outputs = list(directory.glob("work/*/*/out.txt"))
-    return result.returncode, outputs[0].read_text(encoding="utf-8") if outputs else "", result.stdout + result.stderr
-
-
-ARGUMENTS = [
-    {"position": 1, "valueFrom": "$((inputs.a + 1) / 4)"},
-    {"position": 2, "prefix": "--b", "valueFrom": "$(Math.round(inputs.b * 2) + inputs.a % 3)"},
-    {"position": 3, "valueFrom": "$(Math.max(-0.5, inputs.b, 0.0001) - -1e3)"},
-    {"position": 4, "valueFrom": "$(inputs.a / inputs.d)"},
-    {"position": 5, "valueFrom": "$(-7 % 3 + Math.round(-2.5) + Math.round(1e19))"},
-]
-
-
-@pytest.mark.nextflow
-@pytest.mark.serial
-def test_computed_arguments_match_javascript_under_nextflow(tmp_path: Path) -> None:
-    # Expected text is node's value printed the way cwltool prints it.
-    workflow = _calc_workflow(ARGUMENTS, {"a": 7, "b": 1.25, "d": 2}, a="int", b="float", d="int")
-    code, text, log = _run(workflow, tmp_path)
-    assert code == 0, log
-    assert text == "2 --b 4 1001.25 3.5 10000000000000000000\n"
-
-
-@pytest.mark.nextflow
-@pytest.mark.serial
-def test_a_non_finite_subexpression_fails_with_a_named_diagnostic(tmp_path: Path) -> None:
-    workflow = _calc_workflow(ARGUMENTS, {"a": 7, "b": 1.25, "d": 0}, a="int", b="float", d="int")
-    code, _text, log = _run(workflow, tmp_path)
-    assert code != 0
-    where = "CALC arguments[3].valueFrom $(inputs.a / inputs.d)"
-    assert f"Sophios expression {where}: (inputs.a / inputs.d) is Infinity" in log
-    assert "[a:7, d:0]" in log
-
-
-@pytest.mark.fast
-def test_a_computed_workflow_reads_back_and_promotes(tmp_path: Path) -> None:
-    from sophios.input_output_nf import write_nextflow_artifacts  # pylint: disable=import-outside-toplevel
-    from sophios.nf_reader import parse_nf_file, promote_nextflow_document  # pylint: disable=import-outside-toplevel
-    workflow = _calc_workflow(ARGUMENTS, {"a": 7, "b": 1.25, "d": 2}, a="int", b="float", d="int")
-    write_nextflow_artifacts(workflow, tmp_path)
-    parsed = parse_nf_file(tmp_path / "workflow.nf")
-    assert parsed.opaque_regions == ()
-    assert promote_nextflow_document(parsed) == workflow
+@pytest.mark.parametrize(("node", "message"), [
+    ({"op": "Runtime.getRuntime().exec", "args": [{"op": "ref", "value": "a"}]},
+     "unsupported construct 'Runtime.getRuntime\\(\\)\\.exec'"),
+    ({"op": "number", "value": "010"}, "not a strict-mode decimal"),
+])
+def test_a_hydrated_condition_outside_the_closed_grammar_is_rejected(node: dict[str, Any], message: str) -> None:
+    payload = _when_workflow("$(Math.pow(inputs.a, 2) > 1)", {"a": 3}, a="int").to_dict()
+    payload["processes"][0]["condition"]["args"][0] = node
+    with pytest.raises(ValueError, match=message):
+        ExecutableNextflowWorkflow.from_dict(payload)

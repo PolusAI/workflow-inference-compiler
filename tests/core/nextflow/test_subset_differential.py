@@ -3,8 +3,8 @@
 design_docs/sophios_nextflow_backend.md §6, Expressions, requires the two
 authorities to agree over generated expressions. ``TABLE`` is that
 comparison frozen: each expression's expected text is what node computes,
-printed the way the CWL reference path prints it (JSON, then cwltool), so CI
-needs only Nextflow. Rows mix chosen edge cases with a seeded sample of the
+printed as JSON, so CI needs only Nextflow. A number agrees when it is the
+same binary64 value. Rows mix chosen edge cases with a seeded sample of the
 grammar; every subexpression is finite, since non-finite results fail by
 design and are covered by the A11 cell. Regenerate after changing the subset:
 
@@ -207,18 +207,21 @@ TABLE: list[tuple[str, str]] = [
 ]
 
 
+def _agrees(printed: str | None, expected: str) -> bool:
+    if printed is None or expected in ("true", "false"):
+        return printed == expected
+    return printed not in ("true", "false") and float(printed) == float(expected)
+
+
 @pytest.mark.nextflow
 @pytest.mark.serial
 def test_groovy_rendering_matches_javascript(tmp_path: Path) -> None:
     from sophios.nf_expr import (  # pylint: disable=import-outside-toplevel
-        NF_EXPRESSION_FUNCTIONS, NF_NUMBER_TEXT_HELPER, check, parse, render_groovy,
+        NF_EXPRESSION_FUNCTIONS, parse, render_groovy,
     )
     lines = [NF_EXPRESSION_FUNCTIONS, "workflow {"]
     for index, (text, _expected) in enumerate(TABLE):
-        node = parse(text)
-        rendered = render_groovy(node, where=f"row {index}", inputs="[:]")
-        if check(node, {}) == "number":
-            rendered = f"{NF_NUMBER_TEXT_HELPER}({rendered}, false, 'row {index}', [:])"
+        rendered = render_groovy(parse(text), where=f"row {index}", inputs="[:]")
         lines.append(f"    println('ROW{index}=' + ({rendered}).toString())")
     lines.append("}")
     (tmp_path / "main.nf").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -231,7 +234,7 @@ def test_groovy_rendering_matches_javascript(tmp_path: Path) -> None:
     mismatches = [
         (text, expected, printed.get(f"ROW{index}"))
         for index, (text, expected) in enumerate(TABLE)
-        if printed.get(f"ROW{index}") != expected
+        if not _agrees(printed.get(f"ROW{index}"), expected)
     ]
     assert not mismatches
 

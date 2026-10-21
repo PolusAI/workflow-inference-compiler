@@ -27,7 +27,6 @@ from sophios.nf_types import (
 from .test_composition import _PAIR_THEN_USE_PARAMS, _composed, _pair_then_use
 from .test_conditions import _when_workflow
 from .test_dotproduct import _scatter_with_file_array, _sleep_then_pair, _text_port
-from .test_safe_subset import ARGUMENTS, _calc_workflow
 
 
 def _scattered(
@@ -50,7 +49,6 @@ def _scattered(
 BUILDERS: dict[str, Callable[[], ExecutableNextflowWorkflow]] = {
     "single-input scatter adapter": lambda: _scattered("scatter", names=("item",)),
     "single-input dotproduct": lambda: _scattered("dotproduct", names=("item",)),
-    "computed arguments": lambda: _calc_workflow(ARGUMENTS, {"a": 7, "b": 1.25, "d": 2}, a="int", b="float", d="int"),
     "conditional step": lambda: _when_workflow("$(inputs.a > 0)", {"a": 1}, second_step=True, a="int"),
     "dotproduct": lambda: _scattered("dotproduct"),
     "flat_crossproduct": lambda: _scattered("flat_crossproduct"),

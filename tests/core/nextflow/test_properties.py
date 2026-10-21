@@ -17,13 +17,12 @@ from sophios.input_output_nf import (
     _shell_quote,
     render_nextflow,
 )
-from sophios.nf_expr import Expr, groovy_literal, parse
+from sophios.nf_expr import Expr, groovy_literal
 from sophios.nf_symbols import is_nextflow_identifier, normalize_nextflow_identifier
 from sophios.nf_reader import parse_nf_text, promote_nextflow_document
 from sophios.nf_types import (
     ExecutableNextflowWorkflow,
     NfCommand,
-    NfComputed,
     NfInputReference,
     NfLiteral,
     NfPort,
@@ -142,17 +141,17 @@ def test_every_single_quoted_groovy_position_uses_the_one_escaper(value: str) ->
     spoken = "".join(char for char in value if " " <= char <= "~" and char != "\\")  # a when literal's alphabet
     process = NfProcess(
         "TASK",
-        [NfPort("n", "val"), NfPort("s", "val"), NfPort("src", "path", stage_as=staged)],
+        [NfPort("s", "val"), NfPort("src", "path", stage_as=staged)],
         [],
-        NfCommand((NfComputed(parse("$(inputs.n * 2)"), value),)),
+        NfCommand((NfTemplate((NfLiteral("true"),)),)),
         container=value,
         condition=Expr("==", (Expr("ref", (), "s"), Expr("string", (), spoken))),
     )
     rendered = render_nextflow(ExecutableNextflowWorkflow(
         "PIPELINE",
         [process],
-        [NfWorkflowInputConnection(name, "TASK", name) for name in ("n", "s", "src")],
-        {"n": 1, "s": "x", "src": "in.txt"},
+        [NfWorkflowInputConnection(name, "TASK", name) for name in ("s", "src")],
+        {"s": "x", "src": "in.txt"},
     ))
     for literal in (groovy_literal(value), groovy_literal(staged), groovy_literal(spoken)):
         assert literal in rendered

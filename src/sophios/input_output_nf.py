@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .nf_expr import (
-    CONTROL_ESCAPES, NF_EXPRESSION_FUNCTIONS, NF_NUMBER_TEXT_HELPER, groovy_literal, references,
+    CONTROL_ESCAPES, NF_EXPRESSION_FUNCTIONS, groovy_literal, references,
     render_groovy, source_text,
 )
 from .nf_types import (
@@ -29,7 +29,6 @@ from .nf_types import (
     NfProcess,
     NfProcessConnection,
     NfShellLiteral,
-    NfComputed,
     NfTemplate,
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
@@ -133,22 +132,8 @@ def _render_shell_literal(token: NfShellLiteral) -> str:
     return _groovy_gstring_fragment(token.text)
 
 
-def _render_computed(token: NfComputed) -> str:
-    """Render one safe-subset argv word through its fixed Groovy idiom."""
-    inputs = "[" + ", ".join(f"{name}: {name}" for name in sorted(token.names)) + "]"
-    if inputs == "[]":
-        inputs = "[:]"
-    where = groovy_literal(token.where)
-    expression = render_groovy(token.expression, where=token.where, inputs=inputs)
-    integral = "true" if token.integral else "false"
-    text = f"{NF_NUMBER_TEXT_HELPER}({expression}, {integral}, {where}, {inputs})"
-    return f"${{{NF_SHELL_QUOTE_HELPER}({text})}}"
-
-
 def _render_command_token(token: Any) -> str:
     """Render one argv token; flags and array bindings collapse away when falsy/empty."""
-    if isinstance(token, NfComputed):
-        return _render_computed(token)
     if isinstance(token, NfFlag):
         quoted = f"{NF_SHELL_QUOTE_HELPER}({groovy_literal(token.prefix)})"
         return f"${{{token.name} ? {quoted} : ''}}"
@@ -751,11 +736,7 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
         for port in process.outputs
     ):
         sections.append(NF_LOAD_CONTENTS_FUNCTION)
-    if any(
-        isinstance(token, NfComputed)
-        for process in workflow.processes
-        for token in process.command.tokens
-    ) or any(process.condition is not None for process in workflow.processes):
+    if any(process.condition is not None for process in workflow.processes):
         sections.append(NF_EXPRESSION_FUNCTIONS)
     if _nested_process_names(workflow):
         sections.append(NF_NEST_FUNCTION)

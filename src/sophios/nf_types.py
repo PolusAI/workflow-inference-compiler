@@ -8,7 +8,7 @@ import math
 from types import MappingProxyType
 from typing import Any, ClassVar, Generic, Self, TypeVar, get_args
 
-from .nf_expr import NF_FINITE_HELPER, NF_NUMBER_TEXT_HELPER, NF_ROUND_HELPER, Expr, references, validate
+from .nf_expr import NF_FINITE_HELPER, NF_ROUND_HELPER, Expr, references, validate
 from .nf_symbols import NEXTFLOW_SCRIPT_DECLARED_NAMES, validate_nextflow_identifier
 
 
@@ -18,7 +18,7 @@ NF_LOAD_CONTENTS_HELPER = "__sophios_load_contents_9f72e"
 NF_SCATTER_INDEX_NAME = "__sophios_scatter_index_9f72e"
 NF_NEST_HELPER = "__sophios_nest_9f72e"
 NF_INTERNAL_IDENTIFIERS = frozenset({
-    NF_SHELL_QUOTE_HELPER, NF_LOAD_CONTENTS_HELPER, NF_FINITE_HELPER, NF_ROUND_HELPER, NF_NUMBER_TEXT_HELPER,
+    NF_SHELL_QUOTE_HELPER, NF_LOAD_CONTENTS_HELPER, NF_FINITE_HELPER, NF_ROUND_HELPER,
     NF_SCATTER_INDEX_NAME, NF_NEST_HELPER,
 })
 # CWL v1.2 requires a loadContents file to be a UTF-8 text file of this many
@@ -364,47 +364,7 @@ class NfShellLiteral:
         return {"kind": "shell_literal", "text": self.text}
 
 
-@dataclass(frozen=True, slots=True)
-class NfComputed:
-    """One argv word computed by a safe-subset expression (design §6, Expressions).
-
-    ``where`` names the tool, field, and authored text for diagnostics;
-    ``integral`` is set when the bound port is ``int`` or ``long``.
-    """
-
-    expression: Expr
-    where: str
-    integral: bool = False
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.expression, Expr):
-            raise TypeError("computed token expression must be a typed Expr")
-        validate(self.expression)
-        if not isinstance(self.where, str) or not self.where:
-            raise ValueError("computed token requires a non-empty diagnostic location")
-        if not isinstance(self.integral, bool):
-            raise TypeError("computed token integral must be a boolean")
-
-    @property
-    def names(self) -> set[str]:
-        """Input names the expression reads."""
-        return references(self.expression)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize to executable JSON.
-
-        Returns:
-            dict[str, Any]: ``{"kind": "computed", "expression", "where", "integral"}``.
-        """
-        return {
-            "kind": "computed",
-            "expression": self.expression.to_dict(),
-            "where": self.where,
-            "integral": self.integral,
-        }
-
-
-NfCommandToken = NfTemplate | NfFlag | NfArrayBinding | NfShellLiteral | NfComputed
+NfCommandToken = NfTemplate | NfFlag | NfArrayBinding | NfShellLiteral
 
 
 def _command_token_from_dict(value: Mapping[str, Any]) -> NfCommandToken:
@@ -420,8 +380,8 @@ def _command_token_from_dict(value: Mapping[str, Any]) -> NfCommandToken:
             _check_fields(item, type_name="NfShellLiteral", required={"kind", "text"})
             return NfShellLiteral(item["text"])
         case "computed":
-            _check_fields(item, type_name="NfComputed", required={"kind", "expression", "where", "integral"})
-            return NfComputed(Expr.from_dict(item["expression"]), item["where"], item["integral"])
+            # A removed kind is refused in a payload of any version (design §5.3).
+            raise ValueError("the 'computed' command token is removed: a computed valueFrom is not supported")
         case _:
             return NfTemplate.from_dict(item)
 
@@ -438,7 +398,7 @@ class NfCommand:
     def __post_init__(self) -> None:
         tokens = tuple(self.tokens)
         if not tokens or not all(
-            isinstance(token, (NfTemplate, NfFlag, NfArrayBinding, NfShellLiteral, NfComputed)) for token in tokens
+            isinstance(token, (NfTemplate, NfFlag, NfArrayBinding, NfShellLiteral)) for token in tokens
         ):
             raise ValueError("command must contain at least one typed token")
         object.__setattr__(self, "tokens", tokens)
@@ -822,10 +782,7 @@ class NfProcess:
         plain_reference_names = {
             segment.name for segment in segments if isinstance(segment, NfInputReference)
         }
-        computed_names = {
-            name for token in self.command.tokens if isinstance(token, NfComputed) for name in token.names
-        }
-        referenced_names = flag_names | array_binding_names | basename_names | plain_reference_names | computed_names
+        referenced_names = flag_names | array_binding_names | basename_names | plain_reference_names
         if unknown := referenced_names - input_names:
             raise ValueError(
                 f"process {self.name!r} templates reference unknown inputs: {', '.join(sorted(unknown))}"
@@ -835,11 +792,6 @@ class NfProcess:
         if invalid := {name for name in flag_names if qualifiers[name] != "val"}:
             raise ValueError(
                 f"process {self.name!r} flag tokens must reference val inputs: "
-                f"{', '.join(sorted(invalid))}"
-            )
-        if invalid := {name for name in computed_names if qualifiers[name] != "val" or is_array_by_name[name]}:
-            raise ValueError(
-                f"process {self.name!r} computed tokens must reference scalar val inputs: "
                 f"{', '.join(sorted(invalid))}"
             )
         if invalid := {name for name in basename_names if qualifiers[name] != "path"}:
@@ -1200,7 +1152,7 @@ class ExecutableNextflowWorkflow:
     # Each additive token or segment kind declares the version that
     # introduced it, so the subset property is enforced rather than assumed.
     KIND_SCHEMA_VERSIONS: ClassVar[Mapping[str, int]] = MappingProxyType(
-        {"flag": 3, "basename": 4, "array": 5, "shell_literal": 6, "computed": 10}
+        {"flag": 3, "basename": 4, "array": 5, "shell_literal": 6}
     )
     # Version an additive non-kind-tagged field was introduced in, keyed by
     # the field name it appears under. is_array, stage_as, and capture

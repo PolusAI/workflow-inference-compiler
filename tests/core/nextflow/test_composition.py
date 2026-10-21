@@ -40,7 +40,7 @@ def _tools() -> list[dict[str, Any]]:
             "b": {"type": "string", "inputBinding": {"position": 2}},
             "n": {"type": "int"},
         },
-        arguments=[{"position": 3, "valueFrom": "$(inputs.n * 10)"}],
+        arguments=[{"position": 3, "valueFrom": "$(inputs.n)0"}],
         baseCommand="echo",
         stdout="out.txt",
         outputs={"out": FILE_OUT},

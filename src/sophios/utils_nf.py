@@ -24,7 +24,6 @@ from .nf_types import (
     NfBasenameReference,
     NfCommand,
     NfCommandToken,
-    NfComputed,
     NfConnection,
     NfFlag,
     NfInputReference,
@@ -393,30 +392,6 @@ def _shell_literal_value(
     return NfShellLiteral("".join(literal_parts))
 
 
-def _computed_value(value_from: Any, *, tool: Mapping[str, Any], field: str, integral: bool) -> NfComputed | None:
-    """Lower a safe-subset valueFrom, or return None when it is a projection or literal.
-
-    Projections keep the template lowering; any other whole-field
-    ``$( … )`` text must be a number-typed safe-subset expression.
-    """
-    if not is_safe_subset_text(value_from) or _INPUT_EXPRESSION.fullmatch(value_from.strip()):
-        return None
-    inputs = _as_mapping(tool.get("inputs", {}), error="CommandLineTool inputs must be a mapping")
-    input_types = {
-        str(raw_name): definition.get("type") if isinstance(definition, Mapping) else definition
-        for raw_name, definition in inputs.items()
-    }
-    try:
-        expression = parse_safe_subset(value_from)
-        result = check_safe_subset(expression, input_types)
-    except ValueError as exc:
-        raise ValueError(f"{field} {value_from!r} is outside the safe JavaScript subset: {exc}") from exc
-    if result != "number":
-        raise ValueError(f"{field} {value_from!r} must compute a number, not a {result}")
-    authored = " ".join(value_from.split())
-    return NfComputed(expression, f"{tool.get('id', 'tool')} {field} {authored}", integral)
-
-
 def _boolean_value_from(value_from: Any, tool: Mapping[str, Any]) -> str | None:
     """The boolean input a valueFrom restates whole as ``$(inputs.<name>)``, else None."""
     match = _INPUT_EXPRESSION.fullmatch(value_from.strip()) if isinstance(value_from, str) else None
@@ -432,18 +407,6 @@ def _boolean_value_from(value_from: Any, tool: Mapping[str, Any]) -> str | None:
 def _flag_tokens(name: str, prefix: Any) -> tuple[NfCommandToken, ...]:
     """CWL's boolean binding: the prefix when true, nothing when false or without a prefix."""
     return () if prefix is None else (NfFlag(name, prefix),)
-
-
-def _computed_tokens(prefix: Any, value: NfComputed, *, separate: Any = True) -> tuple[NfCommandToken, ...]:
-    match prefix:
-        case None:
-            return (value,)
-        case str() as text if separate is not False:
-            return NfTemplate((NfLiteral(text),)), value
-        case str():
-            raise ValueError("separate: false beside a computed valueFrom is not supported")
-        case _:
-            raise ValueError("CWL command prefix must be a string")
 
 
 def _argument_items(
@@ -463,12 +426,6 @@ def _argument_items(
                     )
                 elif flag := _boolean_value_from(value_from, tool):
                     tokens = _flag_tokens(flag, argument.get("prefix"))
-                elif computed := _computed_value(
-                    value_from, tool=tool, field=f"arguments[{index}].valueFrom", integral=False
-                ):
-                    tokens = _computed_tokens(
-                        argument.get("prefix"), computed, separate=argument.get("separate", True)
-                    )
                 else:
                     value = _template(value_from, context="CWL argument valueFrom")
                     tokens = _binding_tokens(
@@ -796,24 +753,6 @@ def _input_binding_items(
                 # CWL omits the whole binding for an absent input; a flag renders whatever it is.
                 raise ValueError(f"a boolean valueFrom on optional input {raw_name!r} is not supported")
             items.append(((position, 1, str(raw_name)), _flag_tokens(flag, binding.get("prefix"))))
-            continue
-        computed = _computed_value(
-            value_from,
-            tool=tool,
-            field=f"inputs.{raw_name}.inputBinding.valueFrom",
-            integral=required_type in {"int", "long"},
-        )
-        if computed is not None:
-            if _is_optional(input_definition.get("type")):
-                # CWL omits the whole binding for an absent input; a computed
-                # token always renders, so the two would disagree.
-                raise ValueError(
-                    f"a computed valueFrom on optional input {raw_name!r} is not supported"
-                )
-            items.append((
-                (position, 1, str(raw_name)),
-                _computed_tokens(binding.get("prefix"), computed, separate=binding.get("separate", True)),
-            ))
             continue
         value = (
             _template(value_from, context=f"CWL input {raw_name!r} valueFrom")
@@ -1411,6 +1350,18 @@ def _template_positions(
     return positions
 
 
+def _computed_value_from_findings(value_from: Any, *, path: str) -> list[str]:
+    """Reject a valueFrom that computes (design §6, Expressions): one is literal text or a projection."""
+    try:
+        _template(value_from, context="valueFrom")
+    except ValueError:
+        return [
+            f"{path}.valueFrom: a computed valueFrom is not supported; write literal text or $(inputs.<name>), "
+            "and on a File or Directory input $(inputs.<name>.path) or $(inputs.<name>.basename)"
+        ]
+    return []
+
+
 def _path_reference_findings(tool: Mapping[str, Any], *, path: str) -> list[str]:
     """Check every input reference against the type it reads (design §6).
 
@@ -1872,6 +1823,8 @@ def _tool_capability_findings(
                         )
                     except ValueError as exc:
                         findings.append(f"{input_binding_path}.valueFrom: {exc}")
+                elif binding.get("valueFrom") is not None and binding.get("shellQuote") is not False:
+                    findings.extend(_computed_value_from_findings(binding["valueFrom"], path=input_binding_path))
         case _:
             pass
 
@@ -1895,6 +1848,8 @@ def _tool_capability_findings(
                         )
                     except ValueError as exc:
                         findings.append(f"{argument_path}.shellQuote: {exc}")
+                elif argument.get("valueFrom") is not None:
+                    findings.extend(_computed_value_from_findings(argument["valueFrom"], path=argument_path))
         case _:
             pass
 
@@ -2381,8 +2336,7 @@ def _safe_absence_names(tool: Mapping[str, Any]) -> set[str] | None:
         }
     except ValueError:
         return None
-    computed = {name for token in command.tokens if isinstance(token, NfComputed) for name in token.names}
-    unsafe = plain | basenamed | shell_literal_names | computed
+    unsafe = plain | basenamed | shell_literal_names
     return all_names - unsafe
 
 
@@ -2736,9 +2690,7 @@ def _raise_capability_findings(findings: list[str]) -> None:
 def _condition_value(step: Mapping[str, Any], tool: Mapping[str, Any]) -> Expr:
     """Parse and boolean-type a step's ``when`` over the inputs the step binds, as CWL does.
 
-    Mirrors ``_computed_value``'s reuse of the safe-subset parser and
-    checker; a step's when is evaluated once per invocation, after inputs
-    are bound, so it is typed exactly like any other safe-subset expression.
+    A step's when is evaluated once per invocation, after inputs are bound.
     """
     when = step["when"]
     if not isinstance(when, str) or not is_safe_subset_text(when):

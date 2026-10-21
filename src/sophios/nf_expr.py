@@ -10,11 +10,10 @@ rejected with a ValueError naming the construct.
 from dataclasses import dataclass
 import math
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 NF_FINITE_HELPER = "__sophios_finite_9f72e"
 NF_ROUND_HELPER = "__sophios_round_9f72e"
-NF_NUMBER_TEXT_HELPER = "__sophios_number_text_9f72e"
 
 NUMBER = "number"
 BOOLEAN = "boolean"
@@ -462,14 +461,6 @@ def _numeric_ref_nodes(node: Expr) -> set[Expr]:
     return found
 
 
-def referenced_names(nodes: Sequence[Expr]) -> set[str]:
-    """Every input name read by any of ``nodes``."""
-    found: set[str] = set()
-    for node in nodes:
-        found |= references(node)
-    return found
-
-
 NF_EXPRESSION_FUNCTIONS = f'''def {NF_FINITE_HELPER}(double value, String where, String part, Map inputs) {{
     if( Double.isNaN(value) || Double.isInfinite(value) )
         throw new IllegalStateException("Sophios expression " + where + ": " + part \
@@ -480,16 +471,4 @@ NF_EXPRESSION_FUNCTIONS = f'''def {NF_FINITE_HELPER}(double value, String where,
 def {NF_ROUND_HELPER}(double value) {{
     double floor = Math.floor(value)
     return value - floor >= 0.5d ? floor + 1.0d : floor
-}}
-def {NF_NUMBER_TEXT_HELPER}(double value, boolean integral, String where, Map inputs) {{
-    if( value == Math.rint(value) && Math.abs(value) < 1.0e21d )
-        return new BigDecimal(value).toBigInteger().toString()
-    if( integral )
-        throw new IllegalStateException("Sophios expression " + where + ": result " + value \
-+ " is not integral but binds an integer port, with inputs " + inputs)
-    double magnitude = Math.abs(value)
-    if( magnitude < 1.0e-4d || magnitude >= 1.0e16d )
-        throw new IllegalStateException("Sophios expression " + where + ": result " + value \
-+ " needs exponent notation, which is not supported, with inputs " + inputs)
-    return new BigDecimal(Double.toString(value)).stripTrailingZeros().toPlainString()
 }}'''
