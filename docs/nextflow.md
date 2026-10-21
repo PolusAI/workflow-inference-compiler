@@ -448,7 +448,7 @@ and quoted strings; `inputs.<name>` of a `boolean`, `int`, `float` or
 `max`. Arithmetic and ordered comparisons take numbers, and `+` never joins
 strings. Numbers are binary64 as in JavaScript, so integers are exact only
 within ±2^53. A NaN or ±Infinity anywhere in the evaluation, such as a
-division by zero, fails the run; the Nextflow log names the step, the
+division by zero, fails the run with an error that names the step, the
 expression, the subexpression and the input values. CWL would carry the value
 on. Anything outside the subset is rejected by name.
 

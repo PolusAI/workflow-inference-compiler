@@ -461,9 +461,12 @@ def _numeric_ref_nodes(node: Expr) -> set[Expr]:
 
 
 NF_EXPRESSION_FUNCTIONS = f'''def {NF_FINITE_HELPER}(double value, String where, String part, Map inputs) {{
-    if( Double.isNaN(value) || Double.isInfinite(value) )
-        throw new IllegalStateException("Sophios expression " + where + ": " + part \
-+ " is " + value + " with inputs " + inputs)
+    if( Double.isNaN(value) || Double.isInfinite(value) ) {{
+        String message = "Sophios expression " + where + ": " + part + " is " + value + " with inputs " + inputs
+        // A when is evaluated by an operator, and Nextflow reports an operator's failure without its message.
+        log.error(message)
+        throw new IllegalStateException(message)
+    }}
     // + 0.0d turns -0.0 into 0.0: JavaScript never tells them apart, Groovy == does.
     return value + 0.0d
 }}

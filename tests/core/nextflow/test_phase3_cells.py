@@ -123,9 +123,9 @@ def test_calculator_failures(tmp_path: Path) -> None:
     """A11: a non-finite subexpression fails the run, named; no task output is produced."""
     result, _ = _run(_calc_workflow(["$(inputs.i / (inputs.i - 7) > 0)"], "fail_cells"), tmp_path)
     assert result.returncode != 0
-    # A when is evaluated by an operator, not a task, so Nextflow logs the cause.
-    log = (tmp_path / ".nextflow.log").read_text(encoding="utf-8")
-    assert "Sophios expression c0 when ((inputs.i / (inputs.i - 7)) > 0): (inputs.i / (inputs.i - 7)) is Infinity" in log
+    assert "Sophios expression c0 when ((inputs.i / (inputs.i - 7)) > 0): (inputs.i / (inputs.i - 7)) is Infinity" in (
+        result.stdout + result.stderr
+    )
     assert not _ran(tmp_path, "c0.txt")
 
 
