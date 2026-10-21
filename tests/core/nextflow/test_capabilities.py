@@ -1567,7 +1567,7 @@ def test_rejects_per_item_input_binding_on_the_array_schema() -> None:
         [array_tool],
         workflow_inputs={"values": ["a", "b"]},
     )
-    with pytest.raises(ValueError, match="per-item array element bindings are deferred"):
+    with pytest.raises(ValueError, match=r"run\.inputs\.values\.type\.inputBinding: per-item array element bindings"):
         compiled_source_to_nextflow(rose)
 
 
@@ -1871,7 +1871,7 @@ def test_rejects_iwdr_array_typed_target() -> None:
 @pytest.mark.fast
 def test_rejects_iwdr_unsupported_dirent_field() -> None:
     rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "x.txt", "foo": 1}])
-    with pytest.raises(ValueError, match="unsupported Dirent fields"):
+    with pytest.raises(ValueError, match=r"listing\[0\]\.foo: foo is not consumed"):
         compiled_source_to_nextflow(rose)
 
 
@@ -2286,10 +2286,14 @@ def test_rejects_unconsumed_nested_workflow_port_fields() -> None:
     child = _nested_artifacts(result)[0].cwl
     next(iter(child["inputs"].values()))["secondaryFiles"] = [".fai"]
     next(iter(child["outputs"].values()))["pickValue"] = "first_non_null"
+    for section in ("inputs", "outputs"):
+        next(iter(child[section].values()))["type"] = {"type": "array", "items": "File", "name": section}
     with pytest.raises(ValueError) as error:
         compiled_source_to_nextflow(result)
     assert "secondaryFiles are not supported" in str(error.value)
     assert "a workflow output's pickValue is not supported" in str(error.value)
+    for section in ("inputs", "outputs"):
+        assert re.search(rf"\.run\.{section}\.\w+\.type\.name: an array schema's name", str(error.value))
 
 
 @pytest.mark.fast

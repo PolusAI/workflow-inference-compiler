@@ -125,11 +125,15 @@ _NF_SUPPORT_PLACES = {
     'WorkflowStep': 'a workflow step',
     'WorkflowStepInput': "an entry of a step's `in`",
     'WorkflowInputParameter': 'a workflow input',
+    'InputArraySchema': "a workflow input's array type",
     'WorkflowOutputParameter': 'a workflow output',
+    'OutputArraySchema': "a workflow output's array type",
     'CommandInputParameter': 'a tool input',
+    'CommandInputArraySchema': "a tool input's array type",
     'CommandLineBinding': 'an `inputBinding`, or an `arguments` entry',
     'CommandOutputParameter': 'a tool output',
     'CommandOutputBinding': 'an `outputBinding`',
+    'Dirent': 'an entry of an `InitialWorkDirRequirement` listing',
 }
 
 

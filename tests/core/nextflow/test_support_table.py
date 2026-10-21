@@ -54,18 +54,27 @@ def test_the_compile_time_fields_are_the_ones_the_design_names() -> None:
     }
 
 
+def _strings() -> Yaml:
+    return {"type": "array", "items": "string"}
+
+
 def _documents() -> tuple[Yaml, Yaml]:
+    """A tool step scattered over `x`, so the workflow's `x`, the tool's `xs` and the gathered `o` are array schemas."""
     run = tool(
         "T",
-        inputs={"x": {"type": "string", "inputBinding": {"position": 1}}},
+        inputs={
+            "x": {"type": "string", "inputBinding": {"position": 1}},
+            "xs": {"type": _strings(), "inputBinding": {"position": 2}},
+        },
         outputs={"o": {"type": "File", "outputBinding": {"glob": "o.txt"}}},
         requirements={},
     )
     workflow = workflow_doc(
-        [step("T", **{"in": {"x": {"source": "x"}}, "out": ["o"]})],
-        inputs={"x": {"type": "string"}},
-        outputs={"o": {"type": "File", "outputSource": "T/o"}},
+        [step("T", **{"in": {"x": {"source": "x"}, "xs": {"source": "xs"}}, "out": ["o"], "scatter": ["x"]})],
+        inputs={"x": {"type": _strings()}, "xs": {"type": _strings()}},
+        outputs={"o": {"type": {"type": "array", "items": "File"}, "outputSource": "T/o"}},
     )
+    workflow["requirements"] = {"ScatterFeatureRequirement": {}}
     return workflow, run
 
 
@@ -85,6 +94,9 @@ POSITIONS: dict[str, tuple[str, Callable[[Yaml, Yaml], Yaml]]] = {
     "CommandOutputBinding": (
         "steps[0].run.outputs.o.outputBinding", lambda _workflow, run: run["outputs"]["o"]["outputBinding"]
     ),
+    "InputArraySchema": ("workflow.inputs.x.type", lambda workflow, _run: workflow["inputs"]["x"]["type"]),
+    "CommandInputArraySchema": ("steps[0].run.inputs.xs.type", lambda _workflow, run: run["inputs"]["xs"]["type"]),
+    "OutputArraySchema": ("workflow.outputs.o.type", lambda workflow, _run: workflow["outputs"]["o"]["type"]),
 }
 
 
@@ -99,7 +111,8 @@ def _position(cwl_class: str) -> tuple[str, Callable[[Yaml, Yaml], Yaml]]:
 
 
 def _lower(workflow: Yaml, run: Yaml, **values: Any) -> Any:
-    return compiled_source_to_nextflow(synthetic_source(workflow, [run], workflow_inputs={"x": "hi", **values}))
+    source = synthetic_source(workflow, [run], workflow_inputs={"x": ["hi"], "xs": ["a", "b"], **values})
+    return compiled_source_to_nextflow(source)
 
 
 REJECTED = [
