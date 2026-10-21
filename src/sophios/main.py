@@ -315,8 +315,8 @@ def main() -> None:
 def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
     """The command line, as docs/cli-reference.md describes it."""
     if unknown_args and args.passthrough_flags != 'yes':
-        cli.parser.error(f'unrecognized arguments: {" ".join(unknown_args)}. '
-                         'Flags for the CWL runner need --passthrough_flags yes')
+        hint = '. Flags for the CWL runner need --passthrough_flags yes' if args.target == 'cwl' else ''
+        cli.parser.error(f'unrecognized arguments: {" ".join(unknown_args)}{hint}')
     if unknown_args and not (args.run_local or args.generate_run_script):
         cli.parser.error(f'{" ".join(unknown_args)} would go to the CWL runner, which this command does not run. '
                          'Add --run_local or --generate_run_script, or remove them')

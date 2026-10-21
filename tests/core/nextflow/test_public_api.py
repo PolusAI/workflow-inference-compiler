@@ -141,6 +141,18 @@ def test_an_option_set_for_another_target_is_rejected(target: str, capsys: pytes
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize("target", cli.target_options)
+def test_an_unknown_argument_names_passthrough_flags_only_under_cwl(
+    target: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        sophios_main._main(cli.get_args("workflow.wic", ["--target", target]), ["--bogus"])
+    error = capsys.readouterr().err.splitlines()[-1]
+    assert error.startswith("main: error: unrecognized arguments: --bogus")
+    assert ("--passthrough_flags" in error) == (target == "cwl")
+
+
+@pytest.mark.fast
 def test_nextflow_documentation_uses_supported_public_entry_points() -> None:
     documentation = (REPO_ROOT / "docs" / "nextflow.md").read_text(encoding="utf-8")
 
