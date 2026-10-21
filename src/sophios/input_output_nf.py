@@ -62,11 +62,12 @@ NF_SHELL_QUOTE_FUNCTION = f'''def {NF_SHELL_QUOTE_HELPER}(value) {{
 }}'''
 # Checks one workflow input value against its declared type when the pipeline
 # starts (design §6, Inputs and channels). A value of the declared type
-# passes; a command-line value is text, and text converts only when it is
-# exact. A File or Directory is path text, or a mapping with a path, naming an
-# entry of that kind, and the check returns its path text. [] stands for an
-# absent optional value; no path has a lowering of one. Anything else stops
-# the run, naming the parameter.
+# passes, and a float is finite; a command-line value is text, and text
+# converts only when it is exact. A File or Directory is path text, or a
+# mapping with a path and, if it has one, the declared class, naming an entry
+# of that kind, and the check returns its path text. [] stands for an absent optional value; no
+# path has a lowering of one. Anything else stops the run, naming the
+# parameter.
 NF_INPUT_FUNCTION = f'''def {NF_INPUT_HELPER}(String name, value, String type) {{
     def item = type.replace('[]', '').replace('?', '')
     if( type.contains('[]') ) {{
@@ -75,11 +76,12 @@ NF_INPUT_FUNCTION = f'''def {NF_INPUT_HELPER}(String name, value, String type) {
     }}
     else {{
         def text = value instanceof String
-        def path = value instanceof Map ? value.path : value
+        def path = value instanceof Map && value.getOrDefault('class', item) == item ? value.path : value
         if( type.endsWith('?') && value == [] && !(item in ['File', 'Directory']) )
             return value
         if( item == 'boolean' && value instanceof Boolean || item == 'int' && value instanceof Integer ||
-            item == 'float' && value instanceof Number || item == 'string' && text )
+            item == 'float' && value instanceof Number && Double.isFinite(value.toDouble()) ||
+            item == 'string' && text )
             return value
         if( item == 'boolean' && value in ['true', 'false'] )
             return value == 'true'
@@ -89,7 +91,7 @@ NF_INPUT_FUNCTION = f'''def {NF_INPUT_HELPER}(String name, value, String type) {
         if( item == 'float' && text && value ==~ /[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?/ &&
             Double.isFinite(value.toDouble()) )
             return value.toDouble()
-        if( item in ['File', 'Directory'] && path instanceof String &&
+        if( item in ['File', 'Directory'] && path instanceof String && path != '' &&
             (item == 'File' ? file(path, glob: false).isFile() : file(path, glob: false).isDirectory()) )
             return path
     }}

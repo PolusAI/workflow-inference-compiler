@@ -112,6 +112,10 @@ def test_one_file_array_is_scattered_at_one_step_and_taken_whole_at_another(tmp_
     assert observed["whole"] == ["a.txt\nb.txt\n"]
 
 
+class _JsonNumber(str):
+    """Number text the params file holds as it is: Python writes no JSON number past the double range."""
+
+
 # (value, declared type, the checked value, or None when the check stops the run)
 _ENTRY_CASES: list[tuple[Any, str, Any]] = [
     (True, "boolean", True), ("true", "boolean", True), ("false", "boolean", False),
@@ -121,7 +125,8 @@ _ENTRY_CASES: list[tuple[Any, str, Any]] = [
     (" 1", "int", None), (1.5, "int", None), (True, "int", None),
     (1.5, "float", 1.5), (3, "float", 3), ("1.5e3", "float", 1500.0), (".5", "float", 0.5), ("-2", "float", -2.0),
     ("NaN", "float", None), ("Infinity", "float", None), ("1e400", "float", None), ("0x10", "float", None),
-    ("1d", "float", None), (True, "float", None),
+    ("1d", "float", None), (True, "float", None), (_JsonNumber("1e400"), "float", None),
+    (_JsonNumber("-1e400"), "float", None),
     ("x", "string", "x"), ("10", "string", "10"), (5, "string", None), (False, "string", None),
     ([], "int?", []), ([], "string?", []), ([], "int", None), ([], "File?", None), (None, "int?", None),
     (["1", 2], "int[]", [1, 2]), ([], "string[]", []), ([], "string[]?", []), ("a", "string[]", None),
@@ -129,6 +134,8 @@ _ENTRY_CASES: list[tuple[Any, str, Any]] = [
     ("f.txt", "File", "f.txt"), ({"class": "File", "path": "f.txt"}, "File", "f.txt"), ("d", "File", None),
     ("missing", "File", None), (5, "File", None), ("d", "Directory", "d"), ({"path": "d"}, "Directory", "d"),
     ("f.txt", "Directory", None), (["f.txt"], "File[]", ["f.txt"]), (["d", "f.txt"], "Directory[]", None),
+    ({"class": "Directory", "path": "f.txt"}, "File", None), ({"class": "File", "path": "d"}, "Directory", None),
+    ("", "File", None), ({"path": ""}, "Directory", None),
 ]
 
 
@@ -154,8 +161,11 @@ workflow {{
 """,
         encoding="utf-8",
     )
-    cases = [[value, declared] for value, declared, _ in _ENTRY_CASES]
-    (tmp_path / "nextflow_params.json").write_text(json.dumps({"cases": cases}), encoding="utf-8")
+    cases = ", ".join(
+        f"[{value if isinstance(value, _JsonNumber) else json.dumps(value)}, {json.dumps(declared)}]"
+        for value, declared, _ in _ENTRY_CASES
+    )
+    (tmp_path / "nextflow_params.json").write_text(f'{{"cases": [{cases}]}}', encoding="utf-8")
     (tmp_path / "nextflow.config").write_text("", encoding="utf-8")
     result = execute_nextflow(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
