@@ -314,6 +314,8 @@ Every other consumer is rejected with a named diagnostic, including a consumer p
 
 Only explicitly mapped directives are executable. Unsupported requirements and hints are diagnosed rather than ignored. Text rendering is not runtime proof; CPU, memory, environment, and container claims require the evidence appropriate to the phase.
 
+**GPUs (approved lowering).** A tool's `cwltool:CUDARequirement` lowers to Nextflow's `accelerator` directive, with the device count from `cudaDeviceCountMin` and `cudaDeviceCountMax`, each defaulted as cwltool defaults it. `cudaVersionMin` and `cudaComputeCapability` have no Nextflow counterpart: the lowering reads each one present and reports it with a coded diagnostic of severity note saying so, and the generated pipeline does not check it. A note does not stop compilation; Sophios diagnostics have no warning severity. No CI lane has a GPU, so the runtime evidence is the rendered directive together with a run under the local executor, which accepts the directive and runs the task; whether a scheduler places the task on the requested devices is that executor's contract, not a claim this backend proves.
+
 ---
 
 ## 7. Renderer and artifacts
@@ -418,7 +420,7 @@ Approved Phase 3 lowerings:
 Phase 3 adds none of the following. Each is out of this phase and needs a successor design, in the same posture as arbitrary JavaScript, rather than a later phase of this document:
 
 - Nextflow-native graph inference. Precedence among explicit edges, imported topology, CWL inference, and a native pass is designed before any implementation, and ambiguity, cycles, fan-in, and type incompatibility produce deterministic diagnostics. Dropping "before Phase 3" from the non-goal records that the pass is out, not that it has become a silent default.
-- Advanced resource and environment directives. Each one needs runtime observation before it is approved.
+- Resource and environment directives beyond those §6, Resources and containers approves. Each one needs runtime observation before it is approved.
 - REST artifact delivery. It is target-neutral mainline work, and it still needs an explicit security and operations contract: authentication, authorization, input limits, timeouts, secrets, provenance, retention, and artifact delivery.
 
 Phase 3 does not authorize arbitrary JavaScript, user-written Groovy in any position (§6, Expressions), arbitrary Groovy equivalence, or remote Nextflow execution; each requires a successor design.
