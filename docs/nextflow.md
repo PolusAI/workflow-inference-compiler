@@ -57,12 +57,13 @@ when it starts, before any task runs. A value given on the command line, as
 `--name value`, is text, and so is a JSON string in the params file. Text
 converts only when it is exact: `true` or `false` for a `boolean`, a whole
 number within the 32-bit range for an `int`, and a finite decimal number for
-a `float`. A `File` or `Directory` value is a path, or a CWL File or Directory
-object with a `path`, and must name an existing file or directory of that
-kind. An array comes only from the params file, and `[]` stands for an absent
-optional value that is not a `File` or `Directory`; an absent optional `File`
-or `Directory` workflow input is rejected when the workflow compiles. Any
-other value stops the run with `Sophios workflow input
+a `float`; a number given for a `float` must be finite too. A `File` or
+`Directory` value is a path, or a CWL File or Directory object with a `path`
+and, if it has a `class`, the declared one, and must name an existing file or
+directory of that kind. An array comes only from the params file, and `[]`
+stands for an absent optional value that is not a `File` or `Directory`; an
+absent optional `File` or `Directory` workflow input is rejected when the
+workflow compiles. Any other value stops the run with `Sophios workflow input
 '<name>' must be <type>, not <value>`, where `<name>` is the parameter as the
 params file spells it.
 
