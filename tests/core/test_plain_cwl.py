@@ -18,6 +18,7 @@ import yaml
 
 import sophios.main as cli
 from sophios import preflight
+from sophios.backends import RunRequest
 
 #: Twelve plain Workflows of the CWL v1.2 conformance suite; see its README.md.
 CONFORMANCE = Path(__file__).resolve().parent / 'data' / 'cwl-v1.2'
@@ -131,7 +132,7 @@ def _sophios(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[..., P
     What would reach for a container engine is recorded instead.
     """
     extracted: list[Path] = []
-    monkeypatch.setattr(cli.run_local, 'RUNNER_UNAVAILABLE', None)   # Windows has no runner; `--check` would stop there
+    monkeypatch.setattr(preflight, 'PLATFORM_LACKS_RUNNERS', None)   # Windows has no runner; `--check` would stop there
     monkeypatch.setattr(preflight, 'prepare', lambda documents, _settings, _jobs=(): extracted.extend(documents))
     (tmp_path / 'wf').mkdir()
     (tmp_path / 'wf' / 'say.cwl').write_text(SAY, encoding='utf-8')
@@ -282,11 +283,10 @@ def test_a_plain_cwl_workflow_does_not_run_the_analyses_of_a_workflow_of_the_sam
         'root_dir': str(Path.cwd()), 'declared_at': 'plain.wic:3:3'}]), encoding='utf-8')
     given: list[tuple[Any, ...]] = []
 
-    def run_local(run_args_dict: dict[str, str], *_args: Any, realtime_plans: tuple[Any, ...] = (),
-                  **_kwargs: Any) -> int:
-        given.append((run_args_dict['cachedir'], realtime_plans))
+    def run(request: RunRequest) -> int:
+        given.append((request.cachedir, request.realtime_plans))
         return 0
-    monkeypatch.setattr(cli.run_local, 'run_local', run_local)
+    monkeypatch.setattr(cli.run_local, 'run', run)
 
     sophios(PLAIN, '--allow_raw_cwl', '--run_local')
 

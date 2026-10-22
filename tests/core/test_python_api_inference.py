@@ -138,7 +138,7 @@ def test_an_inference_keeps_what_it_was_given_immutably() -> None:
 def test_run_infers_the_edge_its_compile_does(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The workflow `run()` writes for an `Inference` is the one `compile()` returns for it."""
     monkeypatch.setattr(python_runtime.preflight, "prepare", lambda *args, **kwargs: None)
-    monkeypatch.setattr(python_runtime.rl, "run_local", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(python_runtime.run_local, "run", lambda *args, **kwargs: 0)
     inference = Inference(naming_conventions=True)
 
     _workflow("file").run(basepath=str(tmp_path / "named"), inference=inference)

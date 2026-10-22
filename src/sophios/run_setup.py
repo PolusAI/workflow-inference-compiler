@@ -25,6 +25,7 @@ class Settings:
         inputs_file: A job file whose values win over the workflow's, or ''.
         inputs_file_named: How the user named `inputs_file`, for the pre-flight's messages.
         check: Check the machine and stop: nothing is pulled.
+        pull: Pull the images the run uses; off when an earlier step pulled them.
         remove_entrypoints: Run every image without its entrypoint.
     """
 
@@ -33,6 +34,7 @@ class Settings:
     inputs_file: str = ''
     inputs_file_named: str = '--inputs_file'
     check: bool = False
+    pull: bool = True
     remove_entrypoints: bool = False
 
 
@@ -74,8 +76,11 @@ def prepare(artifact: CompilationArtifact, analyses: tuple[realtime.Analysis, ..
     if settings.check:
         preflight.check(preflight.needs(list(documents), jobs), settings.run)
         return Prepared(artifact, plans, documents)
-    # The real-time analyses' images too: they run with --disable-pull.
-    preflight.prepare(list(documents), settings.run, jobs)
+    if settings.pull:
+        # The real-time analyses' images too: they run with --disable-pull.
+        preflight.prepare(list(documents), settings.run, jobs)
+    else:
+        preflight.check(preflight.needs(list(documents), jobs), settings.run)
     if settings.remove_entrypoints:
         artifact = post_compile.remove_artifact_entrypoints(settings.run.container_engine, artifact)
         # The images are built from the ones the pre-flight pulled, so the rewrite is written over the first write.

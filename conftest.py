@@ -11,7 +11,7 @@ import pytest
 CONTRIB_DIR = Path(__file__).resolve().parent / 'tests' / 'contrib'
 
 # `import cwltool.main` pulls in spython, which imports `pwd` at module scope —
-# a POSIX-only module. A test that calls cwltool in-process therefore cannot run
+# a POSIX-only module. A test that runs or imports cwltool therefore cannot run
 # on Windows whatever lane names it. The test declares the dependency with
 # `needs_cwltool`; this is the one place that knows what the dependency costs,
 # so a second platform limitation does not mean editing every test that has one.

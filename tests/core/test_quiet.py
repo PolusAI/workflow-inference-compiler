@@ -130,7 +130,7 @@ def test_quiet_does_not_change_the_compiled_cwl(project: Path, monkeypatch: pyte
 def test_a_quiet_python_run_writes_what_compile_returns(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`run()` is quiet by default, and the document it writes is the one `compile()` returns."""
     workflow = _python_workflow(project)
-    monkeypatch.setattr(python_runtime.rl, 'generate_run_script', lambda cmdline: None)
+    monkeypatch.setattr(python_runtime.run_local, 'generate_run_script', lambda cmdline: None)
     workflow.run(basepath='py', run_args_dict={'generate_run_script': 'yes'})
     written = _read(project / 'py' / 'w.cwl')
     assert written == workflow.compile().cwl_workflow
@@ -148,7 +148,7 @@ def test_only_a_quiet_cwltool_run_is_given_quiet(project: Path, monkeypatch: pyt
     flags = ['--quiet'] if quiet else []
     cli = _sophios(monkeypatch, '--generate_run_script', '--cwl_runner', runner, *flags)[0]
     commands: list[str] = []
-    monkeypatch.setattr(python_runtime.rl, 'generate_run_script', commands.append)
+    monkeypatch.setattr(python_runtime.run_local, 'generate_run_script', commands.append)
     _python_workflow(project).run(basepath='py', run_args_dict={'generate_run_script': 'yes', 'cwl_runner': runner,
                                                                 'quiet': 'yes' if quiet else 'no'})
     for cmdline in (cli, commands[0]):
