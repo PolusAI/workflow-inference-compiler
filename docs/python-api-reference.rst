@@ -18,7 +18,7 @@ sophios.api.python.workflow
 ---------------------------
 
 .. automodule:: sophios.api.python.workflow
-   :members: Step, StepInput, Inference, Workflow, CompiledWorkflow, ApiError, InvalidInferenceError, InvalidInputValueError, InvalidStepError, InvalidLinkError, InvalidCLTError, WorkflowRunError, SophiosError, SophiosErrorCode
+   :members: Step, StepInput, Inference, Workflow, CompiledWorkflow, RunHandle, RunResult, RunState, RunStatus, StepStatus, ApiError, InvalidInferenceError, InvalidInputValueError, InvalidStepError, InvalidLinkError, InvalidCLTError, WorkflowRunError, SophiosError, SophiosErrorCode
 
 sophios.api.python.tool_builder
 -------------------------------

@@ -85,8 +85,8 @@ some of it: `inputs:` and `outputs:` in `.wic`, `flow.inputs` and
   becomes a workflow input for the run to supply;
 - every step output is exposed as a workflow output, so that nothing a step
   made is lost. A Python workflow that names outputs keeps only those:
-  `Workflow.compile()` returns them, and `Workflow.run()` runs the same
-  document. The command line keeps them all.
+  `Workflow.compile()` returns them, and `Workflow.run()`, `start()` and
+  `run_async()` run the same document. The command line keeps them all.
 
 The names the compiler adds are made from the step and the port,
 `<step>~<port>`.

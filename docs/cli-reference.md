@@ -106,7 +106,9 @@ The four rewriting flags (`--cwl_inline_subworkflows`, `--cwl_inline_runtag`,
 
 ## The same options from Python
 
-`Workflow.run(run_args_dict={...})` takes the running options
+`Workflow.run(run_args_dict={...})`, and `Workflow.start()` and
+`Workflow.run_async()` with the same arguments
+([Follow a run from Python](running.md#follow-a-run-from-python)), take the running options
 by flag name without the dashes, as strings:
 `{'cwl_runner': 'toil-cwl-runner', 'outdir': 'results', 'quiet': 'no'}`.
 Only `quiet`, `no_provenance`, `generate_run_script` and
@@ -126,5 +128,5 @@ has been written. `Workflow.compile()`
 takes `lang_version=`, `tool_registry=` and `inference=`, and nothing else.
 The inference flags map onto `Inference(enabled=, strict=, naming_conventions=, insert_steps=)`, and the
 configuration file's `renaming_conventions` and `inference_rules` onto its `renamings=` and `format_rules=`, which are empty in Python unless passed, as it reads no configuration file;
-`Workflow.run()` takes the same `inference=`. The rewriting and partial-failure options are command-line only;
+`Workflow.run()`, `start()` and `run_async()` take the same `inference=`. The rewriting and partial-failure options are command-line only;
 `Workflow.draw()` takes the drawing ones ([Drawing](drawing.md)).

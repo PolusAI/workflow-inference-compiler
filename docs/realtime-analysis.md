@@ -108,8 +108,8 @@ declarations in one workflow are named `<workflow>` and `<workflow>_2`.
 
 ## What happens at run time
 
-With `--run_local` and cwltool, or `Workflow.run()`, Sophios runs one watcher
-per declaration:
+With `--run_local` and cwltool, or `Workflow.run()` or `Workflow.start()`,
+Sophios runs one watcher per declaration:
 
 - The run caches its jobs (`--cachedir`, in `cachedir/` unless you named
   one), so that each step runs in a directory of its own under it. The
@@ -145,7 +145,10 @@ outputs are files like any other.
 The analysis needs cwltool's cache and a run Sophios itself conducts. With
 `--generate_run_script`, `run.sh` runs the workflow without its analyses, and
 with `--cwl_runner toil-cwl-runner` so does Toil; in both cases a line on
-stderr says so, and the workflow is otherwise unchanged. `--check` and
+stderr says so, and the workflow is otherwise unchanged. `Workflow.run_async()`
+never runs them: it refuses a workflow that declares one with `api008`, before
+anything is written or run; from a coroutine,
+`await asyncio.to_thread(flow.run)` runs it with its analyses. `--check` and
 `--generate_cwl_workflow` compile the analysis and write it under
 `realtime/` in the base path, so a declaration is validated whether or not it
 will run.

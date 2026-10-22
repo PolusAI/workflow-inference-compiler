@@ -91,7 +91,7 @@ In detail, layer by layer:
 | Compile | after every file is read | every step names a tool or subworkflow that exists, every input and output a port it declares, every reference something defined, every literal a value of its type, every version pin a known one | `wic011`–`wic014`, `wic017`, `wic018`, `wic020`, `wic022`–`wic028`, `wic031`, `wic032`, `wic036`, `wic039`, `wic044`; notes `wic042`, `wic043` |
 | Pre-flight | before a local run pulls or runs anything; the base path is checked before every compile | the container engine, input paths, writable directories, installed programs; then the image pulls | `wic015`, `wic016`, `wic021`, `wic029`, `wic037` |
 | Run | while the runner runs | nothing of Sophios's; a tool failed | `api005` in Python; `Failure!` lines on the command line |
-| The Python call | at the assignment or call | a value an input cannot take, a step the workflow cannot place, a link between mismatched ports, a tool that will not load, a `.wic` construct with no Python spelling, contradictory inference settings | `api001`–`api004`, `api006`, `api007` |
+| The Python call | at the assignment or call | a value an input cannot take, a step the workflow cannot place, a link between mismatched ports, a tool that will not load, a `.wic` construct with no Python spelling, contradictory inference settings, real-time analyses given to `run_async` | `api001`–`api004`, `api006`–`api008` |
 
 Python workflows skip the parse layer, since they build the document in
 memory; everything from the compile layer on is the same, reported at the
@@ -167,12 +167,15 @@ or outside the workflow, an unbound output, two tools sharing a stem);
 workflow's own output; `api004` a tool file that will not load; `api006` a
 `.wic` construct `from_wic()` cannot hold; `api007` an `Inference` whose
 settings cannot work together, such as renamings without naming
-conventions or format rules without step insertion. The first four are raised as
+conventions or format rules without step insertion; `api008` a workflow
+that declares real-time analyses given to `Workflow.run_async()`, which
+never runs them, one per declaration step. The first four are raised as
 `InvalidInputValueError`, `InvalidStepError`, `InvalidLinkError` and
 `InvalidCLTError`, subclasses of `SophiosError` importable from
 `sophios.api.python.workflow`, each carrying the script line; `api006` is a
 `SophiosError` holding every refusal at once, and `api007` is an
-`InvalidInferenceError`, raised when the `Inference` is made. Ordinary mistakes in the call
+`InvalidInferenceError`, raised when the `Inference` is made; `api008` is a
+`SophiosError`, raised before anything is written or run. Ordinary mistakes in the call
 itself (`TypeError` for a wrong argument type, `AttributeError` for an input
 the tool does not have, `ValueError` for a bad `when` or scatter method) stay
 the built-in exceptions.

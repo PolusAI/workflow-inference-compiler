@@ -267,6 +267,23 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
 - `Workflow.run()` raises `WorkflowRunError` (api005, importable from
   `sophios.api.python.workflow`) when the run fails, instead of returning.
   Catch it where you used to inspect the result.
+- `Workflow.run()` returns a `RunResult` (`state`, `outputs`, `outdir`,
+  `log_file`, `exit_code`) for a completed run instead of `None`, and `None`
+  with `generate_run_script`. A script that ignores the return value runs as
+  before. `Workflow.start()` takes `run()`'s arguments and returns a
+  `RunHandle` once the runner has started: `wait(timeout=None)`, `status()`,
+  `logs()`, `outputs()` and `cancel()`, with the states `QUEUED`, `RUNNING`,
+  `COMPLETED`, `FAILED` and `CANCELLED`. The run lives as long as the Python
+  process: when the interpreter exits with the run still going, it is
+  cancelled.
+- `sophios.run_local_async` is gone: its `run_cwl_workflow` and
+  `run_cwl_serialized` ran a runner without Sophios's checks, image pulls or
+  failure report. Use `await flow.run_async(...)`, a coroutine with `run()`'s
+  arguments and result, which runs the compile and the checks in a worker
+  thread, and stops the runner when its task is cancelled. It refuses a
+  workflow that declares real-time analyses with `api008`; use `run()` or
+  `start()` for one. `sophios.runtime_inputs.normalize_job_inputs` and
+  `normalize_cwl_document`, which only it used, are gone with it.
 - `Workflow.run()` runs exactly the document `Workflow.compile()` returns,
   written as one `<workflow>.cwl` with its job file; it no longer writes a
   file for each tool beside it. A workflow that names outputs keeps only
@@ -367,6 +384,7 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
 
 ### Packaging
 
+- `aiofiles` is no longer a dependency; `sophios.run_local_async` was its only user.
 - The `runners-src` extra is gone; PyPI does not accept a dependency on a Git
   URL. Install `cwl-utils` from Git yourself if you need an unreleased
   version.
