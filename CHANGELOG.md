@@ -247,6 +247,16 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   images; and a `DockerRequirement` under `hints`, or in a tool embedded in an
   inlined document, was never renamed. An image from a registry with a port
   (`localhost:5000/img:tag`) no longer fails the run.
+- cwltool and Toil run as a separate program, a child of Sophios, from the
+  command line and `Workflow.run()` alike, never inside the Sophios process.
+  Ctrl-C sends the runner SIGTERM, on which cwltool stops the containers it
+  started, and kills it if it has not stopped within 30 seconds; however else
+  Sophios ends (`kill`, a closed terminal, `kill -9`), the runner is stopped the
+  same way. `error_<workflow>.txt` is written only when the runner could not be
+  started, and the `via cwltool.main.main python API` line is gone.
+- `sophios.run_local.run_local`, `build_cmd`, `create_safe_env` and
+  `RUNNER_UNAVAILABLE`, and `sophios.plugins.FailedJobs`, are removed: run with
+  the command line or `Workflow.run()`.
 - A local run, from the command line or `Workflow.run()`, keeps everything the
   runner printed, both streams as they came, in `<basepath>/run_<workflow>.log`.
 - A run under `--cwl_runner toil-cwl-runner` writes the output object Toil

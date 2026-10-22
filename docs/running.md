@@ -304,5 +304,10 @@ has not stopped within 30 seconds. Toil stops its own jobs, but a container
 one of them started can keep running: `docker ps` shows it, and
 `docker kill <id>` stops it. The command line exits with 130, and Python
 raises `KeyboardInterrupt`.
+However else Sophios ends (`kill`, a closed terminal or SSH session, a
+restarted notebook kernel, even `kill -9`), the runner is stopped the same
+way: a small watcher started beside it sees that Sophios has gone, sends the
+runner SIGTERM, and kills it if it has not stopped within 30 seconds. A run
+started under `nohup` keeps going after you log out.
 [Checks and errors](checks-and-errors.md) shows how to read each kind of
 problem.
