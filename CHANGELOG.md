@@ -247,6 +247,10 @@ Codes in parentheses are the codes Sophios prints with each diagnostic.
   images; and a `DockerRequirement` under `hints`, or in a tool embedded in an
   inlined document, was never renamed. An image from a registry with a port
   (`localhost:5000/img:tag`) no longer fails the run.
+- A local run, from the command line or `Workflow.run()`, keeps everything the
+  runner printed, both streams as they came, in `<basepath>/run_<workflow>.log`.
+- A run under `--cwl_runner toil-cwl-runner` writes the output object Toil
+  prints to `<basepath>/output_<workflow>.json`, as a cwltool run does.
 
 ### Python API and embedding
 

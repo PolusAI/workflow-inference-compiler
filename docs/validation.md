@@ -41,7 +41,7 @@ surfaces'. The markers, declared in `pyproject.toml`:
 - `fast`: unit and API tests; `pytest -m fast` is the quick local check;
 - `slow`: workflow and integration tests;
 - `serial`: tests that cannot run under `pytest --workers`;
-- `needs_cwltool`: calls cwltool in-process; skipped off POSIX;
+- `needs_cwltool`: runs cwltool; skipped off POSIX;
 - `skip_pypi_ci`: left out of the packaging lane;
 - `contrib`: a contrib surface rather than the core compiler.
 

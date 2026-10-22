@@ -162,17 +162,29 @@ for a `StepInput` default against the working directory.
   `workflow.py` and `tool_builder.py` from reaching the compiler any other
   way.
 - `sophios.run_setup.prepare` is the one path from an artifact to a run, for
-  both adapters: it binds and writes the job, writes the workflow and its
-  analyses, and calls the pre-flight. The command line gives it the tree, or
+  both adapters and the CI harness, through the backend's `prepare`: it binds
+  and writes the job, writes the workflow and its analyses, and calls the
+  pre-flight. The command line gives it the tree, or
   one document under `--cwl_inline_runtag`; Python gives it one document.
   `run_local_async.run_cwl_serialized` runs a workflow it is given as it is.
 - `sophios.preflight` answers what a local run needs from this machine, with
   one diagnostic per problem, and pulls images; it is called by both
   adapters and never by a compute submission.
-- `sophios.run_local` builds the runner command (`--provenance` unless
-  `no_provenance`) and runs cwltool or Toil in-process, with the logging
-  filter that collects failed jobs, then names each failed step;
-  `sophios.realtime` compiles each declaration once and runs a
+- `sophios.backends` describes a run once, as a `RunRequest`, which the
+  command line, the Python API and the CI harness each build. The backend for
+  its target and runner (`BACKENDS`, keyed by `('cwl', 'cwltool')` and
+  `('cwl', 'toil-cwl-runner')`) answers four questions and starts nothing:
+  `check` (the pre-flight), `prepare` (`run_setup.prepare`), `launch` (the
+  runner's argv, environment and working directory; `--provenance` unless
+  `no_provenance`) and `outcome` (after exit: the output object and the
+  failed steps, read from the runner's log lines).
+- `sophios.run_local` is the one path that runs a launch: always as a child
+  process in its own session, whose two streams it echoes line by line and
+  tees into `<basepath>/run_<workflow>.log`. `start` returns a `Run` handle
+  (`wait`, `status`, `logs`, `outputs`, `cancel`) that lives as long as the
+  Python process; `run` is start and wait, or writes `run.sh`. Ctrl-C during
+  `wait` is `cancel`: SIGTERM to the runner, then a kill after a grace
+  period. `sophios.realtime` compiles each declaration once and runs a
   `Watcher` per plan beside the runner.
 
 ## Compatibility contract
