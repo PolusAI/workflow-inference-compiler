@@ -55,9 +55,8 @@ jobs:
       - name: Checkout mm-workflows
         uses: actions/checkout@v5
         with:
-          repository: PolusAI/mm-workflows
-          # Until PolusAI/mm-workflows#268 merges, main's docking examples name steps the old way.
-          ref: refs/pull/268/head
+          repository: ${{ github.repository_owner }}/mm-workflows
+          ref: main
           path: mm-workflows
 
       - name: Checkout image-workflows
