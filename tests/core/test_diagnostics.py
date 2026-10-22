@@ -41,6 +41,7 @@ from sophios.lang.spans import SourceSpan
 from sophios.python_cwl_adapter import check_args_match_inputs
 from sophios.wic_types import StepId, Tool
 
+from .fake_runner import POSIX_ONLY
 from .hermetic import compile_hermetic, compile_hermetic_source
 from .provocations import _provoke_duplicate_document_name
 from .synthetic_tools import SYNTHETIC_NS, clt
@@ -511,6 +512,7 @@ def test_ctrl_c_during_run_local_exits_130(monkeypatch: pytest.MonkeyPatch,
 
 
 @pytest.mark.fast
+@POSIX_ONLY
 @pytest.mark.parametrize('flags', [[], ['--cachedir', 'mycache']])
 def test_a_runner_that_cannot_start_says_why_with_or_without_a_cachedir(
         monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path,
