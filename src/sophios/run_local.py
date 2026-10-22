@@ -2,9 +2,9 @@
 
 A front door describes the run as a `backends.RunRequest`; `run` starts the runner its
 backend launches as a child process, streams what it prints, and reports how it ended.
-`start` returns the `Run` handle that `run` waits on.
+`start` returns the `RunHandle` that `run` waits on, which `Workflow.start()` hands to its caller.
 """
-import enum
+import atexit
 import os
 import shlex
 import signal
@@ -12,6 +12,7 @@ import stat
 import subprocess as sub
 import sys
 import threading
+import time
 import traceback
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, replace
@@ -25,6 +26,7 @@ from . import auto_gen_header, backends, preflight, realtime
 from . import utils
 from .backends import Backend, Launch, RunRequest
 from .compute_request import ComputeRequest
+from .run_status import RunResult, RunState, RunStatus, StepStatus
 from .plugins import logging_filters
 
 
@@ -49,49 +51,6 @@ def generate_run_script(cmdline: str) -> None:
     # chmod +x run.sh
     st = os.stat('run.sh')
     os.chmod('run.sh', st.st_mode | stat.S_IEXEC)
-
-
-class RunState(enum.Enum):
-    """Where a run is. QUEUED and RUNNING may change; COMPLETED, FAILED and CANCELLED never do."""
-
-    QUEUED = 'QUEUED'
-    RUNNING = 'RUNNING'
-    COMPLETED = 'COMPLETED'
-    FAILED = 'FAILED'
-    CANCELLED = 'CANCELLED'
-
-
-@dataclass(frozen=True, slots=True)
-class StepStatus:
-    """A step of the run that failed: how it ended, by exit status or by signal, when the runner said."""
-
-    name: str
-    state: RunState
-    exit_status: int | None = None
-    signal: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class RunStatus:  # pylint: disable=too-many-instance-attributes
-    """A run's status.
-
-    Attributes:
-        state: Where the run is.
-        reason: Why it is in its state, when there is something to say.
-        started_at: When the runner started; None until then.
-        ended_at: When the run ended; None until then.
-        steps: The steps that failed, in the order they failed.
-        outputs: The workflow's output object, once the run COMPLETED.
-        exit_code: The runner's exit code, once it exited.
-    """
-
-    state: RunState
-    reason: str | None = None
-    started_at: datetime | None = None
-    ended_at: datetime | None = None
-    steps: tuple[StepStatus, ...] = ()
-    outputs: Json | None = None
-    exit_code: int | None = None
 
 
 #: What an exit status means on its own (shell conventions), said after it.
@@ -206,20 +165,26 @@ class _Streams:
             stream.close()
 
 
-class Run:  # pylint: disable=too-many-instance-attributes
-    """A runner started as a child of this process, for as long as this process lives.
+class RunHandle:  # pylint: disable=too-many-instance-attributes
+    """A run whose runner is a child of this process, for as long as this process lives.
 
-    `wait` blocks until it ends; `status`, `logs` and `outputs` say where it is; `cancel`
-    stops it, as Ctrl-C during `wait` does.
+    Made started, by `start` (`Workflow.start()`), never by calling the class. There is
+    no detaching from it: when the interpreter exits with the run still going, the run
+    is cancelled. `wait` blocks until it ends; `status`, `logs` and `outputs` say where
+    it is without blocking; `cancel` stops it, as Ctrl-C during `wait` does. Every method
+    may be called from any thread.
     """
 
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def __init__(self, request: RunRequest, backend: Backend, launch: Launch,
                  plans: tuple[realtime.Plan, ...], analysis: realtime.Command | None) -> None:
-        self.request = request
+        """Start the run; ``Workflow.start()`` does this, so a script never calls the class itself."""
+        self._request = request
         self._backend = backend
         self._launch = launch
         self._plans = plans
         self._analysis = analysis
+        self._log = log_path(request).absolute()
         self._status = RunStatus(RunState.QUEUED)
         self._process: sub.Popen[bytes] | None = None
         self._watcher: sub.Popen[bytes] | None = None
@@ -227,22 +192,22 @@ class Run:  # pylint: disable=too-many-instance-attributes
         self._readers: list[threading.Thread] = []
         self._watching: AbstractContextManager[None] | None = None
         self._settle_lock = threading.Lock()
+        self._start()
 
-    def start(self) -> None:
+    def _start(self) -> None:
         """Start the runner, and the real-time analyses beside it.
 
         A runner that cannot be started is a FAILED run, its traceback in `error_<workflow>.txt`.
         """
-        log = log_path(self.request)
         print('Running ' + shlex.join(self._launch.argv), flush=True)
         if self._analysis is not None:
-            self._watching = realtime.watching(self._plans, Path(self.request.cachedir), self._analysis,
+            self._watching = realtime.watching(self._plans, Path(self._request.cachedir), self._analysis,
                                                env=self._launch.env)
             self._watching.__enter__()  # pylint: disable=unnecessary-dunder-call
         started_at = datetime.now()
         try:
-            log.parent.mkdir(parents=True, exist_ok=True)
-            self._streams = _Streams(log.open('w', encoding='utf-8'))
+            self._log.parent.mkdir(parents=True, exist_ok=True)
+            self._streams = _Streams(self._log.open('w', encoding='utf-8'))
             self._process = _spawn(self._launch)
             self._watcher = _watch(self._process)
         except Exception as error:  # pylint: disable=broad-exception-caught
@@ -261,6 +226,7 @@ class Run:  # pylint: disable=too-many-instance-attributes
             self._status = RunStatus(RunState.FAILED, reason, started_at, datetime.now(), exit_code=1)
             return
         self._status = RunStatus(RunState.RUNNING, started_at=started_at)
+        atexit.register(self._end_with_interpreter)
         try:
             assert self._process.stdout is not None and self._process.stderr is not None
             self._readers = [threading.Thread(target=self._streams.pump, args=(pipe, name), daemon=True)
@@ -271,10 +237,17 @@ class Run:  # pylint: disable=too-many-instance-attributes
             self.cancel()
             raise
 
+    def _end_with_interpreter(self) -> None:
+        """As the interpreter exits, cancel the run if its runner is still going, so nothing outlives it;
+        report on a runner that has exited, so its analyses end and its log is closed."""
+        if self._process is not None and self._process.poll() is None:
+            print('Python is exiting before the run ended, so it is cancelled.', file=sys.stderr)
+        self.cancel()
+
     def _unsupervised(self, error: BaseException) -> None:
         """Say that Sophios could not start or follow the runner; keep the traceback in `error_<workflow>.txt`."""
-        name = self.request.workflow_name
-        print('Failed to execute', self.request.basepath / name)
+        name = self._request.workflow_name
+        print('Failed to execute', self._request.basepath / name)
         print(error)
         print(f'See error_{name}.txt for detailed technical information.')
         # Do not display a nasty stack trace to the user; hide it in a file.
@@ -292,29 +265,47 @@ class Run:  # pylint: disable=too-many-instance-attributes
         else:
             watching.__exit__(None, None, None)
 
-    def _join_readers(self) -> None:
-        for reader in self._readers:
-            while reader.is_alive():
-                reader.join(0.2)
-
-    def wait(self) -> RunStatus:
-        """Block until the run ends, and return its status.
+    def _join_readers(self, deadline: float | None = None) -> None:
+        """Wait until the runner's streams are read to their end.
 
         Raises:
+            TimeoutError: `deadline` has passed with the runner exited and its output still being read.
+        """
+        try:
+            for reader in self._readers:
+                while reader.is_alive():
+                    reader.join(_slice(deadline))
+        except TimeoutError:
+            raise TimeoutError('the runner has exited and its output is still being read; wait again') from None
+
+    def wait(self, timeout: float | None = None) -> RunResult:
+        """Block until the run ends, and say how it ended.
+
+        A run that FAILED or was CANCELLED is returned as one: nothing is raised for it.
+
+        Args:
+            timeout: How many seconds to wait at most; None waits as long as the run takes.
+
+        Raises:
+            TimeoutError: The run had not ended within `timeout` seconds. It goes on.
             KeyboardInterrupt: On Ctrl-C, after the runner was stopped (`cancel`).
         """
+        deadline = None if timeout is None else time.monotonic() + timeout
         try:
             if self._process is not None:
                 while self._process.poll() is None:
                     try:
-                        self._process.wait(0.2)
+                        self._process.wait(_slice(deadline))
                     except sub.TimeoutExpired:
                         pass
-                self._join_readers()
+                self._join_readers(deadline)
         except KeyboardInterrupt:
             self.cancel()
             raise
-        return self._settle()
+        status = self._settle()
+        assert status.exit_code is not None
+        return RunResult(status.state, status.outputs, self._launch.cwd / self._launch.outdir, self._log,
+                         status.exit_code)
 
     def status(self) -> RunStatus:
         """Where the run is now, without blocking. A runner that has exited, its output read to the end,
@@ -325,9 +316,9 @@ class Run:  # pylint: disable=too-many-instance-attributes
         return self._status
 
     def logs(self) -> str:
-        """Everything the runner has printed so far, both streams as they came."""
+        """Everything the runner has printed so far, both streams as they came: the run log's text."""
         try:
-            return log_path(self.request).read_text(encoding='utf-8', errors='replace')
+            return self._log.read_text(encoding='utf-8', errors='replace')
         except FileNotFoundError:
             return ''
 
@@ -338,6 +329,7 @@ class Run:  # pylint: disable=too-many-instance-attributes
     def cancel(self) -> None:
         """Stop the runner and the analyses beside it, and mark the run CANCELLED.
 
+        A runner that has already exited is reported on as it ended, COMPLETED or FAILED, as `wait` does.
         On POSIX the runner is sent SIGTERM, on which cwltool stops the containers it started,
         and killed with everything it started when it has not exited within `STOP_GRACE_SECONDS`.
         """
@@ -346,7 +338,8 @@ class Run:  # pylint: disable=too-many-instance-attributes
             process = self._process
             if process is None or self._status.state not in (RunState.QUEUED, RunState.RUNNING):
                 return
-            if process.poll() is None:
+            running = process.poll() is None
+            if running:
                 try:
                     process.send_signal(signal.SIGTERM)
                     process.wait(STOP_GRACE_SECONDS)
@@ -357,9 +350,13 @@ class Run:  # pylint: disable=too-many-instance-attributes
             self._kill(process)
             self._release_watcher()
             self._join_readers()
+            if not running:
+                self._settle_locked()
+                return
             if self._streams is not None:
                 self._streams.log.close()
             self._stop_watching(cancelled=True)
+            atexit.unregister(self._end_with_interpreter)
             print("Interrupted; the runner's processes were terminated.", file=sys.stderr)
             self._status = RunStatus(RunState.CANCELLED, 'cancelled: the runner was stopped',
                                      self._status.started_at, datetime.now(), exit_code=process.returncode)
@@ -390,32 +387,50 @@ class Run:  # pylint: disable=too-many-instance-attributes
     def _settle(self) -> RunStatus:
         """Report on a runner that has exited, once: its outcome, the analyses' final runs, the summary lines."""
         with self._settle_lock:
-            if self._status.state not in (RunState.QUEUED, RunState.RUNNING) or self._process is None:
-                return self._status
-            assert self._streams is not None
-            exit_code = self._process.returncode
-            self._release_watcher()
-            self._streams.log.close()
-            outcome = self._backend.outcome(self.request, exit_code, ''.join(self._streams.stdout),
-                                            log_path(self.request))
-            if outcome.summary is not None:
-                print(f'Final output json metadata blob is in output_{self.request.workflow_name}.json')
-            self._stop_watching(cancelled=False)
-            if self._streams.error is not None:
-                self._unsupervised(self._streams.error)
-            steps = tuple(StepStatus(name, RunState.FAILED, ended if isinstance(ended, int) else None,
-                                     ended if isinstance(ended, str) else None)
-                          for name, ended in outcome.failed.items())
-            if exit_code == 0:
-                print(f'Success! Runner outputs are under {self._launch.outdir}/')
-                self._status = RunStatus(RunState.COMPLETED, None, self._status.started_at, datetime.now(),
-                                         steps, outcome.outputs, exit_code=0)
-            else:
-                for line in _failure_lines(outcome.failed):
-                    print(line, file=sys.stderr)
-                self._status = RunStatus(RunState.FAILED, f'the runner exited with status {exit_code}',
-                                         self._status.started_at, datetime.now(), steps, exit_code=exit_code)
+            return self._settle_locked()
+
+    def _settle_locked(self) -> RunStatus:
+        """`_settle`, with `_settle_lock` held."""
+        if self._status.state not in (RunState.QUEUED, RunState.RUNNING) or self._process is None:
             return self._status
+        assert self._streams is not None
+        exit_code = self._process.returncode
+        self._release_watcher()
+        self._streams.log.close()
+        outcome = self._backend.outcome(self._request, exit_code, ''.join(self._streams.stdout), self._log)
+        if outcome.summary is not None:
+            print(f'Final output json metadata blob is in output_{self._request.workflow_name}.json')
+        self._stop_watching(cancelled=False)
+        atexit.unregister(self._end_with_interpreter)
+        if self._streams.error is not None:
+            self._unsupervised(self._streams.error)
+        steps = tuple(StepStatus(name, RunState.FAILED, ended if isinstance(ended, int) else None,
+                                 ended if isinstance(ended, str) else None)
+                      for name, ended in outcome.failed.items())
+        if exit_code == 0:
+            print(f'Success! Runner outputs are under {self._launch.outdir}/')
+            self._status = RunStatus(RunState.COMPLETED, None, self._status.started_at, datetime.now(),
+                                     steps, outcome.outputs, exit_code=0)
+        else:
+            for line in _failure_lines(outcome.failed):
+                print(line, file=sys.stderr)
+            self._status = RunStatus(RunState.FAILED, f'the runner exited with status {exit_code}',
+                                     self._status.started_at, datetime.now(), steps, exit_code=exit_code)
+        return self._status
+
+
+def _slice(deadline: float | None) -> float:
+    """How long to block before looking again: a fifth of a second, or what is left before `deadline`.
+
+    Raises:
+        TimeoutError: `deadline` has passed.
+    """
+    if deadline is None:
+        return 0.2
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise TimeoutError('the run has not ended yet; it goes on')
+    return min(0.2, left)
 
 
 def _realtime(request: RunRequest, backend: Backend) -> tuple[RunRequest, realtime.Command | None]:
@@ -437,8 +452,8 @@ def _realtime(request: RunRequest, backend: Backend) -> tuple[RunRequest, realti
     return request, command
 
 
-def start(request: RunRequest) -> Run:
-    """Start the run `request` describes, and return its handle.
+def start(request: RunRequest) -> RunHandle:
+    """Start the run `request` describes, and return its handle once the runner has started.
 
     Raises:
         ValueError: No backend runs the request's target with its runner, or it asks for a run script.
@@ -447,9 +462,7 @@ def start(request: RunRequest) -> Run:
         raise ValueError('a run script is written by run(), not started')
     backend = backends.backend(request.target, request.runner)
     request, analysis = _realtime(request, backend)
-    handle = Run(request, backend, backend.launch(request), request.realtime_plans, analysis)
-    handle.start()
-    return handle
+    return RunHandle(request, backend, backend.launch(request), request.realtime_plans, analysis)
 
 
 def run(request: RunRequest) -> int:
@@ -467,9 +480,7 @@ def run(request: RunRequest) -> int:
         _realtime(request, backend)
         generate_run_script(shlex.join(backend.launch(request).argv))
         return 0  # Do not actually run
-    status = start(request).wait()
-    assert status.exit_code is not None
-    return status.exit_code
+    return start(request).wait().exit_code
 
 
 def run_compute(workflow_name: str, workflow: Json, workflow_inputs: Json,

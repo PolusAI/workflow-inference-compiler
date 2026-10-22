@@ -9,7 +9,8 @@ import yaml
 import sophios.api.python._workflow_runtime as python_runtime
 from sophios import main as cli
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
-from sophios.api.python.workflow import Inference, InvalidInferenceError, SophiosError, SophiosErrorCode, Step, Workflow
+from sophios.api.python.workflow import (Inference, InvalidInferenceError, RunResult, RunState, SophiosError,
+                                         SophiosErrorCode, Step, Workflow)
 from sophios.wic_types import Json, StepId, Tool
 
 from .synthetic_tools import clt
@@ -134,11 +135,18 @@ def test_an_inference_keeps_what_it_was_given_immutably() -> None:
         inference.format_rules["tiff"] = "continue"  # type: ignore[index]
 
 
+class _Completed:  # pylint: disable=too-few-public-methods
+    """A started run that has completed: for a test of what `run()` writes, not of the run."""
+
+    def wait(self) -> RunResult:
+        return RunResult(RunState.COMPLETED, {}, Path("outdir"), Path("run.log"), 0)
+
+
 @pytest.mark.fast
 def test_run_infers_the_edge_its_compile_does(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The workflow `run()` writes for an `Inference` is the one `compile()` returns for it."""
     monkeypatch.setattr(python_runtime.preflight, "prepare", lambda *args, **kwargs: None)
-    monkeypatch.setattr(python_runtime.run_local, "run", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(python_runtime.run_local, "start", lambda request: _Completed())
     inference = Inference(naming_conventions=True)
 
     _workflow("file").run(basepath=str(tmp_path / "named"), inference=inference)
