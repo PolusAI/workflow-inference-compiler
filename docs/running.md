@@ -70,8 +70,9 @@ directory inside it, named for the runner, the workflow and the time.
 - To move the base path, pass `--basepath <dir>` on the command line, or
   `basepath='<dir>'` to `run()`; a relative path is read from the current
   directory. Everything Sophios generates goes there: the compiled workflow
-  and job file, the record of the run, `output_<workflow>.json`, the output
-  files, and, on the command line, the drawings and the schema. Only `run.sh`,
+  and job file, the record of the run, `output_<workflow>.json`, the run's
+  log `run_<workflow>.log`, the output files, and, on the command line, the
+  drawings and the schema. Only `run.sh`,
   `error_<workflow>.txt` and, when a real-time analysis turns caching on
   without `--cachedir`, `cachedir/` stay in the current directory.
 - To move only the output files, pass `--outdir <dir>`, or
@@ -261,7 +262,8 @@ Everything goes into the base path:
 | `<workflow>.cwl`, `<workflow>_inputs.yml` | the compiled workflow and its job file; from Python, or with `--cwl_inline_runtag`, the workflow is one document with every step's process in it |
 | `<workflow>~<step>.cwl` | on the command line, the tool or subworkflow each step runs, one file per step ([Compiling to CWL](compiling-to-cwl.md#the-tree)) |
 | `outdir_<runner>_<workflow>_<time>/` | the run's output files, unless `--outdir` names another place |
-| `output_<workflow>.json` | every workflow output with its value |
+| `output_<workflow>.json` | every workflow output with its value; Toil prints it, and Sophios writes it here as cwltool does |
+| `run_<workflow>.log` | everything the runner printed, both streams, as the run went |
 | `provenance/<workflow>/` | the runner's record of what ran, with what, and what came out |
 | `realtime/`, `<workflow>.realtime.json` | compiled real-time analyses, when the workflow declares any |
 
@@ -291,7 +293,16 @@ For statuses 126, 127 and 137 the line also says what they usually mean: the
 command could not be executed, was not found, or was killed, usually for
 memory. The step's own messages are above it in the log. The command line
 exits with the runner's exit code, and `Workflow.run()` raises
-`WorkflowRunError`, whose `exit_code` is the runner's. Ctrl-C stops the run;
-the command line exits with 130, and Python raises `KeyboardInterrupt`.
+`WorkflowRunError`, whose `exit_code` is the runner's.
+
+The runner runs as a separate program, a child of Sophios. What it prints
+shows as it comes, in a terminal and in a notebook alike, and is kept in
+`run_<workflow>.log` in the base path. Ctrl-C stops Sophios, which then stops
+the runner: it sends the runner SIGTERM, on which cwltool stops the
+containers it started, and kills the runner and everything it started if it
+has not stopped within 30 seconds. Toil stops its own jobs, but a container
+one of them started can keep running: `docker ps` shows it, and
+`docker kill <id>` stops it. The command line exits with 130, and Python
+raises `KeyboardInterrupt`.
 [Checks and errors](checks-and-errors.md) shows how to read each kind of
 problem.
