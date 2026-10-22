@@ -11,7 +11,7 @@ Python-facing workflow authoring.
 
 import logging
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, Final, Protocol, TypeVar
 
@@ -22,6 +22,8 @@ from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 
 from sophios import backends, compiler, drawing, input_output, plugins, post_compile as pc, preflight, realtime
 from sophios import run_local, run_setup
+from sophios.run_local import RunHandle
+from sophios.run_status import RunResult, RunState
 from sophios.ir.artifacts import CompilationArtifact, CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.locations import absolute_paths
@@ -574,43 +576,35 @@ def _enabled(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-# pylint: disable-next=too-many-arguments
-def run_workflow(
-    workflow: "Workflow",
-    *,
-    run_args_dict: dict[str, str] | None = None,
-    user_env_vars: dict[str, str] | None = None,
-    basepath: str = DEFAULT_BASEPATH,
-    tool_registry: Tools | None = None,
-    workflow_paths: Mapping[str, Mapping[str, Path]] | None = None,
-    inference: Inference = Inference(),
-) -> None:
-    """Compile and execute a workflow locally.
+@dataclass(frozen=True, slots=True)
+class RunOptions:  # pylint: disable=too-many-instance-attributes
+    """What `Workflow.run()` and `start()` are given, besides the workflow: see `Workflow.run`."""
 
-    Args:
-        workflow (Workflow): Workflow to execute.
-        run_args_dict (dict[str, str] | None): Runtime CLI options for local execution.
-        user_env_vars (dict[str, str] | None): Environment variables to expose to the run.
-        basepath (str): Directory used for generated files and execution artifacts.
-        tool_registry (Tools | None): Optional tool registry override.
-        workflow_paths (Mapping[str, Mapping[str, Path]] | None): The `.wic` files a
-            real-time analysis may be, shaped `{namespace: {stem: path}}`.
-        inference (Inference): How unbound inputs are connected; the same
-            settings `compile` takes, so a run infers the edges its compile does.
+    run_args_dict: dict[str, str] | None = None
+    user_env_vars: dict[str, str] | None = None
+    basepath: str = DEFAULT_BASEPATH
+    tool_registry: Tools | None = None
+    workflow_paths: Mapping[str, Mapping[str, Path]] | None = None
+    inference: Inference = Inference()
+
+
+def _run_request(workflow: "Workflow", options: RunOptions) -> backends.RunRequest:
+    """Compile `workflow`, check this machine, write what the runner reads and pull its images: the run, ready.
 
     Raises:
-        ValueError: If `run_args_dict` names a `cwl_runner` Sophios cannot run.
-        WorkflowRunError: If the runner exits non-zero.
-        KeyboardInterrupt: On Ctrl-C, after the runner was stopped.
+        SophiosError: The workflow does not compile, or this machine cannot run it.
+        ValueError: `run_args_dict` names a `cwl_runner` Sophios cannot run, or a `user_env_vars` key is not
+            an environment variable name.
     """
     logger.info("Running %s", workflow.process_name)
     plugins.logging_filters()
 
-    resolved_run_args = _run_args(run_args_dict)
-    result = compile_workflow_result(workflow, tool_registry=tool_registry, inference=inference)
+    resolved_run_args = _run_args(options.run_args_dict)
+    basepath = options.basepath
+    result = compile_workflow_result(workflow, tool_registry=options.tool_registry, inference=options.inference)
     analyses = realtime.compile_analyses(
-        result.realtime, {namespace: dict(paths) for namespace, paths in (workflow_paths or {}).items()},
-        _merged_known_tools(workflow, tool_registry), compiler_options(inference))
+        result.realtime, {namespace: dict(paths) for namespace, paths in (options.workflow_paths or {}).items()},
+        _merged_known_tools(workflow, options.tool_registry), compiler_options(options.inference))
     if (problem := preflight.unwritable(Path(basepath), "the workflow and its run",
                                         "pass run() a basepath you can write to")) is not None:
         raise SophiosError([problem])
@@ -634,12 +628,38 @@ def run_workflow(
     )
 
     _, unknown_args = get_known_and_unknown_args(workflow.process_name, user_args)
-    retval = run_local.run(backends.RunRequest(
+    return backends.RunRequest(
         workflow.process_name, Path(basepath), runner=resolved_run_args["cwl_runner"],
         container_engine=resolved_run_args["container_engine"], cachedir=resolved_run_args.get("cachedir", ""),
         outdir=resolved_run_args.get("outdir", ""), quiet=resolved_run_args.get("quiet", "yes") == "yes",
         provenance=resolved_run_args.get("no_provenance", "no") != "yes",
-        passthrough_args=tuple(unknown_args), env=dict(user_env_vars or {}), realtime_plans=prepared.plans,
-        generate_run_script=resolved_run_args.get("generate_run_script", "no") == "yes"))
-    if retval != 0:
-        raise WorkflowRunError(workflow.process_name, retval)
+        passthrough_args=tuple(unknown_args), env=dict(options.user_env_vars or {}), realtime_plans=prepared.plans,
+        generate_run_script=resolved_run_args.get("generate_run_script", "no") == "yes")
+
+
+def _completed(workflow: "Workflow", result: RunResult) -> RunResult:
+    """`result`, when the run COMPLETED.
+
+    Raises:
+        WorkflowRunError: It did not.
+    """
+    if result.state is not RunState.COMPLETED:
+        raise WorkflowRunError(workflow.process_name, result.exit_code)
+    return result
+
+
+def start_workflow(workflow: "Workflow", options: RunOptions) -> RunHandle:
+    """Compile and prepare `workflow`, start its runner, and return the run's handle: see `Workflow.start`."""
+    if _enabled(_run_args(options.run_args_dict).get("generate_run_script", "no")):
+        raise ValueError("generate_run_script writes run.sh instead of starting the run: call run() for it")
+    return run_local.start(_run_request(workflow, options))
+
+
+def run_workflow(workflow: "Workflow", options: RunOptions) -> RunResult | None:
+    """Compile and run `workflow`, and wait for it: see `Workflow.run`."""
+    request = _run_request(workflow, options)
+    if request.generate_run_script:
+        run_local.run(request)
+        return None
+    return _completed(workflow, run_local.start(request).wait())
+

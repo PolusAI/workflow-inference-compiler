@@ -358,13 +358,14 @@ def _provoke_workflow_run_failed() -> None:
     from unittest import mock  # pylint: disable=import-outside-toplevel
 
     import sophios.api.python._workflow_runtime as runtime  # pylint: disable=import-outside-toplevel
-    from sophios.api.python.workflow import Step, Workflow  # pylint: disable=import-outside-toplevel
+    from sophios.api.python.workflow import RunResult, RunState, Step, Workflow  # pylint: disable=C0415
 
     echo = Step(clt_path=Path(__file__).resolve().parents[2] / 'cwl_adapters' / 'echo.cwl')
     echo.inputs.message = 'hello'
+    failed = RunResult(RunState.FAILED, None, Path('outdir'), Path('run_provoke.log'), 1)
     with mock.patch.object(runtime.preflight, 'prepare'), \
             mock.patch.object(runtime.input_output, 'write_artifacts_to_disk'), \
-            mock.patch.object(runtime.run_local, 'run', return_value=1):
+            mock.patch.object(runtime.run_local, 'start', return_value=mock.Mock(**{'wait.return_value': failed})):
         Workflow([echo], 'provoke').run()
 
 

@@ -34,8 +34,8 @@ from sophios.backends import RunRequest
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 from sophios.api.python.workflow import (_python_api_types_match, ApiError, CompiledWorkflow,
                                          InvalidCLTError, InvalidInputValueError, InvalidLinkError,
-                                         InvalidStepError, SophiosError, SophiosErrorCode, Step,
-                                         StepInput, Workflow)
+                                         InvalidStepError, RunResult, RunState, SophiosError,
+                                         SophiosErrorCode, Step, StepInput, Workflow)
 from sophios.cli import default_compilation_settings
 from sophios.lang import CwlRecord, InlineLiteral, parse, to_json, wic_schema
 from sophios.compute_request import ComputeExecutionConfig, ComputeOutputConfig, ComputeRequest, ComputeSubmission
@@ -912,6 +912,18 @@ def test_run_cwl_workflow_rejects_an_invalid_env_var_name(tmp_path: Path) -> Non
         asyncio.run(run_local_async.run_cwl_workflow("wf", str(tmp_path), "cwltool", "docker", {"1ST": "x"}))
 
 
+@dataclasses.dataclass
+class _Ended:
+    """A started run that has ended: for a test of what `run()` does around the run, not of the run."""
+
+    state: RunState = RunState.COMPLETED
+    exit_code: int = 0
+
+    def wait(self) -> RunResult:
+        """How the run ended."""
+        return RunResult(self.state, None, Path("outdir"), Path("run.log"), self.exit_code)
+
+
 def _api_run_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, run_args: dict[str, Any]) -> list[str]:
     """The runner command `Workflow.run()` writes to run.sh for `run_args`."""
     touch = Step(clt_path=_adapter("touch"))
@@ -1014,7 +1026,7 @@ def test_workflow_run_prepares_the_cwl_in_its_basepath(
 
     monkeypatch.setattr(python_runtime.preflight, "prepare",
                         lambda documents, settings, jobs=(): prepared.append((documents, settings)))
-    monkeypatch.setattr(python_runtime.run_local, "run", lambda request: 0)
+    monkeypatch.setattr(python_runtime.run_local, "start", lambda request: _Ended())
 
     workflow.run(basepath=str(tmp_path))
 
@@ -1144,7 +1156,7 @@ def test_workflow_run_writes_virtual_output_directories_without_orphans(
     workflow = Workflow([step], "virtual_run_demo")
 
     monkeypatch.setattr(python_runtime.preflight, "prepare", lambda documents, settings, jobs=(): None)
-    monkeypatch.setattr(python_runtime.run_local, "run", lambda request: 0)
+    monkeypatch.setattr(python_runtime.run_local, "start", lambda request: _Ended())
 
     workflow.run(basepath=str(tmp_path))
 
@@ -1162,7 +1174,7 @@ def test_workflow_run_reports_an_unwritable_basepath_as_wic021(monkeypatch: pyte
     step = Step(clt_path=_output_directory_tool(tmp_path / "write_dir.cwl"))
     step.inputs.outDir = Path("result.outDir")
     workflow = Workflow([step], "locked_run_demo")
-    monkeypatch.setattr(python_runtime.run_local, "run", lambda *_args, **_kwargs: pytest.fail("ran"))
+    monkeypatch.setattr(python_runtime.run_local, "start", lambda *_args, **_kwargs: pytest.fail("ran"))
     locked = tmp_path / "locked"
     locked.mkdir(mode=0o555)
 
@@ -1348,7 +1360,7 @@ def _echo_workflow(name: str) -> Workflow:
 def _failed_run(monkeypatch: pytest.MonkeyPatch, exit_code: int) -> SophiosError:
     """The error `Workflow.run()` raises when the runner ends with `exit_code`."""
     _detach_run_from_the_container_engine(monkeypatch)
-    monkeypatch.setattr(python_runtime.run_local, 'run', lambda *_a, **_k: exit_code)
+    monkeypatch.setattr(python_runtime.run_local, 'start', lambda _request: _Ended(RunState.FAILED, exit_code))
     with pytest.raises(SophiosError) as caught:
         _echo_workflow('failing').run()
     return caught.value
@@ -1384,10 +1396,11 @@ def test_a_failed_run_error_survives_being_duplicated(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.fast
-def test_run_does_not_raise_when_the_runner_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_returns_the_result_when_the_runner_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`run()` returns how the run ended instead of None."""
     _detach_run_from_the_container_engine(monkeypatch)
-    monkeypatch.setattr(python_runtime.run_local, 'run', lambda *_a, **_k: 0)
-    _echo_workflow('passing').run()
+    monkeypatch.setattr(python_runtime.run_local, 'start', lambda _request: _Ended())
+    assert _echo_workflow('passing').run() == _Ended().wait()
 
 
 def _fresh_python(script: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -1584,9 +1597,9 @@ def test_ctrl_c_during_run_is_not_reported_as_a_failed_run(monkeypatch: pytest.M
     """A loop that handles failed runs must still stop when the user presses Ctrl-C."""
     _detach_run_from_the_container_engine(monkeypatch)
 
-    def interrupted(_request: RunRequest) -> int:
+    def interrupted(_request: RunRequest) -> _Ended:
         raise KeyboardInterrupt
-    monkeypatch.setattr(python_runtime.run_local, 'run', interrupted)
+    monkeypatch.setattr(python_runtime.run_local, 'start', interrupted)
     with pytest.raises(KeyboardInterrupt):
         _echo_workflow('interrupted').run()
 

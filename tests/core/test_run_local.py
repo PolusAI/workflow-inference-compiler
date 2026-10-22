@@ -19,7 +19,7 @@ import pytest
 
 from sophios import backends, preflight, run_local
 from sophios import main as cli
-from sophios.api.python.workflow import Step, Workflow, WorkflowRunError
+from sophios.api.python.workflow import RunResult, RunState, Step, StepStatus, Workflow, WorkflowRunError
 from sophios.backends import RunRequest
 
 from .fake_runner import POSIX_ONLY, FakeRunner, install
@@ -307,9 +307,9 @@ def test_a_run_whose_watcher_cannot_start_is_stopped_and_says_why(
     monkeypatch.chdir(tmp_path)
     install(monkeypatch, tmp_path, sleep=60)
     monkeypatch.setattr(run_local.sys, 'executable', '')   # as in some embedded interpreters
-    status = run_local.start(RunRequest('wf', tmp_path)).wait()
-    assert status.state is run_local.RunState.FAILED
-    assert 'the watcher that stops it if Sophios ends could not start' in (status.reason or '')
+    handle = run_local.start(RunRequest('wf', tmp_path))
+    assert handle.wait().state is run_local.RunState.FAILED
+    assert 'the watcher that stops it if Sophios ends could not start' in (handle.status().reason or '')
 
 
 @pytest.mark.fast
@@ -336,29 +336,95 @@ def test_a_runner_that_ignores_sigterm_is_killed_after_the_grace(
     del offline
     fake = install(monkeypatch, tmp_path, sleep=60, ignore_sigterm=True)
     monkeypatch.setattr(run_local, 'STOP_GRACE_SECONDS', 0.5)
-    handle = run_local.start(RunRequest('wf', tmp_path))
+    handle = _echo_workflow().start()
     fake.wait_until_started()
     handle.cancel()
     status = handle.status()
-    assert status.state is run_local.RunState.CANCELLED
+    assert status.state is RunState.CANCELLED
     assert status.exit_code == -9
 
 
 @pytest.mark.fast
 def test_a_run_cancelled_from_another_thread_ends_cancelled(
-        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None, capsys: pytest.CaptureFixture[str]) -> None:
     """`wait` reports the cancellation, not the exit status the runner stopped with."""
-    monkeypatch.chdir(tmp_path)
+    del offline
     fake = install(monkeypatch, tmp_path, sleep=60)
-    handle = run_local.start(RunRequest('wf', tmp_path))
+    handle = _echo_workflow().start()
     fake.wait_until_started()
     canceller = threading.Thread(target=handle.cancel)
     canceller.start()
-    status = handle.wait()
+    result = handle.wait()
     canceller.join()
-    assert status.state is run_local.RunState.CANCELLED
+    assert result.state is RunState.CANCELLED
     assert fake.record()['signal'] == 15
     assert 'Failure!' not in capsys.readouterr().err
+
+
+_STARTS_AND_EXITS = '''
+import time
+from pathlib import Path
+from sophios import preflight
+preflight.prepare = lambda *_a, **_k: None
+preflight.runner_program = lambda _name: {program!r}
+from sophios.api.python.workflow import Step, Workflow
+echo = Step(clt_path=Path({echo!r}))
+echo.inputs.message = 'hello'
+Workflow([echo], 'wf').start(run_args_dict={{'cwl_runner': 'toil-cwl-runner'}})
+while not Path({record!r}).exists():
+    time.sleep(0.02)
+'''
+
+#: Appended to `_STARTS_AND_EXITS`: the script exits only once the runner has.
+_AFTER_THE_RUNNER_EXITS = '''
+import json, subprocess
+pid = json.loads(Path({record!r}).read_text(encoding='utf-8'))['pid']
+def state():
+    return subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)], capture_output=True, text=True).stdout.strip()
+while state()[:1] not in ('Z', ''):
+    time.sleep(0.02)
+'''
+
+
+def _run_script(script: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run `script` in a Python of its own that imports this checkout's Sophios."""
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(REPO_ROOT / 'src'), os.environ.get('PYTHONPATH', '')]))
+    return subprocess.run([sys.executable, '-c', script], cwd=cwd, env=env, capture_output=True, text=True,
+                          timeout=120, check=False)
+
+
+@pytest.mark.fast
+def test_a_run_ends_when_the_python_process_exits(tmp_path: Path) -> None:
+    """A script that starts a run and exits without waiting leaves no runner behind."""
+    fake = FakeRunner(tmp_path, sleep=60)
+    script = _STARTS_AND_EXITS.format(program=str(fake.write()), echo=str(REPO_ROOT / 'cwl_adapters' / 'echo.cwl'),
+                                      record=str(fake.record_path))
+    try:
+        exited = _run_script(script, tmp_path)
+        assert exited.returncode == 0, exited.stderr
+        assert fake.record().get('signal') == 15
+        assert 'Python is exiting before the run ended' in exited.stderr
+    finally:   # a runner the script left behind stops here, not with the test session
+        if fake.record_path.exists():
+            try:
+                os.kill(fake.record()['pid'], signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.fast
+def test_a_run_nobody_waited_for_is_reported_on_when_the_python_process_exits(tmp_path: Path) -> None:
+    """A runner that exited before the script did is settled at exit: its outputs are written, its end printed."""
+    outputs = {'out': 3}
+    fake = FakeRunner(tmp_path, stdout=json.dumps(outputs).splitlines())
+    script = (_STARTS_AND_EXITS + _AFTER_THE_RUNNER_EXITS).format(
+        program=str(fake.write()), echo=str(REPO_ROOT / 'cwl_adapters' / 'echo.cwl'), record=str(fake.record_path))
+    exited = _run_script(script, tmp_path)
+    assert exited.returncode == 0, exited.stderr
+    assert 'Success! Runner outputs are under' in exited.stdout
+    assert 'Python is exiting before the run ended' not in exited.stderr
+    written = tmp_path / 'autogenerated' / 'output_wf.json'
+    assert json.loads(written.read_text(encoding='utf-8')) == outputs
 
 
 @pytest.mark.fast
@@ -394,27 +460,104 @@ def test_toil_writes_the_output_object_it_prints(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.fast
-def test_the_handle_reports_how_the_run_ended(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """A finished run's status carries its state, times, outputs or failed steps, and its log."""
-    monkeypatch.chdir(tmp_path)
+def test_start_returns_while_the_runner_runs_and_the_handle_follows_it(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None) -> None:
+    """The handle is RUNNING as soon as `start` returns; `wait` ends with the outputs, the log and the times."""
+    del offline
     outputs = {'out': 1}
-    install(monkeypatch, tmp_path, stdout=json.dumps(outputs).splitlines(), stderr=['toil said this'])
-    handle = run_local.start(RunRequest('wf', tmp_path, runner='toil-cwl-runner'))
-    status = handle.wait()
-    assert status.state is run_local.RunState.COMPLETED
+    fake = install(monkeypatch, tmp_path, stdout=json.dumps(outputs).splitlines(), stderr=['toil said this'],
+                   sleep=1.0)
+    handle = _echo_workflow().start(run_args_dict={'cwl_runner': 'toil-cwl-runner'})
+    assert handle.status().state is RunState.RUNNING and handle.outputs() is None
+    with pytest.raises(TimeoutError):
+        handle.wait(timeout=0.05)
+    fake.wait_until_started()
+    result = handle.wait()
+    assert result == RunResult(RunState.COMPLETED, outputs, result.outdir, tmp_path / 'autogenerated' / 'run_wf.log', 0)
+    assert result.outdir.parent == tmp_path / 'autogenerated' and result.outdir.name.startswith('outdir_toil_wf_')
+    status = handle.status()
+    assert status.state is RunState.COMPLETED and status.outputs == outputs
     assert status.started_at is not None and status.ended_at is not None and status.started_at <= status.ended_at
     assert handle.outputs() == outputs
+    assert handle.logs() == result.log_file.read_text(encoding='utf-8')
     assert 'toil said this' in handle.logs()
 
 
 @pytest.mark.fast
-def test_the_handle_names_the_failed_steps(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_a_failed_run_is_a_result_from_wait_with_its_failed_steps(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None) -> None:
+    """`wait` raises nothing for a failed run: the handle says how it failed."""
+    del offline
     install(monkeypatch, tmp_path, stderr=_EXITED_127, exit_code=1)
-    status = run_local.start(RunRequest('wf', tmp_path)).wait()
-    assert status.state is run_local.RunState.FAILED
-    assert status.steps == (run_local.StepStatus('echo_2', run_local.RunState.FAILED, exit_status=127),)
-    assert status.outputs is None and status.exit_code == 1
+    handle = _echo_workflow().start()
+    result = handle.wait()
+    assert (result.state, result.outputs, result.exit_code) == (RunState.FAILED, None, 1)
+    assert handle.status().steps == (StepStatus('echo_2', RunState.FAILED, exit_status=127),)
+
+
+@pytest.mark.fast
+def test_a_cancelled_run_stays_cancelled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None) -> None:
+    """`cancel` stops the runner with SIGTERM; a second `cancel` and a later `wait` change nothing."""
+    del offline
+    fake = install(monkeypatch, tmp_path, sleep=60)
+    handle = _echo_workflow().start()
+    fake.wait_until_started()
+    handle.cancel()
+    handle.cancel()
+    assert fake.record()['signal'] == 15
+    assert handle.wait().state is handle.status().state is RunState.CANCELLED
+    assert handle.outputs() is None
+
+
+def _wait_until_exited(pid: int) -> None:
+    """Block until the process `pid` has exited, leaving it for its parent to reap."""
+    deadline = time.monotonic() + 30
+    while subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)], capture_output=True, text=True,
+                         check=False).stdout.strip()[:1] not in ('Z', ''):
+        assert time.monotonic() < deadline, f'process {pid} never exited'
+        time.sleep(0.02)
+
+
+@pytest.mark.fast
+def test_cancelling_a_run_whose_runner_has_exited_reports_how_it_ended(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None, capsys: pytest.CaptureFixture[str]) -> None:
+    """A runner that exited 0 before `cancel` is a COMPLETED run, with its outputs written: nothing is stopped."""
+    del offline
+    outputs = {'out': 1}
+    fake = install(monkeypatch, tmp_path, stdout=json.dumps(outputs).splitlines())
+    handle = _echo_workflow().start(run_args_dict={'cwl_runner': 'toil-cwl-runner'})
+    fake.wait_until_started()
+    _wait_until_exited(fake.record()['pid'])
+    handle.cancel()
+    assert handle.status().state is RunState.COMPLETED and handle.outputs() == outputs
+    assert handle.wait().state is RunState.COMPLETED
+    written = tmp_path / 'autogenerated' / 'output_wf.json'
+    assert json.loads(written.read_text(encoding='utf-8')) == outputs
+    assert 'Interrupted' not in capsys.readouterr().err
+
+
+@pytest.mark.fast
+def test_start_refuses_a_run_script_before_anything_is_written(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None) -> None:
+    """Only `run()` writes run.sh; `start()` says so instead of compiling, pulling and starting nothing."""
+    del offline
+    fake = install(monkeypatch, tmp_path)
+    with pytest.raises(ValueError, match='call run'):
+        _echo_workflow().start(run_args_dict={'generate_run_script': 'yes'})
+    assert not fake.record_path.exists() and not (tmp_path / 'autogenerated').exists()
+
+
+@pytest.mark.fast
+def test_run_returns_the_completed_runs_result(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+                                               offline: None) -> None:
+    """`run()` is `start()` and `wait()`: a completed run's outputs, output directory and log come back."""
+    del offline
+    outputs = {'out': 'x'}
+    install(monkeypatch, tmp_path, stdout=json.dumps(outputs).splitlines())
+    result = _echo_workflow().run(run_args_dict={'cwl_runner': 'toil-cwl-runner'})
+    assert result is not None
+    assert (result.state, result.outputs, result.exit_code) == (RunState.COMPLETED, outputs, 0)
+    assert result.log_file.is_file() and result.outdir.is_absolute()
 
 
 @pytest.mark.fast

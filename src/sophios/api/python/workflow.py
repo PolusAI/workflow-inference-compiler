@@ -19,6 +19,7 @@ from sophios.lang.error_codes import SophiosErrorCode
 from sophios.lang.names import check_written_name
 from sophios.lang.spans import SourceSpan
 from sophios.lang.versions import KNOWN_VERSIONS
+from sophios.run_status import RunResult, RunState, RunStatus, StepStatus
 from sophios.wic_types import DEFAULT_BASEPATH, Tools
 
 from ._compiled import CompiledWorkflow
@@ -50,6 +51,8 @@ from ._utils import (
 from ._from_wic import workflow_from_wic as _workflow_from_wic
 from ._types import ScatterMethod
 from ._workflow_runtime import (
+    RunHandle,
+    RunOptions as _RunOptions,
     coerce_path as _coerce_path,
     compiled_workflow as _compiled_workflow,
     draw_workflow as _draw_workflow,
@@ -60,6 +63,7 @@ from ._workflow_runtime import (
     populate_parameters as _populate_parameters,
     run_workflow as _run_workflow,
     silence_autodiscovery_logging as _silence_autodiscovery_logging,
+    start_workflow as _start_workflow,
     step_run as _step_run,
     validate_step_assignment as _validate_step_assignment,
     write_workflow_wic as _write_workflow_wic,
@@ -84,10 +88,15 @@ __all__ = [
     "InvalidInputValueError",
     "InvalidLinkError",
     "InvalidStepError",
+    "RunHandle",
+    "RunResult",
+    "RunState",
+    "RunStatus",
     "SophiosError",
     "SophiosErrorCode",
     "Step",
     "StepInput",
+    "StepStatus",
     "Workflow",
     "WorkflowRunError",
 ]
@@ -1158,8 +1167,8 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         *,
         workflow_paths: Mapping[str, Mapping[str, Path]] | None = None,
         inference: Inference = Inference(),
-    ) -> None:
-        """Compile and execute this workflow locally.
+    ) -> RunResult | None:
+        """Compile and execute this workflow locally, and wait for it: :meth:`start`, then ``wait()``.
 
         A real-time analysis that is a ``.wic`` file comes from ``workflow_paths``,
         shaped ``{namespace: {stem: path}}`` like ``sophios.plugins.get_yml_paths``.
@@ -1183,21 +1192,59 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
             inference (Inference): How an unbound input is connected; the run
                 infers the same edges ``compile(inference=...)`` does.
 
+        Returns:
+            RunResult | None: The completed run: its outputs, output directory and log
+            file. None when ``generate_run_script`` wrote ``run.sh`` instead of running.
+
         Raises:
+            SophiosError: The workflow does not compile, or this machine cannot run it.
             ValueError: If a `user_env_vars` key is not an environment variable name, or
                 `run_args_dict` names a `cwl_runner` Sophios cannot run.
             WorkflowRunError: If the runner exits non-zero. Its `exit_code` is the runner's.
             KeyboardInterrupt: On Ctrl-C, after the runner was stopped.
         """
-        _run_workflow(
-            self,
-            run_args_dict=run_args_dict,
-            user_env_vars=user_env_vars,
-            basepath=basepath,
-            tool_registry=tool_registry,
-            workflow_paths=workflow_paths,
-            inference=inference,
-        )
+        return _run_workflow(self, _RunOptions(run_args_dict, user_env_vars, basepath, tool_registry,
+                                               workflow_paths, inference))
+
+    def start(  # pylint: disable=too-many-arguments
+        self,
+        run_args_dict: dict[str, str] | None = None,
+        user_env_vars: dict[str, str] | None = None,
+        basepath: str = DEFAULT_BASEPATH,
+        tool_registry: Tools | None = None,
+        *,
+        workflow_paths: Mapping[str, Mapping[str, Path]] | None = None,
+        inference: Inference = Inference(),
+    ) -> RunHandle:
+        """Compile this workflow, prepare its run, start its runner, and return without waiting for it.
+
+        Everything before the runner starts happens before ``start`` returns, as in
+        :meth:`run`: the compile, the checks of this machine and the image pulls, so
+        their errors are raised here. The handle it returns is RUNNING, or FAILED when
+        the runner could not be started; ``wait()``, ``status()``, ``logs()``,
+        ``outputs()`` and ``cancel()`` follow it from there. The run lives as long as
+        this Python process: when the interpreter exits with the run still going, the
+        run is cancelled.
+
+        Args:
+            run_args_dict (dict[str, str] | None): As :meth:`run` takes them, except
+                ``generate_run_script``, which only :meth:`run` does.
+            user_env_vars (dict[str, str] | None): Environment variables to expose to the run.
+            basepath (str): Directory used for generated files and execution artifacts.
+            tool_registry (Tools | None): Optional tool registry override.
+            workflow_paths (Mapping[str, Mapping[str, Path]] | None): The
+                ``.wic`` files a real-time analysis may be.
+            inference (Inference): How an unbound input is connected.
+
+        Returns:
+            RunHandle: The started run.
+
+        Raises:
+            SophiosError: The workflow does not compile, or this machine cannot run it.
+            ValueError: As :meth:`run` raises it, and for ``generate_run_script``.
+        """
+        return _start_workflow(self, _RunOptions(run_args_dict, user_env_vars, basepath, tool_registry,
+                                                 workflow_paths, inference))
 
     def _as_workflow_step(self) -> nodes.Step:
         """Return this workflow as a step naming its own ``.wic`` document, with its anchored outputs."""
