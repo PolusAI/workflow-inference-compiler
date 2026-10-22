@@ -2,8 +2,8 @@
 
 This page is about running a workflow the way you need: checking first,
 choosing where the results go, using another container engine or runner,
-running on a cluster, reusing results from an earlier run, and preparing a
-run to start later. The machine you run Sophios on can be your laptop, a
+running on a cluster, reusing results from an earlier run, following a run
+from Python, and preparing a run to start later. The machine you run Sophios on can be your laptop, a
 cloud instance or the login node of an HPC cluster.
 Every task works the same for a `.wic` file and a Python workflow; each one
 shows both.
@@ -37,6 +37,7 @@ Each command stops after a different stage:
 | compile and check the machine | `sophios --yaml w.wic --check` | none; `run()` checks before it runs |
 | prepare a run to start later | `sophios --yaml w.wic --generate_run_script` | `flow.run(run_args_dict={'generate_run_script': 'yes'})` |
 | run | `sophios --yaml w.wic --run_local` | `flow.run()` |
+| run, and get on with something else | none | `flow.start()`, or `await flow.run_async()` |
 
 The command line needs exactly one of these. In Python, options go in
 `run()`'s `run_args_dict`, a mapping from flag names, without the dashes, to
@@ -279,6 +280,115 @@ When one document refers to two different data files with the same name (most of
 This happens under cwltool and toil-cwl-runner alike, and the fix is in cwltool ([cwltool#2370](https://github.com/common-workflow-language/cwltool/pull/2370), for [issue #2369](https://github.com/common-workflow-language/cwltool/issues/2369)).
 Until it ships, pass `--no_provenance`, or `run_args_dict={'no_provenance': 'yes'}`.
 
+## Follow a run from Python
+
+`run()` waits for the run and returns how it ended. `start()` returns as
+soon as the runner has started, with a handle to follow the run by;
+`run_async()` is `run()` for code that runs in an event loop. All three take
+the same arguments, and do the same work before the runner starts: they
+compile, check the machine and pull the images, and raise what those raise.
+
+### What run() returns
+
+`run()` returns a `RunResult`, from `sophios.api.python.workflow`:
+
+```python
+from greeting import workflow
+
+result = workflow().run()
+print(result.outputs['cat~output'], end='')   # Hello, Sophios
+print(result.outdir)                           # where the output files are
+print(result.log_file)                         # everything the runner printed
+```
+
+| Field | What |
+|---|---|
+| `state` | `RunState.COMPLETED`: a run that ends any other way raises |
+| `outputs` | the workflow's outputs, as `output_<workflow>.json` holds them |
+| `outdir` | the directory the output files were moved to |
+| `log_file` | `run_<workflow>.log` in the base path |
+| `exit_code` | the runner's, `0` |
+
+A run that fails still raises `WorkflowRunError`
+([When a run fails](#when-a-run-fails)), so a script that ignores what
+`run()` returns behaves as it did. With `generate_run_script`, nothing runs
+and `run()` returns `None`.
+
+### Start a run and come back to it
+
+```python
+from greeting import workflow
+
+run = workflow().start()
+print(run.status().state)       # RunState.RUNNING
+# ... do something else ...
+result = run.wait()
+print(result.state, result.outputs)
+```
+
+`start()` returns a `RunHandle`, once the runner has started. Its methods
+can be called from any thread:
+
+| Method | What it does |
+|---|---|
+| `wait(timeout=None)` | blocks until the run ends and returns its `RunResult`; after `timeout` seconds it raises `TimeoutError` and the run goes on. A run that failed or was cancelled is returned, not raised |
+| `status()` | where the run is, without blocking: a `RunStatus` with `state`, `reason`, `started_at`, `ended_at`, the failed `steps`, `outputs` and `exit_code` |
+| `logs()` | everything the runner has printed so far |
+| `outputs()` | the workflow's outputs once the run has completed; `None` until then |
+| `cancel()` | stops the runner as Ctrl-C does, and the run ends `CANCELLED`. A runner that has already exited is reported as it ended, `COMPLETED` or `FAILED` |
+
+The states are those the [compute service](compute.md) reports:
+
+| State | Meaning |
+|---|---|
+| `QUEUED` | accepted and not started yet. A local run is never seen in it: `start()` returns once the runner has started |
+| `RUNNING` | the runner is running |
+| `COMPLETED` | the runner exited 0; `outputs()` holds the outputs |
+| `FAILED` | the runner exited non-zero, or could not be started; `status().steps` names the failed steps |
+| `CANCELLED` | `cancel()`, or Ctrl-C during `wait()`, stopped it |
+
+The last three never change. The runner is a child of your Python process,
+and the run lives as long as that process does: there is no detaching from
+it. When the interpreter exits with the run still going, at the end of the
+script, on `sys.exit()` or an uncaught exception, the run is cancelled; a
+run whose runner has exited is reported on then, if nothing did before. A
+Python process killed by a signal (`kill`, `kill -9`) cannot stop its
+runner. `start()` does not write `run.sh`; pass `generate_run_script` to
+`run()` for that.
+
+### Run from asyncio
+
+`run_async()` is a coroutine with `run()`'s arguments and result. The
+compile, the checks and the image pulls run in a worker thread, and the
+runner is awaited without blocking the event loop, so other tasks keep
+running:
+
+```python
+import asyncio
+
+from greeting import workflow
+
+
+async def main() -> None:
+    result = await workflow().run_async()
+    print(result.outdir)
+
+
+asyncio.run(main())
+```
+
+Cancelling the task that awaits it stops the runner, as `cancel()` does,
+before the cancellation goes on; Ctrl-C under `asyncio.run` does the same.
+Cancelled while the worker thread is still compiling, checking or pulling
+images, the task ends at once and nothing is run, but the thread finishes
+its work first, since a thread cannot be stopped from outside:
+`asyncio.run` returns only after it. A failed run raises
+`WorkflowRunError`, as from `run()`.
+`run_async()` never runs [real-time analyses](realtime-analysis.md): a
+workflow that declares one is refused with `api008`, before anything is
+written or run. Use `run()` or `start()` for it; from a coroutine,
+`await asyncio.to_thread(flow.run)` keeps the event loop free.
+
 ## When a run fails
 
 A run that succeeds ends with `Success! Runner outputs are under ...`. One
@@ -292,8 +402,9 @@ Failure! step 'fail' exited with status 1. Its own messages are above, under its
 For statuses 126, 127 and 137 the line also says what they usually mean: the
 command could not be executed, was not found, or was killed, usually for
 memory. The step's own messages are above it in the log. The command line
-exits with the runner's exit code, and `Workflow.run()` raises
-`WorkflowRunError`, whose `exit_code` is the runner's.
+exits with the runner's exit code, and `Workflow.run()` and
+`Workflow.run_async()` raise `WorkflowRunError`, whose `exit_code` is the
+runner's.
 
 The runner runs as a separate program, a child of Sophios. What it prints
 shows as it comes, in a terminal and in a notebook alike, and is kept in
@@ -303,7 +414,8 @@ containers it started, and kills the runner and everything it started if it
 has not stopped within 30 seconds. Toil stops its own jobs, but a container
 one of them started can keep running: `docker ps` shows it, and
 `docker kill <id>` stops it. The command line exits with 130, and Python
-raises `KeyboardInterrupt`.
+raises `KeyboardInterrupt`; a run started with `start()` is stopped the same
+way by `cancel()`.
 However else Sophios ends (`kill`, a closed terminal or SSH session, a
 restarted notebook kernel, even `kill -9`), the runner is stopped the same
 way: a small watcher started beside it sees that Sophios has gone, sends the

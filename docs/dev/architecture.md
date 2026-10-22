@@ -166,7 +166,6 @@ for a `StepInput` default against the working directory.
   and writes the job, writes the workflow and its analyses, and calls the
   pre-flight. The command line gives it the tree, or
   one document under `--cwl_inline_runtag`; Python gives it one document.
-  `run_local_async.run_cwl_serialized` runs a workflow it is given as it is.
 - `sophios.preflight` answers what a local run needs from this machine, with
   one diagnostic per problem, and pulls images; it is called by both
   adapters and never by a compute submission.
@@ -180,11 +179,15 @@ for a `StepInput` default against the working directory.
   failed steps, read from the runner's log lines).
 - `sophios.run_local` is the one path that runs a launch: always as a child
   process in its own session, whose two streams it echoes line by line and
-  tees into `<basepath>/run_<workflow>.log`. `start` returns a `Run` handle
-  (`wait`, `status`, `logs`, `outputs`, `cancel`) that lives as long as the
-  Python process; `run` is start and wait, or writes `run.sh`. Ctrl-C during
-  `wait` is `cancel`: SIGTERM to the runner, then a kill after a grace
-  period. `sophios.realtime` compiles each declaration once and runs a
+  tees into `<basepath>/run_<workflow>.log`. `start` returns the
+  `RunHandle` (`wait`, `status`, `logs`, `outputs`, `cancel`) that
+  `Workflow.start()` hands out, which lives as long as the Python process;
+  `run` is start and wait, or writes `run.sh`. Ctrl-C during `wait` is
+  `cancel`: SIGTERM to the runner, then a kill after a grace period.
+  `sophios.run_status` holds the states, status and result it reports, those
+  of the compute service's contract. `Workflow.run_async()` prepares in a
+  worker thread, then awaits `wait` from another, and cancels the handle
+  when its task is cancelled. `sophios.realtime` compiles each declaration once and runs a
   `Watcher` per plan beside the runner.
 
 ## Compatibility contract
