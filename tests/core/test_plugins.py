@@ -421,19 +421,3 @@ def test_the_same_workflow_stem_in_two_namespaces_is_not_a_duplicate(tmp_path: P
                                                                 'other': [str(tmp_path / 'b')]}})
     assert sorted(found) == ['global', 'other']
     assert capsys.readouterr().err == ''
-
-
-@pytest.mark.fast
-def test_failed_jobs_reads_cwltools_own_records() -> None:
-    import logging  # pylint: disable=import-outside-toplevel
-    failed = sophios.plugins.FailedJobs()
-
-    def record(msg: str, *args: object) -> logging.LogRecord:
-        return logging.LogRecord('cwltool', logging.WARNING, __file__, 1, msg, args, None)
-
-    for msg, args in [(failed.EXITED, ('w__step__1__a', 3)), (failed.COMPLETED, ('w__step__1__a', 'permanentFail')),
-                      (failed.COMPLETED, ('w__step__2__b', 'success')), (failed.SIGNALLED, ('w__step__3__c', 'SIGKILL')),
-                      (failed.COMPLETED, ('w__step__3__c', 'permanentFail')),
-                      (failed.COMPLETED, ('w__step__4__d', 'permanentFail'))]:
-        assert failed.filter(record(msg, *args))
-    assert failed.failed == {'w__step__1__a': 3, 'w__step__3__c': 'SIGKILL', 'w__step__4__d': None}

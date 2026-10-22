@@ -1184,9 +1184,10 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
                 infers the same edges ``compile(inference=...)`` does.
 
         Raises:
-            ValueError: If a `user_env_vars` key is not an environment variable name.
+            ValueError: If a `user_env_vars` key is not an environment variable name, or
+                `run_args_dict` names a `cwl_runner` Sophios cannot run.
             WorkflowRunError: If the runner exits non-zero. Its `exit_code` is the runner's.
-            KeyboardInterrupt: On Ctrl-C. With cwltool, the runner's child processes are terminated first.
+            KeyboardInterrupt: On Ctrl-C, after the runner was stopped.
         """
         _run_workflow(
             self,

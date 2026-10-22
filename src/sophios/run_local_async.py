@@ -12,7 +12,8 @@ from sophios.input_output import dump_wic_yaml
 from sophios.runtime_inputs import normalize_cwl_document, normalize_job_inputs
 from sophios.wic_types import Json
 
-from .run_local import build_cmd, create_safe_env, generate_run_script
+from .backends import RunRequest, backend
+from .run_local import generate_run_script
 
 
 async def run_cwl_workflow(
@@ -30,18 +31,19 @@ async def run_cwl_workflow(
         raise ValueError("cwl_runner must be 'cwltool' or 'toil-cwl-runner'")
 
     run_args = dict(run_args_dict or {})
-    cmd = build_cmd(
+    launch = backend("cwl", cwl_runner).launch(RunRequest(
         workflow_name,
-        basepath,
-        cwl_runner,
-        container_cmd,
-        list(passthrough_args or []),
-        run_args.get("outdir") or None,
+        Path(basepath),
+        runner=cwl_runner,
+        container_engine=container_cmd,
+        outdir=run_args.get("outdir") or "",
         quiet=run_args.get("quiet", "yes") == "yes",
         provenance=run_args.get("no_provenance", "no") != "yes",
-    )
+        passthrough_args=tuple(passthrough_args or ()),
+        env=dict(user_env),
+    ))
+    cmd = list(launch.argv)
     cmdline = " ".join(cmd)
-    exec_env = create_safe_env(dict(user_env))
 
     if run_args.get("generate_run_script", "no") == "yes":
         await asyncio.to_thread(generate_run_script, cmdline)
@@ -58,7 +60,7 @@ async def run_cwl_workflow(
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            env=exec_env,
+            env=dict(launch.env),
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

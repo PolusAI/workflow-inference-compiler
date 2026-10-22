@@ -10,11 +10,13 @@ Each check returns diagnostics rather than raising, so a caller reports every
 problem at once, each on one line: what is wrong, then what to do.
 """
 import ast
+import importlib.util
 import os
 import re
 import shutil
 import subprocess as sub
 import sys
+import sysconfig
 import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -26,7 +28,6 @@ from urllib.request import url2pathname
 import cwl_utils.parser as cwl
 import requests
 
-from . import run_local
 from .ir.locations import input_paths
 from .lang.diagnostics import Diagnostic, Severity, SophiosError
 from .lang.error_codes import SophiosErrorCode
@@ -101,8 +102,8 @@ def _containers(process: Any) -> list[cwl.DockerRequirement]:
     """Every DockerRequirement `process` declares, then each step's own and its process's, in order.
 
     The traversal of `cwl_utils.docker_extract`, which is not imported: importing it imports
-    `cwl_utils.image_puller`, which puts a handler on the root logger, and cwltool's in-process
-    run then fails setting up its own.
+    `cwl_utils.image_puller`, which calls `logging.basicConfig(level=logging.INFO)` and so prints
+    every library's INFO records in this process.
     """
     found = _declared(process)
     if isinstance(process, cwl.WorkflowTypes):
@@ -310,6 +311,24 @@ def _written_path(value: Mapping[str, Any]) -> str | None:
     return None if len(parsed.scheme) > 1 else written   # one letter is a Windows drive
 
 
+#: Why cwltool and Toil cannot run on this platform, or None. Windows has no `pwd`, which they import
+#: (transitively, in cwltool.provenance).
+PLATFORM_LACKS_RUNNERS: Final = ('cwltool and Toil need the pwd module, which Windows does not have'
+                                 if importlib.util.find_spec('pwd') is None else None)
+
+
+def runner_program(name: str) -> str | None:
+    """Where the program `name` that runs a workflow is: this Python environment's own, else the
+    first on PATH; None when there is neither.
+
+    This environment's first, so a run started from an interpreter whose environment is not
+    activated (a notebook kernel, `/path/to/env/bin/python -m sophios`) runs the runner installed
+    beside it.
+    """
+    return shutil.which(name, path=os.pathsep.join([sysconfig.get_path('scripts'),
+                                                    os.environ.get('PATH', os.defpath)]))
+
+
 #: How to install each program a run may call.
 _INSTALL: Final = {
     'cwltool_filterlog': 'install Sophios in this environment (pip install sophios), which provides it',
@@ -321,13 +340,16 @@ _INSTALL: Final = {
 def _program_problems(found: Needs, settings: RunSettings) -> list[Diagnostic]:
     """A program the run calls that is not here, or a runner that cannot run on this platform."""
     problems = []
+    script = 'cwltool_filterlog' if settings.runner == 'cwltool' else settings.runner
     if settings.run_script:
-        script = 'cwltool_filterlog' if settings.runner == 'cwltool' else settings.runner
         if shutil.which(script) is None:
             problems.append(_missing(f'run.sh calls {script}, which is not on PATH: {_INSTALL[script]}'))
-    elif run_local.RUNNER_UNAVAILABLE is not None:
-        problems.append(_missing(f'{settings.runner} cannot run here ({run_local.RUNNER_UNAVAILABLE}): run '
+    elif PLATFORM_LACKS_RUNNERS is not None:
+        problems.append(_missing(f'{settings.runner} cannot run here ({PLATFORM_LACKS_RUNNERS}): run '
                                  'Sophios inside WSL (https://learn.microsoft.com/windows/wsl/install)'))
+    elif runner_program(script) is None:
+        problems.append(_missing(f'the run calls {script}, which is neither in this Python environment nor on '
+                                 f'PATH: {_INSTALL[script]}'))
     if found.containers and shutil.which('cwl-docker-extract') is None:
         problems.append(_missing(f'pulling the images for {settings.container_engine} needs cwl-docker-extract, '
                                  f"which is not on PATH: {_INSTALL['cwl-docker-extract']}"))

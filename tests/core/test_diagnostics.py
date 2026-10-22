@@ -479,8 +479,7 @@ def test_passthrough_flags_need_a_command_that_runs_the_runner(cli_on_helloworld
 @pytest.mark.fast
 def test_run_local_exits_with_the_runners_exit_code(monkeypatch: pytest.MonkeyPatch,
                                                     cli_on_helloworld: Callable[..., None]) -> None:
-    import sophios.run_local as rl
-    monkeypatch.setattr(rl, 'run_local', lambda *_a, **_k: 3)
+    monkeypatch.setattr(run_local, 'run', lambda _request: 3)
     with pytest.raises(SystemExit) as caught:
         cli_on_helloworld('--run_local')
     assert caught.value.code == 3
@@ -496,18 +495,14 @@ def test_cli_asks_the_runner_to_be_quiet_only_with_quiet(cli_on_helloworld: Call
 
 
 @pytest.mark.fast
-@pytest.mark.skipif(sys.platform == 'win32', reason='Ctrl-C reaches the run as a POSIX process-group SIGINT')
 @pytest.mark.parametrize('cwl_runner', ['cwltool', 'toil-cwl-runner'])
 def test_ctrl_c_during_run_local_exits_130(monkeypatch: pytest.MonkeyPatch,
                                            cli_on_helloworld: Callable[..., None], cwl_runner: str) -> None:
-    """The CLI turns the interrupt `run_local` lets through into the shell's SIGINT code, whichever runner ran."""
-    import sophios.run_local as rl
-
-    def interrupted(_args: list[str]) -> int:
+    """The CLI turns the interrupt the run lets through into the shell's SIGINT code, whichever runner ran."""
+    def interrupted(_request: object) -> int:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(rl.cwltool.main, 'main', interrupted)
-    monkeypatch.setattr(rl.toil.cwl.cwltoil, 'main', interrupted)
+    monkeypatch.setattr(run_local, 'run', interrupted)
     # KeyboardInterrupt is listed so a regression fails this test instead of aborting the session.
     with pytest.raises((SystemExit, KeyboardInterrupt)) as caught:
         cli_on_helloworld('--run_local', '--cwl_runner', cwl_runner)
@@ -517,20 +512,16 @@ def test_ctrl_c_during_run_local_exits_130(monkeypatch: pytest.MonkeyPatch,
 
 @pytest.mark.fast
 @pytest.mark.parametrize('flags', [[], ['--cachedir', 'mycache']])
-def test_a_runner_that_raises_says_why_with_or_without_a_cachedir(
-        monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+def test_a_runner_that_cannot_start_says_why_with_or_without_a_cachedir(
+        monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path,
         cli_on_helloworld: Callable[..., None], flags: list[str]) -> None:
     """The traceback goes to error_<name>.txt; the message itself is printed, whatever the cache."""
-    import sophios.run_local as rl
-
-    def broken(_args: list[str]) -> int:
-        raise RuntimeError('the runner broke')
-
-    monkeypatch.setattr(rl.cwltool.main, 'main', broken)
+    monkeypatch.setattr(preflight, 'runner_program', lambda _name: str(tmp_path / 'no_such_runner'))
     with pytest.raises(SystemExit) as caught:
         cli_on_helloworld('--run_local', *flags)
     assert caught.value.code == 1
-    assert 'the runner broke' in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert 'no_such_runner' in out and 'See error_helloworld.txt' in out
 
 
 # --------------------------------------------------------------------------
@@ -846,7 +837,7 @@ def test_a_file_uri_in_the_inputs_file_is_read_as_this_platforms_path(
         machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A `file:` location names the file in this platform's own spelling: on Windows a drive path, not `/C:/...`."""
     machine('running')
-    monkeypatch.setattr(run_local, 'RUNNER_UNAVAILABLE', None)
+    monkeypatch.setattr(preflight, 'PLATFORM_LACKS_RUNNERS', None)
     data = tmp_path / 'in x.txt'
     data.write_text('x', encoding='utf-8')
     (tmp_path / 'job.yml').write_text(f"file:\n  class: File\n  location: '{data.as_uri()}'\n", encoding='utf-8')
@@ -1085,10 +1076,25 @@ def test_a_run_script_whose_runner_is_missing_is_wic029(
 
 
 @pytest.mark.fast
+def test_a_run_whose_runner_is_missing_is_wic029(
+        machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    """The runner is a program: one that is not installed is named before anything is pulled or started."""
+    calls = machine(missing=('toil-cwl-runner',))
+    monkeypatch.setattr(preflight, 'PLATFORM_LACKS_RUNNERS', None)
+    with pytest.raises(SystemExit) as caught:
+        _cli(monkeypatch, tmp_path, None, '--cwl_runner', 'toil-cwl-runner', mode='--run_local')
+    assert caught.value.code == 1
+    assert ('error [wic029] the run calls toil-cwl-runner, which is neither in this Python environment nor on '
+            'PATH: install Toil' in capsys.readouterr().err)
+    assert not _pulled(calls)
+
+
+@pytest.mark.fast
 def test_a_runner_that_cannot_run_here_is_named_before_the_run(
         monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setattr(run_local, 'RUNNER_UNAVAILABLE', 'no pwd module', raising=False)
-    monkeypatch.setattr(run_local.cwltool.main, 'main', lambda _args: 0)
+    monkeypatch.setattr(preflight, 'PLATFORM_LACKS_RUNNERS', 'no pwd module')
+    monkeypatch.setattr(run_local, 'run', lambda _request: pytest.fail('the runner started'))
     workflow = Path(__file__).resolve().parents[2] / 'docs' / 'tutorials' / 'helloworld.wic'
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr('sys.argv', ['sophios', '--yaml', str(workflow), '--run_local'])
@@ -1118,7 +1124,7 @@ def test_check_compiles_and_checks_then_stops_without_pulling_or_running(
         machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
         capsys: pytest.CaptureFixture[str]) -> None:
     calls = machine('running')
-    monkeypatch.setattr(run_local.cwltool.main, 'main', lambda _args: pytest.fail('--check must not run the workflow'))
+    monkeypatch.setattr(run_local, 'run', lambda _request: pytest.fail('--check must not run the workflow'))
     _cli(monkeypatch, tmp_path, _TOUCH, mode='--check')   # returns: the machine is fine
     assert 'Checked ' in capsys.readouterr().out
     assert (tmp_path / 'autogenerated' / 'w.cwl').exists()

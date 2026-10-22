@@ -364,7 +364,7 @@ def _provoke_workflow_run_failed() -> None:
     echo.inputs.message = 'hello'
     with mock.patch.object(runtime.preflight, 'prepare'), \
             mock.patch.object(runtime.input_output, 'write_artifacts_to_disk'), \
-            mock.patch.object(runtime.rl, 'run_local', return_value=1):
+            mock.patch.object(runtime.run_local, 'run', return_value=1):
         Workflow([echo], 'provoke').run()
 
 

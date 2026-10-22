@@ -17,7 +17,7 @@ from sophios.lang.error_codes import SophiosErrorCode
 from sophios.ir.artifacts import CompilationResult
 from . import input_output as io
 from . import post_compile as pc
-from . import cli, compiler, drawing, plugins, preflight, realtime, run_local, run_setup
+from . import backends, cli, compiler, drawing, plugins, preflight, realtime, run_local, run_setup
 from .ir import frontdoor
 from .ir.frontdoor import SourceBundle
 from .wic_types import CompilerOptions, Json, Tools
@@ -185,7 +185,7 @@ def _preflight(args: argparse.Namespace, documents: list[Path], jobs: tuple[pref
     if not args.check:
         preflight.prepare(documents, settings, jobs)
         return True
-    preflight.check(preflight.needs(documents, jobs), settings)
+    backends.backend('cwl', args.cwl_runner).check(documents, jobs, settings)
     print(f'Checked {documents[0]}: nothing in the way of a local run on this machine. '
           'Nothing was pulled or run.')
     return False
@@ -207,19 +207,13 @@ def _run(args: argparse.Namespace, unknown_args: list[str], workflow_name: str,
 
     Exits with the runner's exit code when it is not 0, and with 130 on Ctrl-C.
     """
-    run_args_dict = {}
-    run_args_dict['container_engine'] = args.container_engine
-    run_args_dict['cwl_runner'] = args.cwl_runner
-    run_args_dict['cachedir'] = args.cachedir
-    run_args_dict['outdir'] = args.outdir
-    run_args_dict['generate_run_script'] = 'yes' if args.generate_run_script else 'no'
-    run_args_dict['quiet'] = 'yes' if args.quiet else 'no'
-    run_args_dict['no_provenance'] = 'yes' if args.no_provenance else 'no'
+    request = backends.RunRequest(
+        workflow_name, Path(args.basepath), runner=args.cwl_runner, documents=documents,
+        container_engine=args.container_engine, cachedir=args.cachedir, outdir=args.outdir, quiet=args.quiet,
+        provenance=not args.no_provenance, passthrough_args=tuple(unknown_args), realtime_plans=realtime_plans,
+        generate_run_script=args.generate_run_script)
     try:
-        retval = run_local.run_local(run_args_dict, False,
-                                     workflow_name=workflow_name, passthrough_args=unknown_args,
-                                     basepath=args.basepath,
-                                     documents=documents, realtime_plans=realtime_plans)
+        retval = run_local.run(request)
     except KeyboardInterrupt:
         # 130 is the shell's exit code for SIGINT.
         sys.exit(130)
@@ -381,9 +375,10 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
                           Path(args.basepath)), args.diagnostics)
 
     if _is_local_run(args):
-        prepared = run_setup.prepare(artifact, analyses, Path(args.basepath), run_setup.Settings(
-            _run_settings(args), root_dir, args.inputs_file, check=args.check,
-            remove_entrypoints=args.docker_remove_entrypoints))
+        prepared = backends.backend('cwl', args.cwl_runner).prepare(
+            artifact, analyses, Path(args.basepath),
+            run_setup.Settings(_run_settings(args), root_dir, args.inputs_file, check=args.check,
+                               remove_entrypoints=args.docker_remove_entrypoints))
         draw_after_write()
         if args.check:
             print(f'Checked {prepared.documents[0]}: nothing in the way of a local run on this machine. '

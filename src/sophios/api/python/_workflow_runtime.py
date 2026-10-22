@@ -20,8 +20,8 @@ import yaml
 from cwl_utils.parser import CommandLineTool as CWLCommandLineTool
 from cwl_utils.parser import load_document_by_uri, load_document_by_yaml
 
-from sophios import compiler, drawing, input_output, plugins, post_compile as pc, preflight, realtime, run_local as rl
-from sophios import run_setup
+from sophios import backends, compiler, drawing, input_output, plugins, post_compile as pc, preflight, realtime
+from sophios import run_local, run_setup
 from sophios.ir.artifacts import CompilationArtifact, CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.locations import absolute_paths
@@ -560,7 +560,7 @@ def _run_args(overrides: dict[str, str] | None) -> dict[str, str]:
     """The default local-run settings with `overrides` applied.
 
     `quiet` is on unless the caller turns it off. It, `no_provenance` and
-    `generate_run_script` are normalised to the `yes`/`no` that `run_local` reads.
+    `generate_run_script` are normalised to `yes`/`no`.
     """
     resolved = {**DEFAULT_RUN_ARGS, **(overrides or {})}
     for switch in ("quiet", "no_provenance", "generate_run_script"):
@@ -599,8 +599,9 @@ def run_workflow(
             settings `compile` takes, so a run infers the edges its compile does.
 
     Raises:
+        ValueError: If `run_args_dict` names a `cwl_runner` Sophios cannot run.
         WorkflowRunError: If the runner exits non-zero.
-        KeyboardInterrupt: On Ctrl-C. With cwltool, the runner's child processes are terminated first.
+        KeyboardInterrupt: On Ctrl-C, after the runner was stopped.
     """
     logger.info("Running %s", workflow.process_name)
     plugins.logging_filters()
@@ -616,7 +617,7 @@ def run_workflow(
     outdir = resolved_run_args.get("outdir")
     writes = ((Path(outdir), "the run's outputs", "give run() an outdir you can write to"),) if outdir else ()
     # One document, the workflow's and each analysis's, as `compile()` returns it.
-    prepared = run_setup.prepare(
+    prepared = backends.backend("cwl", resolved_run_args["cwl_runner"]).prepare(
         _one_document(workflow, result),
         tuple(replace(analysis, artifact=pc.inline_artifact_runs(analysis.artifact)) for analysis in analyses),
         Path(basepath),
@@ -633,14 +634,12 @@ def run_workflow(
     )
 
     _, unknown_args = get_known_and_unknown_args(workflow.process_name, user_args)
-    retval = rl.run_local(
-        resolved_run_args,
-        False,
-        workflow_name=workflow.process_name,
-        basepath=basepath,
-        passthrough_args=unknown_args,
-        user_env_vars=dict(user_env_vars or {}),
-        realtime_plans=prepared.plans,
-    )
+    retval = run_local.run(backends.RunRequest(
+        workflow.process_name, Path(basepath), runner=resolved_run_args["cwl_runner"],
+        container_engine=resolved_run_args["container_engine"], cachedir=resolved_run_args.get("cachedir", ""),
+        outdir=resolved_run_args.get("outdir", ""), quiet=resolved_run_args.get("quiet", "yes") == "yes",
+        provenance=resolved_run_args.get("no_provenance", "no") != "yes",
+        passthrough_args=tuple(unknown_args), env=dict(user_env_vars or {}), realtime_plans=prepared.plans,
+        generate_run_script=resolved_run_args.get("generate_run_script", "no") == "yes"))
     if retval != 0:
         raise WorkflowRunError(workflow.process_name, retval)
