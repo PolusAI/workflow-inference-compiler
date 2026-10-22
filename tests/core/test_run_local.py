@@ -7,6 +7,9 @@ import _thread
 import json
 import os
 import shlex
+import signal
+import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -211,6 +214,118 @@ def test_ctrl_c_stops_the_runner_and_exits_130(monkeypatch: pytest.MonkeyPatch, 
     pressed.join()
     assert fake.record()['signal'] == 15
     assert "Interrupted; the runner's processes were terminated." in capsys.readouterr().err
+
+
+#: Sophios, in a process of its own, starting a run of the stand-in and then waiting on it (`wait`), waiting
+#: from another thread (`thread`), holding it as a notebook does between cells (`hold`), or waiting after
+#: forking a child that outlives it and so holds everything it inherited (`fork`, as `multiprocessing` does).
+_SOPHIOS = """
+import os, signal, sys, threading, time
+from pathlib import Path
+from sophios import preflight, run_local
+from sophios.backends import RunRequest
+program, basepath, mode, grace, nohup = sys.argv[1], Path(sys.argv[2]), sys.argv[3], float(sys.argv[4]), sys.argv[5]
+if nohup == 'nohup':
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)   # as `nohup` leaves it for the program it starts
+preflight.runner_program = lambda _name: program
+run_local.STOP_GRACE_SECONDS = grace
+handle = run_local.start(RunRequest('wf', basepath))
+if mode == 'fork':
+    if (child := os.fork()) == 0:
+        time.sleep(30)
+        os._exit(0)
+    (basepath.parent / 'forked.pid').write_text(str(child))
+if mode in ('wait', 'fork'):
+    handle.wait()
+elif mode == 'thread':
+    waiter = threading.Thread(target=handle.wait)
+    waiter.start()
+    waiter.join()
+else:
+    time.sleep(120)
+"""
+
+
+def _sophios_ended(fake: FakeRunner, mode: str, signum: int, *, grace: float = 30.0,
+                   ignore_hangup: bool = False) -> int:
+    """Start `_SOPHIOS`, end it with `signum` once the stand-in runs, and return the stand-in's pid."""
+    env = {**os.environ, 'PYTHONPATH': os.pathsep.join([str(REPO_ROOT / 'src'), os.environ.get('PYTHONPATH', '')])}
+    argv = [sys.executable, '-c', _SOPHIOS, str(fake.write()), str(fake.directory / 'b'), mode, str(grace),
+            'nohup' if ignore_hangup else '-']
+    with subprocess.Popen(argv, cwd=fake.directory, env=env,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as sophios:
+        fake.wait_until_started()
+        os.kill(sophios.pid, signum)
+        if not ignore_hangup:
+            assert sophios.wait(10) == -signum
+        else:
+            assert sophios.wait(30) == 0
+    return int(fake.record()['pid'])
+
+
+def _gone(pid: int, within: float) -> bool:
+    """Whether process `pid` has ended within `within` seconds; it is killed if not."""
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    os.kill(pid, signal.SIGKILL)
+    return False
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(('mode', 'signame'), [('wait', 'SIGTERM'), ('wait', 'SIGHUP'), ('wait', 'SIGKILL'),
+                                               ('thread', 'SIGTERM'), ('hold', 'SIGTERM')])
+def test_the_runner_does_not_outlive_sophios(tmp_path: Path, mode: str, signame: str) -> None:
+    """However Sophios ends, its runner is sent SIGTERM, on which cwltool stops its containers."""
+    fake = FakeRunner(tmp_path, sleep=60)
+    pid = _sophios_ended(fake, mode, getattr(signal, signame))
+    assert _gone(pid, within=10)
+    assert fake.record()['signal'] == signal.SIGTERM
+
+
+@pytest.mark.fast
+def test_a_child_sophios_forked_does_not_keep_the_runner_going(tmp_path: Path) -> None:
+    """What a forked child inherits includes the watcher's pipe; the watcher still sees that Sophios has gone."""
+    fake = FakeRunner(tmp_path, sleep=60)
+    pid = _sophios_ended(fake, 'fork', signal.SIGKILL)
+    forked = int((tmp_path / 'forked.pid').read_text())
+    try:
+        assert _gone(pid, within=10)
+        os.kill(forked, 0)   # still alive, still holding the pipe
+    finally:
+        os.kill(forked, signal.SIGKILL)
+
+
+@pytest.mark.fast
+def test_a_run_whose_watcher_cannot_start_is_stopped_and_says_why(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Without its watcher nothing would stop the runner should Sophios end, so the run does not go on."""
+    monkeypatch.chdir(tmp_path)
+    install(monkeypatch, tmp_path, sleep=60)
+    monkeypatch.setattr(run_local.sys, 'executable', '')   # as in some embedded interpreters
+    status = run_local.start(RunRequest('wf', tmp_path)).wait()
+    assert status.state is run_local.RunState.FAILED
+    assert 'the watcher that stops it if Sophios ends could not start' in (status.reason or '')
+
+
+@pytest.mark.fast
+def test_a_runner_that_ignores_sigterm_is_killed_once_sophios_has_gone(tmp_path: Path) -> None:
+    fake = FakeRunner(tmp_path, sleep=60, ignore_sigterm=True)
+    pid = _sophios_ended(fake, 'wait', signal.SIGKILL, grace=1.0)
+    assert _gone(pid, within=10)
+
+
+@pytest.mark.fast
+def test_a_hangup_ignored_by_nohup_leaves_the_run_going(tmp_path: Path) -> None:
+    """`nohup` keeps a run alive after logout: Sophios ignores the hangup, and the run finishes."""
+    fake = FakeRunner(tmp_path, sleep=1)
+    pid = _sophios_ended(fake, 'wait', signal.SIGHUP, ignore_hangup=True)
+    assert _gone(pid, within=1)
+    assert 'signal' not in fake.record()
 
 
 @pytest.mark.fast

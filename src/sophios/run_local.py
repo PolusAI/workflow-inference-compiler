@@ -145,6 +145,37 @@ def _spawn(launch: Launch) -> sub.Popen[bytes]:
                      stdin=sub.DEVNULL, stdout=sub.PIPE, stderr=sub.PIPE, start_new_session=True)
 
 
+#: Runs beside every runner, in a session of its own, reading a pipe only Sophios writes to. When
+#: Sophios ends, however it ends (a signal, `kill -9`, a crash), the pipe closes with nothing written,
+#: or, if something Sophios forked still holds the pipe, the watcher's parent is no longer Sophios. Then
+#: the watcher stops the runner's session: SIGTERM, then SIGKILL if it has not stopped within the grace.
+#: A byte written first means the run is over, and the watcher leaves without touching anything.
+_WATCHER: Final = """
+import os, select, signal, sys, time
+group, grace, sophios = int(sys.argv[1]), float(sys.argv[2]), int(sys.argv[3])
+while os.getppid() == sophios:
+    if select.select([0], [], [], 0.5)[0]:
+        if os.read(0, 1):
+            sys.exit(0)
+        break
+try:
+    os.killpg(group, signal.SIGTERM)
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        time.sleep(0.1)
+        os.killpg(group, 0)
+    os.killpg(group, signal.SIGKILL)
+except (ProcessLookupError, PermissionError):
+    pass
+"""
+
+
+def _watch(runner: sub.Popen[bytes]) -> sub.Popen[bytes]:
+    """Start the watcher that stops `runner`'s session if this process ends before the run does."""
+    return sub.Popen([sys.executable, '-I', '-c', _WATCHER, str(runner.pid), str(STOP_GRACE_SECONDS), str(os.getpid())],
+                     stdin=sub.PIPE, stdout=sub.DEVNULL, stderr=sub.DEVNULL, start_new_session=True)
+
+
 @dataclass
 class _Streams:
     """What the runner printed, as the run goes: echoed, written to the log, and its stdout kept."""
@@ -191,6 +222,7 @@ class Run:  # pylint: disable=too-many-instance-attributes
         self._analysis = analysis
         self._status = RunStatus(RunState.QUEUED)
         self._process: sub.Popen[bytes] | None = None
+        self._watcher: sub.Popen[bytes] | None = None
         self._streams: _Streams | None = None
         self._readers: list[threading.Thread] = []
         self._watching: AbstractContextManager[None] | None = None
@@ -212,15 +244,21 @@ class Run:  # pylint: disable=too-many-instance-attributes
             log.parent.mkdir(parents=True, exist_ok=True)
             self._streams = _Streams(log.open('w', encoding='utf-8'))
             self._process = _spawn(self._launch)
+            self._watcher = _watch(self._process)
         except Exception as error:  # pylint: disable=broad-exception-caught
+            reason = f'the runner could not be started: {error}'
+            if self._process is not None:   # started, with nothing to stop it should this process end
+                self._kill(self._process)
+                self._process.wait()
+                self._process = None
+                reason = f'the runner was stopped: the watcher that stops it if Sophios ends could not start: {error}'
             self._unsupervised(error)
             if self._streams is not None:
                 self._streams.log.close()
             self._stop_watching(cancelled=True)
             for line in _failure_lines({}):
                 print(line, file=sys.stderr)
-            self._status = RunStatus(RunState.FAILED, f'the runner could not be started: {error}', started_at,
-                                     datetime.now(), exit_code=1)
+            self._status = RunStatus(RunState.FAILED, reason, started_at, datetime.now(), exit_code=1)
             return
         self._status = RunStatus(RunState.RUNNING, started_at=started_at)
         try:
@@ -317,6 +355,7 @@ class Run:  # pylint: disable=too-many-instance-attributes
                     process.wait()
             # Whatever the runner left in its session, which would also keep its streams open.
             self._kill(process)
+            self._release_watcher()
             self._join_readers()
             if self._streams is not None:
                 self._streams.log.close()
@@ -324,6 +363,19 @@ class Run:  # pylint: disable=too-many-instance-attributes
             print("Interrupted; the runner's processes were terminated.", file=sys.stderr)
             self._status = RunStatus(RunState.CANCELLED, 'cancelled: the runner was stopped',
                                      self._status.started_at, datetime.now(), exit_code=process.returncode)
+
+    def _release_watcher(self) -> None:
+        """Tell the watcher the run is over, so it leaves the runner's session alone."""
+        watcher, self._watcher = self._watcher, None
+        if watcher is None:
+            return
+        assert watcher.stdin is not None
+        try:
+            watcher.stdin.write(b'.')
+            watcher.stdin.close()
+        except OSError:
+            pass   # it has gone already
+        watcher.wait()
 
     @staticmethod
     def _kill(process: sub.Popen[bytes]) -> None:
@@ -342,6 +394,7 @@ class Run:  # pylint: disable=too-many-instance-attributes
                 return self._status
             assert self._streams is not None
             exit_code = self._process.returncode
+            self._release_watcher()
             self._streams.log.close()
             outcome = self._backend.outcome(self.request, exit_code, ''.join(self._streams.stdout),
                                             log_path(self.request))
