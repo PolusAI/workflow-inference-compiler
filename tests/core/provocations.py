@@ -369,6 +369,24 @@ def _provoke_workflow_run_failed() -> None:
         Workflow([echo], 'provoke').run()
 
 
+def _provoke_realtime_not_async() -> None:
+    """Await `run_async()` on a workflow that declares a real-time analysis."""
+    import asyncio  # pylint: disable=import-outside-toplevel
+    from pathlib import Path  # pylint: disable=import-outside-toplevel
+
+    from sophios.api.python.workflow import Step, Workflow  # pylint: disable=import-outside-toplevel
+
+    adapters = Path(__file__).resolve().parents[2] / 'cwl_adapters'
+    touch = Step(clt_path=adapters / 'touch.cwl')
+    touch.inputs.filename = 'empty.txt'
+    declaration = Step(clt_path=adapters / 'file_watchers' / 'cwl_subinterpreter.cwl')
+    declaration.inputs.file_pattern = 'empty.txt'
+    declaration.inputs.cwl_tool = 'touch'
+    declaration.inputs.max_times = 2
+    declaration.inputs.config = {'in': {'filename': 'again.txt'}}
+    asyncio.run(Workflow([touch, declaration], 'provoke').run_async())
+
+
 COMPILED.update({
     SophiosErrorCode.INVALID_INPUT_VALUE: _provoke_invalid_input_value,
     SophiosErrorCode.INVALID_STEP: _provoke_invalid_step,
@@ -376,6 +394,7 @@ COMPILED.update({
     SophiosErrorCode.INVALID_TOOL: _provoke_invalid_tool,
     SophiosErrorCode.INVALID_INFERENCE: _provoke_invalid_inference,
     SophiosErrorCode.WORKFLOW_RUN_FAILED: _provoke_workflow_run_failed,
+    SophiosErrorCode.REALTIME_NOT_ASYNC: _provoke_realtime_not_async,
     SophiosErrorCode.UNDEFINED_EDGE: _provoke_undefined_edge,
     SophiosErrorCode.DUPLICATE_EDGE_DEF: _provoke_duplicate_edge_def,
     SophiosErrorCode.EMPTY_NAME: _provoke_empty_name,

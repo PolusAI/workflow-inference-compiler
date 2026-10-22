@@ -1,4 +1,14 @@
-from sophios.runtime_inputs import normalize_job_inputs
+from typing import Any
+
+from sophios.ir.artifacts import CompilationArtifact
+from sophios.runtime_inputs import normalize_artifact_job_inputs
+from sophios.wic_types import Json
+
+
+def normalize_job_inputs(job_inputs: dict[str, Any]) -> Json:
+    """`job_inputs` normalized for a workflow that declares nothing about them."""
+    artifact = CompilationArtifact(namespace=(), name='w', run_path='w.cwl', cwl={}, job_inputs={}, graph=None)
+    return normalize_artifact_job_inputs(artifact, job_inputs)
 
 
 def test_normalize_job_inputs_uses_concrete_file_format() -> None:
@@ -25,7 +35,7 @@ def test_normalize_job_inputs_uses_concrete_file_format() -> None:
         ],
     }
 
-    normalized = normalize_job_inputs({}, job_inputs)
+    normalized = normalize_job_inputs(job_inputs)
 
     assert normalized["ligand"]["format"] == "edam:format_3814"
     assert normalized["nested"][0]["format"] == "edam:format_1476"
@@ -44,7 +54,7 @@ def test_normalize_job_inputs_uses_edam_pdbqt_format() -> None:
         },
     }
 
-    normalized = normalize_job_inputs({}, job_inputs)
+    normalized = normalize_job_inputs(job_inputs)
 
     assert normalized["ligand"]["format"] == "edam:format_4036"
 
@@ -65,6 +75,6 @@ def test_normalize_job_inputs_removes_unresolved_format_list() -> None:
         },
     }
 
-    normalized = normalize_job_inputs({}, job_inputs)
+    normalized = normalize_job_inputs(job_inputs)
 
     assert "format" not in normalized["ligand"]

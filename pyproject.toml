@@ -53,8 +53,7 @@ dependencies = [
     # We are using the official release for these packages for now
     "toil[cwl]",
     "fastapi",
-    "uvicorn",
-    "aiofiles"
+    "uvicorn"
 ]
 
 [project.readme]
@@ -106,8 +105,7 @@ mypy-types = [
     "types-requests",
     "types-setuptools",
     "types-six",
-    "types-urllib3",
-    "types-aiofiles"
+    "types-urllib3"
 ]
 runners = [
     "toil[cwl]",

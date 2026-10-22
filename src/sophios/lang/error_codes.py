@@ -121,6 +121,9 @@ class SophiosErrorCode(StrEnum):
     #: strings, renamings with naming conventions off, or format rules with
     #: step insertion off.
     INVALID_INFERENCE = 'api007'
+    #: A workflow that declares real-time analyses, given to
+    #: `Workflow.run_async`, which never runs them.
+    REALTIME_NOT_ASYNC = 'api008'
 
     @property
     def is_language(self) -> bool:
@@ -382,4 +385,9 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         'or format rules with step insertion off.',
         'Do what the message names: use `continue` or `break`, write each renaming as `(before, after)`, '
         'set `naming_conventions=True` for renamings, or set `insert_steps=True` for format rules.'),
+    SophiosErrorCode.REALTIME_NOT_ASYNC: Explanation(
+        Kind.CALL,
+        'A workflow that declares real-time analyses, given to `Workflow.run_async`, which never runs them.',
+        'Run it with `Workflow.run()` or `Workflow.start()`; from a coroutine, '
+        '`await asyncio.to_thread(workflow.run)` keeps the event loop free.'),
 }

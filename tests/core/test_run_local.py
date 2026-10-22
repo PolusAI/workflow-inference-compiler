@@ -4,6 +4,7 @@ Each run here starts a stand-in runner (`fake_runner`) through a public front do
 everything between the front door and the child process is the code users run.
 """
 import _thread
+import asyncio
 import json
 import os
 import shlex
@@ -558,6 +559,66 @@ def test_run_returns_the_completed_runs_result(monkeypatch: pytest.MonkeyPatch, 
     assert result is not None
     assert (result.state, result.outputs, result.exit_code) == (RunState.COMPLETED, outputs, 0)
     assert result.log_file.is_file() and result.outdir.is_absolute()
+
+
+@pytest.mark.fast
+def test_run_async_leaves_the_event_loop_free_while_the_runner_runs(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None) -> None:
+    """Another coroutine keeps running while the runner does, and the run's result is awaited."""
+    del offline
+    outputs = {'out': 2}
+    fake = install(monkeypatch, tmp_path, stdout=json.dumps(outputs).splitlines(), sleep=1.0)
+
+    async def main() -> tuple[RunResult | None, int]:
+        ticks_while_running = 0
+
+        async def tick() -> None:
+            nonlocal ticks_while_running
+            while True:
+                ticks_while_running += fake.record_path.exists()
+                await asyncio.sleep(0.01)
+
+        ticker = asyncio.create_task(tick())
+        result = await _echo_workflow().run_async(run_args_dict={'cwl_runner': 'toil-cwl-runner'})
+        ticker.cancel()
+        return result, ticks_while_running
+
+    result, ticks = asyncio.run(main())
+    assert result is not None and (result.state, result.outputs) == (RunState.COMPLETED, outputs)
+    assert ticks >= 10
+
+
+@pytest.mark.fast
+def test_run_async_raises_for_a_failed_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None) -> None:
+    """As `run()` does: a failed run cannot be missed."""
+    del offline
+    install(monkeypatch, tmp_path, exit_code=4)
+    with pytest.raises(WorkflowRunError) as caught:
+        asyncio.run(_echo_workflow().run_async())
+    assert caught.value.exit_code == 4
+
+
+@pytest.mark.fast
+def test_cancelling_the_run_async_task_stops_the_runner(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offline: None, capsys: pytest.CaptureFixture[str]) -> None:
+    """The runner is sent SIGTERM and has exited before the task's cancellation is seen."""
+    del offline
+    fake = install(monkeypatch, tmp_path, sleep=60)
+
+    async def main() -> None:
+        task = asyncio.create_task(_echo_workflow().run_async())
+        while not fake.record_path.exists():
+            await asyncio.sleep(0.02)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(main())
+    stopped = fake.record()
+    assert stopped['signal'] == 15
+    with pytest.raises(ProcessLookupError):
+        os.kill(stopped['pid'], 0)
+    assert "Interrupted; the runner's processes were terminated." in capsys.readouterr().err
 
 
 @pytest.mark.fast

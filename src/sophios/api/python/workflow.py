@@ -62,6 +62,7 @@ from ._workflow_runtime import (
     normalize_workflow_name as _normalize_workflow_name,
     populate_parameters as _populate_parameters,
     run_workflow as _run_workflow,
+    run_workflow_async as _run_workflow_async,
     silence_autodiscovery_logging as _silence_autodiscovery_logging,
     start_workflow as _start_workflow,
     step_run as _step_run,
@@ -1228,7 +1229,8 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
 
         Args:
             run_args_dict (dict[str, str] | None): As :meth:`run` takes them, except
-                ``generate_run_script``, which only :meth:`run` does.
+                ``generate_run_script``: :meth:`run` and :meth:`run_async` write a run
+                script, ``start`` has nothing to start then.
             user_env_vars (dict[str, str] | None): Environment variables to expose to the run.
             basepath (str): Directory used for generated files and execution artifacts.
             tool_registry (Tools | None): Optional tool registry override.
@@ -1245,6 +1247,48 @@ class Workflow(_ProcessBase):  # pylint: disable=too-many-instance-attributes
         """
         return _start_workflow(self, _RunOptions(run_args_dict, user_env_vars, basepath, tool_registry,
                                                  workflow_paths, inference))
+
+    async def run_async(  # pylint: disable=too-many-arguments
+        self,
+        run_args_dict: dict[str, str] | None = None,
+        user_env_vars: dict[str, str] | None = None,
+        basepath: str = DEFAULT_BASEPATH,
+        tool_registry: Tools | None = None,
+        *,
+        workflow_paths: Mapping[str, Mapping[str, Path]] | None = None,
+        inference: Inference = Inference(),
+    ) -> RunResult | None:
+        """:meth:`run`, as a coroutine that never blocks the event loop.
+
+        The compile, the checks and the image pulls run in a worker thread, and the
+        runner is awaited from one. Cancelling the task that awaits it stops the runner,
+        as :meth:`RunHandle.cancel` does, before the cancellation goes on; a runner that
+        had already exited is reported on as it ended.
+
+        Real-time analyses never run this way: a workflow that declares one is refused
+        with ``api008``, before anything is written or run. :meth:`run` and :meth:`start`
+        run them.
+
+        Args:
+            run_args_dict (dict[str, str] | None): As :meth:`run` takes them.
+            user_env_vars (dict[str, str] | None): Environment variables to expose to the run.
+            basepath (str): Directory used for generated files and execution artifacts.
+            tool_registry (Tools | None): Optional tool registry override.
+            workflow_paths (Mapping[str, Mapping[str, Path]] | None): Unused here: they
+                name real-time analyses, which are refused.
+            inference (Inference): How an unbound input is connected.
+
+        Returns:
+            RunResult | None: As :meth:`run` returns it.
+
+        Raises:
+            SophiosError: As :meth:`run` raises it, and ``api008`` for real-time analyses.
+            ValueError: As :meth:`run` raises it.
+            WorkflowRunError: If the runner exits non-zero.
+            asyncio.CancelledError: When the awaiting task is cancelled, after the runner was stopped.
+        """
+        return await _run_workflow_async(self, _RunOptions(run_args_dict, user_env_vars, basepath, tool_registry,
+                                                           workflow_paths, inference))
 
     def _as_workflow_step(self) -> nodes.Step:
         """Return this workflow as a step naming its own ``.wic`` document, with its anchored outputs."""

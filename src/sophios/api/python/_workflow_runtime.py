@@ -9,6 +9,7 @@ Python-facing workflow authoring.
 # This module is the private adapter layer between workflow objects and the
 # compiler/runtime boundary, so reaching internal state is intentional.
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -27,10 +28,11 @@ from sophios.run_status import RunResult, RunState
 from sophios.ir.artifacts import CompilationArtifact, CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.locations import absolute_paths
-from sophios.ir.realtime import ADAPTER
+from sophios.ir.realtime import ADAPTER, Declaration
 from sophios.ir.resolve import RegistrySnapshot
-from sophios.lang import CwlRecord, Diagnostics, Document, ParseResult, SophiosError, render
+from sophios.lang import CwlRecord, Diagnostic, Diagnostics, Document, ParseResult, Severity, SophiosError, render
 from sophios.lang import Step as LangStep
+from sophios.lang.error_codes import SophiosErrorCode
 from sophios.cli import default_compilation_settings, get_known_and_unknown_args
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils import convert_args_dict_to_args_list
@@ -578,7 +580,7 @@ def _enabled(value: Any) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class RunOptions:  # pylint: disable=too-many-instance-attributes
-    """What `Workflow.run()` and `start()` are given, besides the workflow: see `Workflow.run`."""
+    """What `Workflow.run()`, `start()` and `run_async()` are given, besides the workflow: see `Workflow.run`."""
 
     run_args_dict: dict[str, str] | None = None
     user_env_vars: dict[str, str] | None = None
@@ -588,11 +590,20 @@ class RunOptions:  # pylint: disable=too-many-instance-attributes
     inference: Inference = Inference()
 
 
-def _run_request(workflow: "Workflow", options: RunOptions) -> backends.RunRequest:
+def _realtime_refused(declarations: tuple[Declaration, ...]) -> SophiosError:
+    """`api008`, at each real-time analysis declaration: `run_async` never runs them."""
+    return SophiosError(Diagnostic(
+        Severity.ERROR, SophiosErrorCode.REALTIME_NOT_ASYNC,
+        f"this step declares the real-time analysis {declaration.analysis!r}, and run_async() never runs "
+        "real-time analyses", declaration.span) for declaration in declarations)
+
+
+def _run_request(workflow: "Workflow", options: RunOptions, *, refuse_realtime: bool) -> backends.RunRequest:
     """Compile `workflow`, check this machine, write what the runner reads and pull its images: the run, ready.
 
     Raises:
-        SophiosError: The workflow does not compile, or this machine cannot run it.
+        SophiosError: The workflow does not compile, this machine cannot run it, or it declares real-time
+            analyses and `refuse_realtime` is set (`api008`).
         ValueError: `run_args_dict` names a `cwl_runner` Sophios cannot run, or a `user_env_vars` key is not
             an environment variable name.
     """
@@ -602,6 +613,8 @@ def _run_request(workflow: "Workflow", options: RunOptions) -> backends.RunReque
     resolved_run_args = _run_args(options.run_args_dict)
     basepath = options.basepath
     result = compile_workflow_result(workflow, tool_registry=options.tool_registry, inference=options.inference)
+    if refuse_realtime and result.realtime:
+        raise _realtime_refused(result.realtime)
     analyses = realtime.compile_analyses(
         result.realtime, {namespace: dict(paths) for namespace, paths in (options.workflow_paths or {}).items()},
         _merged_known_tools(workflow, options.tool_registry), compiler_options(options.inference))
@@ -652,14 +665,31 @@ def start_workflow(workflow: "Workflow", options: RunOptions) -> RunHandle:
     """Compile and prepare `workflow`, start its runner, and return the run's handle: see `Workflow.start`."""
     if _enabled(_run_args(options.run_args_dict).get("generate_run_script", "no")):
         raise ValueError("generate_run_script writes run.sh instead of starting the run: call run() for it")
-    return run_local.start(_run_request(workflow, options))
+    return run_local.start(_run_request(workflow, options, refuse_realtime=False))
 
 
 def run_workflow(workflow: "Workflow", options: RunOptions) -> RunResult | None:
     """Compile and run `workflow`, and wait for it: see `Workflow.run`."""
-    request = _run_request(workflow, options)
+    request = _run_request(workflow, options, refuse_realtime=False)
     if request.generate_run_script:
         run_local.run(request)
         return None
     return _completed(workflow, run_local.start(request).wait())
 
+
+async def run_workflow_async(workflow: "Workflow", options: RunOptions) -> RunResult | None:
+    """`run_workflow`, awaited: see `Workflow.run_async`."""
+    request = await asyncio.to_thread(_run_request, workflow, options, refuse_realtime=True)
+    if request.generate_run_script:
+        run_local.run(request)
+        return None
+    handle = run_local.start(request)
+    waiting = asyncio.ensure_future(asyncio.to_thread(handle.wait))
+    try:
+        result = await asyncio.shield(waiting)
+    except asyncio.CancelledError:
+        # The runner is stopped before the cancellation goes on, so nothing outlives the task.
+        await asyncio.to_thread(handle.cancel)
+        await waiting
+        raise
+    return _completed(workflow, result)
