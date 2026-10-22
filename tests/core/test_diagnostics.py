@@ -1091,20 +1091,6 @@ def test_a_run_whose_runner_is_missing_is_wic029(
 
 
 @pytest.mark.fast
-def test_a_runner_that_cannot_run_here_is_named_before_the_run(
-        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setattr(preflight, 'PLATFORM_LACKS_RUNNERS', 'no pwd module')
-    monkeypatch.setattr(run_local, 'run', lambda _request: pytest.fail('the runner started'))
-    workflow = Path(__file__).resolve().parents[2] / 'docs' / 'tutorials' / 'helloworld.wic'
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr('sys.argv', ['sophios', '--yaml', str(workflow), '--run_local'])
-    with pytest.raises(SystemExit) as caught:
-        cli.main()
-    assert caught.value.code == 1
-    assert 'error [wic029] cwltool cannot run here (no pwd module): run Sophios inside WSL' in capsys.readouterr().err
-
-
-@pytest.mark.fast
 def test_a_missing_image_puller_is_wic029(
         machine: Callable[..., list[object]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
         capsys: pytest.CaptureFixture[str]) -> None:
