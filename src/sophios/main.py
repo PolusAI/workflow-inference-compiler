@@ -49,7 +49,6 @@ def _load_source_bundle(args: argparse.Namespace,
     if (problem := preflight.unwritable(basepath, 'the compiled workflow',
                                         'give --basepath a directory you can write to')) is not None:
         raise SophiosError([problem])
-    basepath.mkdir(parents=True, exist_ok=True)
     bundle = frontdoor.bundle_from_disk(Path(yaml_path), yml_paths, tools_cwl)
     return yaml_path, yaml_stem, bundle
 
@@ -187,7 +186,7 @@ def _preflight(args: argparse.Namespace, documents: list[Path], jobs: tuple[pref
         return True
     backends.backend('cwl', args.cwl_runner).check(documents, jobs, settings)
     print(f'Checked {documents[0]}: nothing in the way of a local run on this machine. '
-          'Nothing was pulled or run.')
+          'Nothing was written, pulled or run.')
     return False
 
 
@@ -335,6 +334,9 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
         cli.parser.error(f'no workflow file at {args.yaml}')
     if args.inputs_file and not Path(args.inputs_file).is_file():
         cli.parser.error(f'no inputs file at {args.inputs_file}')
+    if args.check and args.graphviz:
+        cli.parser.error('--graphviz writes drawings and --check writes nothing: '
+                         'draw with --generate_cwl_workflow --graphviz')
     if args.allow_raw_cwl and _is_plain_cwl_workflow(Path(args.yaml)):
         _pass_through(args, unknown_args)
         return
@@ -381,8 +383,8 @@ def _main(args: argparse.Namespace, unknown_args: list[str]) -> None:
                                remove_entrypoints=args.docker_remove_entrypoints))
         draw_after_write()
         if args.check:
-            print(f'Checked {prepared.documents[0]}: nothing in the way of a local run on this machine. '
-                  'Nothing was pulled or run.')
+            print(f'Checked {prepared.artifact.name}: nothing in the way of a local run on this machine. '
+                  'Nothing was written, pulled or run.')
             return
         _run(args, unknown_args, prepared.artifact.name, realtime_plans=prepared.plans)
 

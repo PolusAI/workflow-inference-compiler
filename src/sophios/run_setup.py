@@ -7,6 +7,7 @@ images without entrypoints when asked.
 """
 from dataclasses import dataclass, replace
 from pathlib import Path
+import tempfile
 
 from sophios import input_output, post_compile, preflight, realtime
 from sophios.ir.artifacts import CompilationArtifact
@@ -55,9 +56,21 @@ def prepare(artifact: CompilationArtifact, analyses: tuple[realtime.Analysis, ..
     `--cwl_inline_runtag` and from Python. Its job is the values bound in the workflow,
     a relative path read against `settings.root_dir`, under the inputs file's.
 
+    A check (`settings.check`) writes them into a temporary directory instead, removed
+    when the check ends, so it leaves `basepath` as it found it.
+
     Raises:
         SophiosError: What the pre-flight found in the way, before anything is pulled.
     """
+    if not settings.check:
+        return _prepare(artifact, analyses, basepath, settings)
+    with tempfile.TemporaryDirectory(prefix='sophios-check-') as scratch:
+        return _prepare(artifact, analyses, Path(scratch), settings)
+
+
+def _prepare(artifact: CompilationArtifact, analyses: tuple[realtime.Analysis, ...], basepath: Path,
+             settings: Settings) -> Prepared:
+    """`prepare`, writing under `basepath`."""
     # As the runner gets them, in which an output-target Directory is a name for the run to create.
     bound = normalize_artifact_job_inputs(artifact, artifact.job_inputs)
     # The runner reads the job from `basepath`, so a relative path is written absolute.
