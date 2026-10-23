@@ -36,9 +36,7 @@ from sophios.nf_types import (
     NfWorkflowOutputConnection,
 )
 
-from .test_conditions import _when_workflow
-from .test_reader_symmetry import BUILDERS
-from .testkit import command, flag_workflow, output_port, template
+from .testkit import command, output_port, template
 
 
 @pytest.mark.fast
@@ -84,14 +82,18 @@ def test_executable_schema_declares_version_and_kind() -> None:
     workflow = ExecutableNextflowWorkflow("wf", [], [], {})
     payload = workflow.to_dict()
 
-    assert payload["schema_version"] == 16
+    current = ExecutableNextflowWorkflow.SCHEMA_VERSION
+    assert payload["schema_version"] == current
     assert payload["representation_kind"] == "executable"
 
-    payload["schema_version"] = 1
-    with pytest.raises(ValueError, match="schema version"):
-        ExecutableNextflowWorkflow.from_dict(payload)
+    for version in (current - 1, current + 1):
+        payload["schema_version"] = version
+        with pytest.raises(ValueError, match=re.escape(
+            f"executable Nextflow schema version {version} is not the current version {current}"
+        )):
+            ExecutableNextflowWorkflow.from_dict(payload)
 
-    payload["schema_version"] = 16
+    payload["schema_version"] = current
     payload["representation_kind"] = "structural"
     with pytest.raises(ValueError, match="representation kind"):
         ExecutableNextflowWorkflow.from_dict(payload)
@@ -496,65 +498,6 @@ def test_process_rejects_referencing_a_renamed_input_elsewhere_via_basename() ->
 
 
 @pytest.mark.fast
-def test_hydration_rejects_an_array_kind_token_older_than_schema_version_5() -> None:
-    """A hand-crafted payload can carry the array kind without is_array; the kind gate still fires."""
-    process = NfProcess(
-        "NAMES",
-        [NfPort("names", "val")],
-        [],
-        command("echo"),
-    )
-    payload = ExecutableNextflowWorkflow(
-        "wf",
-        [process],
-        [NfWorkflowInputConnection("names", "NAMES", "names")],
-        {"names": "unused"},
-    ).to_dict()
-    payload["processes"][0]["command"]["tokens"].append(
-        {"kind": "array", "name": "names", "prefix": None}
-    )
-    payload["schema_version"] = 4
-    with pytest.raises(ValueError, match=r"'array'.*schema version 5.*schema version 4"):
-        ExecutableNextflowWorkflow.from_dict(payload)
-
-
-@pytest.mark.fast
-def test_hydration_accepts_earlier_subset_schema_versions() -> None:
-    payload = ExecutableNextflowWorkflow(
-        "wf", [NfProcess("P", [], [], command("true"))], [], {}
-    ).to_dict()
-    assert payload["schema_version"] == 16
-
-    for earlier in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15):
-        payload["schema_version"] = earlier
-        assert ExecutableNextflowWorkflow.from_dict(payload).to_dict()["schema_version"] == 16
-
-    for unsupported in (1, 17):
-        payload["schema_version"] = unsupported
-        with pytest.raises(ValueError, match="schema version"):
-            ExecutableNextflowWorkflow.from_dict(payload)
-
-
-@pytest.mark.fast
-def test_hydration_treats_parameter_keys_as_opaque_user_data() -> None:
-    payload = ExecutableNextflowWorkflow("wf", [], [], {}).to_dict()
-    payload["schema_version"] = 2
-    payload["params"] = {
-        "kind": "shell_literal",
-        "nested": {
-            "is_array": True,
-            "stage_as": "renamed.txt",
-            "adapter": "scatter",
-            "capture": "single",
-        },
-    }
-
-    hydrated = ExecutableNextflowWorkflow.from_dict(payload)
-
-    assert hydrated.to_dict()["params"] == payload["params"]
-
-
-@pytest.mark.fast
 def test_rejects_duplicate_process_names() -> None:
     process = NfProcess("P", [], [], command("true"))
     with pytest.raises(ValueError, match="duplicate process"):
@@ -681,14 +624,14 @@ def test_rejects_invalid_private_ir_before_writing_artifacts(tmp_path: Path) -> 
 
 
 def _adapted_workflow(
-    adapter: str | None = "scatter",
+    adapter: str | None = "dotproduct",
     port: NfPort | None = None,
 ) -> ExecutableNextflowWorkflow:
-    # The param has to match what the edge consumes: the scatter adapter
+    # The param has to match what the edge consumes: a scattered edge
     # takes the whole array, while an unadapted edge into a scalar port
     # takes one value.
     destination = port or NfPort("item", "val")
-    array_valued = adapter == "scatter" or destination.is_array
+    array_valued = adapter is not None or destination.is_array
     return ExecutableNextflowWorkflow(
         "wf",
         [NfProcess("SCATTER", [destination], [], command("true"))],
@@ -698,23 +641,9 @@ def _adapted_workflow(
 
 
 @pytest.mark.fast
-def test_hydration_defaults_a_missing_adapter_to_none() -> None:
-    """Every version before 8 never wrote the key, so its absence is unadapted."""
-    payload = _adapted_workflow(adapter=None).to_dict()
-    del payload["connections"][0]["adapter"]
-    payload["schema_version"] = 7
-
-    hydrated = ExecutableNextflowWorkflow.from_dict(payload)
-
-    assert hydrated.connections == (
-        NfWorkflowInputConnection("items", "SCATTER", "item"),
-    )
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize("adapter", ["gather", "flatten", "", "collect"])
+@pytest.mark.parametrize("adapter", ["gather", "scatter", "", "collect"])
 def test_rejects_an_adapter_outside_the_approved_set(adapter: str) -> None:
-    approved = "dotproduct, flat_crossproduct, nested_crossproduct, scatter"
+    approved = "dotproduct, flat_crossproduct, nested_crossproduct"
     with pytest.raises(ValueError, match=f"channel adapter must be one of {approved}"):
         _adapted_workflow(adapter)
 
@@ -763,7 +692,7 @@ def test_rejects_one_parameter_adapted_at_only_some_sinks() -> None:
             "wf",
             [scattered, whole],
             [
-                NfWorkflowInputConnection("items", "SCATTER", "item", "scatter"),
+                NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
                 NfWorkflowInputConnection("items", "WHOLE", "item"),
             ],
             {"items": ["a", "b"]},
@@ -779,42 +708,29 @@ def test_accepts_one_parameter_adapted_at_every_sink() -> None:
         "wf",
         [first, second],
         [
-            NfWorkflowInputConnection("items", "FIRST", "item", "scatter"),
-            NfWorkflowInputConnection("items", "SECOND", "item", "scatter"),
+            NfWorkflowInputConnection("items", "FIRST", "item", "dotproduct"),
+            NfWorkflowInputConnection("items", "SECOND", "item", "dotproduct"),
         ],
         {"items": ["a", "b"]},
     )
 
     assert workflow.connections == (
-        NfWorkflowInputConnection("items", "FIRST", "item", "scatter"),
-        NfWorkflowInputConnection("items", "SECOND", "item", "scatter"),
-    )
-
-
-def _multi_input_workflow(method: str) -> ExecutableNextflowWorkflow:
-    process = NfProcess("PAIR", [NfPort("first", "val"), NfPort("second", "val")], [], command("true"))
-    return ExecutableNextflowWorkflow(
-        "wf",
-        [process],
-        [
-            NfWorkflowInputConnection("firsts", "PAIR", "first", method),
-            NfWorkflowInputConnection("seconds", "PAIR", "second", method),
-        ],
-        {"firsts": ["a", "b"], "seconds": ["c", "d"]},
+        NfWorkflowInputConnection("items", "FIRST", "item", "dotproduct"),
+        NfWorkflowInputConnection("items", "SECOND", "item", "dotproduct"),
     )
 
 
 @pytest.mark.fast
-def test_rejects_a_process_mixing_scatter_and_dotproduct_adapters() -> None:
+def test_rejects_a_process_mixing_scatter_methods() -> None:
     process = NfProcess(
         "PAIR", [NfPort("first", "val"), NfPort("second", "val")], [], command("true")
     )
-    with pytest.raises(ValueError, match="mixes channel adapters dotproduct, scatter"):
+    with pytest.raises(ValueError, match="mixes channel adapters dotproduct, flat_crossproduct"):
         ExecutableNextflowWorkflow(
             "wf",
             [process],
             [
-                NfWorkflowInputConnection("firsts", "PAIR", "first", "scatter"),
+                NfWorkflowInputConnection("firsts", "PAIR", "first", "flat_crossproduct"),
                 NfWorkflowInputConnection("seconds", "PAIR", "second", "dotproduct"),
             ],
             {"firsts": ["a"], "seconds": ["b"]},
@@ -873,25 +789,6 @@ def test_rejects_gathering_the_skipped_positions_of_a_conditional_multi_input_pr
             [*connections, NfWorkflowOutputConnection("NEXT", "g", "result")],
             {"avals": ["x"], "bvals": ["y"]},
         )
-
-
-def _captured_workflow(capture: str = "single") -> ExecutableNextflowWorkflow:
-    glob = NfTemplate((NfLiteral("out.txt"),))
-    process = NfProcess(
-        "MAKE",
-        [NfPort("message", "val")],
-        [NfPort("result", "path", "result", glob, capture=capture)],
-        NfCommand((NfTemplate((NfLiteral("printf"),)),), stdout=glob),
-    )
-    return ExecutableNextflowWorkflow(
-        "wf",
-        [process],
-        [
-            NfWorkflowInputConnection("message", "MAKE", "message"),
-            NfWorkflowOutputConnection("MAKE", "result", "result"),
-        ],
-        {"message": "hi"},
-    )
 
 
 @pytest.mark.fast
@@ -1097,60 +994,3 @@ def test_an_optional_output_reaches_only_an_unscattered_workflow_output(adapter:
     with pytest.raises(ValueError, match="optional output"):
         ExecutableNextflowWorkflow("WF", [_optional_producer(), consume], connections,
                                    {"xs": [1]} if adapter else {"x": 1})
-
-
-def _wf(process: NfProcess, **params: Any) -> ExecutableNextflowWorkflow:
-    """`process` alone, each input wired from a same-named parameter."""
-    connections = [NfWorkflowInputConnection(port.name, process.name, port.name) for port in process.inputs]
-    return ExecutableNextflowWorkflow("wf", [process], connections, params)
-
-
-_ECHO = NfTemplate((NfLiteral("echo"),))
-
-# Each schema gate's label and version, and a builder whose newest part is the gated one.
-GATES = [
-    pytest.param(build, label, introduced, id=label)
-    for build, label, introduced in [
-        (flag_workflow, "'flag'", 3),
-        (lambda: _wf(
-            NfProcess("COPY", [NfPort("s", "path")], [], NfCommand((_ECHO, NfTemplate((NfBasenameReference("s"),))))),
-            s="a.txt",
-        ), "'basename'", 4),
-        (lambda: _wf(
-            NfProcess("NAMES", [NfPort("n", "val", is_array=True)], [], NfCommand((_ECHO, NfArrayBinding("n", "-n")))),
-            n=["a", "b"],
-        ), "'is_array'", 5),
-        (lambda: _wf(NfProcess("REDIRECT", [], [], NfCommand((_ECHO, NfShellLiteral(">>"))))), "'shell_literal'", 6),
-        (lambda: _wf(
-            NfProcess("STAGE", [NfPort("s", "path", stage_as="renamed.txt")], [], command("cat", "renamed.txt")),
-            s="in.txt",
-        ), "'stage_as'", 7),
-        (_adapted_workflow, "'adapter'", 8),
-        (_captured_workflow, "'capture'", 9),
-        (lambda: _when_workflow("$(inputs.a > 0)", {"a": 3}, a="int"), "'condition'", 11),
-        (lambda: _multi_input_workflow("dotproduct"), "adapter='dotproduct'", 12),
-        (lambda: _multi_input_workflow("flat_crossproduct"), "adapter='flat_crossproduct'", 13),
-        (BUILDERS["gather and rescatter"], "adapter='gather'", 14),
-        (BUILDERS["nested_crossproduct"], "adapter='nested_crossproduct'", 15),
-        (lambda: ExecutableNextflowWorkflow(
-            "WF", [_optional_producer()],
-            [NfWorkflowInputConnection("x", "MAYBE", "x"), NfWorkflowOutputConnection("MAYBE", "o", "o")], {"x": 1},
-        ), "'optional'", 16),
-    ]
-]
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize(("build", "gate_label", "introduced"), GATES)
-def test_a_payload_round_trips_and_its_newest_part_needs_its_schema_version(
-    build: Callable[[], ExecutableNextflowWorkflow], gate_label: str, introduced: int
-) -> None:
-    """A version is a claim about the value space, so each additive part's version is enforced."""
-    payload = build().to_dict()
-    assert ExecutableNextflowWorkflow.from_dict(payload) == build()
-    payload["schema_version"] = introduced - 1
-    with pytest.raises(ValueError, match=re.escape(
-        f"{gate_label} requires executable Nextflow schema version {introduced}, "
-        f"but the payload declares schema version {introduced - 1}"
-    )):
-        ExecutableNextflowWorkflow.from_dict(payload)

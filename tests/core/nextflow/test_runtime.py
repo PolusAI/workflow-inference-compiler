@@ -1136,7 +1136,7 @@ def test_scatter_over_files_stages_one_element_per_task(tmp_path: Path) -> None:
         "PIPELINE",
         [process],
         [
-            NfWorkflowInputConnection("sources", "READ_ONE", "source", "scatter"),
+            NfWorkflowInputConnection("sources", "READ_ONE", "source", "dotproduct"),
             NfWorkflowOutputConnection("READ_ONE", "result", "copies"),
         ],
         {
@@ -1198,7 +1198,7 @@ def test_nested_workflow_executes_through_its_inlined_process(tmp_path: Path) ->
 @pytest.mark.nextflow
 @pytest.mark.serial
 def test_one_scattered_parameter_feeds_two_processes_independently(tmp_path: Path) -> None:
-    """R2.16: adapting per consumption site avoids a consumed-once queue channel."""
+    """R2.16: each scattered process builds its own invocations, so no queue channel is consumed twice."""
     first = NfProcess(
         "FIRST",
         [NfPort("item", "val")],
@@ -1215,8 +1215,8 @@ def test_one_scattered_parameter_feeds_two_processes_independently(tmp_path: Pat
         "PIPELINE",
         [first, second],
         [
-            NfWorkflowInputConnection("items", "FIRST", "item", "scatter"),
-            NfWorkflowInputConnection("items", "SECOND", "item", "scatter"),
+            NfWorkflowInputConnection("items", "FIRST", "item", "dotproduct"),
+            NfWorkflowInputConnection("items", "SECOND", "item", "dotproduct"),
             NfWorkflowOutputConnection("FIRST", "result", "first"),
             NfWorkflowOutputConnection("SECOND", "result", "second"),
         ],
@@ -1282,7 +1282,7 @@ def test_a_scattered_step_broadcasts_an_unscattered_file_input(tmp_path: Path) -
         "PIPELINE",
         [process],
         [
-            NfWorkflowInputConnection("items", "COPY", "item", "scatter"),
+            NfWorkflowInputConnection("items", "COPY", "item", "dotproduct"),
             NfWorkflowInputConnection("reference", "COPY", "reference"),
             NfWorkflowOutputConnection("COPY", "result", "copies"),
         ],
