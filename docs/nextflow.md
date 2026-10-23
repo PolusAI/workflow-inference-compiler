@@ -67,6 +67,12 @@ workflow compiles. Any other value stops the run with `Sophios workflow input
 '<name>' must be <type>, not <value>`, where `<name>` is the parameter as the
 params file spells it.
 
+The pipeline needs Nextflow's v2 script parser, its default. Under
+`NXF_SYNTAX_PARSER=v1` Nextflow converts a command-line value itself, so
+`--name 010` arrives as the number 10, and the pipeline stops before any task
+with `Sophios-generated Nextflow needs the v2 script parser: unset
+NXF_SYNTAX_PARSER or set it to v2`.
+
 Sophios does not support dry runs. Every generated process has a `stub:`
 block that prints `Sophios-generated Nextflow does not support dry runs
 (-stub-run)` and exits 1, so `-stub-run` stops at the first task and runs no
