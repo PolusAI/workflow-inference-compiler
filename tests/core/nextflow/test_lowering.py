@@ -24,7 +24,7 @@ from sophios.nf_types import (
 )
 from sophios.utils_nf import compiled_source_to_nextflow, cwl_type_to_nf_qualifier
 
-from .testkit import step, synthetic_source, tool, workflow_doc
+from .testkit import one_step, step, synthetic_source, tool, workflow_doc
 
 
 @pytest.mark.fast
@@ -52,16 +52,53 @@ def test_rejects_unbounded_and_collection_types(cwl_type: Any) -> None:
         cwl_type_to_nf_qualifier(cwl_type)
 
 
+# Each real fixture's workflow name, (process, inputs) list, connections and params.
+GOLDEN_GRAPHS = {
+    "real_supported_result": (
+        "wf",
+        [("touch", (NfPort("filename", "val"),)), ("copy", (NfPort("source", "path", path_kind="file"),))],
+        (
+            NfWorkflowInputConnection("touch_filename", "touch", "filename"),
+            NfProcessConnection("touch", "result", "copy", "source"),
+            NfWorkflowOutputConnection("touch", "result", "touch_result"),
+            NfWorkflowOutputConnection("copy", "result", "copy_result"),
+        ),
+        {"touch_filename": "message.txt"},
+    ),
+    # A scattered port stays a scalar element port; its parameter carries the whole source array.
+    "real_scattered_result": (
+        "wf",
+        [("echo_item", (NfPort("item", "val"),))],
+        (
+            NfWorkflowInputConnection("echo_item_item", "echo_item", "item", "dotproduct"),
+            NfWorkflowOutputConnection("echo_item", "result", "echo_item_result"),
+        ),
+        {"echo_item_item": ["alpha", "beta"]},
+    ),
+    # The subworkflow's step is a namespaced process that reads the outer producer.
+    "real_nested_result": (
+        "root",
+        [("write", (NfPort("message", "val"),)), ("child_inner_copy", (NfPort("source", "path", path_kind="file"),))],
+        (
+            NfWorkflowInputConnection("write_message", "write", "message"),
+            NfProcessConnection("write", "result", "child_inner_copy", "source"),
+            NfWorkflowOutputConnection("write", "result", "write_result"),
+            NfWorkflowOutputConnection("child_inner_copy", "result", "child_inner_copy_result"),
+        ),
+        {"write_message": "nested composition"},
+    ),
+}
+
+
 @pytest.mark.fast
-def test_real_supported_compilation_result_converts(
-    real_supported_result: CompilationResult,
-) -> None:
-    converted = compiled_source_to_nextflow(real_supported_result)
-    assert converted.name == "wf"
-    assert [process.name for process in converted.processes] == [
-        "touch",
-        "copy",
-    ]
+@pytest.mark.parametrize("fixture", sorted(GOLDEN_GRAPHS))
+def test_a_real_compilation_lowers_to_its_exact_graph(fixture: str, request: pytest.FixtureRequest) -> None:
+    name, processes, connections, params = GOLDEN_GRAPHS[fixture]
+    workflow = compiled_source_to_nextflow(request.getfixturevalue(fixture))
+    assert workflow.name == name
+    assert [(process.name, process.inputs) for process in workflow.processes] == processes
+    assert workflow.connections == connections
+    assert workflow.params == params
 
 
 @pytest.mark.fast
@@ -79,15 +116,7 @@ def test_composes_command_arguments_bindings_and_redirects() -> None:
         stdout="stdout.txt",
         stderr="stderr.txt",
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("RUN", **{"in": {"message": "message", "source": "source"}, "out": ["report"]})],
-            inputs={"message": {"type": "string"}, "source": {"type": "File"}},
-            outputs={"report": {"type": "File", "outputSource": "RUN/report"}},
-        ),
-        [run_tool],
-        workflow_inputs={"message": "hello", "source": {"class": "File", "path": "input.txt"}},
-    )
+    rose = one_step(run_tool, ["report"], message="hello", source={"class": "File", "path": "input.txt"})
     process = compiled_source_to_nextflow(rose).processes[0]
     rendered = render_nextflow(compiled_source_to_nextflow(rose))
     command_line = next(line for line in rendered.splitlines() if " < " in line)
@@ -102,28 +131,28 @@ def test_composes_command_arguments_bindings_and_redirects() -> None:
 
 
 @pytest.mark.fast
-def test_boolean_flag_lowers_to_a_conditional_flag_token() -> None:
-    sort_tool = tool(
-        "SORT",
-        inputs={
-            "reverse": {
-                "type": "boolean",
-                "inputBinding": {"position": 1, "prefix": "-r"},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("SORT", **{"in": {"reverse": "reverse"}})],
-            inputs={"reverse": {"type": "boolean"}},
-        ),
-        [sort_tool],
-        workflow_inputs={"reverse": True},
-    )
+@pytest.mark.parametrize(
+    "binding", [{"prefix": "--verbose"}, {}, {"separate": True}], ids=["prefix", "no-prefix", "separate-no-prefix"]
+)
+@pytest.mark.parametrize("value_from", [None, "$(inputs.verbose)"], ids=["no-valuefrom", "self-valuefrom"])
+@pytest.mark.parametrize(("declared", "value"), [
+    ("boolean", True), ("boolean", False), (["null", "boolean"], True), (["null", "boolean"], False),
+    (["null", "boolean"], None),
+])
+def test_a_boolean_binding_is_a_flag_token_exactly_when_it_has_a_prefix(
+    binding: dict[str, Any], value_from: str | None, declared: Any, value: bool | None
+) -> None:
+    """A flag tests its value and never dereferences it, so false and an absent optional lower alike.
 
-    command = compiled_source_to_nextflow(rose).processes[0].command
-
-    assert command.tokens[1] == NfFlag("reverse", "-r")
+    A valueFrom restating its own input is the same flag, and cwltool accepts
+    separate: true without a prefix; only a falsy separate rejects.
+    """
+    input_binding = {"position": 1, **binding, **({} if value_from is None else {"valueFrom": value_from})}
+    rose = one_step(tool("FLAGS", inputs={"verbose": {"type": declared, "inputBinding": input_binding}}), verbose=value)
+    workflow = compiled_source_to_nextflow(rose)
+    assert workflow.params == {"verbose": [] if value is None else value}
+    flags = (NfFlag("verbose", "--verbose"),) if binding.get("prefix") else ()
+    assert workflow.processes[0].command.tokens[1:] == flags
 
 
 @pytest.mark.fast
@@ -137,17 +166,7 @@ def test_flag_tokens_take_their_cwl_position_among_other_bindings() -> None:
         },
         arguments=[{"position": 1, "valueFrom": "--stable"}],
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("SORT", **{"in": {"source": "source", "reverse": "reverse"}})],
-            inputs={"source": {"type": "File"}, "reverse": {"type": "boolean"}},
-        ),
-        [sort_tool],
-        workflow_inputs={
-            "source": {"class": "File", "path": "in.txt"},
-            "reverse": True,
-        },
-    )
+    rose = one_step(sort_tool, source={"class": "File", "path": "in.txt"}, reverse=True)
 
     tokens = compiled_source_to_nextflow(rose).processes[0].command.tokens
 
@@ -168,14 +187,7 @@ def test_array_of_scalars_lowers_to_a_val_array_port_with_a_binding() -> None:
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("NAMES", **{"in": {"names": "names"}})],
-            inputs={"names": {"type": {"type": "array", "items": "string"}}},
-        ),
-        [names_tool],
-        workflow_inputs={"names": ["alice", "bob"]},
-    )
+    rose = one_step(names_tool, names=["alice", "bob"])
 
     process = compiled_source_to_nextflow(rose).processes[0]
 
@@ -194,19 +206,7 @@ def test_array_of_files_lowers_to_a_path_array_port() -> None:
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("CAT", **{"in": {"sources": "sources"}})],
-            inputs={"sources": {"type": {"type": "array", "items": "File"}}},
-        ),
-        [cat_tool],
-        workflow_inputs={
-            "sources": [
-                {"class": "File", "path": "a.txt"},
-                {"class": "File", "path": "b.txt"},
-            ]
-        },
-    )
+    rose = one_step(cat_tool, sources=[{"class": "File", "path": "a.txt"}, {"class": "File", "path": "b.txt"}])
 
     process = compiled_source_to_nextflow(rose).processes[0]
 
@@ -220,14 +220,7 @@ def test_array_binding_without_a_prefix_lowers_correctly() -> None:
         "CAT",
         inputs={"sources": {"type": {"type": "array", "items": "string"}, "inputBinding": {}}},
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("CAT", **{"in": {"sources": "sources"}})],
-            inputs={"sources": {"type": {"type": "array", "items": "string"}}},
-        ),
-        [cat_tool],
-        workflow_inputs={"sources": ["a", "b"]},
-    )
+    rose = one_step(cat_tool, sources=["a", "b"])
 
     process = compiled_source_to_nextflow(rose).processes[0]
 
@@ -246,14 +239,7 @@ def test_empty_array_value_is_accepted_and_distinct_from_absent() -> None:
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("NAMES", **{"in": {"names": "names"}})],
-            inputs={"names": {"type": {"type": "array", "items": "string"}}},
-        ),
-        [names_tool],
-        workflow_inputs={"names": []},
-    )
+    rose = one_step(names_tool, names=[])
 
     assert compiled_source_to_nextflow(rose).params == {"names": []}
 
@@ -270,13 +256,7 @@ def test_shell_quote_false_literal_lowers_to_a_raw_shell_literal_token() -> None
             {"position": 3, "valueFrom": "out.txt"},
         ],
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("REDIRECT", out=["result"])],
-            outputs={"result": {"type": "File", "outputSource": "REDIRECT/result"}},
-        ),
-        [redirect_tool],
-    )
+    rose = one_step(redirect_tool, ["result"])
 
     tokens = compiled_source_to_nextflow(rose).processes[0].command.tokens
 
@@ -299,14 +279,7 @@ def test_shell_quote_false_takes_precedence_over_boolean_flag_lowering() -> None
         },
         requirements={"ShellCommandRequirement": {}},
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("LITERAL", **{"in": {"flag": "flag"}})],
-            inputs={"flag": {"type": "boolean"}},
-        ),
-        [literal_tool],
-        workflow_inputs={"flag": True},
-    )
+    rose = one_step(literal_tool, flag=True)
 
     tokens = compiled_source_to_nextflow(rose).processes[0].command.tokens
 
@@ -323,7 +296,7 @@ def test_command_of_only_shell_literals_still_runs_a_program() -> None:
         baseCommand=None,
         arguments=[{"position": 1, "valueFrom": "printf ok", "shellQuote": False}],
     )
-    rose = synthetic_source(workflow_doc([step("LITERAL")]), [literal_tool])
+    rose = one_step(literal_tool)
 
     tokens = compiled_source_to_nextflow(rose).processes[0].command.tokens
 
@@ -338,14 +311,7 @@ def test_iwdr_own_basename_listing_lowers_to_no_stage_as() -> None:
         inputs={"source": {"type": "File", "inputBinding": {"position": 1}}},
         requirements={"InitialWorkDirRequirement": {"listing": ["$(inputs.source)"]}},
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("STAGE", **{"in": {"source": "source"}})],
-            inputs={"source": {"type": "File"}},
-        ),
-        [stage_tool],
-        workflow_inputs={"source": {"class": "File", "path": "in.txt"}},
-    )
+    rose = one_step(stage_tool, source={"class": "File", "path": "in.txt"})
 
     process = compiled_source_to_nextflow(rose).processes[0]
 
@@ -363,14 +329,7 @@ def test_iwdr_literal_entryname_lowers_to_a_stage_as_port() -> None:
         ]}},
         arguments=["cat", "renamed.txt"],
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("STAGE", **{"in": {"source": "source"}})],
-            inputs={"source": {"type": "File"}},
-        ),
-        [stage_tool],
-        workflow_inputs={"source": {"class": "File", "path": "in.txt"}},
-    )
+    rose = one_step(stage_tool, source={"class": "File", "path": "in.txt"})
 
     process = compiled_source_to_nextflow(rose).processes[0]
 
@@ -391,15 +350,7 @@ def test_basename_lowers_to_a_typed_segment_in_every_template_position() -> None
         arguments=[{"position": 2, "valueFrom": "$(inputs.source.basename).copy"}],
         stdout="$(inputs.source.basename).log",
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("COPY", **{"in": {"source": "source"}, "out": ["result"]})],
-            inputs={"source": {"type": "File"}},
-            outputs={"result": {"type": "File", "outputSource": "COPY/result"}},
-        ),
-        [copy_tool],
-        workflow_inputs={"source": {"class": "File", "path": "lines.txt"}},
-    )
+    rose = one_step(copy_tool, ["result"], source={"class": "File", "path": "lines.txt"})
 
     process = compiled_source_to_nextflow(rose).processes[0]
 
@@ -409,73 +360,6 @@ def test_basename_lowers_to_a_typed_segment_in_every_template_position() -> None
     assert process.command.stdout == NfTemplate(
         (NfBasenameReference("source"), NfLiteral(".log"))
     )
-
-
-@pytest.mark.fast
-def test_self_referencing_value_from_lowers_identically_to_no_value_from() -> None:
-    """A $(inputs.<name>) valueFrom restating the input renders the exact same flag token."""
-    def build(value_from: Any) -> Any:
-        binding: dict[str, Any] = {"position": 1, "prefix": "-r"}
-        if value_from is not None:
-            binding["valueFrom"] = value_from
-        sort_tool = tool(
-            "SORT",
-            inputs={"reverse": {"type": "boolean", "inputBinding": binding}},
-        )
-        rose = synthetic_source(
-            workflow_doc(
-                [step("SORT", **{"in": {"reverse": "reverse"}})],
-                inputs={"reverse": {"type": "boolean"}},
-            ),
-            [sort_tool],
-            workflow_inputs={"reverse": True},
-        )
-        return compiled_source_to_nextflow(rose).processes[0].command
-
-    without_value_from = build(None)
-    with_value_from = build("$(inputs.reverse)")
-    assert without_value_from == with_value_from
-    assert with_value_from.tokens[1] == NfFlag("reverse", "-r")
-
-
-@pytest.mark.fast
-def test_absent_optional_scalar_lowers_to_the_sentinel_parameter() -> None:
-    """An unreferenced optional val input carries the runtime-proven [] sentinel."""
-    passthrough = tool("PASSTHROUGH", inputs={"note": {"type": ["null", "string"]}})
-    rose = synthetic_source(
-        workflow_doc(
-            [step("PASSTHROUGH", **{"in": {"note": "note"}})],
-            inputs={"note": {"type": ["null", "string"]}},
-        ),
-        [passthrough],
-        workflow_inputs={"note": None},
-    )
-
-    workflow = compiled_source_to_nextflow(rose)
-
-    assert workflow.params == {"note": []}
-    assert NfWorkflowInputConnection("note", "_PASSTHROUGH", "note") in workflow.connections
-
-
-@pytest.mark.fast
-def test_boolean_binding_without_a_prefix_contributes_no_token() -> None:
-    sort_tool = tool(
-        "SORT",
-        inputs={"reverse": {"type": "boolean", "inputBinding": {"position": 1}}},
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("SORT", **{"in": {"reverse": "reverse"}})],
-            inputs={"reverse": {"type": "boolean"}},
-        ),
-        [sort_tool],
-        workflow_inputs={"reverse": True},
-    )
-
-    command = compiled_source_to_nextflow(rose).processes[0].command
-
-    assert [token for token in command.tokens if isinstance(token, NfFlag)] == []
-    assert len(command.tokens) == 1
 
 
 @pytest.mark.fast
@@ -538,7 +422,7 @@ def test_maps_docker_requirement() -> None:
         "CONTAINER",
         requirements={"DockerRequirement": {"dockerPull": "ubuntu:24.04"}},
     )
-    rose = synthetic_source(workflow_doc([step("CONTAINER")]), [container])
+    rose = one_step(container)
     assert compiled_source_to_nextflow(rose).processes[0].container == "ubuntu:24.04"
 
 
@@ -571,19 +455,6 @@ def test_maps_cpu_and_memory_requirements() -> None:
 
 
 @pytest.mark.fast
-def test_preserves_linear_dag(real_supported_result: CompilationResult) -> None:
-    workflow = compiled_source_to_nextflow(real_supported_result)
-    internal = [
-        connection
-        for connection in workflow.connections
-        if isinstance(connection, NfProcessConnection)
-    ]
-    assert [(edge.from_process, edge.from_port, edge.to_process, edge.to_port) for edge in internal] == [
-        ("touch", "result", "copy", "source"),
-    ]
-
-
-@pytest.mark.fast
 def test_preserves_fanout() -> None:
     producer = tool(
         "A", outputs={"out": {"type": "File", "outputBinding": {"glob": "out.txt"}}}
@@ -609,24 +480,6 @@ def test_preserves_fanout() -> None:
 
 
 @pytest.mark.fast
-def test_preserves_workflow_input_connection(real_supported_result: CompilationResult) -> None:
-    connections = compiled_source_to_nextflow(real_supported_result).connections
-    assert NfWorkflowInputConnection("touch_filename", "touch", "filename") in connections
-
-
-@pytest.mark.fast
-def test_preserves_workflow_output_connection(real_supported_result: CompilationResult) -> None:
-    connections = compiled_source_to_nextflow(real_supported_result).connections
-    assert NfWorkflowOutputConnection("copy", "result", "copy_result") in connections
-
-
-@pytest.mark.fast
-def test_copies_workflow_params(real_supported_result: CompilationResult) -> None:
-    params = compiled_source_to_nextflow(real_supported_result).params
-    assert params == {"touch_filename": "message.txt"}
-
-
-@pytest.mark.fast
 def test_forward_conversion_uses_resolved_graph_edges(
     real_supported_result: CompilationResult,
 ) -> None:
@@ -649,50 +502,6 @@ def test_conversion_does_not_mutate_compilation_result(
 
 
 @pytest.mark.fast
-def test_scatter_lowers_to_an_adapted_workflow_input_connection(
-    real_scattered_result: CompilationResult,
-) -> None:
-    connections = compiled_source_to_nextflow(real_scattered_result).connections
-    assert connections[0] == NfWorkflowInputConnection("echo_item_item", "echo_item", "item", "dotproduct")
-
-
-@pytest.mark.fast
-def test_a_scattered_port_stays_a_scalar_element_port(
-    real_scattered_result: CompilationResult,
-) -> None:
-    """The process receives one element per task, so its port is not array-marked."""
-    process = compiled_source_to_nextflow(real_scattered_result).processes[0]
-    assert process.inputs == (NfPort("item", "val"),)
-
-
-@pytest.mark.fast
-def test_a_scattered_parameter_carries_the_whole_source_array(
-    real_scattered_result: CompilationResult,
-) -> None:
-    assert compiled_source_to_nextflow(real_scattered_result).params == {
-        "echo_item_item": ["alpha", "beta"]
-    }
-
-
-@pytest.mark.fast
-def test_a_subworkflow_graph_projects_into_namespaced_processes(
-    real_nested_result: CompilationResult,
-) -> None:
-    workflow = compiled_source_to_nextflow(real_nested_result)
-    assert [process.name for process in workflow.processes] == ["write", "child_inner_copy"]
-
-
-@pytest.mark.fast
-def test_subworkflow_io_binds_to_the_outer_step_endpoints(
-    real_nested_result: CompilationResult,
-) -> None:
-    """The inner step reads the outer producer, and the outer output reads the inner step."""
-    connections = compiled_source_to_nextflow(real_nested_result).connections
-    assert NfProcessConnection("write", "result", "child_inner_copy", "source") in connections
-    assert NfWorkflowOutputConnection("child_inner_copy", "result", "child_inner_copy_result") in connections
-
-
-@pytest.mark.fast
 @pytest.mark.parametrize("base_command", ["pre$(inputs.s)", ["pre$(inputs.s)"]], ids=["string", "list"])
 def test_base_command_and_prefix_are_literals(base_command: Any) -> None:
     literal = tool(
@@ -700,11 +509,7 @@ def test_base_command_and_prefix_are_literals(base_command: Any) -> None:
         inputs={"s": {"type": "string", "inputBinding": {"prefix": "-$(inputs.s)"}}},
         baseCommand=base_command,
     )
-    rose = synthetic_source(
-        workflow_doc([step("LITERAL", **{"in": {"s": "s"}})], inputs={"s": "string"}),
-        [literal],
-        workflow_inputs={"s": "x"},
-    )
+    rose = one_step(literal, s="x")
     tokens = compiled_source_to_nextflow(rose).processes[0].command.tokens
     assert tokens == (
         NfTemplate((NfLiteral("pre$(inputs.s)"),)),
@@ -720,13 +525,9 @@ def _boolean_valuefrom_tokens(binding: dict[str, Any], *, owner: dict[str, Any] 
         arguments.append({"valueFrom": "$(inputs.b)", **binding})
     else:
         inputs["s"] = {**owner, "inputBinding": {"valueFrom": "$(inputs.b)", **binding}}
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAG", **{"in": {name: name for name in inputs}})],
-            inputs={name: definition["type"] for name, definition in inputs.items()},
-        ),
-        [tool("FLAG", inputs=inputs, baseCommand="echo", arguments=arguments)],
-        workflow_inputs={name: {"b": True, "s": "x"}[name] for name in inputs},
+    values: dict[str, Any] = {"b": True, "s": "x"}
+    rose = one_step(
+        tool("FLAG", inputs=inputs, baseCommand="echo", arguments=arguments), **{name: values[name] for name in inputs}
     )
     return tuple(compiled_source_to_nextflow(rose).processes[0].command.tokens[1:])
 

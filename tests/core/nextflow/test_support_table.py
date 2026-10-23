@@ -149,6 +149,7 @@ def test_compile_time_fields_leave_the_executable_model_unchanged() -> None:
     for cwl_class, (_path, place) in POSITIONS.items():
         place(workflow, run).update({name: SAMPLES[name] for name in COMPILE_TIME & set(FIELDS[cwl_class])})
     run["requirements"]["NetworkAccess"] = {"networkAccess": True}
+    run.update({"$namespaces": {"edam": "https://edamontology.org/"}, "$schemas": ["https://example.org/formats.rdf"]})
     run["hints"] = [{"class": "NetworkAccess", "networkAccess": True}]
     value = {"class": "File", "location": "f.txt", "format": [SAMPLES["format"]]}
     assert _lower(workflow, run, f=value) == plain

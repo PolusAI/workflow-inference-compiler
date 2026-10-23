@@ -24,7 +24,6 @@ from sophios.api.python.tool_builder import (
 )
 from sophios.api.python.workflow import CompiledWorkflow, Step, StepInput, Workflow
 from sophios.cli import default_compilation_settings
-from sophios.input_output_nf import render_nextflow
 from sophios.ir.artifacts import CompilationResult
 from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.resolve import RegistrySnapshot
@@ -45,12 +44,12 @@ from sophios.utils_nf import (
     _NAMED_OUTPUT_EVAL_REJECTIONS,
     _output_capture,
     CompiledNextflowSource,
-    compilation_result_source,
     compiled_source_to_nextflow,
 )
 from sophios.wic_types import Yaml
 
 from .testkit import (
+    one_step,
     REPO_ROOT,
     step,
     synthetic_source,
@@ -80,53 +79,6 @@ def test_real_unsupported_compilation_aggregates_capability_errors(
 
 
 @pytest.mark.fast
-def test_rejects_every_unconsumed_tool_field_before_lowering() -> None:
-    unconsumed = tool(
-        "UNCONSUMED",
-        inputs={
-            "reference": {
-                "type": "File",
-                "secondaryFiles": [".fai"],
-                "format": "https://edamontology.org/format_1929",
-                "inputBinding": {
-                    "position": 1,
-                    "itemSeparator": ",",
-                    "loadContents": True,
-                },
-            }
-        },
-        outputs={"result": {"type": "File", "outputBinding": {"glob": "result.txt"}}},
-        requirements={
-            "DockerRequirement": {
-                "dockerPull": "ubuntu:24.04",
-                "dockerOutputDirectory": "/output",
-            }
-        },
-        successCodes=[1],
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("UNCONSUMED", **{"in": {"reference": "reference"}, "out": ["result"]})],
-            inputs={"reference": {"type": "File"}},
-            outputs={"result": {"type": "File", "outputSource": "UNCONSUMED/result"}},
-        ),
-        [unconsumed],
-        workflow_inputs={"reference": {"class": "File", "path": "reference.fa"}},
-    )
-
-    with pytest.raises(ValueError) as error:
-        compiled_source_to_nextflow(rose)
-
-    message = str(error.value)
-    assert "steps[0].run.successCodes" in message
-    assert "steps[0].run.inputs.reference.secondaryFiles" in message
-    assert "steps[0].run.inputs.reference.format" not in message  # compile-time: read by EDAM inference
-    assert "steps[0].run.inputs.reference.inputBinding.itemSeparator" in message
-    assert "steps[0].run.inputs.reference.inputBinding.loadContents" in message
-    assert "steps[0].run.requirements.DockerRequirement.dockerOutputDirectory" in message
-
-
-@pytest.mark.fast
 def test_a_literal_file_into_a_format_declaring_input_lowers_to_its_path(tmp_path: Path) -> None:
     """Sophios writes the input's `format` on the File value; like the input's, it is compile-time (design §3)."""
     source = tmp_path / "in.mdin"
@@ -146,61 +98,6 @@ def test_a_literal_file_into_a_format_declaring_input_lowers_to_its_path(tmp_pat
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize("value", [False, True])
-def test_accepts_boolean_flag_bindings_for_both_values(value: bool) -> None:
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {"position": 1, "prefix": "--verbose"},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": "boolean"},
-        ),
-        [flags],
-        workflow_inputs={"verbose": value},
-    )
-
-    assert compiled_source_to_nextflow(rose).params == {"verbose": value}
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize("value", [False, True])
-def test_accepts_self_referencing_value_from_on_a_boolean_binding(value: bool) -> None:
-    """A bare $(inputs.<name>) valueFrom restating its own input lowers to the same flag."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {
-                    "position": 1,
-                    "prefix": "--verbose",
-                    "valueFrom": "$(inputs.verbose)",
-                },
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": value},
-    )
-
-    converted = compiled_source_to_nextflow(rose)
-    assert converted.params == {"verbose": value}
-    assert converted.processes[0].command.tokens[-1] == NfFlag("verbose", "--verbose")
-
-
-@pytest.mark.fast
 def test_rejects_value_from_aliasing_a_different_input_on_a_boolean_binding() -> None:
     """Aliasing a different input's presence onto this flag has no approved lowering."""
     flags = tool(
@@ -217,14 +114,7 @@ def test_rejects_value_from_aliasing_a_different_input_on_a_boolean_binding() ->
             "other": {"type": "boolean"},
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose", "other": "other"}})],
-            inputs={"verbose": {"type": "boolean"}, "other": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True, "other": False},
-    )
+    rose = one_step(flags, verbose=True, other=False)
 
     with pytest.raises(ValueError, match=r"valueFrom on a boolean inputBinding is supported only as"):
         compiled_source_to_nextflow(rose)
@@ -246,14 +136,7 @@ def test_rejects_literal_value_from_on_a_boolean_binding() -> None:
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True},
-    )
+    rose = one_step(flags, verbose=True)
 
     with pytest.raises(ValueError, match=r"valueFrom on a boolean inputBinding is supported only as"):
         compiled_source_to_nextflow(rose)
@@ -275,14 +158,7 @@ def test_rejects_basename_suffixed_value_from_on_a_boolean_binding() -> None:
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True},
-    )
+    rose = one_step(flags, verbose=True)
 
     with pytest.raises(ValueError, match=r"valueFrom on a boolean inputBinding is supported only as"):
         compiled_source_to_nextflow(rose)
@@ -349,32 +225,6 @@ def test_accepts_a_boolean_source_wired_into_a_boolean_flag() -> None:
 
 
 @pytest.mark.fast
-def test_accepts_absent_optional_boolean_flag() -> None:
-    """A flag never dereferences its value, so absence renders identically to false."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": ["null", "boolean"],
-                "inputBinding": {"position": 1, "prefix": "--verbose"},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": ["null", "boolean"]}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": None},
-    )
-
-    converted = compiled_source_to_nextflow(rose)
-    assert converted.params == {"verbose": []}
-    assert converted.processes[0].command.tokens[-1] == NfFlag("verbose", "--verbose")
-
-
-@pytest.mark.fast
 def test_rejects_absent_optional_flag_that_is_also_dereferenced() -> None:
     """A flag use does not excuse a template use of the same input.
 
@@ -391,89 +241,12 @@ def test_rejects_absent_optional_flag_that_is_also_dereferenced() -> None:
         },
         arguments=[{"position": 2, "valueFrom": "--label=$(inputs.verbose)"}],
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("BOTH", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": ["null", "boolean"]}},
-        ),
-        [both],
-        workflow_inputs={"verbose": None},
-    )
+    rose = one_step(both, verbose=None)
 
     assert _findings(rose) == [
         "steps[0].run.inputs.verbose: absent optional values are supported only for a "
         "val input whose absence leaves command rendering unchanged"
     ]
-
-
-@pytest.mark.fast
-def test_ignores_inert_documentation_but_not_semantics() -> None:
-    baseline_tool = tool(
-        "IDENTITY",
-        inputs={
-            "source": {
-                "type": "File",
-                "inputBinding": {"position": 1},
-            }
-        },
-        outputs={
-            "result": {
-                "type": "File",
-                "outputBinding": {"glob": "result.txt"},
-            }
-        },
-        arguments=[{"position": 2, "valueFrom": "result.txt"}],
-    )
-    documented_tool = copy.deepcopy(baseline_tool)
-    documented_tool.update({
-        "$namespaces": {"edam": "https://edamontology.org/"},
-        "$schemas": ["https://example.org/formats.rdf"],
-        "label": "Identity",
-        "doc": "Copies one file without changing executable semantics.",
-    })
-    documented_tool["inputs"]["source"].update({
-        "label": "Source",
-        "doc": "The file to copy.",
-    })
-    documented_tool["outputs"]["result"].update({
-        "label": "Result",
-        "doc": "The copied file.",
-    })
-
-    workflow = workflow_doc(
-        [step("IDENTITY", **{"in": {"source": "source"}, "out": ["result"]})],
-        inputs={"source": {"type": "File"}},
-        outputs={"result": {"type": "File", "outputSource": "IDENTITY/result"}},
-    )
-    workflow_inputs = {"source": {"class": "File", "path": "source.txt"}}
-    baseline = compiled_source_to_nextflow(
-        synthetic_source(workflow, [baseline_tool], workflow_inputs=workflow_inputs)
-    )
-    documented = compiled_source_to_nextflow(
-        synthetic_source(workflow, [documented_tool], workflow_inputs=workflow_inputs)
-    )
-
-    assert documented == baseline
-    assert render_nextflow(documented) == render_nextflow(baseline)
-
-    documented_tool["permanentFailCodes"] = [1]
-    with pytest.raises(ValueError) as error:
-        compiled_source_to_nextflow(
-            synthetic_source(workflow, [documented_tool], workflow_inputs=workflow_inputs)
-        )
-    message = str(error.value)
-    assert "steps[0].run.permanentFailCodes" in message
-    for path in (
-        "steps[0].run.$namespaces",
-        "steps[0].run.$schemas",
-        "steps[0].run.label",
-        "steps[0].run.doc",
-        "steps[0].run.inputs.source.label",
-        "steps[0].run.inputs.source.doc",
-        "steps[0].run.outputs.result.label",
-        "steps[0].run.outputs.result.doc",
-    ):
-        assert path not in message
 
 
 @pytest.mark.fast
@@ -487,60 +260,6 @@ def test_rejects_compiledworkflow_substitution() -> None:
 def test_requires_workflow_root() -> None:
     with pytest.raises(ValueError, match="root.*Workflow"):
         CompiledNextflowSource("tool", tool("tool"), (), {})
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize(
-    ("mutation", "diagnostic"),
-    [
-        (
-            lambda workflow: workflow.update(
-                {"requirements": {"MultipleInputFeatureRequirement": {}}}
-            ),
-            "workflow.requirements.MultipleInputFeatureRequirement",
-        ),
-        (
-            lambda workflow: workflow["inputs"]["message"].update(
-                {"inputBinding": {"position": 1}}
-            ),
-            "workflow.inputs.message.inputBinding",
-        ),
-        (
-            lambda workflow: workflow["outputs"]["result"].update(
-                {"pickValue": "first_non_null"}
-            ),
-            "workflow.outputs.result.pickValue",
-        ),
-        (
-            lambda workflow: workflow["steps"][0].update({"requirements": {}}),
-            "steps[0].requirements",
-        ),
-        (
-            lambda workflow: workflow["steps"][0]["in"]["message"].update(
-                {"valueFrom": "changed"}
-            ),
-            "steps[0].in.message.valueFrom",
-        ),
-    ],
-)
-def test_closed_world_analysis_covers_workflow_and_step_levels(
-    mutation: Any,
-    diagnostic: str,
-) -> None:
-    write = tool(
-        "WRITE",
-        inputs={"message": {"type": "string", "inputBinding": {"position": 1}}},
-        outputs={"result": {"type": "File", "outputBinding": {"glob": "result.txt"}}},
-    )
-    workflow = workflow_doc(
-        [step("WRITE", **{"in": {"message": {"source": "message"}}, "out": ["result"]})],
-        inputs={"message": {"type": "string"}},
-        outputs={"result": {"type": "File", "outputSource": "WRITE/result"}},
-    )
-    mutation(workflow)
-    rose = synthetic_source(workflow, [write], workflow_inputs={"message": "hello"})
-    with pytest.raises(ValueError, match=re.escape(diagnostic)):
-        compiled_source_to_nextflow(rose)
 
 
 @pytest.mark.fast
@@ -677,15 +396,10 @@ def test_rejects_boundary_values_outside_supported_shape(cwl_type: Any, value: A
 def test_accepts_unreferenced_absent_optional_input() -> None:
     """An optional val input with no inputBinding is never dereferenced, so absence is safe."""
     optional = tool("OPTIONAL", inputs={"message": {"type": ["null", "string"]}})
-    rose = synthetic_source(
-        workflow_doc(
-            [step("OPTIONAL", **{"in": {"message": "message"}})],
-            inputs={"message": {"type": ["null", "string"]}},
-        ),
-        [optional],
-        workflow_inputs={"message": None},
-    )
-    assert compiled_source_to_nextflow(rose).params == {"message": []}
+    rose = one_step(optional, message=None)
+    workflow = compiled_source_to_nextflow(rose)
+    assert workflow.params == {"message": []}
+    assert NfWorkflowInputConnection("message", "_OPTIONAL", "message") in workflow.connections
 
 
 @pytest.mark.fast
@@ -700,14 +414,7 @@ def test_rejects_absent_optional_input_bound_directly_into_the_command() -> None
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("OPTIONAL", **{"in": {"message": "message"}})],
-            inputs={"message": {"type": ["null", "string"]}},
-        ),
-        [optional],
-        workflow_inputs={"message": None},
-    )
+    rose = one_step(optional, message=None)
     with pytest.raises(
         ValueError,
         match=r"steps\[0\].run.inputs.message: absent optional values are supported only for "
@@ -733,14 +440,7 @@ def test_rejects_absent_optional_input_whose_binding_emits_a_shell_literal() -> 
         },
         requirements={"ShellCommandRequirement": {}},
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("OPTIONAL", **{"in": {"message": "message"}})],
-            inputs={"message": {"type": ["null", "string"]}},
-        ),
-        [optional],
-        workflow_inputs={"message": None},
-    )
+    rose = one_step(optional, message=None)
 
     with pytest.raises(
         ValueError,
@@ -757,14 +457,7 @@ def test_rejects_absent_optional_input_referenced_via_another_bindings_value_fro
         inputs={"message": {"type": ["null", "string"]}},
         arguments=[{"position": 1, "valueFrom": "$(inputs.message)"}],
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("ALIASED", **{"in": {"message": "message"}})],
-            inputs={"message": {"type": ["null", "string"]}},
-        ),
-        [aliased],
-        workflow_inputs={"message": None},
-    )
+    rose = one_step(aliased, message=None)
     with pytest.raises(ValueError, match=r"steps\[0\].run.inputs.message: absent optional"):
         compiled_source_to_nextflow(rose)
 
@@ -773,14 +466,7 @@ def test_rejects_absent_optional_input_referenced_via_another_bindings_value_fro
 def test_rejects_absent_optional_path_input() -> None:
     """path-qualifier channel construction always stages unconditionally; absence stays rejected."""
     optional = tool("OPTIONAL", inputs={"reference": {"type": ["null", "File"]}})
-    rose = synthetic_source(
-        workflow_doc(
-            [step("OPTIONAL", **{"in": {"reference": "reference"}})],
-            inputs={"reference": {"type": ["null", "File"]}},
-        ),
-        [optional],
-        workflow_inputs={"reference": None},
-    )
+    rose = one_step(optional, reference=None)
     with pytest.raises(ValueError, match=r"steps\[0\].run.inputs.reference: absent optional"):
         compiled_source_to_nextflow(rose)
 
@@ -812,15 +498,7 @@ def test_rejects_basename_against_a_value_input() -> None:
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("BASENAME", **{"in": {"label": "label"}, "out": ["result"]})],
-            inputs={"label": {"type": "string"}},
-            outputs={"result": {"type": "File", "outputSource": "BASENAME/result"}},
-        ),
-        [basename],
-        workflow_inputs={"label": "input"},
-    )
+    rose = one_step(basename, ["result"], label="input")
     assert _findings(rose) == [
         "steps[0].run.outputs.result.outputBinding.glob: $(inputs.label.basename) "
         "requires a File or Directory input, and label is declared 'string'"
@@ -837,11 +515,7 @@ def test_path_and_basename_require_a_file_or_directory_input(suffix: str, cwl_ty
         inputs={"value": {"type": cwl_type, "inputBinding": {"prefix": "-v", "valueFrom": reference}}},
         stdout=f"{reference}.log",
     )
-    rose = synthetic_source(
-        workflow_doc([step("SUFFIXED", **{"in": {"value": "value"}})], inputs={"value": cwl_type}),
-        [suffixed],
-        workflow_inputs={"value": value},
-    )
+    rose = one_step(suffixed, value=value)
     reason = f"{reference} requires a File or Directory input, and value is declared {cwl_type!r}"
     assert {
         f"steps[0].run.inputs.value.inputBinding.valueFrom: {reason}",
@@ -865,10 +539,10 @@ def test_rejects_output_glob_outside_typed_input_subset() -> None:
         compiled_source_to_nextflow(rose)
 
 
-def _findings(rose: CompiledNextflowSource) -> list[str]:
+def _findings(source: CompiledNextflowSource | CompilationResult) -> list[str]:
     """Return the exact aggregated finding lines of one rejected conversion."""
     with pytest.raises(ValueError) as error:
-        compiled_source_to_nextflow(rose)
+        compiled_source_to_nextflow(source)
     header, *lines = str(error.value).splitlines()
     assert header == "Nextflow capability analysis failed:"
     return [line.removeprefix("- ") for line in lines]
@@ -1254,7 +928,7 @@ def test_rejects_unsupported_workflow_level_requirements(
 def test_rejects_tool_requirement_without_class(section: str) -> None:
     classless = tool("CLASSLESS")
     classless[section] = [{"directive": "${System.exit(3)}"}]
-    rose = synthetic_source(workflow_doc([step("CLASSLESS")]), [classless])
+    rose = one_step(classless)
 
     assert _findings(rose) == [
         f"steps[0].run.{section}.0: a requirement or hint needs a string `class`"
@@ -1293,7 +967,7 @@ def test_rejects_fractional_cpu_requirements_before_lowering() -> None:
         "RESOURCES",
         requirements={"ResourceRequirement": {"coresMax": 2.5}},
     )
-    rose = synthetic_source(workflow_doc([step("RESOURCES")]), [resources])
+    rose = one_step(resources)
 
     with pytest.raises(ValueError, match=r"coresMax.*whole number"):
         compiled_source_to_nextflow(rose)
@@ -1309,130 +983,6 @@ def test_rejects_unknown_connection_source() -> None:
         [consumer],
     )
     with pytest.raises(ValueError, match="unknown source process"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_separate_without_a_prefix() -> None:
-    """cwltool raises for separate without prefix, so the backend must not accept it."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {"position": 1, "separate": False},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True},
-    )
-
-    with pytest.raises(ValueError, match="separate cannot be specified without a prefix"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_accepts_separate_true_without_a_prefix_on_a_boolean_binding() -> None:
-    """cwltool accepts separate: true without a prefix; only a falsy separate rejects."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {"position": 1, "separate": True},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True},
-    )
-
-    assert compiled_source_to_nextflow(rose).params == {"verbose": True}
-
-
-@pytest.mark.fast
-def test_rejects_separate_null_without_a_prefix_on_a_boolean_binding() -> None:
-    """cwltool's own .get("separate", True) only defaults an absent key; separate: null still rejects."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {"position": 1, "separate": None},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True},
-    )
-
-    with pytest.raises(ValueError, match="separate cannot be specified without a prefix"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_separate_null_without_a_prefix_on_a_string_binding() -> None:
-    """The general _binding_tokens path rejects separate: null the same way the boolean path does."""
-    echo = tool(
-        "ECHO",
-        inputs={
-            "message": {
-                "type": "string",
-                "inputBinding": {"position": 1, "separate": None},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("ECHO", **{"in": {"message": "message"}})],
-            inputs={"message": {"type": "string"}},
-        ),
-        [echo],
-        workflow_inputs={"message": "hi"},
-    )
-
-    with pytest.raises(ValueError, match="separate cannot be specified without a prefix"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_whitespace_only_prefix_on_a_boolean_binding() -> None:
-    """A blank prefix must hit the named capability diagnostic, not NfFlag's own invariant."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {"position": 1, "prefix": "   "},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True},
-    )
-
-    with pytest.raises(ValueError, match="CWL command prefix for 'verbose' must be a non-empty string"):
         compiled_source_to_nextflow(rose)
 
 
@@ -1471,14 +1021,7 @@ def test_a_command_of_only_flags_still_runs_a_program() -> None:
         },
         baseCommand=None,
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("FLAGS", **{"in": {"verbose": "verbose"}})],
-            inputs={"verbose": {"type": "boolean"}},
-        ),
-        [flags],
-        workflow_inputs={"verbose": True},
-    )
+    rose = one_step(flags, verbose=True)
 
     tokens = compiled_source_to_nextflow(rose).processes[0].command.tokens
 
@@ -1499,14 +1042,7 @@ def _array_tool(items: Any, **binding: Any) -> Yaml:
 
 
 def _array_rose(items: Any, value: Any, **binding: Any) -> CompiledNextflowSource:
-    return synthetic_source(
-        workflow_doc(
-            [step("ARRAY", **{"in": {"values": "values"}})],
-            inputs={"values": {"type": {"type": "array", "items": items}}},
-        ),
-        [_array_tool(items, **binding)],
-        workflow_inputs={"values": value},
-    )
+    return one_step(_array_tool(items, **binding), values=value)
 
 
 def _array_rose_from_producer(items: Any, **binding: Any) -> CompiledNextflowSource:
@@ -1536,52 +1072,6 @@ def test_rejects_nested_arrays() -> None:
 def test_rejects_per_item_input_binding_on_array_items() -> None:
     rose = _array_rose_from_producer({"type": "File", "inputBinding": {"prefix": "-I"}})
     with pytest.raises(ValueError, match="per-item array element bindings are deferred"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_per_item_input_binding_on_the_array_schema() -> None:
-    """CWL's common spelling puts the per-item binding beside items, not inside it.
-
-    Accepting this form rendered `-B a b`, silently dropping the per-item
-    prefix cwltool renders as `-B -A a -A b`.
-    """
-    array_tool = tool(
-        "ARRAY",
-        inputs={
-            "values": {
-                "type": {
-                    "type": "array",
-                    "items": "string",
-                    "inputBinding": {"prefix": "-A"},
-                },
-                "inputBinding": {"position": 1, "prefix": "-B"},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("ARRAY", **{"in": {"values": "values"}})],
-            inputs={"values": {"type": {"type": "array", "items": "string"}}},
-        ),
-        [array_tool],
-        workflow_inputs={"values": ["a", "b"]},
-    )
-    with pytest.raises(ValueError, match=r"run\.inputs\.values\.type\.inputBinding: per-item array element bindings"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_value_from_on_an_array_binding() -> None:
-    rose = _array_rose("string", ["a"], valueFrom="$(inputs.values)")
-    with pytest.raises(ValueError, match=r"valueFrom on an array-typed inputBinding.*deferred"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_item_separator_on_an_array_binding() -> None:
-    rose = _array_rose("string", ["a", "b"], itemSeparator=",")
-    with pytest.raises(ValueError, match=r"inputBinding\.itemSeparator: itemSeparator is not supported"):
         compiled_source_to_nextflow(rose)
 
 
@@ -1620,14 +1110,7 @@ def test_rejects_absent_optional_array_input() -> None:
             }
         },
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("ARRAY", **{"in": {"values": "values"}})],
-            inputs={"values": {"type": ["null", {"type": "array", "items": "string"}]}},
-        ),
-        [optional_array],
-        workflow_inputs={"values": None},
-    )
+    rose = one_step(optional_array, values=None)
     with pytest.raises(ValueError, match=r"steps\[0\].run.inputs.values: absent optional"):
         compiled_source_to_nextflow(rose)
 
@@ -1651,13 +1134,7 @@ def _shell_tool(arguments: list[Any], *, shell_command: bool = True) -> Yaml:
 
 
 def _shell_rose(arguments: list[Any], *, shell_command: bool = True) -> CompiledNextflowSource:
-    return synthetic_source(
-        workflow_doc(
-            [step("SHELL", out=["result"])],
-            outputs={"result": {"type": "File", "outputSource": "SHELL/result"}},
-        ),
-        [_shell_tool(arguments, shell_command=shell_command)],
-    )
+    return one_step(_shell_tool(arguments, shell_command=shell_command), ["result"])
 
 
 @pytest.mark.fast
@@ -1707,15 +1184,7 @@ def _shell_tool_with_input(value_from: str) -> Yaml:
 )
 def test_rejects_shell_quote_false_referencing_an_input(value_from: str) -> None:
     """Unquoting a value derived from any input -- directly or via a suffix -- is the boundary."""
-    rose = synthetic_source(
-        workflow_doc(
-            [step("SHELL", **{"in": {"message": "message"}, "out": ["result"]})],
-            inputs={"message": {"type": "string"}},
-            outputs={"result": {"type": "File", "outputSource": "SHELL/result"}},
-        ),
-        [_shell_tool_with_input(value_from)],
-        workflow_inputs={"message": "hi"},
-    )
+    rose = one_step(_shell_tool_with_input(value_from), ["result"], message="hi")
     with pytest.raises(ValueError, match="references an input"):
         compiled_source_to_nextflow(rose)
 
@@ -1734,15 +1203,7 @@ def test_rejects_shell_quote_false_input_binding_with_no_value_from() -> None:
         outputs={"result": {"type": "File", "outputBinding": {"glob": "out.txt"}}},
         requirements={"ShellCommandRequirement": {}},
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("APPEND", **{"in": {"text": "text"}, "out": ["result"]})],
-            inputs={"text": {"type": "string"}},
-            outputs={"result": {"type": "File", "outputSource": "APPEND/result"}},
-        ),
-        [append_tool],
-        workflow_inputs={"text": "Hello"},
-    )
+    rose = one_step(append_tool, ["result"], text="Hello")
     with pytest.raises(ValueError, match="does not support a prefix"):
         compiled_source_to_nextflow(rose)
 
@@ -1940,17 +1401,8 @@ def test_rejects_iwdr_collision_same_literal_name() -> None:
         arguments=["cat", "same.txt"],
         stdout="out.txt",
     )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("STAGE", **{"in": {"a": "a", "b": "b"}, "out": ["result"]})],
-            inputs={"a": {"type": "File"}, "b": {"type": "File"}},
-            outputs={"result": {"type": "File", "outputSource": "STAGE/result"}},
-        ),
-        [collision_tool],
-        workflow_inputs={
-            "a": {"class": "File", "path": "a.txt"},
-            "b": {"class": "File", "path": "b.txt"},
-        },
+    rose = one_step(
+        collision_tool, ["result"], a={"class": "File", "path": "a.txt"}, b={"class": "File", "path": "b.txt"}
     )
     with pytest.raises(ValueError, match="staged under the same literal name"):
         compiled_source_to_nextflow(rose)
@@ -2058,14 +1510,6 @@ def _with_wrapper_semantic(
 
 
 @pytest.mark.fast
-def test_resolved_subworkflow_projects_to_a_namespaced_process(
-    real_nested_result: CompilationResult,
-) -> None:
-    names = [process.name for process in compiled_source_to_nextflow(real_nested_result).processes]
-    assert "child_inner_copy" in names
-
-
-@pytest.mark.fast
 def test_an_empty_resolved_subworkflow_projects_to_no_processes() -> None:
     result = compile_workflow_result(Workflow([Workflow([], "child")], "root"))
     assert compiled_source_to_nextflow(result).processes == ()
@@ -2096,14 +1540,6 @@ def test_resolved_nesting_deeper_than_one_level_projects_recursively() -> None:
     assert [process.name for process in workflow.processes] == ["write", "middle_leaf_inner_copy"]
 
 
-def _capability_findings(result: CompilationResult) -> list[str]:
-    with pytest.raises(ValueError) as error:
-        compiled_source_to_nextflow(result)
-    header, *lines = str(error.value).splitlines()
-    assert header == "Nextflow capability analysis failed:"
-    return [line.removeprefix("- ") for line in lines]
-
-
 def _merged_steps() -> list[Step]:
     """The cookbook's record.wic: two step outputs merged into one File[] input."""
     touch = Step(clt_path=REPO_ROOT / "cwl_adapters" / "touch.cwl")
@@ -2129,13 +1565,13 @@ def test_a_step_input_with_a_list_of_sources_is_rejected_by_name() -> None:
     echo.inputs.message = StepInput(
         source=[picked.inputs.a.as_type("string?"), picked.inputs.b.as_type("string?")], pick_value="first_non_null"
     )
-    assert _capability_findings(compile_workflow_result(Workflow(_merged_steps(), "record"))) == [
+    assert _findings(compile_workflow_result(Workflow(_merged_steps(), "record"))) == [
         "workflow.steps[2].in.files.source: a list of sources is not supported"
     ]
     assert "workflow.steps[0].run.steps[2].in.files.source: a list of sources is not supported" in (
-        _capability_findings(compile_workflow_result(Workflow([Workflow(_merged_steps(), "child")], "root")))
+        _findings(compile_workflow_result(Workflow([Workflow(_merged_steps(), "child")], "root")))
     )
-    assert _capability_findings(compile_workflow_result(picked)) == [
+    assert _findings(compile_workflow_result(picked)) == [
         "workflow.steps[0].in.message.source: a list of sources is not supported"
     ]
 
@@ -2150,7 +1586,7 @@ def test_a_step_input_its_tool_does_not_declare_is_rejected_by_name(when: str | 
     echo.inputs.enabled = StepInput(source=flow.inputs.loud.as_type("boolean?"))
     if when is not None:
         echo.when = when
-    assert _capability_findings(compile_workflow_result(flow)) == [
+    assert _findings(compile_workflow_result(flow)) == [
         "steps[0].in.enabled: an input the step's tool does not declare is not supported"
     ]
 
@@ -2170,69 +1606,6 @@ def test_rejects_when_on_a_resolved_subworkflow_call() -> None:
 
 
 @pytest.mark.fast
-def test_resolved_subworkflow_input_reaches_the_leaf_process(
-    real_nested_result: CompilationResult,
-) -> None:
-    workflow = compiled_source_to_nextflow(real_nested_result)
-    assert any(
-        isinstance(edge, NfProcessConnection)
-        and edge.from_process.endswith("write")
-        and edge.to_process.endswith("inner_copy")
-        for edge in workflow.connections
-    )
-
-
-@pytest.mark.fast
-def test_projection_does_not_invent_subworkflow_inputs(
-    real_nested_result: CompilationResult,
-) -> None:
-    source = compilation_result_source(real_nested_result)
-    declared = set(cast(dict[str, Any], source.workflow["inputs"]))
-    leaf_sources: set[str] = set()
-    for step_document in cast(list[dict[str, Any]], source.workflow["steps"]):
-        for definition in cast(dict[str, Any], step_document["in"]).values():
-            value = definition.get("source") if isinstance(definition, Mapping) else definition
-            if isinstance(value, str) and "/" not in value:
-                leaf_sources.add(value)
-    assert leaf_sources <= declared
-
-
-@pytest.mark.fast
-def test_projected_outputs_name_declared_leaf_outputs(
-    real_nested_result: CompilationResult,
-) -> None:
-    source = compilation_result_source(real_nested_result)
-    steps = cast(list[dict[str, Any]], source.workflow["steps"])
-    endpoints = {
-        f"{step_document['id']}/{output}"
-        for step_document in steps
-        for output in step_document["out"]
-    }
-    assert all(
-        definition["outputSource"] in endpoints
-        for definition in cast(dict[str, Any], source.workflow["outputs"]).values()
-    )
-
-
-@pytest.mark.fast
-def test_nested_output_boundary_resolves_to_a_leaf_output(
-    real_nested_result: CompilationResult,
-) -> None:
-    outputs = cast(dict[str, Any], compilation_result_source(real_nested_result).workflow["outputs"])
-    assert any("inner_copy/result" in definition["outputSource"] for definition in outputs.values())
-
-
-@pytest.mark.fast
-def test_nested_output_source_names_an_existing_process(
-    real_nested_result: CompilationResult,
-) -> None:
-    source = compilation_result_source(real_nested_result)
-    process_names = {step_document["id"] for step_document in source.workflow["steps"]}
-    for definition in cast(dict[str, Any], source.workflow["outputs"]).values():
-        assert definition["outputSource"].rsplit("/", maxsplit=1)[0] in process_names
-
-
-@pytest.mark.fast
 def test_inner_input_source_is_taken_from_the_resolved_graph(
     real_nested_result: CompilationResult,
 ) -> None:
@@ -2244,17 +1617,6 @@ def test_inner_input_source_is_taken_from_the_resolved_graph(
         isinstance(edge, NfProcessConnection) and edge.from_process.endswith("write")
         for edge in workflow.connections
     )
-
-
-@pytest.mark.fast
-def test_every_projected_process_connection_names_existing_processes(
-    real_nested_result: CompilationResult,
-) -> None:
-    workflow = compiled_source_to_nextflow(real_nested_result)
-    names = {process.name for process in workflow.processes}
-    for edge in workflow.connections:
-        if isinstance(edge, NfProcessConnection):
-            assert edge.from_process in names and edge.to_process in names
 
 
 @pytest.mark.fast
@@ -2365,12 +1727,7 @@ def _read_cwl_adapter(name: str) -> Yaml:
     ))
 
 
-def _capture_rose(
-    output: Yaml,
-    *,
-    output_type: str = "File",
-    tool_extra: Yaml | None = None,
-) -> CompiledNextflowSource:
+def _capture_rose(output: Yaml, *, tool_extra: Yaml | None = None) -> CompiledNextflowSource:
     """One real-shaped step whose single output carries the given definition."""
     step_tool = tool(
         "make",
@@ -2378,22 +1735,7 @@ def _capture_rose(
         outputs={"result": output},
         **(tool_extra or {}),
     )
-    document = workflow_doc(
-        [step("make", **{"in": {"message": "message"}, "out": ["result"]})],
-        inputs={"message": "string"},
-        outputs={"result": {"type": output_type, "outputSource": "make/result"}},
-    )
-    return synthetic_source(document, [step_tool], workflow_inputs={"message": "hi"})
-
-
-def _capture_findings(rose: CompiledNextflowSource) -> list[str]:
-    with pytest.raises(ValueError) as error:
-        compiled_source_to_nextflow(rose)
-    return [
-        line.removeprefix("- ")
-        for line in str(error.value).splitlines()
-        if line.startswith("- ")
-    ]
+    return one_step(step_tool, ["result"], message="hi")
 
 
 def _unadmitted_finding(text: str) -> str:
@@ -2447,9 +1789,7 @@ def test_surrounding_whitespace_is_trimmed_but_internal_variation_is_not(text: s
 @pytest.mark.fast
 @pytest.mark.parametrize("text", ["$( self[0] )", "$(self[ 0 ])", "$(self[0] )", "$(self [0])"])
 def test_internal_variation_of_the_admitted_literal_is_rejected(text: str) -> None:
-    findings = _capture_findings(_capture_rose(
-        {"type": "File", "outputBinding": {"glob": "out.txt", "outputEval": text}}
-    ))
+    findings = _findings(_capture_rose({"type": "File", "outputBinding": {"glob": "out.txt", "outputEval": text}}))
 
     assert findings == [_unadmitted_finding(text)]
 
@@ -2479,9 +1819,7 @@ _REJECTED_OUTPUT_EVAL_CORPUS = (
 @pytest.mark.parametrize("text", _REJECTED_OUTPUT_EVAL_CORPUS)
 def test_every_unadmitted_output_eval_shape_names_the_approved_set(text: str) -> None:
     """No expression is evaluated, composed, or partially recognized."""
-    findings = _capture_findings(_capture_rose(
-        {"type": "File", "outputBinding": {"glob": "out.txt", "outputEval": text}}
-    ))
+    findings = _findings(_capture_rose({"type": "File", "outputBinding": {"glob": "out.txt", "outputEval": text}}))
 
     assert findings == [_unadmitted_finding(text)]
 
@@ -2499,9 +1837,7 @@ def test_every_unadmitted_output_eval_shape_names_the_approved_set(text: str) ->
     ],
 )
 def test_each_named_projection_rejection_explains_itself(text: str, reason: str) -> None:
-    findings = _capture_findings(_capture_rose(
-        {"type": "File", "outputBinding": {"glob": "out.txt", "outputEval": text}}
-    ))
+    findings = _findings(_capture_rose({"type": "File", "outputBinding": {"glob": "out.txt", "outputEval": text}}))
 
     assert len(findings) == 1
     assert findings[0].startswith(
@@ -2513,9 +1849,7 @@ def test_each_named_projection_rejection_explains_itself(text: str, reason: str)
 @pytest.mark.fast
 @pytest.mark.parametrize("glob", ["*.txt", "out?.txt", "out[0-9].txt"])
 def test_a_wildcard_glob_beside_a_cardinality_declaration_is_rejected(glob: str) -> None:
-    findings = _capture_findings(_capture_rose(
-        {"type": "File", "outputBinding": {"glob": glob, "outputEval": "$(self[0])"}}
-    ))
+    findings = _findings(_capture_rose({"type": "File", "outputBinding": {"glob": glob, "outputEval": "$(self[0])"}}))
 
     assert len(findings) == 1
     assert findings[0].startswith("steps[0].run.outputs.result.outputBinding: outputEval")
@@ -2525,7 +1859,7 @@ def test_a_wildcard_glob_beside_a_cardinality_declaration_is_rejected(glob: str)
 
 @pytest.mark.fast
 def test_an_input_reference_glob_beside_a_cardinality_declaration_is_rejected() -> None:
-    findings = _capture_findings(_capture_rose(
+    findings = _findings(_capture_rose(
         {"type": "File", "outputBinding": {"glob": "$(inputs.message)", "outputEval": "$(self[0])"}}
     ))
 
@@ -2538,9 +1872,7 @@ def test_an_input_reference_glob_beside_a_cardinality_declaration_is_rejected() 
 
 @pytest.mark.fast
 def test_load_contents_without_its_paired_output_eval_is_rejected() -> None:
-    findings = _capture_findings(_capture_rose(
-        {"type": "File", "outputBinding": {"glob": "out.txt", "loadContents": True}}
-    ))
+    findings = _findings(_capture_rose({"type": "File", "outputBinding": {"glob": "out.txt", "loadContents": True}}))
 
     assert findings == [
         "steps[0].run.outputs.result.outputBinding: loadContents on output 'result' has no "
@@ -2550,7 +1882,7 @@ def test_load_contents_without_its_paired_output_eval_is_rejected() -> None:
 
 @pytest.mark.fast
 def test_the_cardinality_declaration_is_not_paired_with_load_contents() -> None:
-    findings = _capture_findings(_capture_rose({
+    findings = _findings(_capture_rose({
         "type": "File",
         "outputBinding": {"glob": "out.txt", "loadContents": True, "outputEval": "$(self[0])"},
     }))
@@ -2559,37 +1891,6 @@ def test_the_cardinality_declaration_is_not_paired_with_load_contents() -> None:
         "steps[0].run.outputs.result.outputBinding: outputEval '$(self[0])' declares output "
         "cardinality and is not paired with loadContents"
     ]
-
-
-@pytest.mark.fast
-def test_load_contents_on_an_input_is_rejected_by_name_at_both_locations() -> None:
-    """The input-side lowering is separate and unimplemented, not smuggled in here."""
-    step_tool = tool(
-        "make",
-        inputs={
-            "parameter": {"type": "File", "loadContents": True},
-            "binding": {"type": "File", "inputBinding": {"position": 1, "loadContents": True}},
-        },
-        outputs={"result": {"type": "File", "outputBinding": {"glob": "out.txt"}}},
-    )
-    document = workflow_doc(
-        [step("make", **{"in": {"parameter": "one", "binding": "two"}, "out": ["result"]})],
-        inputs={"one": "File", "two": "File"},
-        outputs={"result": {"type": "File", "outputSource": "make/result"}},
-    )
-    rose = synthetic_source(document, [step_tool], workflow_inputs={"one": "a.txt", "two": "b.txt"})
-
-    findings = _capture_findings(rose)
-
-    assert sorted(finding.split(":")[0] for finding in findings) == [
-        "steps[0].run.inputs.binding.inputBinding.loadContents",
-        "steps[0].run.inputs.parameter.loadContents",
-    ]
-    assert all(
-        "an input's contents would have to become a value channel read at staging time"
-        in finding
-        for finding in findings
-    )
 
 
 @pytest.mark.fast
@@ -2614,7 +1915,6 @@ _ADMITTED_TEXT_BINDING = {
 def test_the_admitted_file_text_capture_lowers_to_a_value_port() -> None:
     workflow = compiled_source_to_nextflow(_capture_rose(
         {"type": "string", "outputBinding": dict(_ADMITTED_TEXT_BINDING)},
-        output_type="string",
     ))
 
     port = workflow.processes[0].outputs[0]
@@ -2642,9 +1942,7 @@ def test_file_text_capture_requires_load_contents_true() -> None:
             del binding["loadContents"]
         else:
             binding["loadContents"] = load_contents
-        findings = _capture_findings(_capture_rose(
-            {"type": "string", "outputBinding": binding}, output_type="string"
-        ))
+        findings = _findings(_capture_rose({"type": "string", "outputBinding": binding}))
         assert findings == [
             "steps[0].run.outputs.result.outputBinding: outputEval "
             "'$(self[0].contents)' captures file text and requires loadContents: true "
@@ -2657,10 +1955,7 @@ def test_file_text_capture_requires_load_contents_true() -> None:
 def test_a_numeric_file_text_capture_is_rejected_because_parsing_is_computation(
     declared: str,
 ) -> None:
-    findings = _capture_findings(_capture_rose(
-        {"type": declared, "outputBinding": dict(_ADMITTED_TEXT_BINDING)},
-        output_type=declared,
-    ))
+    findings = _findings(_capture_rose({"type": declared, "outputBinding": dict(_ADMITTED_TEXT_BINDING)}))
 
     assert len(findings) == 1
     assert findings[0].startswith("steps[0].run.outputs.result.outputBinding: outputEval")
@@ -2670,9 +1965,7 @@ def test_a_numeric_file_text_capture_is_rejected_because_parsing_is_computation(
 
 @pytest.mark.fast
 def test_file_text_capture_on_a_non_string_non_numeric_output_is_rejected() -> None:
-    findings = _capture_findings(_capture_rose(
-        {"type": "File", "outputBinding": dict(_ADMITTED_TEXT_BINDING)}
-    ))
+    findings = _findings(_capture_rose({"type": "File", "outputBinding": dict(_ADMITTED_TEXT_BINDING)}))
 
     assert findings == [
         "steps[0].run.outputs.result.outputBinding: outputEval '$(self[0].contents)' "
@@ -2684,10 +1977,7 @@ def test_file_text_capture_on_a_non_string_non_numeric_output_is_rejected() -> N
 @pytest.mark.fast
 @pytest.mark.parametrize("glob", ["*.txt", "out?.txt", "out[0-9].txt"])
 def test_a_wildcard_glob_beside_a_file_text_capture_is_rejected(glob: str) -> None:
-    findings = _capture_findings(_capture_rose(
-        {"type": "string", "outputBinding": {**_ADMITTED_TEXT_BINDING, "glob": glob}},
-        output_type="string",
-    ))
+    findings = _findings(_capture_rose({"type": "string", "outputBinding": {**_ADMITTED_TEXT_BINDING, "glob": glob}}))
 
     assert len(findings) == 1
     assert "requires a glob with no wildcard character" in findings[0]
@@ -2716,7 +2006,7 @@ def test_a_captured_value_cannot_feed_another_process() -> None:
     )
     rose = synthetic_source(document, [producer, consumer], workflow_inputs={"message": "hi"})
 
-    findings = _capture_findings(rose)
+    findings = _findings(rose)
 
     assert findings == [
         "steps[1].in.text: 'produce/text' captures file text; its only approved sink is "
@@ -2751,19 +2041,25 @@ def test_lowering_rejections_aggregate_with_every_other_finding_by_step() -> Non
 @pytest.mark.fast
 @pytest.mark.parametrize(("inputs", "message"), [
     ({"b": {"type": "boolean", "inputBinding": {"prefix": ""}}}, "prefix for 'b' must be a non-empty string"),
+    # A blank prefix hits the named diagnostic, not NfFlag's own invariant.
+    ({"b": {"type": "boolean", "inputBinding": {"prefix": "   "}}}, "prefix for 'b' must be a non-empty string"),
+    # cwltool rejects separate without a prefix.
     ({"s": {"type": "string", "inputBinding": {"separate": False}}}, "separate cannot be specified without a prefix"),
-    ({"xs": {"type": {"type": "array", "items": "string"}, "inputBinding": {"valueFrom": "x"}}}, "valueFrom"),
-], ids=["empty-boolean-prefix", "separate-without-prefix", "array-valuefrom"])
+    ({"b": {"type": "boolean", "inputBinding": {"separate": False}}}, "separate cannot be specified without a prefix"),
+    # cwltool's .get("separate", True) defaults only an absent key, so separate: null rejects too.
+    ({"b": {"type": "boolean", "inputBinding": {"separate": None}}}, "separate cannot be specified without a prefix"),
+    ({"s": {"type": "string", "inputBinding": {"separate": None}}}, "separate cannot be specified without a prefix"),
+    (
+        {"xs": {"type": {"type": "array", "items": "string"}, "inputBinding": {"valueFrom": "$(inputs.xs)"}}},
+        "valueFrom on an array-typed inputBinding",
+    ),
+], ids=[
+    "empty-boolean-prefix", "blank-boolean-prefix", "separate-without-prefix", "boolean-separate-without-prefix",
+    "boolean-separate-null", "string-separate-null", "array-valuefrom",
+])
 def test_a_lowering_only_rejection_is_a_finding_at_its_step(inputs: Any, message: str) -> None:
-    values = {"b": True, "s": "x", "xs": ["x"]}
-    rose = synthetic_source(
-        workflow_doc(
-            [step("REJECTED", **{"in": {name: name for name in inputs}})],
-            inputs={name: {"type": definition["type"]} for name, definition in inputs.items()},
-        ),
-        [tool("REJECTED", inputs=inputs)],
-        workflow_inputs={name: values[name] for name in inputs},
-    )
+    values: dict[str, Any] = {"b": True, "s": "x", "xs": ["x"]}
+    rose = one_step(tool("REJECTED", inputs=inputs), **{name: values[name] for name in inputs})
     [finding] = _findings(rose)
     assert finding.startswith("steps[0]: ") and message in finding
 
@@ -2813,9 +2109,8 @@ def test_a_command_error_is_reported_instead_of_a_wrong_cause_absence_finding() 
 
 @pytest.mark.fast
 def test_a_command_error_is_reported_instead_of_an_absent_optional_finding() -> None:
-    rose = synthetic_source(
-        workflow_doc([step("ABSENT", **{"in": {"v": "v"}})], inputs={"v": "string?"}),
-        [tool("ABSENT", inputs={"v": {"type": "string?", "inputBinding": {}}}, arguments=["$(runtime.cores)"])],
+    rose = one_step(
+        tool("ABSENT", inputs={"v": {"type": "string?", "inputBinding": {}}}, arguments=["$(runtime.cores)"])
     )
     [finding] = _findings(rose)
     assert finding.startswith("steps[0]: CWL argument contains an unsupported CWL expression")
@@ -2831,11 +2126,7 @@ def test_a_command_error_is_reported_instead_of_an_absent_optional_finding() -> 
 ], ids=["embedded-file", "whole-file", "embedded-path", "embedded-basename", "embedded-string"])
 def test_a_file_reference_embedded_in_text_is_rejected(argument: str, admitted: bool) -> None:
     embedded = tool("EMBEDDED", inputs={"f": {"type": "File"}, "s": {"type": "string"}}, arguments=[argument])
-    rose = synthetic_source(
-        workflow_doc([step("EMBEDDED", **{"in": {"f": "f", "s": "s"}})], inputs={"f": "File", "s": "string"}),
-        [embedded],
-        workflow_inputs={"f": {"class": "File", "path": "in.txt"}, "s": "x"},
-    )
+    rose = one_step(embedded, f={"class": "File", "path": "in.txt"}, s="x")
     if admitted:
         compiled_source_to_nextflow(rose)
         return
