@@ -286,8 +286,7 @@ def test_cli_converts_a_report_to_exit_1(monkeypatch: pytest.MonkeyPatch,
 
     def reports(*_args: object, **_kwargs: object) -> None:
         raise SophiosError.error(SophiosErrorCode.UNRESOLVED_INPUT,
-                                 'Did you forget to use !ii before x?',
-                                 'If you want to compile the workflow anyway, use --allow_raw_cwl')
+                                 'Did you forget to use !ii before x?')
 
     monkeypatch.setattr('sys.argv', ['sophios'])
     monkeypatch.setattr(cli, '_main', reports)
@@ -298,7 +297,6 @@ def test_cli_converts_a_report_to_exit_1(monkeypatch: pytest.MonkeyPatch,
     assert caught.value.code == 1
     printed = capsys.readouterr().err
     assert 'Did you forget to use !ii' in printed
-    assert '--allow_raw_cwl' in printed
     assert '[wic011]' in printed
 
 
@@ -579,13 +577,12 @@ def test_a_duplicate_document_name_names_its_document() -> None:
 
 
 @pytest.mark.fast
-def test_an_unresolved_input_error_does_not_call_itself_a_warning() -> None:
-    """wic011 is an error: its message says what to write, with no `Warning!` in front."""
+def test_an_unresolved_input_is_one_error_that_says_what_to_write() -> None:
+    """wic011 is one line, with no `Warning!` in front and no advice to compile anyway."""
     with pytest.raises(SophiosError) as caught:
         compile_hermetic({'steps': [{'id': 'mk_file', 'in': {'name': 'x'}}]})
-    first = caught.value.diagnostics[0]
-    assert first.code is SophiosErrorCode.UNRESOLVED_INPUT
-    assert first.message == 'Did you forget to use !ii before x?'
+    assert [(d.code, d.message) for d in caught.value.diagnostics] == \
+        [(SophiosErrorCode.UNRESOLVED_INPUT, 'Did you forget to use !ii before x?')]
 
 
 # --------------------------------------------------------------------------

@@ -164,7 +164,6 @@ def _check_unresolved_names(graph: WorkflowGraph, allow_raw_cwl: bool,
                 raise SophiosError.error(
                     SophiosErrorCode.UNRESOLVED_INPUT,
                     f'Did you forget to use !ii before {name}?',
-                    'If you want to compile the workflow anyway, use --allow_raw_cwl',
                     span=getattr(value, 'span', None),
                     locator=Locator(step=step.id.name, index=step.id.index, port=names.port(binding.sink.port)))
     for child in graph.children:
