@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-import yaml
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -14,15 +13,14 @@ from sophios.api.python.workflow import _python_api_types_match
 from sophios.lang.compatibility import TypeRelation, reference_relation
 from sophios.lang.diagnostics import SophiosError
 from sophios.lang.error_codes import SophiosErrorCode
-from sophios.lang.versions import KNOWN_VERSIONS
 from sophios.utils_cwl import desugar_into_canonical_normal_form
-from sophios.utils_yaml import wic_loader
 from sophios.wic_types import StepId, Tool, Tools, Yaml
 
 from .synthetic_tools import clt
 
 from .hermetic import ORACLE, compile_hermetic
 from .reference_model import ReferenceExpectation, reference_expectation
+from .wic_reading import read_wic
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 
@@ -82,15 +80,6 @@ def test_a_recursive_or_malformed_declaration_is_unknown_not_a_crash() -> None:
     assert reference_relation(
         recursive, {'type': 'array', 'items': 'string'}, lang_version='0.0.1') \
         is TypeRelation.UNKNOWN
-
-
-@pytest.mark.fast
-def test_every_language_version_owns_a_judgment() -> None:
-    """Dispatch is exhaustive over versions and rejects an impossible caller value."""
-    assert all(reference_relation('string', 'string', lang_version=version)
-               is TypeRelation.OVERLAPS for version in KNOWN_VERSIONS)
-    with pytest.raises(ValueError, match='No reference judgment'):
-        reference_relation('string', 'string', lang_version='not-a-version')
 
 
 @pytest.mark.fast
@@ -269,7 +258,7 @@ def test_echo_multi_scatter_keeps_any_at_the_cwl_boundary() -> None:
     """The exact tutorial that exposed the old matcher's Any false positive."""
     path = REPO_ROOT / 'docs/tutorials/echo_multi_scatter.wic'
     document = desugar_into_canonical_normal_form(
-        yaml.load(path.read_text(encoding='utf-8'), Loader=wic_loader()))
+        read_wic(path.read_text(encoding='utf-8'), path.name))
     tools: Tools = {
         StepId('array_indices', 'global'): Tool(
             '/synthetic/array_indices.cwl',

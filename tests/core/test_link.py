@@ -115,7 +115,7 @@ def test_cross_scope_obligation_discharged_two_levels_below_the_definition() -> 
 def test_a_call_does_not_exempt_an_edge_from_document_order(definition_first: bool) -> None:
     """The order rule is one rule, whether the reference is flat or in a call.
 
-    Reference §4.1.2: a reference resolves against the definitions before it,
+    .wic reference §4: a reference resolves against the definitions before it,
     and a child may consume what its includer has *already* defined. Lower
     applies that within one scope. If Link ignored it across a call, the same
     program would be `wic025` written flat and legal once split into a
@@ -207,9 +207,9 @@ def test_consuming_scatter_participates_in_reference_judgment() -> None:
 def test_a_wrapper_cannot_scatter_over_a_name_generated_inside_its_callee() -> None:
     """A caller scatters only over what its callee declares.
 
-    `child__step__1__mk_b___value` is how the compiler spells `mk_b`'s input
-    once `child.wic` is emitted; a wrapper naming it would depend on the
-    callee's step layout. It is `wic032`.
+    `mk_b~value` is how the compiler spells `mk_b`'s input once `child.wic`
+    is emitted; a wrapper naming it would depend on the callee's step layout.
+    It is `wic032`.
     """
     tools = copy.deepcopy(SYNTHETIC_TOOLS)
     tools[LegacyStepId('mk_a', SYNTHETIC_NS)] = Tool(
@@ -218,7 +218,7 @@ def test_a_wrapper_cannot_scatter_over_a_name_generated_inside_its_callee() -> N
         '/synthetic/mk_b.cwl', clt({'value': {'type': 'File'}}, {}))
     child = 'steps:\n- id: mk_b\n  in: {value: !* shared}\n'
     root = ('steps:\n- id: mk_a\n  out:\n  - value: !& shared\n'
-            '- id: child.wic\n  scatter: [child__step__1__mk_b___value]\n')
+            '- id: child.wic\n  scatter: [mk_b~value]\n')
     typed = _rooted(root, tools, child=child)
     assert typed.graph is None
     [diagnostic] = typed.diagnostics
@@ -311,7 +311,7 @@ steps:
 outputs:
   result:
     type: File
-    outputSource: child__step__1__mk_file/file
+    outputSource: mk_file/file
 '''
     root = '''
 steps:
@@ -402,4 +402,33 @@ def test_a_wrapper_scatters_a_declared_input_threaded_to_another_name() -> None:
     assert typed.graph is not None, list(typed.diagnostics)
 
     linked = link(complete(typed.graph))
+    assert linked.graph is not None, [str(item) for item in linked.diagnostics]
+
+
+@pytest.mark.fast
+def test_a_record_source_whose_type_is_provably_disjoint_is_wic023() -> None:
+    """A record that hands its one source on unchanged is judged as a bare `!*` is."""
+    tools = copy.deepcopy(SYNTHETIC_TOOLS)
+    tools[LegacyStepId('int_source', SYNTHETIC_NS)] = Tool(
+        '/synthetic/int_source.cwl', clt({}, {'value': {'type': 'int'}}))
+    root = ('steps:\n- id: int_source\n  out:\n  - value: !& v\n'
+            '- id: mk_file\n  in:\n    name: !cwl {source: !* v}\n')
+    typed = _rooted(root, tools)
+    assert typed.graph is not None, list(typed.diagnostics)
+    linked = link(typed.graph)
+    assert [diagnostic.code for diagnostic in linked.diagnostics] == [
+        SophiosErrorCode.INCOMPATIBLE_INPUT_REFERENCE]
+
+
+@pytest.mark.fast
+def test_a_record_that_transforms_its_source_is_not_judged_by_its_sinks_type() -> None:
+    """`valueFrom` makes the value the step receives, so the source's type is not the input's."""
+    tools = copy.deepcopy(SYNTHETIC_TOOLS)
+    tools[LegacyStepId('int_source', SYNTHETIC_NS)] = Tool(
+        '/synthetic/int_source.cwl', clt({}, {'value': {'type': 'int'}}))
+    root = ('steps:\n- id: int_source\n  out:\n  - value: !& v\n'
+            "- id: mk_file\n  in:\n    name: !cwl {source: !* v, valueFrom: '$(String(self))'}\n")
+    typed = _rooted(root, tools)
+    assert typed.graph is not None, list(typed.diagnostics)
+    linked = link(typed.graph)
     assert linked.graph is not None, [str(item) for item in linked.diagnostics]

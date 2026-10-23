@@ -21,7 +21,7 @@ from sophios.api.python.tool_builder import (
     Outputs,
     cwl,
 )
-from sophios.api.python.workflow import CompiledWorkflow, Step, Workflow
+from sophios.api.python.workflow import CompiledWorkflow, Step, StepInput, Workflow
 from sophios.cli import default_compilation_settings
 from sophios.input_output_nf import render_nextflow
 from sophios.ir.artifacts import CompilationResult
@@ -47,7 +47,6 @@ from sophios.utils_nf import (
     compilation_result_source,
     compiled_source_to_nextflow,
 )
-from sophios.utils_graphs import get_graph_reps
 from sophios.wic_types import Yaml
 
 from .testkit import (
@@ -602,6 +601,20 @@ def test_aggregates_workflow_input_collisions_with_other_findings() -> None:
 
 
 @pytest.mark.fast
+def test_rejects_step_identifier_collisions_naming_both_steps() -> None:
+    """A repeated id carries `@<position>`; it and an authored id may normalize alike."""
+    rose = synthetic_source(
+        workflow_doc([step("touch@2"), step("touch_2")]),
+        [tool("touch@2"), tool("touch_2")],
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"workflow\.steps: workflow step identifiers 'touch@2', 'touch_2' normalize to 'touch_2'",
+    ):
+        compiled_source_to_nextflow(rose)
+
+
+@pytest.mark.fast
 def test_rejects_tool_port_identifier_collisions() -> None:
     collision = tool(
         "COLLISION",
@@ -928,8 +941,8 @@ def test_accepts_two_input_dotproduct_scatter() -> None:
     workflow = compiled_source_to_nextflow(_two_input_scatter_rose(scatterMethod="dotproduct"))
 
     assert set(workflow.connections) >= {
-        NfWorkflowInputConnection("firsts", "SCATTER", "first", "dotproduct"),
-        NfWorkflowInputConnection("seconds", "SCATTER", "second", "dotproduct"),
+        NfWorkflowInputConnection("firsts", "_SCATTER", "first", "dotproduct"),
+        NfWorkflowInputConnection("seconds", "_SCATTER", "second", "dotproduct"),
     }
 
 
@@ -968,7 +981,7 @@ def test_accepts_an_inert_scatter_method_at_one_scattered_input(
     workflow = compiled_source_to_nextflow(_scatter_rose(**step_fields))
 
     assert workflow.connections == (
-        NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
+        NfWorkflowInputConnection("items", "_SCATTER", "item", "dotproduct"),
     )
 
 
@@ -978,7 +991,7 @@ def test_accepts_both_single_input_scatter_spellings(scatter: Any) -> None:
     workflow = compiled_source_to_nextflow(_scatter_rose(scatter=scatter))
 
     assert workflow.connections == (
-        NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
+        NfWorkflowInputConnection("items", "_SCATTER", "item", "dotproduct"),
     )
 
 
@@ -1141,7 +1154,7 @@ def test_accepts_a_workflow_output_of_a_scattered_step() -> None:
 
     workflow = compiled_source_to_nextflow(rose)
 
-    assert NfWorkflowOutputConnection("SCATTER", "result", "each") in workflow.connections
+    assert NfWorkflowOutputConnection("_SCATTER", "result", "each") in workflow.connections
 
 
 @pytest.mark.fast
@@ -1177,7 +1190,7 @@ def test_accepts_inert_workflow_level_scatter_requirement(requirements: Any) -> 
     cast(dict[str, Any], rose.workflow)["requirements"] = requirements
 
     assert compiled_source_to_nextflow(rose).connections == (
-        NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
+        NfWorkflowInputConnection("items", "_SCATTER", "item", "dotproduct"),
     )
 
 
@@ -1984,30 +1997,22 @@ def _nested_downstream_result() -> CompilationResult:
     consume = Step(_copy_tool(), step_name="consume")
     consume.inputs.source = "placeholder.txt"
     root = Workflow([write, child, consume], "root")
-    document = workflow_runtime.workflow_document(root, inline_subtrees=False)
+    document = workflow_runtime.workflow_document(root)
     steps = list(document.steps)
     steps[1] = replace(steps[1], outputs=(OutputBinding("result", EdgeDef("childout")),))
     steps[2] = replace(steps[2], inputs=(("source", EdgeRef("childout")),))
-    compiler_options, graph_settings, tag_paths = default_compilation_settings()
-    tools = workflow_runtime._merged_known_tools(root._flatten_steps())
+    compiler_options = default_compilation_settings()
+    tools = workflow_runtime._merged_known_tools(root)
     bundle = SourceBundle(
         ParseResult(replace(document, steps=tuple(steps)), Diagnostics()),
         "root",
         RegistrySnapshot.from_tools(tools, workflows={
             ("global", child.process_name): ParseResult(
-                workflow_runtime.workflow_document(child, inline_subtrees=False), Diagnostics()
+                workflow_runtime.workflow_document(child), Diagnostics()
             ),
         }),
     )
-    return compiler.compile_source(
-        bundle,
-        compiler_options,
-        graph_settings,
-        tag_paths,
-        relative_run_path=True,
-        testing=True,
-        graph_target=get_graph_reps("root"),
-    )
+    return compiler.compile_source(bundle, compiler_options, testing=True)
 
 
 def _nested_artifacts(result: CompilationResult) -> list[Any]:
@@ -2037,7 +2042,7 @@ def test_resolved_subworkflow_projects_to_a_namespaced_process(
     real_nested_result: CompilationResult,
 ) -> None:
     names = [process.name for process in compiled_source_to_nextflow(real_nested_result).processes]
-    assert any("child_wic___child__step__1__inner_copy" in name for name in names)
+    assert "child_inner_copy" in names
 
 
 @pytest.mark.fast
@@ -2068,9 +2073,66 @@ def test_a_resolved_subworkflow_output_reaches_a_downstream_outer_step() -> None
 @pytest.mark.fast
 def test_resolved_nesting_deeper_than_one_level_projects_recursively() -> None:
     workflow = compiled_source_to_nextflow(_deep_nested_result())
-    assert len([process for process in workflow.processes if "inner_copy" in process.name]) == 1
-    assert any("middle_wic" in process.name and "leaf_wic" in process.name
-               for process in workflow.processes)
+    assert [process.name for process in workflow.processes] == ["write", "middle_leaf_inner_copy"]
+
+
+def _capability_findings(result: CompilationResult) -> list[str]:
+    with pytest.raises(ValueError) as error:
+        compiled_source_to_nextflow(result)
+    header, *lines = str(error.value).splitlines()
+    assert header == "Nextflow capability analysis failed:"
+    return [line.removeprefix("- ") for line in lines]
+
+
+def _merged_steps() -> list[Step]:
+    """The cookbook's record.wic: two step outputs merged into one File[] input."""
+    touch = Step(clt_path=REPO_ROOT / "cwl_adapters" / "touch.cwl")
+    touch.inputs.filename = "empty.txt"
+    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
+    echo.inputs.message = "Hello"
+    concat = Step.from_cwl_document({
+        "class": "CommandLineTool",
+        "cwlVersion": "v1.2",
+        "baseCommand": "cat",
+        "inputs": {"files": {"type": "File[]", "inputBinding": {"position": 1}}},
+        "outputs": {"joined": {"type": "File", "outputBinding": {"glob": "joined.txt"}}},
+        "stdout": "joined.txt",
+    }, process_name="concat")
+    concat.inputs.files = StepInput(source=[touch.outputs.file, echo.outputs.stdout], link_merge="merge_flattened")
+    return [touch, echo, concat]
+
+
+@pytest.mark.fast
+def test_a_step_input_with_a_list_of_sources_is_rejected_by_name() -> None:
+    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
+    picked = Workflow([echo], "picked")
+    echo.inputs.message = StepInput(
+        source=[picked.inputs.a.as_type("string?"), picked.inputs.b.as_type("string?")], pick_value="first_non_null"
+    )
+    assert _capability_findings(compile_workflow_result(Workflow(_merged_steps(), "record"))) == [
+        "workflow.steps[2].in.files.source: a list of sources is not supported"
+    ]
+    assert "workflow.steps[0].run.steps[2].in.files.source: a list of sources is not supported" in (
+        _capability_findings(compile_workflow_result(Workflow([Workflow(_merged_steps(), "child")], "root")))
+    )
+    assert _capability_findings(compile_workflow_result(picked)) == [
+        "workflow.steps[0].in.message.source: a list of sources is not supported"
+    ]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("when", [None, "$(inputs.enabled)"], ids=["unread", "read-by-when"])
+def test_a_step_input_its_tool_does_not_declare_is_rejected_by_name(when: str | None) -> None:
+    """The cookbook's when.wic: a step-only input that a when reads."""
+    echo = Step(clt_path=REPO_ROOT / "cwl_adapters" / "echo.cwl")
+    echo.inputs.message = "Hello"
+    flow = Workflow([echo], "when")
+    echo.inputs.enabled = StepInput(source=flow.inputs.loud.as_type("boolean?"))
+    if when is not None:
+        echo.when = when
+    assert _capability_findings(compile_workflow_result(flow)) == [
+        "steps[0].in.enabled: an input the step's tool does not declare is not supported"
+    ]
 
 
 @pytest.mark.fast
@@ -2646,8 +2708,8 @@ def test_lowering_rejections_aggregate_with_every_other_finding_by_step() -> Non
     rose = synthetic_source(
         workflow_doc(
             [
-                step("GATED", **{"in": {"a": "a"}, "when": "$(inputs.a ** 2 > 1)"}),
-                step("GATED", **{"in": {"a": "a"}, "when": "$(inputs.a + 1)"}),
+                step("GATED@1", **{"in": {"a": "a"}, "when": "$(inputs.a ** 2 > 1)"}),
+                step("GATED@2", **{"in": {"a": "a"}, "when": "$(inputs.a + 1)"}),
                 step("UNSUPPORTED"),
             ],
             inputs={"a": "int"},
@@ -2768,6 +2830,6 @@ def test_a_step_consuming_an_optional_output_is_a_finding() -> None:
         [maybe, consume],
     )
     assert _findings(rose) == [
-        "workflow: connection MAYBE.o -> CONSUME.source consumes an optional output, which may be null; "
+        "workflow: connection _MAYBE.o -> _CONSUME.source consumes an optional output, which may be null; "
         "only a workflow output can take it"
     ]

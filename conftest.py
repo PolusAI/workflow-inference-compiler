@@ -8,11 +8,10 @@ import pytest
 # Zone membership is defined by directory: anything under tests/contrib/ is
 # contrib. The marker is derived from that rather than applied by hand, so the
 # directory stays the single source of truth and the two cannot drift.
-# See design_docs/core-refactor-design.md, Spec 0.
 CONTRIB_DIR = Path(__file__).resolve().parent / 'tests' / 'contrib'
 
 # `import cwltool.main` pulls in spython, which imports `pwd` at module scope —
-# a POSIX-only module. A test that calls cwltool in-process therefore cannot run
+# a POSIX-only module. A test that runs or imports cwltool therefore cannot run
 # on Windows whatever lane names it. The test declares the dependency with
 # `needs_cwltool`; this is the one place that knows what the dependency costs,
 # so a second platform limitation does not mean editing every test that has one.

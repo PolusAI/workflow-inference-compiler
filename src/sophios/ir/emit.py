@@ -22,24 +22,21 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
-from ..lang import versions
-from ..lang.diagnostics import SophiosError
-from ..lang.error_codes import SophiosErrorCode
-from ..lang.versions import ANNOTATION_NAMESPACE, ANNOTATION_NAMESPACE_URI
+from ..lang import CwlRecord
+from ..lang.nodes import OpaqueCwl
 from ..wic_types import Cwl
 from .declarations import required
-from .names import NAMESPACE_SEPARATOR, Names
+from .names import Names
 from .stepin import step_inputs, step_out
-from .types import (DerivedName, EmissionDocument, EmittedValue, Expression, PortName,
+from .types import (DerivedName, EmissionDocument, EmittedValue, Expression, PortName, Record,
                     Source, StepNode, StepOutputRef, WorkflowGraph, WorkflowPort)
 
 EDAM_NAMESPACE = ('edam', 'https://edamontology.org/')
-EDAM_SCHEMA = 'https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl'
 
 
-def _step_spelling(step: StepNode, names: Names, relative_run_path: bool,
-                   partial_failure: bool) -> StepNode:
-    """`step` with its `run:` path written.
+def _step_spelling(step: StepNode, names: Names, partial_failure: bool) -> StepNode:
+    """`step` with its `run:` path written: the file its process is written to,
+    beside every other document of the tree.
 
     Under partial failure a step runs only when every required input arrived,
     so its `when` is rewritten from the ports it declares.
@@ -52,35 +49,23 @@ def _step_spelling(step: StepNode, names: Names, relative_run_path: bool,
         if needed:
             interpreted['when'] = '$(' + ' && '.join(
                 f'inputs["{name}"] != null' for name in needed) + ')'
-    target = run.target
-    if isinstance(target, str):
-        # From the resolved identity: `target` is this function's own output,
-        # so a leaf read back out of it would compound.
-        leaf = f'{run.process_id.name}.cwl'
-        if relative_run_path:
-            target = f'{names.step(step.id)}/{leaf}'
-        elif run.child is not None:
-            target = f'{names.qualified(step.id)}{NAMESPACE_SEPARATOR}{leaf}'
-        else:
-            target = f'../{leaf}'
+    target = f'{names.file(step.id)}.cwl'
     return replace(step, interpreted=tuple(interpreted.items()), run=replace(run, target=target))
 
 
-def surface(graph: WorkflowGraph, names: Names, *,
-            relative_run_path: bool = True, partial_failure: bool = False) -> EmissionDocument:
+def surface(graph: WorkflowGraph, names: Names, *, partial_failure: bool = False) -> EmissionDocument:
     """Spell `graph`'s facts as the document Emit renders, for this graph alone.
 
-    Requirements implied by the steps, the EDAM namespace and schema, a step's
-    `run:` path and the order fields appear in: none is a fact about the
-    workflow, and none is read by any phase. They are computed here, once per
+    Requirements implied by the steps, the EDAM namespace (only for a
+    document that spells a format `edam:`), a step's `run:` path and the
+    order fields appear in: none is a fact about the workflow, and none is
+    read by any phase. They are computed here, once per
     emitted document, rather than in `complete`, which runs whenever a phase
     needs the facts current.
 
     Args:
         graph (WorkflowGraph): One completed document, without its children.
         names (Names): The spelling of every step in the tree `graph` is in.
-        relative_run_path (bool): Whether a `run:` target is written relative
-            to the step directory or namespaced beside the root.
         partial_failure (bool): Whether each step runs only when its required
             inputs arrived.
 
@@ -91,8 +76,6 @@ def surface(graph: WorkflowGraph, names: Names, *,
         ValueError: If the graph states no document -- a missing version, or a
             step with no run. Emit asks for the type this returns, so this
             is the only place the question is asked.
-        SophiosError: `wic031` if two distinct boundary names are spelled
-            alike, which the emitted document could not tell apart.
     """
     if not graph.cwl_version:
         raise ValueError('an emission graph must declare its CWL version')
@@ -101,27 +84,18 @@ def surface(graph: WorkflowGraph, names: Names, *,
     if any(step.run is None for step in graph.steps):
         raise ValueError('every step in an emission graph needs a run')
 
-    for ports in (graph.workflow_inputs, graph.workflow_outputs):
-        _refuse_colliding_names(tuple(port.name for port in ports), names)
-    steps = [_step_spelling(step, names, relative_run_path, partial_failure)
-             for step in graph.steps]
+    steps = [_step_spelling(step, names, partial_failure) for step in graph.steps]
 
     requirements = dict(graph.requirements)
-    if graph.children:
-        requirements['SubworkflowFeatureRequirement'] = {}
-    if any(step.scatter_ports for step in steps):
-        requirements['ScatterFeatureRequirement'] = {}
-    if any(dict(step.interpreted).get('when') is not None for step in steps):
-        requirements['InlineJavascriptRequirement'] = {}
+    for requirement in _implied_requirements(graph, steps):
+        # An authored body is kept; an authored `Class:` with no body is `{}`, as CWL needs.
+        if requirements.get(requirement) is None:
+            requirements[requirement] = {}
     requirements = dict(sorted(requirements.items()))
 
-    namespaces = {name: value for name, value in graph.namespaces
-                  if name not in {EDAM_NAMESPACE[0], ANNOTATION_NAMESPACE}}
-    namespaces[EDAM_NAMESPACE[0]] = EDAM_NAMESPACE[1]
-    namespaces[ANNOTATION_NAMESPACE] = ANNOTATION_NAMESPACE_URI
-    schemas = list(graph.schemas)
-    if EDAM_SCHEMA not in schemas:
-        schemas.append(EDAM_SCHEMA)
+    namespaces = dict(graph.namespaces)
+    if _uses_edam(graph):
+        namespaces[EDAM_NAMESPACE[0]] = EDAM_NAMESPACE[1]
     positions = {step.id: index for index, step in enumerate(steps)}
 
     def boundary_order(name: PortName) -> tuple[int, int]:
@@ -141,19 +115,51 @@ def surface(graph: WorkflowGraph, names: Names, *,
     return EmissionDocument(replace(
         graph, steps=tuple(steps), requirements=tuple(requirements.items()),
         workflow_inputs=workflow_inputs, job_bindings=job_bindings,
-        namespaces=tuple(namespaces.items()), schemas=tuple(schemas)))
+        namespaces=tuple(namespaces.items())))
 
 
-def _refuse_colliding_names(declared: tuple[PortName, ...], names: Names) -> None:
-    """Raise `wic031` when two distinct names in one namespace render alike."""
-    spelled: dict[str, PortName] = {}
-    for name in declared:
-        text = names.port(name)
-        if text in spelled and spelled[text] != name:
-            raise SophiosError.error(
-                SophiosErrorCode.DUPLICATE_DOCUMENT_NAME,
-                f'{text!r} names two different ports in the emitted document')
-        spelled[text] = name
+def _uses_edam(graph: WorkflowGraph) -> bool:
+    """Whether a `format:` of `graph`'s inputs or outputs, or of a File in its job or a `default:`, is an `edam:` CURIE.
+
+    The job and the defaults count because a runner reads their CURIEs against the workflow's `$namespaces`.
+    """
+    ports = (*graph.workflow_inputs, *graph.workflow_outputs)
+    formats = [port.declaration.format for port in ports if port.declaration.has_format]
+    formats += [found for port in ports if port.declaration.has_default
+                for found in _job_formats(port.declaration.default)]
+    formats += [found for step in graph.steps for binding in step.bindings if isinstance(binding.value, CwlRecord)
+                for key, value in binding.value.fields if key == 'default' for found in _job_formats(value)]
+    formats += [found for binding in graph.job_bindings for found in _job_formats(binding.value)]
+    return any(isinstance(text, str) and text.startswith(f'{EDAM_NAMESPACE[0]}:')
+               for value in formats for text in (value if isinstance(value, list) else [value]))
+
+
+def _job_formats(value: OpaqueCwl) -> list[OpaqueCwl]:
+    """Every `format` a job value holds, at any depth: a File's, a File's in a list or a record."""
+    match value:
+        case dict():
+            own = [value['format']] if 'format' in value else []
+            return own + [found for item in value.values() for found in _job_formats(item)]
+        case list():
+            return [found for item in value for found in _job_formats(item)]
+    return []
+
+
+def _implied_requirements(graph: WorkflowGraph, steps: list[StepNode]) -> tuple[str, ...]:
+    """The requirement classes `graph`'s calls, scatters, `when`s and step-input records need."""
+    records = [binding.value for step in steps for binding in step.bindings
+               if isinstance(binding.value, CwlRecord)]
+    value_from = [str(text) for record in records for key, text in record.fields if key == 'valueFrom']
+    return tuple(requirement for requirement, needed in (
+        ('SubworkflowFeatureRequirement', bool(graph.children)),
+        ('ScatterFeatureRequirement', any(step.scatter_ports for step in steps)),
+        ('InlineJavascriptRequirement',
+         any(dict(step.interpreted).get('when') is not None for step in steps)
+         or any('$(' in text or '${' in text for text in value_from)),
+        ('MultipleInputFeatureRequirement',
+         any(len(record.sources) > 1 or 'linkMerge' in dict(record.fields) for record in records)),
+        ('StepInputExpressionRequirement', bool(value_from)),
+    ) if needed)
 
 
 def emit(graph: EmissionDocument, names: Names) -> Cwl:
@@ -169,14 +175,14 @@ def emit(graph: EmissionDocument, names: Names) -> Cwl:
         'steps': [_emit_step(step, ins[step.id], names) for step in graph.steps],
         'cwlVersion': graph.cwl_version,
         'class': 'Workflow',
-        '$namespaces': {name: deepcopy(value) for name, value in graph.namespaces},
-        '$schemas': deepcopy(list(graph.schemas)),
-        'inputs': {names.port(port.name): _emit_port(port, names)
-                   for port in graph.workflow_inputs},
-        versions.ANNOTATION_KEY: graph.lang_version,
-        'outputs': {names.port(port.name): _emit_port(port, names)
-                    for port in graph.workflow_outputs},
     }
+    if graph.namespaces:
+        known['$namespaces'] = {name: deepcopy(value) for name, value in graph.namespaces}
+    if graph.schemas:
+        # An ontology is a dependency of the document: only its author adds one.
+        known['$schemas'] = deepcopy(list(graph.schemas))
+    known['inputs'] = {names.port(port.name): _emit_port(port, names) for port in graph.workflow_inputs}
+    known['outputs'] = {names.port(port.name): _emit_port(port, names) for port in graph.workflow_outputs}
     if graph.requirements:
         known['requirements'] = {name: deepcopy(value) for name, value in graph.requirements}
     known.update({name: deepcopy(value) for name, value in graph.passthrough})
@@ -214,19 +220,17 @@ def _emit_step(node: StepNode, ins: tuple[tuple[PortName, EmittedValue], ...],
 
 
 def _emit_scatter(scatter: Any, ports: tuple[PortName, ...], names: Names) -> Any:
-    """`scatter:` spelled from its resolved `ports`, in the authored shape."""
+    """`scatter:` spelled from its resolved `ports`, always as a list."""
     match scatter:
-        case list():
+        case list() | str():
             return [names.port(port) for port in ports]
-        case str():
-            return names.port(ports[0])
     return deepcopy(scatter)
 
 
-def _emit_binding(value: EmittedValue, names: Names) -> str | dict[str, str]:
+def _emit_binding(value: EmittedValue, names: Names) -> str | dict[str, Any]:
     """One `in:` entry, in the spelling its value asks for.
 
-    Returns `str | dict[str, str]` rather than `Any` so mypy checks this
+    Returns `str | dict[str, Any]` rather than `Any` so mypy checks this
     `match` covers the union instead of a missed arm silently falling through.
     """
     match value:
@@ -236,6 +240,14 @@ def _emit_binding(value: EmittedValue, names: Names) -> str | dict[str, str]:
             return {'source': names.source(ref)}
         case Expression(text=text):
             return text
+        case Record(sources=sources, fields=fields):
+            known: dict[str, Any] = {}
+            if sources:
+                spelled = [names.source(source) for source in sources]
+                # One source stays a list beside `linkMerge`, which merges a list.
+                known['source'] = spelled if len(spelled) > 1 or 'linkMerge' in dict(fields) else spelled[0]
+            known.update({key: deepcopy(field) for key, field in fields})
+            return known
 
 
 def _emit_port(port: WorkflowPort, names: Names) -> Any:

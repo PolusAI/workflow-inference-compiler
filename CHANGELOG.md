@@ -1,3 +1,411 @@
 # Changelog
 
 All notable changes to Sophios will be documented in this file.
+
+Each release's generated notes list what changed. Where a release breaks
+something that worked in the one before it, an upgrade section beneath its
+notes says what to change in your files and code.
+
+## 0.7.0: upgrading from 0.6.0
+
+Codes in parentheses are the codes Sophios prints with each diagnostic.
+
+### `.wic` files
+
+- A literal must already have its input's type; nothing is converted any more
+  (wic020). Write `!ii 2` rather than `!ii 2.9` on an `int` input, `!ii true`
+  rather than `!ii yes` on a `boolean` input, and `!ii 1.0e-5` rather than
+  `!ii 1e-5` (YAML 1.1 reads the latter as text). A `string` input still takes
+  any scalar, and an `int` still feeds a `float`.
+- A quoted `!ii` scalar is its text, as it is in plain YAML: `!ii '007'` is the
+  text `007`, where it used to be the number 7. Quote a literal to keep it
+  text; leave it unquoted for a number, so `!ii 7` on an `int` input. A
+  `string` input takes either spelling.
+- A boolean on a `string` input reaches the tool as `true` or `false`, where it
+  was `True` or `False`. A tool that compares against `True` must compare
+  against `true`.
+- A scalar literal on an input listed in `scatter:` is an error (wic020); it
+  used to be wrapped into a one-element list, so the scatter ran once. Write
+  a list, or take the input out of `scatter:`.
+- A mapping in `in:` made only of CWL step-input fields (`source`, `default`,
+  `valueFrom`, `linkMerge`, ...) is reported (wic038); it used to be sent to
+  the tool as a literal object. Tag it `!ii` if the tool should receive that
+  mapping, or write it as a `!cwl` step-input record if it binds the input.
+- An output with `linkMerge`, `pickValue` or a list `outputSource` is reported
+  (wic038). Point `outputSource` at one `step/port`.
+- `!&` belongs on outputs only (wic019). It never compiled on an input; move it
+  to the producing step's `out:` and consume it with `!*`.
+- A step written as a single-key entry in a sequence (`- touch: {...}`) is
+  reported (wic006); it never compiled. Write `- id: touch`, or use the
+  mapping form `steps: {touch: {...}}`.
+- A document the YAML loader cannot load (`!!int abc`, `!!str [a]`, an
+  impossible date such as `2020-13-45`, an unknown `!!` tag such as `!!foo: 1`,
+  `k: !!foo 1` or a verbatim `!<tag:...>`, a `<<` that merges a scalar) is
+  reported (wic009) at the loader's position, with the loader's own message,
+  as an unknown `!` tag is; it used to pass the parser or crash it. Correct the
+  value at that position, or quote the text if it was meant literally.
+- An `!ii` scalar is read as YAML reads the same text written plain, so
+  `!ii 2020-13-45` is reported (wic009) as `2020-13-45` is; it used to become
+  the text `2020-13-45`. Quote the text if it was meant literally.
+- A Sophios tag used as a mapping key (`!ii a: b`) is reported (wic005): a key
+  is a name. Put the tag on the value: `a: !ii b`.
+- A step id, a workflow input or output, and the workflow's own file name are
+  letters, digits, `_`, `.` and `-`, and do not start with `.`; anything else
+  is reported (wic045). They become file names and ids of the compiled CWL,
+  where `/`, `#`, a space or `~` broke the run or a name. Rename the step or
+  port.
+- `<<` merge keys apply everywhere, as YAML defines them: in `!ii` values, in
+  `in:` and in plain CWL passed through, which used to carry a literal `<<` key
+  or make an input named `<<`. A merged mapping keeps the key order the YAML
+  loader gives it, so steps merged into `steps:` run in that order. To keep a
+  key named `<<`, quote it: `"<<": value`.
+- A step whose run is a CWL Workflow (a top-level `class: Workflow`, or a packed
+  `$graph` whose `main` is a Workflow) is refused (wic013), whether it is a
+  stem on `search_paths_cwl`, a `run:` path or an inline `run:` body. It used
+  to compile with exit 0 and then fail in cwltool, or fail with wic028. Write
+  it as a `.wic` subworkflow and call that, or run a CWL Workflow file on its
+  own with `--allow_raw_cwl`. In Python, a `Step` whose `clt_path` is a CWL
+  Workflow is refused the same way: build it as a nested `Workflow` of `Step`s.
+- A packed `.cwl` file (a `$graph`) whose `main` is a CommandLineTool is that
+  tool, on `search_paths_cwl`, as a `run:` path or as a `Step`'s `clt_path`:
+  the step has `main`'s ports and runs `main` on its own, as a CWL runner
+  would. It used to compile as a tool with no ports (wic028, or a failure in
+  cwltool). A packed file with no `main` is refused (wic013), naming the
+  processes it holds.
+- A `cwl_subinterpreter` step declares a real-time analysis, which Sophios
+  runs beside the workflow under `--run_local` (see Real-time Analysis in
+  `docs/advanced.md`); it is no longer emitted as a CWL step. Every input is a
+  literal, and a malformed declaration is reported (wic044). The adapter's
+  `cachedir_path`, `root_workflow_yml_path` and `homedir` inputs and its
+  `output_log_path` output are gone: remove a binding of those inputs and any
+  edge from `output_log_path`. `max_times` is an `int`; a string integer such
+  as `'20'` is still accepted. From Python, a `.wic` analysis is found through
+  `Workflow.run(workflow_paths=...)`, shaped like `Workflow.from_wic`'s.
+
+- The REST converter keeps each WFB setting as sent: a string setting is text
+  and is no longer read as YAML a second time. That second read crashed on
+  `*.tif`, `@x` or `%p`, turned `{row:c}` into a mapping, cut `x # y` to `x`,
+  folded line breaks, dropped surrounding quotes and spaces, and wrote a null,
+  alone or inside a list, as the text `None`. A typed value sent as text now
+  stays text: send `5`, `0.5`, `true`, `null` or `[1, 2]` as that JSON value,
+  not as the string `"5"`, `"0.5"`, `"true"`, `"null"` or `"[1, 2]"`, which a
+  typed input reports (wic020). `"2020-01-02"`, `"yes"`, `"0x1F"` and `"12:30"`
+  stay text as well.
+
+### Compiled CWL
+
+- A step is called by its id: `touch`, where it was
+  `greeting__step__1__touch`, and a call to `make_greeting.wic` is the step
+  `make_greeting`. An id more than one step of a workflow has is numbered on
+  every step that has it, the first included, with `@` and the step's
+  position: `append@2`, `append@3`; so is a step whose id is also the name of
+  one of the workflow's inputs or outputs. A name the compiler makes joins
+  step and port with `~`: the input `touch~filename` where it was
+  `greeting__step__1__touch___filename`, and a nested one
+  `make_greeting~touch~filename`. Rename the keys of an inputs file written
+  for an earlier compile, and the keys you read from `output_<workflow>.json`;
+  `--cwl_inline_subworkflows` names a dissolved call's steps `<call>~<step>`.
+  In Markdown on GitHub, quote such a name in a code span: two `~` render as
+  strikethrough.
+- A `when:` on a subworkflow call that reads one of the call's made names
+  writes it in brackets, `$(inputs["touch~filename"])`: `~` is not allowed in
+  `inputs.<name>`.
+- An `outputSource:` that names its step as `<workflow>__step__<n>__<id>` names
+  no step any more: with no `type:` it is reported (wic036), and with one the
+  runner rejects it. Write the step's id, or `(n, id)` when the id repeats. A
+  step whose id you wrote that way is still that step.
+- Every file of the tree sits beside the workflow in the base path:
+  `<workflow>.cwl`, `<workflow>_inputs.yml`, and `<workflow>~<step>.cwl` for
+  the process each step runs, where it was `<generated step id>/<tool>.cwl`;
+  a step inside a subworkflow is `<workflow>~<call>~<step>.cwl`. A tool three
+  steps run is written three times, and two workflows compiled into one base
+  path never share a file. The empty `<tool>_inputs.yml` beside each tool is
+  no longer written. A real-time analysis is laid out the same way under
+  `realtime/<workflow>/`: `<analysis>.cwl` and `<analysis>~<step>.cwl`. A
+  script that read a tool file by its old path reads it by its step's.
+- `autogenerated/<workflow>.names.json` is no longer written, and a run no
+  longer rewrites the runner's messages: they name each step as it is called
+  in the compiled CWL.
+- A tool that refers to a file relative to itself (an `$include`, an
+  `$import`, a relative `location` or `path` such as a `default:`) is packed
+  by cwltool when it is written: the include becomes its text, the import its
+  content, a location an absolute `file://` URI. The files stay where they
+  are, and a copied tool no longer loses them. A file cwltool cannot read is
+  reported at the step that runs the tool (wic013), where the run used to
+  fail. A `dockerFile` given by `$include` is packed the same way; its path
+  is no longer made absolute.
+- The compiled workflow no longer lists the EDAM ontology under `$schemas`;
+  `$schemas` holds what you wrote.
+- The compiled workflow no longer carries Sophios's own `sophios:lang_version`
+  key and `sophios` prefix, which no runner reads; the compile prints the
+  version, and Python has `CompiledWorkflow.lang_version`. `edam` is declared
+  in `$namespaces` only where a format says `edam:`.
+
+### Command line
+
+- The runner's default output directory is named after the workflow too,
+  `outdir_<runner>_<workflow>_<timestamp>`, like the provenance, summary and
+  job-store paths beside it. Two different workflows started in the same
+  second from one directory no longer share it, where cwltool could fail with
+  `File exists` or merge their outputs. Two runs of the same workflow started
+  in the same second from one directory still share every path the run writes.
+- Diagnostics are printed on stderr, each with its `file:line:col` and code, and
+  so are the compile-failure banners. A script that read them from stdout must
+  read stderr.
+- A working directory where `autogenerated/` cannot be created or written is
+  reported as `wic021`, naming the directory, before anything is compiled; it
+  used to be a `PermissionError` traceback.
+- `--basepath DIR` names the directory the command writes its compiled workflow,
+  job file, drawings, schema and run files into, as `Workflow.run(basepath=)`
+  does; it was always `autogenerated/`. Nothing under it is read as a tool or
+  workflow: pass the same directory to `plugins.get_tools_cwl(config, basepath=)`
+  and `get_yml_paths(config, basepath=)` from Python.
+- A `--yaml` or `--inputs_file` that names no file is a usage error: one line
+  and exit code 2, as a missing `--config_file` already was. It used to be a
+  `FileNotFoundError` traceback.
+- An unexpected failure is one line: what stopped, and the
+  `error_<workflow>.txt` that now holds the whole traceback (it used to be
+  written without its stack frames). If the line does not say what to change,
+  report it with that file.
+- An unrecognised argument exits with code 2. Pass `--passthrough_flags yes` to
+  hand unknown flags to the runner; `--passthrough_flags` accepts only `yes` or
+  `no`.
+- A flag is never read as an abbreviation of a longer one: write each flag in
+  full (`--inputs_file`, not `--inputs`). A runner flag such as `--validate`
+  now reaches the runner instead of being taken for `--validate_plugins`.
+- `--run_local` exits with the runner's exit code when the run fails; it used
+  to exit 0. A script that checked the output instead of the exit code can
+  check the exit code.
+- `--quiet` is passed to cwltool only when you give it. It no longer changes
+  the compiled CWL: a tool on a search path used to get `stdout: <tool>.out`
+  and `stderr: <tool>.err` at compile, written to files the run deleted. A
+  tool's own messages now print as the run goes.
+- `--no_provenance` drops the runner's `--provenance`; it used to be accepted
+  and ignored.
+- `--cachedir` is passed to cwltool when you give it, so cwltool caches each
+  step there and reuses a step whose tool and inputs are unchanged. It used to
+  be accepted and ignored, and its default, `cachedir`, is now unset: a run
+  caches only when you ask, or in `cachedir/` when it runs a real-time
+  analysis. Give `--cachedir cachedir` to keep the old directory.
+- A relative `location` or `path` of a File or Directory in a `.wic`
+  `default:`, under `inputs:` or in a step-input record, is read from the
+  directory of the `.wic` and written absolute into the compiled CWL; it used
+  to be written as it was, and read from wherever the runner read the
+  compiled workflow. A default that relied on that reads from beside the
+  `.wic`, or is written absolute.
+- A relative `location` or `path` of a File or Directory in `--inputs_file`
+  is read from the directory of the inputs file, at any depth, as CWL v1.2
+  section 5.1.5 says. Only a top-level `location` was rewritten before, and it
+  was read from the working directory, so a job file that sat elsewhere
+  worked. If you keep an inputs file outside the directory you run from and
+  wrote its paths relative to that directory, make them relative to the file,
+  or absolute.
+- Before a run, Sophios checks that each File and Directory a job names
+  exists, is the right kind and is readable (wic016). An inputs file that is
+  not a mapping of input names to values is reported (wic002). It also checks
+  that it can create and write the directories the run writes to:
+  `autogenerated/` or `Workflow.run()`'s `basepath`, and `--outdir` or
+  `run_args_dict={"outdir": ...}` (wic021).
+- A `!ii` File or Directory read from beside the workflow is run where it is:
+  the job names it by its absolute path, and nothing is copied. A File used to
+  be copied into `autogenerated/`, however large, and a Directory was not, so a
+  tool that read it failed.
+- The container engine is checked only when a step runs in a container, with
+  `<engine> info` rather than a hello-world container. A workflow with no
+  container runs without an engine.
+- Before a local run, a podman run pulls its images with podman; it used to pull
+  them with docker. A tool whose image comes from `dockerLoad` or `dockerImport`
+  now has it loaded before the run; the run never loaded it before. An image
+  that cannot be pulled, loaded or imported is reported (wic037) instead of
+  ending in a traceback.
+- `--write_intermediate_wic` is gone.
+- `--ignore_validation_errors` is still accepted but does nothing beyond a
+  warning: there is no separate validation pass left to ignore. Remove it.
+- `--generate_schemas` writes only the language schema,
+  `autogenerated/schemas/wic.json`. Per-tool and per-workflow schemas, and
+  `schema_store.json`, are no longer written: point an editor at `wic.json`.
+- `--cwl_inline_subworkflows` flattens subworkflow calls into the root again,
+  and `--cwl_inline_runtag` embeds each tool; pass both for one self-contained
+  file. A call that carries anything besides `in` and `out` (such as
+  `scatter:` or `when:`), or whose workflow says `wic: {inlineable: false}`,
+  stays nested and is named on stderr.
+- The `cwl_subinterpreter` command is gone; `--run_local` runs a declared
+  real-time analysis itself.
+- `--graphviz` draws each step as a box with no fill, its outline and label
+  in black, and an inferred edge in black; an explicit edge is still blue.
+  The boxes used to be filled light blue and the inferred edges white, which
+  vanished on a white page. `--graph_dark_theme` now draws the text, the box
+  outlines and the inferred edges in white, for a dark background; it used to
+  turn the text and the inferred edges black. The labels `--graph_label_edges`
+  writes take the same colour as the text. Drop the flag where you passed it
+  to get black, and pass it where you relied on white. With the flag an
+  explicit edge is a lighter blue (`lightskyblue`), which reads on a dark
+  background where `blue` does not.
+- `--docker_remove_entrypoints` (and `docker_remove_entrypoints` in
+  `Workflow.run()`) runs the `-noentrypoint` images it builds. The run used to
+  read the CWL written before the images were renamed, so it ran the original
+  images; and a `DockerRequirement` under `hints`, or in a tool embedded in an
+  inlined document, was never renamed. An image from a registry with a port
+  (`localhost:5000/img:tag`) no longer fails the run.
+- cwltool and Toil run as a separate program, a child of Sophios, from the
+  command line and `Workflow.run()` alike, never inside the Sophios process.
+  Ctrl-C sends the runner SIGTERM, on which cwltool stops the containers it
+  started, and kills it if it has not stopped within 30 seconds; however else
+  Sophios ends (`kill`, a closed terminal, `kill -9`), the runner is stopped the
+  same way. `error_<workflow>.txt` is written only when the runner could not be
+  started, and the `via cwltool.main.main python API` line is gone.
+- `sophios.run_local.run_local`, `build_cmd`, `create_safe_env` and
+  `RUNNER_UNAVAILABLE`, and `sophios.plugins.FailedJobs`, are removed: run with
+  the command line or `Workflow.run()`.
+- A local run, from the command line or `Workflow.run()`, keeps everything the
+  runner printed, both streams as they came, in `<basepath>/run_<workflow>.log`.
+- A run under `--cwl_runner toil-cwl-runner` writes the output object Toil
+  prints to `<basepath>/output_<workflow>.json`, as a cwltool run does.
+
+### Python API and embedding
+
+- `Workflow.run()` raises `WorkflowRunError` (api005, importable from
+  `sophios.api.python.workflow`) when the run fails, instead of returning.
+  Catch it where you used to inspect the result.
+- `Workflow.run()` returns a `RunResult` (`state`, `outputs`, `outdir`,
+  `log_file`, `exit_code`) for a completed run instead of `None`, and `None`
+  with `generate_run_script`. A script that ignores the return value runs as
+  before. `Workflow.start()` takes `run()`'s arguments and returns a
+  `RunHandle` once the runner has started: `wait(timeout=None)`, `status()`,
+  `logs()`, `outputs()` and `cancel()`, with the states `QUEUED`, `RUNNING`,
+  `COMPLETED`, `FAILED` and `CANCELLED`. The run lives as long as the Python
+  process: when the interpreter exits with the run still going, it is
+  cancelled.
+- `sophios.run_local_async` is gone: its `run_cwl_workflow` and
+  `run_cwl_serialized` ran a runner without Sophios's checks, image pulls or
+  failure report. Use `await flow.run_async(...)`, a coroutine with `run()`'s
+  arguments and result, which runs the compile and the checks in a worker
+  thread, and stops the runner when its task is cancelled. It refuses a
+  workflow that declares real-time analyses with `api008`; use `run()` or
+  `start()` for one. `sophios.runtime_inputs.normalize_job_inputs` and
+  `normalize_cwl_document`, which only it used, are gone with it.
+- `Workflow.run()` runs exactly the document `Workflow.compile()` returns,
+  written as one `<workflow>.cwl` with its job file; it no longer writes a
+  file for each tool beside it. A workflow that names outputs keeps only
+  those, in the run's outputs as in `compile()`: read a step's output by
+  naming it as a workflow output.
+- `run_args_dict={'no_provenance': 'yes'}` runs without the runner's
+  record of the run.
+- A `Step(step_name=...)` or `Workflow` name with a character other than
+  letters, digits, `_`, `.` and `-`, or starting with `.`, raises
+  `ValueError`. A relative File or Directory in a `StepInput(default=...)` is
+  read from the working directory and written absolute, as a bound value is.
+- `Workflow.compile()` and `Workflow.run()` take `inference=Inference(...)`
+  (`sophios.api.python.workflow`), the Python spelling of
+  `--inference_disable`, `--inference_strict`,
+  `--inference_use_naming_conventions`, `--insert_steps_automatically` and the
+  configuration file's `renaming_conventions` and `inference_rules`. An
+  invalid one is `api007`. Without it, inference runs with the defaults, as before.
+- Library code raises `SophiosError` (`sophios.lang.diagnostics`) instead of
+  calling `sys.exit(1)`, so a bad workflow no longer ends the calling process.
+  Catch `SophiosError` where you caught `SystemExit`. The CLI's exit codes are
+  unchanged.
+- A numpy `int`, `float32` or `bool` passed as a literal is no longer
+  converted; pass `int(...)`, `float(...)` or `bool(...)`.
+- Contrib modules moved under `sophios.contrib`:
+  `sophios.api.utils.converter` is `sophios.contrib.converter`,
+  `sophios.api.utils.wfb_util` is `sophios.contrib.wfb_util`,
+  `sophios.api.utils.ict.*` is `sophios.contrib.ict.*`, and
+  `sophios.api.rest.api` is `sophios.contrib.rest.api`. The REST API's HTTP
+  behaviour is unchanged.
+- The modules `sophios.ast`, `sophios.inference`, `sophios.inlineing` and
+  `sophios.schemas` are gone with the compiler they belonged to. Compile
+  through the CLI or `sophios.api.python`.
+- Ports are bound and read through their objects. `Workflow.add_input()` is
+  gone; declare an input by binding it: `workflow.inputs.name = ...` or
+  `step.inputs.x = workflow.inputs.name`.
+- `Step.bind_input()`, `Step.get_output()`, `Workflow.bind_input()`,
+  `Workflow.bind_output()` and `Workflow.add_output()` are private. Use
+  `step.inputs.x = ...`, `step.outputs.x` and `workflow.outputs.x = ...`.
+- `Output(from_input=...)` is gone; write the glob as a CWL expression, e.g.
+  `glob="$(inputs.output.basename)"` for a File or Directory input,
+  `glob="$(inputs.output)"` for a string one.
+- `Fields.to_list()` is gone and `SecondaryFile.to_dict()` returns a mapping:
+  the tool builder renders through cwl_utils.
+- `Workflow.write_wic()` writes a self-contained bundle (the root `.wic`, each
+  nested workflow's `.wic` and each tool's `.cwl`) and no longer takes
+  `inline_subworkflows`. The inline `subtree:` form is gone. Drop the
+  argument and read the nested workflows from their own files.
+- `Workflow.to_wic_yaml()` and the `Workflow.yaml` property are gone:
+  `Workflow.write_wic()` is the one way to write `.wic` from Python. Call it
+  and read the file it writes.
+- A written workflow output names its authored step (`step/port`), and every
+  step carries `run: <stem>.cwl`. Two different tools sharing one file stem in
+  a workflow are rejected; rename one tool's file. So is a different
+  `<stem>.cwl` already in the target directory, which `write_wic` used to
+  overwrite silently; a file holding the same tool is left untouched. A tool's
+  relative imports such as `$import` are not copied.
+- Several sources, `linkMerge`, `pickValue`, `valueFrom`, `default`,
+  `loadContents` and `loadListing` are bound with `StepInput(source=,
+  link_merge=, pick_value=, value_from=, default=, load_contents=,
+  load_listing=)`, whose sources are port objects. A list of ports, or a port
+  anywhere inside a bound list or mapping, raises `InvalidInputValueError`
+  where it is bound; it used to reach the compiler as a literal and fail with
+  wic020. Wrap the ports in `StepInput(source=[...])`.
+- `Step(path, config_path=...)` is `Step(path, step_inputs_file=...)`. Its
+  values are bound as written: a File or Directory in it is no longer checked
+  when the step is built (api001), and a local run reports a missing one
+  before it starts (wic016), reading a relative path from the working
+  directory. `Step.from_cwl_document(config=...)` and
+  `CommandLineTool.to_step(config=...)` are `step_inputs=...`, bound the same
+  way.
+- `Workflow.run(user_env_vars=...)` passes each value to the runner exactly as
+  given; `$`, `!`, `&`, quotes, parentheses and newlines used to be stripped
+  from it. Write a value as the runner should see it. A key that is not an
+  environment variable name raises `ValueError` before the run starts, where
+  it used to be dropped with a warning; rename or remove it.
+- `compile_source` takes the bundle and the compiler options only: drop
+  `yaml_tag_paths`, the graph settings and `graph_target`.
+  `sophios.cli.default_compilation_settings()` returns the compiler options, and
+  `get_dicts_for_compilation()` returns `(compiler_options, graph_settings)`.
+  The compiler no longer draws: `CompilationArtifact.graph_view` and
+  `sophios.utils_graphs` are gone, and `sophios.drawing.draw(result, bundle,
+  graph_settings, name, *, background)` draws a compiled workflow. The
+  `sophios.cwl_subinterpreter` module is gone.
+- `sophios.utils_yaml.wic_loader()` and its `WicLoader` are gone. Read a
+  `.wic` with `sophios.lang.parse` or `Workflow.from_wic`.
+- `CommandLineTool.validate()`, `write_cwl(validate=True)` and
+  `validate_cwl_document()` never load the ontologies under `$schemas`, as a
+  local run does not, and no longer take `skip_schemas`. Drop the argument.
+- `Workflow.draw()` returns the workflow's drawing as a `graphviz.Digraph`,
+  which a Jupyter notebook shows inline when a cell ends with it. It compiles
+  as `compile()` does, so `inference=` changes the edges it draws. Its
+  background is opaque, white or with `dark=True` near-black, so it reads in
+  a light or a dark notebook, in exported HTML and on GitHub; `--graphviz`
+  keeps its transparent background.
+
+<!-- Breaking changes merged before 0.7.0 is released add their upgrade steps
+     to the section above that they belong to. -->
+
+### Packaging
+
+- `aiofiles` is no longer a dependency; `sophios.run_local_async` was its only user.
+- The `runners-src` extra is gone; PyPI does not accept a dependency on a Git
+  URL. Install `cwl-utils` from Git yourself if you need an unreleased
+  version.
+- cwltool 3.1.20241217163858 or newer is required. From that release cwltool
+  names a singularity image with no tag as `cwl-docker-extract` pulls it
+  (`<name>_latest`); with an older cwltool, a singularity run of such an
+  image cannot find it. `pip install -U cwltool` if pip reports a conflict.
+- Before a release is uploaded to PyPI, its built wheel and sdist are each
+  installed into a fresh environment and used from outside the checkout: the
+  CLI, the Python API, and a tutorial compile with the adapters the package
+  ships. The same check runs on every pull request.
+
+### New diagnostics that do not fail a compile
+
+These print on stderr and change no output; nothing needs to change.
+
+- When inference picks between equally good producers it says so: wic042 when
+  one producer offered several matching outputs, wic043 when an earlier
+  producer also matched. `--inference_strict` makes both errors; pin the edge
+  with `!&`/`!*` to choose explicitly.
+- A `when:` that reads an undeclared input (with the bracket form to write
+  when it reads `inputs.<call>` for a made name), a `wic: steps:` key or a
+  `wic: graphviz: ranksame` entry that addresses no step, and a call left nested by `--cwl_inline_subworkflows`
+  are each named on stderr.

@@ -59,8 +59,8 @@ def test_real_supported_compilation_result_converts(
     converted = compiled_source_to_nextflow(real_supported_result)
     assert converted.name == "wf"
     assert [process.name for process in converted.processes] == [
-        "wf__step__1__touch",
-        "wf__step__2__copy",
+        "touch",
+        "copy",
     ]
 
 
@@ -454,7 +454,7 @@ def test_absent_optional_scalar_lowers_to_the_sentinel_parameter() -> None:
     workflow = compiled_source_to_nextflow(rose)
 
     assert workflow.params == {"note": []}
-    assert NfWorkflowInputConnection("note", "PASSTHROUGH", "note") in workflow.connections
+    assert NfWorkflowInputConnection("note", "_PASSTHROUGH", "note") in workflow.connections
 
 
 @pytest.mark.fast
@@ -500,9 +500,9 @@ def test_applies_unwired_scalar_default_before_lowering() -> None:
         [default_tool],
     )
     workflow = compiled_source_to_nextflow(rose)
-    assert workflow.params == {"_DEFAULT___message": "hello default"}
-    assert NfWorkflowInputConnection("_DEFAULT___message", "DEFAULT", "message") in workflow.connections
-    assert "Channel.value(params._DEFAULT___message)" in render_nextflow(workflow)
+    assert workflow.params == {"_DEFAULT_message": "hello default"}
+    assert NfWorkflowInputConnection("_DEFAULT_message", "_DEFAULT", "message") in workflow.connections
+    assert "Channel.value(params._DEFAULT_message)" in render_nextflow(workflow)
 
 
 @pytest.mark.fast
@@ -520,14 +520,14 @@ def test_rejects_collisions_between_source_and_default_params() -> None:
     rose = synthetic_source(
         workflow_doc(
             [step("DEFAULT")],
-            inputs={"DEFAULT___message": {"type": "string"}},
+            inputs={"DEFAULT_message": {"type": "string"}},
         ),
         [default_tool],
-        workflow_inputs={"DEFAULT___message": "workflow value"},
+        workflow_inputs={"DEFAULT_message": "workflow value"},
     )
     with pytest.raises(
         ValueError,
-        match="lowered workflow parameter names collide: _DEFAULT___message",
+        match="workflow parameter identifiers 'DEFAULT_message', 'DEFAULT~message' normalize to '_DEFAULT_message'",
     ):
         compiled_source_to_nextflow(rose)
 
@@ -579,7 +579,7 @@ def test_preserves_linear_dag(real_supported_result: CompilationResult) -> None:
         if isinstance(connection, NfProcessConnection)
     ]
     assert [(edge.from_process, edge.from_port, edge.to_process, edge.to_port) for edge in internal] == [
-        ("wf__step__1__touch", "result", "wf__step__2__copy", "source"),
+        ("touch", "result", "copy", "source"),
     ]
 
 
@@ -603,7 +603,7 @@ def test_preserves_fanout() -> None:
         edge
         for edge in connections
         if isinstance(edge, NfProcessConnection)
-        and edge.from_process == "A"
+        and edge.from_process == "_A"
         and edge.from_port == "out"
     ]) == 2
 
@@ -611,27 +611,19 @@ def test_preserves_fanout() -> None:
 @pytest.mark.fast
 def test_preserves_workflow_input_connection(real_supported_result: CompilationResult) -> None:
     connections = compiled_source_to_nextflow(real_supported_result).connections
-    assert NfWorkflowInputConnection(
-        "wf__step__1__touch___filename",
-        "wf__step__1__touch",
-        "filename",
-    ) in connections
+    assert NfWorkflowInputConnection("touch_filename", "touch", "filename") in connections
 
 
 @pytest.mark.fast
 def test_preserves_workflow_output_connection(real_supported_result: CompilationResult) -> None:
     connections = compiled_source_to_nextflow(real_supported_result).connections
-    assert NfWorkflowOutputConnection(
-        "wf__step__2__copy",
-        "result",
-        "wf__step__2__copy___result",
-    ) in connections
+    assert NfWorkflowOutputConnection("copy", "result", "copy_result") in connections
 
 
 @pytest.mark.fast
 def test_copies_workflow_params(real_supported_result: CompilationResult) -> None:
     params = compiled_source_to_nextflow(real_supported_result).params
-    assert params == {"wf__step__1__touch___filename": "message.txt"}
+    assert params == {"touch_filename": "message.txt"}
 
 
 @pytest.mark.fast
@@ -644,12 +636,7 @@ def test_forward_conversion_uses_resolved_graph_edges(
 
     connections = compiled_source_to_nextflow(compilation).connections
 
-    assert NfProcessConnection(
-        "wf__step__1__touch",
-        "result",
-        "wf__step__2__copy",
-        "source",
-    ) in connections
+    assert NfProcessConnection("touch", "result", "copy", "source") in connections
 
 
 @pytest.mark.fast
@@ -666,12 +653,7 @@ def test_scatter_lowers_to_an_adapted_workflow_input_connection(
     real_scattered_result: CompilationResult,
 ) -> None:
     connections = compiled_source_to_nextflow(real_scattered_result).connections
-    assert connections[0] == NfWorkflowInputConnection(
-        "wf__step__1__echo_item___item",
-        "wf__step__1__echo_item",
-        "item",
-        "dotproduct",
-    )
+    assert connections[0] == NfWorkflowInputConnection("echo_item_item", "echo_item", "item", "dotproduct")
 
 
 @pytest.mark.fast
@@ -688,7 +670,7 @@ def test_a_scattered_parameter_carries_the_whole_source_array(
     real_scattered_result: CompilationResult,
 ) -> None:
     assert compiled_source_to_nextflow(real_scattered_result).params == {
-        "wf__step__1__echo_item___item": ["alpha", "beta"]
+        "echo_item_item": ["alpha", "beta"]
     }
 
 
@@ -697,10 +679,7 @@ def test_a_subworkflow_graph_projects_into_namespaced_processes(
     real_nested_result: CompilationResult,
 ) -> None:
     workflow = compiled_source_to_nextflow(real_nested_result)
-    assert [process.name for process in workflow.processes] == [
-        "root__step__1__write",
-        "root__step__2__child_wic___child__step__1__inner_copy",
-    ]
+    assert [process.name for process in workflow.processes] == ["write", "child_inner_copy"]
 
 
 @pytest.mark.fast
@@ -709,17 +688,8 @@ def test_subworkflow_io_binds_to_the_outer_step_endpoints(
 ) -> None:
     """The inner step reads the outer producer, and the outer output reads the inner step."""
     connections = compiled_source_to_nextflow(real_nested_result).connections
-    assert NfProcessConnection(
-        "root__step__1__write",
-        "result",
-        "root__step__2__child_wic___child__step__1__inner_copy",
-        "source",
-    ) in connections
-    assert NfWorkflowOutputConnection(
-        "root__step__2__child_wic___child__step__1__inner_copy",
-        "result",
-        "root__step__2__child_wic___child__step__1__inner_copy___result",
-    ) in connections
+    assert NfProcessConnection("write", "result", "child_inner_copy", "source") in connections
+    assert NfWorkflowOutputConnection("child_inner_copy", "result", "child_inner_copy_result") in connections
 
 
 @pytest.mark.fast

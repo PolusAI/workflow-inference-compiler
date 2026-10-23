@@ -1,20 +1,17 @@
 {
   "name": "multistep1_toJson_pyapi_py",
   "yaml_inputs": {
-    "multistep1_toJson_pyapi_py__step__1__touch___filename": "empty.txt",
-    "multistep1_toJson_pyapi_py__step__2__append___str": "Hello"
+    "touch~filename": "empty.txt",
+    "append~str": "Hello"
   },
   "steps": [
     {
-      "id": "multistep1_toJson_pyapi_py__step__1__touch",
+      "id": "touch",
       "in": {
         "filename": {
-          "source": "multistep1_toJson_pyapi_py__step__1__touch___filename"
+          "source": "touch~filename"
         }
       },
-      "out": [
-        "file"
-      ],
       "run": {
         "class": "CommandLineTool",
         "requirements": {
@@ -39,22 +36,30 @@
               "glob": "$(inputs.filename)"
             }
           }
-        }
-      }
-    },
-    {
-      "id": "multistep1_toJson_pyapi_py__step__2__append",
-      "in": {
-        "str": {
-          "source": "multistep1_toJson_pyapi_py__step__2__append___str"
         },
-        "file": {
-          "source": "multistep1_toJson_pyapi_py__step__1__touch/file"
+        "hints": {
+          "LoadListingRequirement": {
+            "loadListing": "deep_listing"
+          },
+          "NetworkAccess": {
+            "networkAccess": true
+          }
         }
       },
       "out": [
         "file"
-      ],
+      ]
+    },
+    {
+      "id": "append",
+      "in": {
+        "str": {
+          "source": "append~str"
+        },
+        "file": {
+          "source": "touch/file"
+        }
+      },
       "run": {
         "class": "CommandLineTool",
         "requirements": {
@@ -91,19 +96,27 @@
               "glob": "$(inputs.file.basename)"
             }
           }
-        }
-      }
-    },
-    {
-      "id": "multistep1_toJson_pyapi_py__step__3__cat",
-      "in": {
-        "file": {
-          "source": "multistep1_toJson_pyapi_py__step__2__append/file"
+        },
+        "hints": {
+          "LoadListingRequirement": {
+            "loadListing": "deep_listing"
+          },
+          "NetworkAccess": {
+            "networkAccess": true
+          }
         }
       },
       "out": [
-        "output"
-      ],
+        "file"
+      ]
+    },
+    {
+      "id": "cat",
+      "in": {
+        "file": {
+          "source": "append/file"
+        }
+      },
       "run": {
         "class": "CommandLineTool",
         "requirements": {
@@ -131,40 +144,43 @@
           }
         },
         "stdin": "$(inputs.file.path)",
-        "stdout": "output"
-      }
+        "stdout": "output",
+        "hints": {
+          "LoadListingRequirement": {
+            "loadListing": "deep_listing"
+          },
+          "NetworkAccess": {
+            "networkAccess": true
+          }
+        }
+      },
+      "out": [
+        "output"
+      ]
     }
   ],
   "cwlVersion": "v1.2",
   "class": "Workflow",
-  "$namespaces": {
-    "edam": "https://edamontology.org/",
-    "sophios": "https://github.com/PolusAI/sophios#"
-  },
-  "$schemas": [
-    "https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl"
-  ],
   "inputs": {
-    "multistep1_toJson_pyapi_py__step__1__touch___filename": {
+    "touch~filename": {
       "type": "string"
     },
-    "multistep1_toJson_pyapi_py__step__2__append___str": {
+    "append~str": {
       "type": "string"
     }
   },
   "outputs": {
-    "multistep1_toJson_pyapi_py__step__1__touch___file": {
+    "touch~file": {
       "type": "File",
-      "outputSource": "multistep1_toJson_pyapi_py__step__1__touch/file"
+      "outputSource": "touch/file"
     },
-    "multistep1_toJson_pyapi_py__step__2__append___file": {
+    "append~file": {
       "type": "File",
-      "outputSource": "multistep1_toJson_pyapi_py__step__2__append/file"
+      "outputSource": "append/file"
     },
-    "multistep1_toJson_pyapi_py__step__3__cat___output": {
+    "cat~output": {
       "type": "string",
-      "outputSource": "multistep1_toJson_pyapi_py__step__3__cat/output"
+      "outputSource": "cat/output"
     }
-  },
-  "sophios:lang_version": "0.0.1"
+  }
 }

@@ -1,12 +1,12 @@
-"""Compile-cost cases, run weekly and gating nothing.
+"""Compile-cost cases, run weekly; their timings gate nothing.
 
 Not a property suite and not hermetic: the corpus half is the point — a trend
 over the workflows people actually compile — so it imports `wic_corpus` and is
 excluded from the oracle's module list.
 
-No thresholds, no assertions: `main` returns 0 whatever the numbers say. A
-benchmark that can fail a build is a gate, and correctness is the property
-suite's job. `parse_only` deliberately does not compile for real, which is what
+No thresholds: however slow a week is, no number fails anything. A case that
+raises is reported in the table, the other cases still run, and `main` then
+returns 1. `parse_only` deliberately does not compile for real, which is what
 lets a slow week be pinned to the parser or to the compiler.
 """
 import sys
@@ -28,7 +28,7 @@ from typing import Callable, Final
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core.hermetic import compile_hermetic, subworkflow_step
+from core.hermetic import compile_hermetic, nested_workflow
 from core.synthetic_tools import clt, SYNTHETIC_TOOLS
 from core.wic_corpus import CORPUS, corpus_id
 
@@ -39,7 +39,6 @@ import sophios.input_output as io
 import sophios.plugins
 from sophios.lang import parse
 from sophios.utils_cwl import desugar_into_canonical_normal_form
-from sophios.utils_graphs import get_graph_reps
 from sophios.wic_types import Cwl, StepId, Tool, Tools, Yaml
 
 
@@ -76,9 +75,9 @@ def _get_corpus_env() -> _CorpusEnv:
     global _corpus_env  # pylint: disable=global-statement
     if _corpus_env is None:
         args = sophios.cli.get_args()
-        config_path = Path(args.config_file)
-        config = io.get_config(config_path, config_path) if config_path.exists() else io.get_basic_config()
-        tools = sophios.plugins.get_tools_cwl(config, quiet=True)
+        config_path = args.config_file or io.default_config_file(Path(args.homedir))
+        config = io.read_config_from_disk(config_path) if config_path.exists() else io.get_basic_config()
+        tools = sophios.plugins.get_tools_cwl(config)
         yml_paths = sophios.plugins.get_yml_paths(config)
         _corpus_env = _CorpusEnv(tools, yml_paths)
     return _corpus_env
@@ -92,11 +91,8 @@ def _compile_corpus_file(path: Path) -> None:
     env = _get_corpus_env()
     args = sophios.cli.get_args(str(path))
     bundle = frontdoor.bundle_from_disk(path, env.yml_paths, env.tools)
-    compiler_options, graph_settings, yaml_tag_paths = sophios.cli.get_dicts_for_compilation(args)
-    graph = get_graph_reps(str(path))
-    sophios.compiler.compile_source(
-        bundle, compiler_options, graph_settings, yaml_tag_paths,
-        relative_run_path=True, testing=True, graph_target=graph)
+    compiler_options, _graph_settings = sophios.cli.get_dicts_for_compilation(args)
+    sophios.compiler.compile_source(bundle, compiler_options, testing=True)
 
 
 # --------------------------------------------------------------------------
@@ -105,10 +101,8 @@ def _compile_corpus_file(path: Path) -> None:
 
 def _speculative_insertion_registry() -> tuple[Yaml, Tools]:
     """Two branches, each needing exactly one whitelisted-format-converter
-    insertion. "Two or more whitelisted converter tools" is the design's own
-    phrase for what this path requires (design_docs/core-refactor-design.md
-    §6.2). Section 6.3 puts the path in benchmark coverage; §1 documents its
-    `O(2^n)` complexity.
+    insertion. Two or more whitelisted converter tools put a compilation on
+    this path, whose cost is `O(2^n)`.
 
     Formats may be written either way here: `inference.declared_formats`
     normalises a bare string to a one-element list at every point of entry, so
@@ -146,15 +140,7 @@ def _run_speculative_insertion() -> None:
 # --------------------------------------------------------------------------
 # Case 3: deep nesting.
 
-def _deep_nesting_yml() -> Yaml:
-    """A leaf step wrapped five levels deep with `hermetic.subworkflow_step`."""
-    tree: Yaml = {'steps': [{'id': 'mk_file', 'in': {'name': {'wic_inline_input': 'leaf.txt'}}}]}
-    for level in range(5):
-        tree = {'steps': [subworkflow_step(f'level_{level}.wic', tree)]}
-    return tree
-
-
-_DEEP_NESTING_YML: Final = _deep_nesting_yml()
+_DEEP_NESTING_YML: Final = nested_workflow(15)
 
 
 # --------------------------------------------------------------------------
@@ -193,16 +179,15 @@ CASES: Final[tuple[Case, ...]] = tuple(
 ) + (
     Case('speculative_insertion',
          "A workflow with two branches, each needing one whitelisted-format-"
-         "converter insertion — the design's own phrase, 'two or more "
-         "whitelisted converter tools', for what puts a compilation on this "
-         "path. Section 6.3 puts it in benchmark coverage; §1 documents the "
-         "O(2^n) complexity. The corpus never reaches it. This case times "
+         "converter insertion. Two or more whitelisted converter tools put a "
+         "compilation on this path, whose cost is O(2^n). The corpus never "
+         "reaches it. This case times "
          "two real insertions and the fixed-point passes they force, so it is "
          "the one number on this list that moves with the insertion search "
          "rather than with per-step cost.",
          run=_run_speculative_insertion),
     Case('deep_nesting',
-         "A workflow partitioned five levels deep with "
+         "A workflow partitioned fifteen levels deep with "
          "hermetic.subworkflow_step. Namespacing cost grows with depth and "
          "nothing else on this list has depth.",
          run=lambda: compile_hermetic(_DEEP_NESTING_YML, 'oracle', tools=SYNTHETIC_TOOLS)),
@@ -221,7 +206,7 @@ CASES: Final[tuple[Case, ...]] = tuple(
 
 
 def main() -> int:
-    """Time every case and print a table. Always returns 0."""
+    """Time every case and print a table. Returns 1 if a case raised, else 0."""
     # Discovery is shared setup, not a property of whichever corpus path sorts
     # first. Keep it lazy when a caller selects only synthetic cases.
     if any(case.name.startswith('corpus/') for case in CASES):
@@ -231,6 +216,7 @@ def main() -> int:
     print('|---|---:|')
     corpus_total = 0.0
     all_total = 0.0
+    failed = 0
     for case in CASES:
         start = time.perf_counter()
         try:
@@ -238,17 +224,18 @@ def main() -> int:
             elapsed_seconds = time.perf_counter() - start
             elapsed = f'{elapsed_seconds:.3f}'
         except Exception as exc:  # pylint: disable=broad-except
-            # A case that fails is reported and skipped. This job does not
-            # gate, so a broken case must not stop the other numbers arriving.
+            # A case that raises is reported and the rest still run, so one
+            # broken case does not hide the other numbers; the run then fails.
             elapsed_seconds = time.perf_counter() - start
             elapsed = f'error: {type(exc).__name__}'
+            failed += 1
         all_total += elapsed_seconds
         if case.name.startswith('corpus/'):
             corpus_total += elapsed_seconds
         print(f'| {case.name} | {elapsed} |')
     print(f'| corpus (total) | {corpus_total:.3f} |')
     print(f'| all cases (total) | {all_total:.3f} |')
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == '__main__':

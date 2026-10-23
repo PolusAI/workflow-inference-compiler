@@ -1,0 +1,13 @@
+steps:
+- id: touch
+  in:
+    filename: !ii greeting.txt
+- id: hello
+  run: append
+  in:
+    str: !ii Hello, Sophios
+- id: goodbye
+  run: append
+  in:
+    str: !ii Goodbye for now
+- id: cat

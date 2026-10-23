@@ -1,7 +1,7 @@
 """The Sophios language version: what exists, and how one is chosen.
 
 Owns the version list and implements the selection rules normatively defined
-in the language reference, §7. Resolution always lands on 0.0.1 today, but
+in the language spec, §6. Resolution always lands on 0.0.1 today, but
 the mechanism handles the general case of multiple known versions.
 """
 from typing import Final
@@ -14,12 +14,6 @@ KNOWN_VERSIONS: Final[tuple[str, ...]] = ('0.0.1',)
 
 #: The newest version — what untagged sources resolve to.
 LANG_VERSION: Final[str] = KNOWN_VERSIONS[-1]
-
-#: The namespace under which the resolved version is annotated in emitted CWL,
-#: so the annotation is a declared extension field and the output stays valid.
-ANNOTATION_NAMESPACE: Final[str] = 'sophios'
-ANNOTATION_NAMESPACE_URI: Final[str] = 'https://github.com/PolusAI/sophios#'
-ANNOTATION_KEY: Final[str] = f'{ANNOTATION_NAMESPACE}:lang_version'
 
 
 def resolve(requested: str | None = None,

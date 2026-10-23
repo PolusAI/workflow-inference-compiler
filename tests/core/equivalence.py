@@ -6,12 +6,12 @@ without a reason is a place for a real difference to hide.
 
     IDENTICAL          nothing is ignored.
     UP_TO_ORDER        mapping key order is ignored.
-    UP_TO_EMBEDDING    `run:` paths are ignored.
+    UP_TO_EMBEDDING    `run:` paths, `$namespaces` and `$schemas` are ignored.
     UP_TO_RENAMING     namespaced names are ignored; the DAG must match.
 
-A lattice, asserted by `test_the_lattice_holds`. What each strength forgives is
-declared on `equivalent`.
+A lattice. What each strength forgives is declared on `equivalent`.
 """
+import copy
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import PurePosixPath
@@ -20,6 +20,7 @@ from typing import Any, Final, Iterator
 import networkx as nx
 from networkx.algorithms import isomorphism
 
+from sophios.ir.artifacts import CompilationArtifact
 from sophios.utils import recursively_delete_dict_key
 from sophios.wic_types import Yaml
 
@@ -32,15 +33,15 @@ class Strength(IntEnum):
 
     #: Namespaced names may differ; the DAG and the tools at each node may not.
     #: Legitimate because a namespace encodes *nesting depth*
-    #: (`{stem}__step__{i}__{key}`, joined with `'___'`, docs/dev/algorithms.md),
+    #: (`{stem}__step__{i}__{key}`, joined with `'___'`, docs/dev/architecture.md),
     #: so splitting a workflow into subworkflows renames every port and moves
     #: no edge. This is the only strength partitioning can preserve.
     UP_TO_RENAMING = 1
 
     #: `run:` paths may differ; nothing else may. Legitimate because `run:`
-    #: encodes where a document sits relative to its parent — `relative_run_path`
-    #: writes `step_name/stem.cwl` or `'___'.join(namespaces + [stem.cwl])`
-    #: (src/sophios/compiler.py:626-634) — which is embedding, not meaning.
+    #: names the file a process is written to, which depends on what else the
+    #: tree holds (a stem another process took is numbered) — embedding, not
+    #: meaning.
     UP_TO_EMBEDDING = 2
 
     #: Mapping key order may differ; nothing else may. Legitimate because a
@@ -134,12 +135,11 @@ def equivalent(left: Yaml, right: Yaml, strength: Strength) -> Divergence | None
         case Strength.UP_TO_ORDER:
             return _first_difference(left, right, strength, '', ordered=False)
         case Strength.UP_TO_EMBEDDING:
-            # `$namespaces` goes with `run:`, and not as a convenience. A
-            # prefix must be declared in the document that uses it, so
-            # embedding a child moves the child's declarations up into its
-            # parent (`post_compile.inline_artifact_runs`). Deleting `run:`
-            # alone therefore does not erase what embedding changed: it erases
-            # the child and leaves the prefixes the child brought with it.
+            # `$namespaces` and `$schemas` go with `run:`: a prefix and an
+            # ontology are declared in the document that uses them, so embedding
+            # moves a child's up into its parent (`inline_artifact_runs`), and
+            # deleting `run:` alone would leave what the child brought. A root
+            # sees only its own, so a caller holding the tree checks `$schemas`.
             return _first_difference(_without_embedding(left),
                                      _without_embedding(right),
                                      strength, '', ordered=False)
@@ -149,8 +149,8 @@ def equivalent(left: Yaml, right: Yaml, strength: Strength) -> Divergence | None
 
 def _without_embedding(document: Any) -> Any:
     """A document with everything embedding decides removed."""
-    return recursively_delete_dict_key(
-        '$namespaces', recursively_delete_dict_key('run', document))
+    return recursively_delete_dict_key('$schemas', recursively_delete_dict_key(
+        '$namespaces', recursively_delete_dict_key('run', document)))
 
 
 def _first_difference(left: Any, right: Any, strength: Strength, path: str, *,
@@ -216,11 +216,11 @@ _OUTPUT_NODE: Final = '<output> '
 def _process(step: Yaml) -> Any:
     """The process a step runs, read from its `run:` and never from its id.
 
-    A path contributes its final segment: the compiler writes the process file
-    as `{process}.cwl` under a directory recording where the document sits
-    (`step_id/`, `../`), and that directory is embedding, which a renaming
-    re-roots. An embedded process contributes the whole of itself. Neither is
-    a decoding of an id, so an id's spelling can change without this moving.
+    A path contributes its final segment. The compiler names that file by the
+    root and the step's address, which is embedding, so a document compared up
+    to renaming is first given its tools embedded (`flatten_model`). An
+    embedded process contributes the whole of itself. Neither is a decoding of
+    an id, so an id's spelling can change without this moving.
 
     So a path and an embedded copy of the same process label differently:
     `UP_TO_RENAMING` does not forgive embedding, and a document compared
@@ -596,3 +596,154 @@ def _same_dag(left: Yaml, right: Yaml) -> Divergence | None:
         return Divergence(Strength.UP_TO_RENAMING, '<dag>',
                           sorted(one.nodes), sorted(two.nodes))
     return None
+
+
+def _source_of(value: Any) -> str | None:
+    """The `source` one `in:` binding names, in whichever of the two surface
+    forms the compiler emitted (`{name: source}` or `{name: {source: ...}}`)."""
+    source = value.get('source') if isinstance(value, dict) else value
+    return source if isinstance(source, str) else None
+
+
+def _set_source(bindings: Yaml, name: str, source: str) -> None:
+    """Rewrites one binding's source in place, keeping its own surface form."""
+    value = bindings[name]
+    if isinstance(value, dict):
+        value['source'] = source
+    else:
+        bindings[name] = source
+
+
+def _inlined_steps(wrapper_id: str, inner: Yaml, formal_to_actual: dict[str, str | None],
+                   step_requirements: Yaml) -> list[Yaml]:
+    """The steps of the flattened subworkflow `inner`, as the call `wrapper_id` inlines them.
+
+    Ids are unique in a document only: two subworkflows may each call a step `captured`, so an
+    inlined step takes its wrapper's id in front of its own, as the compiler's flattening does.
+    """
+    inner_ids = {str(inner_step['id']) for inner_step in inner.get('steps', [])}
+    inlined: list[Yaml] = []
+    for inner_step in inner.get('steps', []):
+        for name, value in inner_step.get('in', {}).items():
+            source = _source_of(value)
+            if source is not None and source in formal_to_actual:
+                actual = formal_to_actual[source]
+                if actual is not None:
+                    _set_source(inner_step['in'], name, actual)
+            elif source is not None and source.partition('/')[0] in inner_ids:
+                _set_source(inner_step['in'], name, f'{wrapper_id}~{source}')
+        inner_step['id'] = f'{wrapper_id}~{inner_step["id"]}'
+        if step_requirements:
+            inner_step['requirements'] = {**step_requirements, **(inner_step.get('requirements') or {})}
+        inlined.append(inner_step)
+    return inlined
+
+
+def flatten_model(artifact: CompilationArtifact) -> Yaml:
+    """The compiled document with every subworkflow step inlined whose boundary
+    is proved removable, so a split and an unsplit compilation of the same
+    steps can be compared directly.
+
+    This is an independent test oracle, scoped to what `equivalent()` at
+    UP_TO_RENAMING actually forgives: it needs the DAG's topology and every
+    step's body right, and it does not need `run:` paths, `steps[].id`, or
+    workflow-level port *names* right at all, because those are exactly what
+    that strength already ignores (`equivalence.py`). A tool step's `run:` is
+    the tool it runs, embedded: its file is named by the step's address, which
+    is embedding.
+
+    Recognising a subworkflow step by its own sub-tree's `class` (`Workflow`,
+    not `CommandLineTool`) rather than by an `id` suffix: `rose.sub_trees` has
+    one entry per step regardless of kind (verified directly — a flat,
+    two-`CommandLineTool` compile still has two leaf sub-trees, one per step),
+    so the id is not what marks a step as needing to be inlined here; its own
+    compiled class is.
+    """
+    document: Yaml = copy.deepcopy(artifact.cwl)
+    steps: list[Yaml] = document.get('steps', [])
+    children = artifact.children
+    flat_steps: list[Yaml] = []
+    #: `{wrapper_id}/{wrapper_out_port} -> real producer's own source string`,
+    #: for every subworkflow step this pass inlines away.
+    redirects: dict[str, str] = {}
+    #: Requirements the inlined subworkflows themselves declared (their own
+    #: `SubworkflowFeatureRequirement` already stripped, recursively, by the
+    #: nested `flatten_model` call below) — e.g. `ScatterFeatureRequirement`, for a
+    #: `scatter:` that lived inside the subworkflow and is now a step directly
+    #: in *this* document. A CWL document declares only the features its own
+    #: `steps:` uses, so once a step moves in here, whatever requirement it
+    #: needed moves with it.
+    inherited_requirements: dict[str, Yaml] = {}
+    inlined_any = False
+    kept_any = False
+
+    for step, child in zip(steps, children):
+        if child.cwl.get('class') != 'Workflow':
+            # A tool's file is named by where its step sits, which a split moves; the step is
+            # labelled with the process itself.
+            flat_steps.append({**step, 'run': copy.deepcopy(child.cwl)})
+            continue
+        if set(step) - {'id', 'in', 'run', 'out'} or (child.graph is not None and not child.graph.inlineable):
+            # The author wrote more on the call than `in` and `out` (a scatter, a `when`...), or the
+            # workflow it runs says `wic: inlineable: false`: its boundary is not proved removable,
+            # so it stays a call.
+            kept_any = True
+            flat_steps.append(step)
+            continue
+        inlined_any = True
+        inner = flatten_model(child)
+        kept_any = kept_any or 'SubworkflowFeatureRequirement' in (inner.get('requirements') or {})
+        # What the subworkflow required applied to every step under it. The few the workflow engine
+        # reads against the document move to this one; the rest go onto each step, the step's own
+        # entry winning.
+        declared = dict(inner.get('requirements') or {})
+        declared.pop('SubworkflowFeatureRequirement', None)
+        document_features = ('InlineJavascriptRequirement', 'ScatterFeatureRequirement',
+                             'StepInputExpressionRequirement', 'MultipleInputFeatureRequirement')
+        inherited_requirements.update({k: v for k, v in declared.items() if k in document_features})
+        step_requirements = {k: v for k, v in declared.items() if k not in document_features}
+        # The wrapper's own `in:` maps the subworkflow's formal parameter
+        # names (its inner workflow-level `inputs:` keys) to the sources that
+        # actually feed them at *this* level.
+        wrapper_id = step['id']
+        inner_ids = {str(inner_step['id']) for inner_step in inner.get('steps', [])}
+        flat_steps.extend(_inlined_steps(
+            wrapper_id, inner, {name: _source_of(value) for name, value in step.get('in', {}).items()},
+            step_requirements))
+        # The subworkflow's own `outputs:` map its output port names to
+        # `outputSource: '<inner step>/<port>'`; anything outside referred to
+        # `{wrapper_id}/{that port name}`, so redirect that reference straight
+        # to the real producer, which is now itself one of `flat_steps`.
+        for out_name, out_value in inner.get('outputs', {}).items():
+            producer, _, port = out_value['outputSource'].partition('/')
+            redirects[f'{wrapper_id}/{out_name}'] = (
+                f'{wrapper_id}~{producer}/{port}' if producer in inner_ids else out_value['outputSource'])
+
+    for flat_step in flat_steps:
+        for name, value in flat_step.get('in', {}).items():
+            source = _source_of(value)
+            if source is not None and source in redirects:
+                _set_source(flat_step['in'], name, redirects[source])
+    document['steps'] = flat_steps
+
+    for out_value in document.get('outputs', {}).values():
+        out_source = out_value.get('outputSource')
+        if isinstance(out_source, str) and out_source in redirects:
+            out_value['outputSource'] = redirects[out_source]
+
+    if inlined_any:
+        # Unless a call stayed, a flattened document contains no subworkflow
+        # step, so the requirement that declares one no longer applies — left in place, it
+        # would make `_requirement_names` (equivalence.py) diverge on every
+        # split for a reason that has nothing to do with the workflow's
+        # meaning. What each inlined subworkflow's *own* requirements needed
+        # does still apply, now that their steps are directly in `steps:`
+        # here, so those are merged in rather than dropped with the rest.
+        requirements = document.get('requirements')
+        merged = dict(requirements) if isinstance(requirements, dict) else {}
+        if not kept_any:
+            merged.pop('SubworkflowFeatureRequirement', None)
+        merged.update(inherited_requirements)
+        document['requirements'] = merged
+
+    return document

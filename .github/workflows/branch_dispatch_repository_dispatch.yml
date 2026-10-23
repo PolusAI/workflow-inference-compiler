@@ -17,7 +17,6 @@ jobs:
     steps:
       # See token.md
       - name: Generate a token
-        if: always()
         id: generate_token
         uses: actions/create-github-app-token@v3
         with:
@@ -97,6 +96,12 @@ jobs:
           default_branch: main
           access_token: ${{ steps.generate_token.outputs.token }}
 
+      # The dispatched runs are titled by this message: its subject line alone, as for pull requests.
+      - name: Get commit subject
+        env:
+          COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
+        run: echo "commit_message=$(printf '%s\n' "$COMMIT_MESSAGE" | head -n1)" >> "$GITHUB_ENV"
+
       - name: Branch dispatch lint_and_test.yml
         uses: ./.github/my_actions/branch_dispatch/ # Must start with ./
         id: bd_lint_and_test
@@ -109,7 +114,7 @@ jobs:
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
-          commit_message: ${{ github.event.client_payload.commit_message }}
+          commit_message: ${{ env.commit_message }}
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
           image_workflows_owner: ${{ steps.ce_image-workflows.outputs.owner }}
@@ -128,7 +133,7 @@ jobs:
           wic_owner: ${{ steps.ce_wic.outputs.owner }}
           wic_ref: ${{ steps.ce_wic.outputs.ref }}
           event_type: ${{ github.event_name }}
-          commit_message: ${{ github.event.client_payload.commit_message }}
+          commit_message: ${{ env.commit_message }}
           mm_workflows_owner: ${{ steps.ce_mm-workflows.outputs.owner }}
           mm_workflows_ref: ${{ steps.ce_mm-workflows.outputs.ref }}
           image_workflows_owner: ${{ steps.ce_image-workflows.outputs.owner }}

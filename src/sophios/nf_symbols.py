@@ -150,6 +150,42 @@ NEXTFLOW_RESERVED_WORDS = (
 # default-imported class (Math, String, Map...), so it is renamed as well.
 NEXTFLOW_SCRIPT_NAMES = frozenset({"task", "log", "channel"})
 
+# Names a process or workflow cannot take: the members of
+# modules/nf-lang/src/main/java/nextflow/script/dsl/ScriptDsl.java, which every
+# script declares, and params and main. Nextflow rejects a process or workflow
+# that redeclares one, or the script then reads the process in its place.
+NEXTFLOW_SCRIPT_DECLARED_NAMES = frozenset(
+    {
+        "baseDir",
+        "branchCriteria",
+        "channel",
+        "env",
+        "error",
+        "exit",
+        "file",
+        "files",
+        "groupKey",
+        "launchDir",
+        "log",
+        "main",
+        "moduleDir",
+        "multiMapCriteria",
+        "nextflow",
+        "params",
+        "print",
+        "printf",
+        "println",
+        "projectDir",
+        "record",
+        "secrets",
+        "sendMail",
+        "sleep",
+        "tuple",
+        "workDir",
+        "workflow",
+    }
+)
+
 # ScriptLexer.JavaLetter delegates to Character.isJavaIdentifierStart and
 # excludes identifier-ignorable characters. These Unicode general categories
 # are the corresponding Java identifier categories.
@@ -220,9 +256,10 @@ def normalize_nextflow_identifier(value: str, *, variable: bool = True) -> str:
 
     Characters outside the grammar's letter/digit categories become ``_``,
     and a leading ``_`` is added when the first character cannot start an
-    identifier or the result is a reserved word, and for a ``variable`` also
-    when a script resolves the name to something else (``NEXTFLOW_SCRIPT_NAMES``,
-    or a capitalized name).
+    identifier, when the result is a reserved word, when a script resolves
+    the name to something else (``NEXTFLOW_SCRIPT_NAMES``, or a capitalized
+    name), and for a process or workflow name also when the script already
+    declares it (``NEXTFLOW_SCRIPT_DECLARED_NAMES``).
 
     Args:
         value (str): Non-empty source text to normalize.
@@ -244,8 +281,11 @@ def normalize_nextflow_identifier(value: str, *, variable: bool = True) -> str:
     )
     if not _is_java_letter(identifier[0]):
         identifier = f"_{identifier}"
-    if identifier in NEXTFLOW_RESERVED_WORDS or variable and (
-        identifier in NEXTFLOW_SCRIPT_NAMES or identifier[0].isupper()
+    if (
+        identifier in NEXTFLOW_RESERVED_WORDS
+        or identifier in NEXTFLOW_SCRIPT_NAMES
+        or identifier[0].isupper()
+        or not variable and identifier in NEXTFLOW_SCRIPT_DECLARED_NAMES
     ):
         identifier = f"_{identifier}"
     return validate_nextflow_identifier(identifier, field_name="normalized identifier")

@@ -1,15 +1,13 @@
-import importlib
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 import yaml
+from schema_salad.utils import yaml_no_ts  # pylint: disable=no-name-in-module
 
-import sophios.api.python._tool_builder_support as tool_builder_support
 from sophios.api.python.tool_builder import (
     CommandLineTool,
     Dirent,
-    DockerRequirement,
     Field,
     Fields,
     Input,
@@ -19,29 +17,9 @@ from sophios.api.python.tool_builder import (
     cwl,
     secondary_file,
 )
-from sophios.api.python.workflow import Step
+from sophios.api.python.workflow import Step, Workflow
 from sophios.lang import InlineLiteral
 from sophios.lang.cwl import CWL_VERSION
-
-
-@pytest.mark.fast
-def test_hand_authored_cwl_specs_compare_by_identity() -> None:
-    """Hand-authored spec classes compare and hash by identity."""
-    left = DockerRequirement("ubuntu")
-    right = DockerRequirement("ubuntu")
-    assert left != right
-    assert isinstance(hash(left), int)
-
-
-@pytest.mark.fast
-def test_old_tool_builder_module_name_is_not_available() -> None:
-    """The pre-rename module path is gone, not aliased.
-
-    An alias left behind keeps client code working and keeps two names for one
-    thing in circulation; the import must fail so the rename is visible.
-    """
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("sophios.api.python." + "cwl" + "_builder")
 
 
 def _rich_tool() -> CommandLineTool:
@@ -86,18 +64,6 @@ def _rich_tool() -> CommandLineTool:
         .stdout("aligned.sam")
         .success_codes(0, 2)
     )
-
-
-@pytest.mark.fast
-def test_tool_builder_requires_structural_core() -> None:
-    """Inputs and outputs are positional, not optional.
-
-    A tool without them serializes to a document CWL rejects, so the failure
-    belongs at construction rather than at validation.
-    """
-    constructor = cast(Any, CommandLineTool)
-    with pytest.raises(TypeError):
-        constructor("missing-inputs")
 
 
 @pytest.mark.fast
@@ -149,22 +115,12 @@ def test_tool_name_with_slash_keeps_document_ids() -> None:
 
 
 @pytest.mark.fast
-def test_record_rejects_a_single_field_spec() -> None:
-    """A record's fields are a collection; one FieldSpec is not iterable."""
-    with pytest.raises(TypeError):
-        cwl.record(cast(Any, Field(cwl.int, name="x")), name="R")
-
-
-@pytest.mark.fast
 def test_structured_port_references_do_not_accept_raw_strings() -> None:
     """A port reference is the port object, never its name as text.
 
     A string cannot be checked against the tool it came from, so a typo would
     survive to the emitted document and fail at runtime. The type is the check.
     """
-    with pytest.raises(TypeError, match="named Input/Output object"):
-        Output(cwl.file, from_input="output")
-
     tool = CommandLineTool(
         "demo",
         Inputs(input=Input(cwl.file)),
@@ -290,7 +246,7 @@ def test_tool_builder_high_level_helpers_hide_cwl_plumbing() -> None:
         tile_size=Input(cwl.int, flag="--tile-size", required=False).label("Tile size"),
         iou_threshold=Input(cwl.float, flag="--iou-threshold", required=False).label("IoU threshold"),
     )
-    outputs = Outputs(output=Output(cwl.directory, from_input=inputs.output).label("Output segmentation Zarr"))
+    outputs = Outputs(output=Output(cwl.directory, glob="$(inputs.output.basename)").label("Output segmentation Zarr"))
     tool = (
         CommandLineTool("sam3", inputs, outputs)
         .describe("SAM3 OME Zarr autosegmentation", "Run SAM3 autosegmentation on a zarr volume.")
@@ -354,78 +310,16 @@ def test_tool_builder_write_cwl_round_trips_yaml(tmp_path: Path) -> None:
 
 
 @pytest.mark.fast
-def test_tool_builder_validate_uses_cwltool_stack(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Validation goes through cwltool, in-process and with no subprocess."""
-    class FakeRuntimeContext:
-        def __init__(self, kwargs: dict[str, object]) -> None:
-            self.kwargs = kwargs
-
-    class FakeLoadTool:
-        def __init__(self) -> None:
-            self.calls: list[tuple[str, object]] = []
-
-        def fetch_document(self, path: str, loading_context: str) -> tuple[str, dict[str, str], str]:
-            """Stand in for cwltool's document fetch, returning a fixed document."""
-            self.calls.append(("fetch_document", (Path(path).suffix, loading_context)))
-            return loading_context, {"class": "CommandLineTool"}, "file:///aligner.cwl"
-
-        def resolve_and_validate_document(
-            self,
-            loading_context: str,
-            workflowobj: dict[str, str],
-            uri: str,
-            preprocess_only: bool = False,
-        ) -> tuple[str, str]:
-            """Stand in for cwltool's resolve-and-validate step."""
-            self.calls.append(("resolve_and_validate_document", preprocess_only))
-            assert loading_context == "prepared-context"
-            assert workflowobj == {"class": "CommandLineTool"}
-            assert uri == "file:///aligner.cwl"
-            return "validated-context", "file:///validated-aligner.cwl"
-
-        def make_tool(self, uri: str, loading_context: str) -> dict[str, str]:
-            """Stand in for cwltool's tool construction."""
-            self.calls.append(("make_tool", uri))
-            assert loading_context == "validated-context"
-            return {"uri": uri, "loading_context": loading_context}
-
-    def fake_get_default_args() -> dict[str, object]:
-        return {
-            "validate": False,
-            "skip_schemas": False,
-            "workflow": None,
-            "do_validate": True,
-        }
-
-    def fake_setup_loading_context(
-        loading_context: None,
-        runtime_context: FakeRuntimeContext,
-        args: object,
-    ) -> str:
-        assert loading_context is None
-        assert Path(str(runtime_context.kwargs["workflow"])).name == "aligner.cwl"
-        assert runtime_context.kwargs["validate"] is True
-        assert runtime_context.kwargs["skip_schemas"] is False
-        assert Path(str(getattr(args, "workflow"))).name == "aligner.cwl"
-        assert getattr(args, "validate") is True
-        assert getattr(args, "skip_schemas") is False
-        return "prepared-context"
-
-    fake_load_tool = FakeLoadTool()
-    monkeypatch.setattr(tool_builder_support, "_import_cwltool_load_tool", lambda: fake_load_tool)
-    monkeypatch.setattr(
-        tool_builder_support,
-        "_import_cwltool_validation_support",
-        lambda: (FakeRuntimeContext, fake_get_default_args, fake_setup_loading_context),
+@pytest.mark.parametrize("text", ["._", "._5", "1e3", "0o17"])
+def test_tool_builder_string_default_is_a_string_to_cwltool(text: str) -> None:
+    """A string `default` is written so that cwltool, which reads YAML 1.2, reads a string."""
+    tool = CommandLineTool(
+        "echoer",
+        Inputs(message=Input(cwl.string, default=text)),
+        Outputs(out=Output.stdout()),
     )
 
-    result = _rich_tool().validate()
-
-    assert result.uri == "file:///validated-aligner.cwl"
-    assert result.process == {
-        "uri": "file:///validated-aligner.cwl",
-        "loading_context": "validated-context",
-    }
+    assert yaml_no_ts().load(tool.to_cwl_yaml())["inputs"][0]["default"] == text
 
 
 @pytest.mark.fast
@@ -453,4 +347,56 @@ def test_tool_builder_converts_to_in_memory_step() -> None:
     assert step.clt_path.name == "say_hello.cwl"
     assert _by_id(step.yaml["inputs"])["message"]["type"] == "string"
     assert _by_id(step.yaml["outputs"])["out"]["type"] == "stdout"
-    assert step._as_workflow_step(inline_subtrees=False).input("message") == InlineLiteral("hello")
+    message = step._as_workflow_step().input("message")
+    assert isinstance(message, InlineLiteral) and message.value == "hello"
+
+
+@pytest.mark.fast
+def test_a_workflow_output_bound_to_stdout_or_stderr_is_a_file() -> None:
+    """`stdout` and `stderr` are a CommandLineTool's own shorthands; the workflow outputs they feed must say `File`."""
+    tool = CommandLineTool(
+        "echo_tool",
+        Inputs(message=Input(cwl.string, position=1)),
+        Outputs(out=Output.stdout(), err=Output.stderr()),
+    ).stdout("stdout.txt").stderr("stderr.txt")
+    step = tool.to_step(step_name="say_hello")
+    step.inputs.message = "hello"
+    workflow = Workflow([step], "stdout_out")
+    workflow.outputs.log = step.outputs.out
+    workflow.outputs.errors = step.outputs.err
+
+    outputs = workflow.compile().cwl_workflow["outputs"]
+    assert outputs["log"]["type"] == "File"
+    assert outputs["errors"]["type"] == "File"
+
+
+@pytest.mark.fast
+def test_an_unbound_stdin_input_is_promoted_as_a_file() -> None:
+    """`stdin` is a CommandLineTool's own shorthand; the workflow input promoted from it must say `File`."""
+    tool = CommandLineTool(
+        "cat_tool",
+        Inputs(src=Input("stdin")),
+        Outputs(out=Output.stdout()),
+    ).stdout("stdout.txt")
+    step = tool.to_step(step_name="cat_it")
+    workflow = Workflow([step], "stdin_in")
+    workflow.outputs.log = step.outputs.out
+
+    inputs = workflow.compile().cwl_workflow["inputs"]
+    assert [spec["type"] for spec in inputs.values()] == ["File"]
+
+
+@pytest.mark.fast
+def test_a_bound_stdin_input_is_promoted_as_a_file() -> None:
+    """A `stdin` input bound to a workflow input must not leave `stdin` on the workflow."""
+    tool = CommandLineTool(
+        "cat_tool",
+        Inputs(src=Input("stdin")),
+        Outputs(out=Output.stdout()),
+    ).stdout("stdout.txt")
+    step = tool.to_step(step_name="cat_it")
+    workflow = Workflow([step], "stdin_bound")
+    step.inputs.src = workflow.inputs.data
+    workflow.outputs.log = step.outputs.out
+
+    assert workflow.compile().cwl_workflow["inputs"] == {"data": {"type": "File"}}

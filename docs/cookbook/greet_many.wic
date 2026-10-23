@@ -1,0 +1,21 @@
+steps:
+- id: touch
+  scatter: [filename]
+  scatterMethod: dotproduct
+  in:
+    filename: !ii [alice.txt, bob.txt, carol.txt]
+  out:
+  - file: !& empty_files
+- id: append
+  scatter: [file, str]
+  scatterMethod: dotproduct
+  in:
+    file: !* empty_files
+    str: !ii ["Hello, Alice", "Hello, Bob", "Hello, Carol"]
+  out:
+  - file: !& greeting_files
+- id: cat
+  scatter: [file]
+  scatterMethod: dotproduct
+  in:
+    file: !* greeting_files
