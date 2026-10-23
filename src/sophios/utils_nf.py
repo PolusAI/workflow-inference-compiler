@@ -1,6 +1,6 @@
 """Lower a resolved Sophios compilation into the Nextflow representation."""
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 import copy
 from dataclasses import dataclass, replace
 import math
@@ -129,19 +129,15 @@ def _identifier_normalization_findings(
 
 
 def _as_mapping(value: Any, *, error: str) -> Mapping[str, Any]:
-    match value:
-        case Mapping() as mapping:
-            return mapping
-        case _:
-            raise ValueError(error)
+    if isinstance(value, Mapping):
+        return value
+    raise ValueError(error)
 
 
 def _as_list(value: Any, *, error: str) -> list[Any]:
-    match value:
-        case list() as items:
-            return items
-        case _:
-            raise ValueError(error)
+    if isinstance(value, list):
+        return value
+    raise ValueError(error)
 
 
 def _is_optional(cwl_type: Any) -> bool:
@@ -243,7 +239,7 @@ def _array_item_type(array_type: Any) -> Any:
     inside ``items`` are explicitly deferred rather than silently mishandled.
     The array schema's own fields, a per-item ``inputBinding`` beside
     ``items`` among them, are checked against the support table by
-    :func:`_array_schema_findings`.
+    :func:`_parameter_findings`.
     """
     items = array_type.get("items") if isinstance(array_type, Mapping) else None
     match items:
@@ -701,20 +697,7 @@ def _iwdr_rename_reference_findings(
     """
     if not renamed_names:
         return []
-    try:
-        command = _command(tool)
-        outputs = _ports(tool.get("outputs", {}), outputs=True)
-    except (ValueError, TypeError):
-        return []
-    templates = [
-        *(token for token in command.tokens if isinstance(token, NfTemplate)),
-        *(stream for stream in (command.stdin, command.stdout, command.stderr) if stream),
-        *(port.glob for port in outputs if port.glob),
-    ]
-    plain, basenamed = _template_reference_names(templates)
-    referenced = (plain | basenamed) & renamed_names
-    if not referenced:
-        return []
+    referenced = (_referenced_names(tool) or set()) & renamed_names
     return [
         f"{path}.run.requirements.InitialWorkDirRequirement: input {name!r} is staged under "
         "an explicit rename and cannot also be referenced elsewhere in the command, stream "
@@ -887,6 +870,16 @@ def _cpu_resource(value: Any) -> int:
     return number
 
 
+def _memory(value: Any) -> int | float:
+    return _resource_number(value, name="memory")
+
+
+# The value checks of a requirement's fields, in the order findings report them.
+_REQUIREMENT_VALUES: Mapping[str, Mapping[str, Callable[[Any], Any]]] = {
+    "ResourceRequirement": {"coresMin": _cpu_resource, "coresMax": _cpu_resource, "ramMin": _memory, "ramMax": _memory},
+}
+
+
 def _resources(tool: Mapping[str, Any]) -> NfResources:
     resource = _requirement(tool, "ResourceRequirement")
     if resource is None:
@@ -894,32 +887,8 @@ def _resources(tool: Mapping[str, Any]) -> NfResources:
     cpus = _resource_value(resource, "coresMin", "coresMax")
     memory = _resource_value(resource, "ramMin", "ramMax")
     rendered_cpus = None if cpus is None else _cpu_resource(cpus)
-    rendered_memory = None if memory is None else _resource_number(memory, name="memory")
+    rendered_memory = None if memory is None else _memory(memory)
     return NfResources(rendered_cpus, rendered_memory)
-
-
-def _resource_requirement_findings(
-    requirement: Mapping[str, Any],
-    *,
-    path: str,
-) -> list[str]:
-    """Validate every resource value the lowering consumes."""
-    findings: list[str] = []
-    for field_name in ("coresMin", "coresMax"):
-        if field_name not in requirement:
-            continue
-        try:
-            _cpu_resource(requirement[field_name])
-        except ValueError as exc:
-            findings.append(f"{path}.{field_name}: {exc}")
-    for field_name in ("ramMin", "ramMax"):
-        if field_name not in requirement:
-            continue
-        try:
-            _resource_number(requirement[field_name], name="memory")
-        except ValueError as exc:
-            findings.append(f"{path}.{field_name}: {exc}")
-    return findings
 
 
 def _output_template(raw_name: Any, definition: Any) -> NfTemplate:
@@ -1089,8 +1058,6 @@ def _output_capture(raw_name: Any, definition: Mapping[str, Any]) -> str | None:
 
 # Keys a compiled CWL document carries beside its class's fields.
 _DOCUMENT_KEYS = frozenset({"$namespaces", "$schemas"})
-_SUPPORTED_REQUIREMENTS = consumed(REQUIREMENT_CLASSES["CommandLineTool"])
-_SUPPORTED_WORKFLOW_REQUIREMENTS = consumed(REQUIREMENT_CLASSES["Workflow"])
 _TOOL_CONSUMED_FIELDS = consumed(FIELDS["CommandLineTool"]) | _DOCUMENT_KEYS
 _WORKFLOW_CONSUMED_FIELDS = consumed(FIELDS["Workflow"]) | _DOCUMENT_KEYS | {"sophios:lang_version"}
 # The outputBinding fields that declare capture behavior, as opposed to naming
@@ -1141,26 +1108,39 @@ def _unconsumed_field_findings(
     ]
 
 
-def _array_schema_findings(definition: Any, cwl_class: str, *, path: str) -> list[str]:
-    """Reject the fields of each array schema a parameter's type declares that the lowering does not consume.
+# The array schema class each parameter class's array types are; a class with none gets no array-schema check.
+_ARRAY_SCHEMAS = {
+    "WorkflowInputParameter": "InputArraySchema",
+    "WorkflowOutputParameter": "OutputArraySchema",
+    "CommandInputParameter": "CommandInputArraySchema",
+}
+
+
+def _parameter_findings(definition: Any, cwl_class: str, *, path: str) -> list[str]:
+    """Reject a parameter's long or double type, and each field of it or its array schemas not consumed.
 
     Args:
         definition (Any): The parameter, or its bare type.
-        cwl_class (str): The array schema's class, a key of `FIELDS`.
+        cwl_class (str): The parameter's class, a key of `FIELDS`.
         path (str): Where the parameter sits, for the finding.
 
     Returns:
-        list[str]: One finding per field, with its row's note.
+        list[str]: The number-type findings, then one finding per field, with its row's note.
     """
-    cwl_type: Any = definition.get("type") if isinstance(definition, Mapping) else definition
-    members = (
-        [(f"{path}.type[{index}]", member) for index, member in enumerate(cwl_type)]
-        if isinstance(cwl_type, list) else [(f"{path}.type", cwl_type)]
-    )
-    return [
-        finding for member_path, member in members if _is_array_type(member)
-        for finding in _unconsumed_field_findings(member, cwl_class, path=member_path)
-    ]
+    findings = _number_type_findings(definition, path=path)
+    if schema_class := _ARRAY_SCHEMAS.get(cwl_class):
+        cwl_type: Any = definition.get("type") if isinstance(definition, Mapping) else definition
+        members = (
+            [(f"{path}.type[{index}]", member) for index, member in enumerate(cwl_type)]
+            if isinstance(cwl_type, list) else [(f"{path}.type", cwl_type)]
+        )
+        findings.extend(
+            finding for member_path, member in members if _is_array_type(member)
+            for finding in _unconsumed_field_findings(member, schema_class, path=member_path)
+        )
+    if isinstance(definition, Mapping):
+        findings.extend(_unconsumed_field_findings(definition, cwl_class, path=path))
+    return findings
 
 
 def _local_locations_as_paths(value: Any) -> Any:
@@ -1217,44 +1197,71 @@ def _phase1_value_matches(cwl_type: Any, value: Any) -> bool:
             return False
 
 
-def _requirement_definition(
+def _requirement_entries(section: Any) -> list[tuple[str, str, Mapping[str, Any] | None]]:
+    """(class, path suffix, payload) of each requirement in a section; a list item without a string class is ``""``."""
+    match section:
+        case Mapping():
+            return [
+                (str(name), str(name), payload if isinstance(payload, Mapping) else None)
+                for name, payload in section.items()
+            ]
+        case list():
+            return [
+                (
+                    item["class"] if isinstance(item, Mapping) and isinstance(item.get("class"), str) else "",
+                    str(index),
+                    item if isinstance(item, Mapping) else None,
+                )
+                for index, item in enumerate(section)
+            ]
+    return []
+
+
+def _requirement_findings(
     section: Any,
+    owner: str,
     *,
-    class_name: str,
-    suffix: str,
-) -> Mapping[str, Any] | None:
-    """Return a requirement payload for closed-world field analysis."""
-    match section:
-        case Mapping() as requirements:
-            definition = requirements.get(class_name)
-        case list() as requirements:
-            definition = requirements[int(suffix)]
-        case _:
-            return None
-    return definition if isinstance(definition, Mapping) else None
+    path: str,
+    otherwise: str,
+    tool: Mapping[str, Any] | None = None,
+) -> list[str]:
+    """Apply closed-world analysis to each requirement or hint of a section.
 
+    Args:
+        section (Any): The requirements or hints.
+        owner (str): The class holding them, a key of `REQUIREMENT_CLASSES`.
+        path (str): Where the section sits, for the finding.
+        otherwise (str): The reason a class the table has no rejected row for is rejected; ``{}`` is the class.
+        tool (Mapping[str, Any] | None): The tool holding them, whose inputs an InitialWorkDirRequirement stages.
 
-_CLASSLESS_REQUIREMENT = "a requirement or hint needs a string `class`"
-
-
-def _requirement_names(section: Any) -> list[tuple[str, str]]:
-    """Return requirement names and stable path suffixes; a list item without a class gets ``""``."""
-    match section:
-        case None:
-            return []
-        case Mapping() as requirements:
-            return [(str(name), str(name)) for name in requirements]
-        case list() as requirements:
-            names: list[tuple[str, str]] = []
-            for index, requirement in enumerate(requirements):
-                match requirement:
-                    case Mapping() if isinstance(requirement.get("class"), str):
-                        names.append((requirement["class"], str(index)))
-                    case _:
-                        names.append(("", str(index)))
-            return names
-        case _:
-            return []
+    Returns:
+        list[str]: One finding per unsupported requirement, field or value.
+    """
+    rows = REQUIREMENT_CLASSES[owner]
+    findings: list[str] = []
+    for class_name, suffix, payload in _requirement_entries(section):
+        requirement_path = f"{path}.{suffix}"
+        if not class_name:
+            findings.append(f"{requirement_path}: a requirement or hint needs a string `class`")
+        elif class_name not in consumed(rows):
+            reason = _rejection(rows, class_name, otherwise=otherwise.format(class_name))
+            findings.append(f"{requirement_path}: {reason}")
+        elif class_name == "NetworkAccess" and (payload or {}).get("networkAccess") is not True:
+            findings.append(
+                f"{requirement_path}.networkAccess: only the literal true is supported: a Nextflow "
+                "task has network access, and the generated pipeline cannot withhold it"
+            )
+        elif payload:
+            findings.extend(_unconsumed_field_findings(payload, class_name, path=requirement_path))
+            for field_name, check in _REQUIREMENT_VALUES.get(class_name, {}).items():
+                if field_name in payload:
+                    try:
+                        check(payload[field_name])
+                    except ValueError as exc:
+                        findings.append(f"{requirement_path}.{field_name}: {exc}")
+            if class_name == "InitialWorkDirRequirement" and tool is not None:
+                findings.extend(_iwdr_listing_findings(tool, payload, path=requirement_path))
+    return findings
 
 
 def _template_positions(
@@ -1264,51 +1271,42 @@ def _template_positions(
 ) -> list[tuple[Any, str]]:
     """Pair every templated tool value with the CWL path it was written at."""
     positions: list[tuple[Any, str]] = []
-    match tool.get("arguments"):
-        case list() as arguments:
-            for index, argument in enumerate(arguments):
-                argument_path = f"{path}.run.arguments[{index}]"
-                match argument:
-                    case Mapping() as mapping if mapping.get("valueFrom") is not None:
-                        positions.append((mapping["valueFrom"], f"{argument_path}.valueFrom"))
-                    case Mapping():
-                        pass
-                    case _:
-                        positions.append((argument, argument_path))
-        case _:
-            pass
-    match tool.get("inputs"):
-        case Mapping() as inputs:
-            for raw_name, definition in inputs.items():
-                if not isinstance(definition, Mapping):
-                    continue
-                binding = definition.get("inputBinding")
-                if not isinstance(binding, Mapping):
-                    continue
-                if binding.get("valueFrom") is not None:
-                    positions.append((binding["valueFrom"], f"{path}.run.inputs.{raw_name}.inputBinding.valueFrom"))
-        case _:
-            pass
+    if isinstance(arguments := tool.get("arguments"), list):
+        for index, argument in enumerate(arguments):
+            argument_path = f"{path}.run.arguments[{index}]"
+            match argument:
+                case Mapping() as mapping if mapping.get("valueFrom") is not None:
+                    positions.append((mapping["valueFrom"], f"{argument_path}.valueFrom"))
+                case Mapping():
+                    pass
+                case _:
+                    positions.append((argument, argument_path))
+    if isinstance(inputs := tool.get("inputs"), Mapping):
+        for raw_name, definition in inputs.items():
+            if not isinstance(definition, Mapping):
+                continue
+            binding = definition.get("inputBinding")
+            if not isinstance(binding, Mapping):
+                continue
+            if binding.get("valueFrom") is not None:
+                positions.append((binding["valueFrom"], f"{path}.run.inputs.{raw_name}.inputBinding.valueFrom"))
     for stream in ("stdin", "stdout", "stderr"):
         if tool.get(stream) is not None:
             positions.append((tool[stream], f"{path}.run.{stream}"))
-    match tool.get("outputs"):
-        case Mapping() as outputs:
-            for raw_name, definition in outputs.items():
-                if not isinstance(definition, Mapping):
-                    continue
-                binding = definition.get("outputBinding")
-                if not isinstance(binding, Mapping):
-                    continue
-                if binding.get("glob") is not None:
-                    positions.append(
-                        (
-                            binding["glob"],
-                            f"{path}.run.outputs.{raw_name}.outputBinding.glob",
-                        )
+    if isinstance(outputs := tool.get("outputs"), Mapping):
+        for raw_name, definition in outputs.items():
+            if not isinstance(definition, Mapping):
+                continue
+            binding = definition.get("outputBinding")
+            if not isinstance(binding, Mapping):
+                continue
+            if binding.get("glob") is not None:
+                positions.append(
+                    (
+                        binding["glob"],
+                        f"{path}.run.outputs.{raw_name}.outputBinding.glob",
                     )
-        case _:
-            pass
+                )
     return positions
 
 
@@ -1361,38 +1359,20 @@ def _path_reference_findings(tool: Mapping[str, Any], *, path: str) -> list[str]
     return findings
 
 
-def _emitted_steps(artifact: CompilationArtifact) -> list[Mapping[str, Any]]:
-    """The steps the artifact's emitted workflow document lists, in graph order."""
-    raw_steps = _as_list(
-        artifact.cwl.get("steps", []),
-        error="compiled CWL Workflow steps must be a list",
-    )
-    return [
-        _as_mapping(step, error="compiled CWL Workflow steps must be mappings")
-        for step in raw_steps
-    ]
-
-
 def _graph_steps_with_artifacts(
     graph: WorkflowGraph,
     artifact: CompilationArtifact,
 ) -> list[tuple[StepNode, Mapping[str, Any], CompilationArtifact]]:
     """Pair every resolved leaf step with its emitted step and the tool artifact it executes."""
-    emitted_steps = _emitted_steps(artifact)
-    if len(graph.steps) != len(artifact.children) or len(graph.steps) != len(emitted_steps):
-        raise ValueError("resolved graph steps do not match compilation artifacts")
     leaves: list[tuple[StepNode, Mapping[str, Any], CompilationArtifact]] = []
-    for step, emitted, child_artifact in zip(graph.steps, emitted_steps, artifact.children, strict=True):
+    steps = zip(graph.steps, _workflow_steps(artifact.cwl), artifact.children, strict=True)
+    for step, emitted, child_artifact in steps:
         if step.run is None:
             raise ValueError(f"resolved step {step.id} has no run")
         child_graph = step.run.child
         if child_graph is None:
-            if child_artifact.graph is not None:
-                raise ValueError(f"tool step {step.id} unexpectedly owns a workflow artifact")
             leaves.append((step, emitted, child_artifact))
             continue
-        if child_artifact.graph is None:
-            raise ValueError(f"workflow step {step.id} has no resolved child artifact")
         leaves.extend(_graph_steps_with_artifacts(child_graph, child_artifact))
     return leaves
 
@@ -1452,8 +1432,6 @@ def _leaf_step_document(
     boundary_sources: Mapping[PortId, str],
 ) -> dict[str, Any]:
     """Project one resolved leaf step without repeating inference or inlining."""
-    if step.run is None or step.run.child is not None:
-        raise ValueError(f"{step.id} is not a completed executable leaf step")
     ports = {names.port(port.id.port): port for port in step.inputs}
     raw_inputs = _as_mapping(emitted.get("in", {}), error="compiled step inputs must be a mapping")
     inputs: dict[str, Any] = {}
@@ -1471,8 +1449,6 @@ def _leaf_step_document(
 
 def compilation_result_source(result: CompilationResult) -> CompiledNextflowSource:
     """Project the completed core graph into the backend's closed source seam."""
-    if not isinstance(result, CompilationResult):
-        raise TypeError("Nextflow conversion requires a CompilationResult")
     graph = result.graph
     names = Names.of(graph)
     leaves = _graph_steps_with_artifacts(graph, result.artifact)
@@ -1552,12 +1528,9 @@ def _nested_workflow_capability_findings(
     workflow call or child workflow must be either consumed here or rejected
     before the call node is projected away.
     """
-    emitted_steps = _emitted_steps(artifact)
-    if len(graph.steps) != len(artifact.children) or len(graph.steps) != len(emitted_steps):
-        return [f"{path}.steps: resolved graph steps do not match compilation artifacts"]
     findings: list[str] = []
     for index, (step, emitted, child_artifact) in enumerate(
-        zip(graph.steps, emitted_steps, artifact.children, strict=True)
+        zip(graph.steps, _workflow_steps(artifact.cwl), artifact.children, strict=True)
     ):
         step_path = f"{path}.steps[{index}]"
         for raw_name, definition in _as_mapping(
@@ -1600,10 +1573,7 @@ def _nested_workflow_capability_findings(
             _unconsumed_field_findings(child_document, "Workflow", path=child_path, kept=_WORKFLOW_CONSUMED_FIELDS)
         )
         findings.extend(_workflow_requirement_findings(child_document, path=child_path))
-        for section_name, cwl_class, schema_class in (
-            ("inputs", "WorkflowInputParameter", "InputArraySchema"),
-            ("outputs", "WorkflowOutputParameter", "OutputArraySchema"),
-        ):
+        for section_name, cwl_class in (("inputs", "WorkflowInputParameter"), ("outputs", "WorkflowOutputParameter")):
             section = child_document.get(section_name, {})
             if not isinstance(section, Mapping):
                 findings.append(
@@ -1613,10 +1583,7 @@ def _nested_workflow_capability_findings(
                 continue
             for raw_name, definition in section.items():
                 port_path = f"{child_path}.{section_name}.{raw_name}"
-                findings.extend(_number_type_findings(definition, path=port_path))
-                findings.extend(_array_schema_findings(definition, schema_class, path=port_path))
-                if isinstance(definition, Mapping):
-                    findings.extend(_unconsumed_field_findings(definition, cwl_class, path=port_path))
+                findings.extend(_parameter_findings(definition, cwl_class, path=port_path))
                 # Inlining replaces a nested workflow's input with the calling step's binding,
                 # where CWL would apply the input's default to a null one.
                 if section_name == "inputs" and isinstance(definition, Mapping) and "default" in definition:
@@ -1673,169 +1640,118 @@ def _tool_capability_findings(
     findings.extend(_path_reference_findings(tool, path=path))
 
     for section_name in ("requirements", "hints"):
-        section = tool.get(section_name)
-        for class_name, suffix in _requirement_names(section):
-            requirement_path = f"{path}.run.{section_name}.{suffix}"
-            if not class_name:
-                findings.append(f"{requirement_path}: {_CLASSLESS_REQUIREMENT}")
-            elif class_name not in _SUPPORTED_REQUIREMENTS:
-                reason = _rejection(
-                    REQUIREMENT_CLASSES["CommandLineTool"], class_name,
-                    otherwise=f"{class_name} is not supported by the Nextflow target",
-                )
-                findings.append(f"{requirement_path}: {reason}")
-            elif class_name == "NetworkAccess" and (
-                _requirement_definition(section, class_name=class_name, suffix=suffix) or {}
-            ).get("networkAccess") is not True:
-                findings.append(
-                    f"{requirement_path}.networkAccess: only the literal true is supported: a Nextflow "
-                    "task has network access, and the generated pipeline cannot withhold it"
-                )
-            elif definition := _requirement_definition(
-                section,
-                class_name=class_name,
-                suffix=suffix,
-            ):
-                findings.extend(
-                    _unconsumed_field_findings(definition, class_name, path=requirement_path)
-                )
-                if class_name == "ResourceRequirement":
-                    findings.extend(
-                        _resource_requirement_findings(
-                            definition,
-                            path=requirement_path,
-                        )
-                    )
-                if class_name == "InitialWorkDirRequirement":
-                    findings.extend(
-                        _iwdr_listing_findings(
-                            tool,
-                            definition,
-                            path=requirement_path,
-                        )
-                    )
+        findings.extend(
+            _requirement_findings(
+                tool.get(section_name), "CommandLineTool", path=f"{path}.run.{section_name}",
+                otherwise="{} is not supported by the Nextflow target", tool=tool,
+            )
+        )
     try:
         renamed_names = set(_iwdr_stage_as(tool))
     except ValueError:
         renamed_names = set()
     findings.extend(_iwdr_rename_reference_findings(tool, renamed_names, path=path))
     shell_mode_active = _requirement(tool, "ShellCommandRequirement") is not None
-    match tool.get("inputs", {}):
-        case Mapping() as inputs:
-            findings.extend(
-                _identifier_normalization_findings(
-                    inputs,
-                    context="tool input",
-                    path=f"{path}.run.inputs",
-                )
+    if isinstance(inputs := tool.get("inputs", {}), Mapping):
+        findings.extend(
+            _identifier_normalization_findings(
+                inputs,
+                context="tool input",
+                path=f"{path}.run.inputs",
             )
-            for raw_name, raw_definition in inputs.items():
-                if not isinstance(raw_definition, Mapping):
-                    continue
-                input_path = f"{path}.run.inputs.{raw_name}"
-                findings.extend(_number_type_findings(raw_definition, path=input_path))
-                findings.extend(_array_schema_findings(raw_definition, "CommandInputArraySchema", path=input_path))
-                findings.extend(
-                    _unconsumed_field_findings(raw_definition, "CommandInputParameter", path=input_path)
-                )
-                findings.extend(_default_value_findings(raw_definition, path=input_path))
-                binding = raw_definition.get("inputBinding")
-                if not isinstance(binding, Mapping):
-                    continue
-                input_binding_path = f"{input_path}.inputBinding"
-                findings.extend(
-                    _unconsumed_field_findings(binding, "CommandLineBinding", path=input_binding_path)
-                )
-                if binding.get("shellQuote") is False:
-                    try:
-                        _shell_literal_value(raw_name, binding, shell_mode=shell_mode_active)
-                    except ValueError as exc:
-                        findings.append(f"{input_binding_path}.shellQuote: {exc}")
-                if (
-                    _required_type(raw_definition.get("type")) == "boolean"
-                    and binding.get("valueFrom") is not None
-                    and binding.get("shellQuote") is not False
-                ):
-                    try:
-                        _boolean_flag_reference(
-                            raw_name,
-                            _identifier(raw_name, context="input binding name"),
-                            binding["valueFrom"],
-                        )
-                    except ValueError as exc:
-                        findings.append(f"{input_binding_path}.valueFrom: {exc}")
-                elif binding.get("valueFrom") is not None and binding.get("shellQuote") is not False:
-                    findings.extend(_computed_value_from_findings(binding["valueFrom"], path=input_binding_path))
-        case _:
-            pass
-
-    match tool.get("arguments", []):
-        case list() as arguments:
-            for argument_index, argument in enumerate(arguments):
-                if not isinstance(argument, Mapping):
-                    continue
-                argument_path = f"{path}.run.arguments[{argument_index}]"
-                findings.extend(
-                    _unconsumed_field_findings(argument, "CommandLineBinding", path=argument_path)
-                )
-                if argument.get("shellQuote") is False:
-                    try:
-                        _shell_literal_value(
-                            f"arguments[{argument_index}]", argument, shell_mode=shell_mode_active
-                        )
-                    except ValueError as exc:
-                        findings.append(f"{argument_path}.shellQuote: {exc}")
-                elif argument.get("valueFrom") is not None:
-                    findings.extend(_computed_value_from_findings(argument["valueFrom"], path=argument_path))
-        case _:
-            pass
-
-    match tool.get("outputs", {}):
-        case Mapping() as outputs:
+        )
+        for raw_name, raw_definition in inputs.items():
+            if not isinstance(raw_definition, Mapping):
+                continue
+            input_path = f"{path}.run.inputs.{raw_name}"
+            findings.extend(_parameter_findings(raw_definition, "CommandInputParameter", path=input_path))
+            findings.extend(_default_value_findings(raw_definition, path=input_path))
+            binding = raw_definition.get("inputBinding")
+            if not isinstance(binding, Mapping):
+                continue
+            input_binding_path = f"{input_path}.inputBinding"
             findings.extend(
-                _identifier_normalization_findings(
-                    outputs,
-                    context="tool output",
-                    path=f"{path}.run.outputs",
-                )
+                _unconsumed_field_findings(binding, "CommandLineBinding", path=input_binding_path)
             )
-            for raw_name, raw_definition in outputs.items():
-                if not isinstance(raw_definition, Mapping):
-                    continue
-                output_path = f"{path}.run.outputs.{raw_name}"
-                findings.extend(_number_type_findings(raw_definition, path=output_path))
-                findings.extend(
-                    _unconsumed_field_findings(raw_definition, "CommandOutputParameter", path=output_path)
-                )
-                binding = raw_definition.get("outputBinding")
-                # An outputBinding that declares capture behavior is diagnosed
-                # by _output_capture alone, which reports the type it requires;
-                # the generic type finding would only restate that less
-                # precisely.
-                declares_capture = isinstance(binding, Mapping) and bool(
-                    _OUTPUT_CAPTURE_FIELDS & set(binding)
-                )
+            if binding.get("shellQuote") is False:
                 try:
-                    qualifier = cwl_type_to_nf_qualifier(raw_definition.get("type"))
-                except ValueError:
-                    qualifier = "unsupported"
-                if qualifier != "path" and not declares_capture:
-                    findings.append(
-                        f"{output_path}.type: an output is collected by glob as a File or Directory, "
-                        "or captured as text with loadContents and outputEval"
-                    )
-                if not isinstance(binding, Mapping):
-                    continue
-                output_binding_path = f"{output_path}.outputBinding"
-                findings.extend(
-                    _unconsumed_field_findings(binding, "CommandOutputBinding", path=output_binding_path)
-                )
-                try:
-                    _output_capture(raw_name, raw_definition)
+                    _shell_literal_value(raw_name, binding, shell_mode=shell_mode_active)
                 except ValueError as exc:
-                    findings.append(f"{output_binding_path}: {exc}")
-        case _:
-            pass
+                    findings.append(f"{input_binding_path}.shellQuote: {exc}")
+            if (
+                _required_type(raw_definition.get("type")) == "boolean"
+                and binding.get("valueFrom") is not None
+                and binding.get("shellQuote") is not False
+            ):
+                try:
+                    _boolean_flag_reference(
+                        raw_name,
+                        _identifier(raw_name, context="input binding name"),
+                        binding["valueFrom"],
+                    )
+                except ValueError as exc:
+                    findings.append(f"{input_binding_path}.valueFrom: {exc}")
+            elif binding.get("valueFrom") is not None and binding.get("shellQuote") is not False:
+                findings.extend(_computed_value_from_findings(binding["valueFrom"], path=input_binding_path))
+
+    if isinstance(arguments := tool.get("arguments", []), list):
+        for argument_index, argument in enumerate(arguments):
+            if not isinstance(argument, Mapping):
+                continue
+            argument_path = f"{path}.run.arguments[{argument_index}]"
+            findings.extend(
+                _unconsumed_field_findings(argument, "CommandLineBinding", path=argument_path)
+            )
+            if argument.get("shellQuote") is False:
+                try:
+                    _shell_literal_value(
+                        f"arguments[{argument_index}]", argument, shell_mode=shell_mode_active
+                    )
+                except ValueError as exc:
+                    findings.append(f"{argument_path}.shellQuote: {exc}")
+            elif argument.get("valueFrom") is not None:
+                findings.extend(_computed_value_from_findings(argument["valueFrom"], path=argument_path))
+
+    if isinstance(outputs := tool.get("outputs", {}), Mapping):
+        findings.extend(
+            _identifier_normalization_findings(
+                outputs,
+                context="tool output",
+                path=f"{path}.run.outputs",
+            )
+        )
+        for raw_name, raw_definition in outputs.items():
+            if not isinstance(raw_definition, Mapping):
+                continue
+            output_path = f"{path}.run.outputs.{raw_name}"
+            findings.extend(_parameter_findings(raw_definition, "CommandOutputParameter", path=output_path))
+            binding = raw_definition.get("outputBinding")
+            # An outputBinding that declares capture behavior is diagnosed
+            # by _output_capture alone, which reports the type it requires;
+            # the generic type finding would only restate that less
+            # precisely.
+            declares_capture = isinstance(binding, Mapping) and bool(
+                _OUTPUT_CAPTURE_FIELDS & set(binding)
+            )
+            try:
+                qualifier = cwl_type_to_nf_qualifier(raw_definition.get("type"))
+            except ValueError:
+                qualifier = "unsupported"
+            if qualifier != "path" and not declares_capture:
+                findings.append(
+                    f"{output_path}.type: an output is collected by glob as a File or Directory, "
+                    "or captured as text with loadContents and outputEval"
+                )
+            if not isinstance(binding, Mapping):
+                continue
+            output_binding_path = f"{output_path}.outputBinding"
+            findings.extend(
+                _unconsumed_field_findings(binding, "CommandOutputBinding", path=output_binding_path)
+            )
+            try:
+                _output_capture(raw_name, raw_definition)
+            except ValueError as exc:
+                findings.append(f"{output_binding_path}: {exc}")
     return findings
 
 
@@ -1851,76 +1767,59 @@ def _workflow_capability_findings(
         provided_params,
         error="compiled workflow input values must be a mapping",
     )
-    match workflow.get("inputs", {}):
-        case Mapping() as inputs:
-            findings.extend(
-                _identifier_normalization_findings(
-                    inputs,
-                    context="workflow input",
-                    path="workflow.inputs",
-                )
+    if isinstance(inputs := workflow.get("inputs", {}), Mapping):
+        findings.extend(
+            _identifier_normalization_findings(
+                inputs,
+                context="workflow input",
+                path="workflow.inputs",
             )
-            declared_names = {str(name) for name in inputs}
-            for raw_name, definition in inputs.items():
-                input_path = f"workflow.inputs.{raw_name}"
-                findings.extend(_number_type_findings(definition, path=input_path))
-                findings.extend(_array_schema_findings(definition, "InputArraySchema", path=input_path))
-                if isinstance(definition, Mapping):
-                    findings.extend(
-                        _unconsumed_field_findings(definition, "WorkflowInputParameter", path=input_path)
-                    )
-                    has_default = "default" in definition
-                    cwl_type = definition.get("type")
-                    findings.extend(_default_value_findings(definition, path=input_path))
-                else:
-                    has_default = False
-                    cwl_type = definition
-                if raw_name not in provided and not has_default and not _is_optional(cwl_type):
-                    findings.append(f"{input_path}: required workflow input value is missing")
-                if raw_name in provided and provided[raw_name] is None and not _is_optional(cwl_type):
-                    findings.append(
-                        f"{input_path}: explicit null input values are not valid for a required input"
-                    )
-                elif raw_name in provided and provided[raw_name] is None:
-                    # An explicit null on an optional input is only safe for
-                    # specific consuming positions; _absent_optional_findings
-                    # analyzes each consuming step and port for that.
-                    pass
-                elif raw_name in provided and not _phase1_value_matches(
-                    cwl_type, provided[raw_name]
-                ):
-                    findings.append(
-                        f"{input_path}: supplied value does not match its supported CWL type"
-                    )
-            for extra_name in sorted(set(map(str, provided)) - declared_names):
+        )
+        declared_names = {str(name) for name in inputs}
+        for raw_name, definition in inputs.items():
+            input_path = f"workflow.inputs.{raw_name}"
+            findings.extend(_parameter_findings(definition, "WorkflowInputParameter", path=input_path))
+            if isinstance(definition, Mapping):
+                has_default = "default" in definition
+                cwl_type = definition.get("type")
+                findings.extend(_default_value_findings(definition, path=input_path))
+            else:
+                has_default = False
+                cwl_type = definition
+            if raw_name not in provided and not has_default and not _is_optional(cwl_type):
+                findings.append(f"{input_path}: required workflow input value is missing")
+            if raw_name in provided and provided[raw_name] is None and not _is_optional(cwl_type):
                 findings.append(
-                    f"workflow.input_values.{extra_name}: value has no declared workflow input"
+                    f"{input_path}: explicit null input values are not valid for a required input"
                 )
-        case _:
-            pass
-
-    match workflow.get("outputs", {}):
-        case Mapping() as outputs:
-            findings.extend(
-                _identifier_normalization_findings(
-                    outputs,
-                    context="workflow output",
-                    path="workflow.outputs",
+            elif raw_name in provided and provided[raw_name] is None:
+                # An explicit null on an optional input is only safe for
+                # specific consuming positions; _absent_optional_findings
+                # analyzes each consuming step and port for that.
+                pass
+            elif raw_name in provided and not _phase1_value_matches(
+                cwl_type, provided[raw_name]
+            ):
+                findings.append(
+                    f"{input_path}: supplied value does not match its supported CWL type"
                 )
+        for extra_name in sorted(set(map(str, provided)) - declared_names):
+            findings.append(
+                f"workflow.input_values.{extra_name}: value has no declared workflow input"
             )
-            for raw_name, definition in outputs.items():
-                findings.extend(_number_type_findings(definition, path=f"workflow.outputs.{raw_name}"))
-                findings.extend(
-                    _array_schema_findings(definition, "OutputArraySchema", path=f"workflow.outputs.{raw_name}")
-                )
-                if isinstance(definition, Mapping):
-                    findings.extend(
-                        _unconsumed_field_findings(
-                            definition, "WorkflowOutputParameter", path=f"workflow.outputs.{raw_name}"
-                        )
-                    )
-        case _:
-            pass
+
+    if isinstance(outputs := workflow.get("outputs", {}), Mapping):
+        findings.extend(
+            _identifier_normalization_findings(
+                outputs,
+                context="workflow output",
+                path="workflow.outputs",
+            )
+        )
+        for raw_name, definition in outputs.items():
+            findings.extend(
+                _parameter_findings(definition, "WorkflowOutputParameter", path=f"workflow.outputs.{raw_name}")
+            )
 
     findings.extend(
         _identifier_normalization_findings(
@@ -1939,17 +1838,14 @@ def _workflow_capability_findings(
             findings.append(
                 f"{step_path}.scatterMethod: scatterMethod without scatter is not executable"
             )
-        match step.get("in", {}):
-            case Mapping() as step_inputs:
-                for raw_name, definition in step_inputs.items():
-                    if isinstance(definition, Mapping):
-                        findings.extend(
-                            _unconsumed_field_findings(
-                                definition, "WorkflowStepInput", path=f"{step_path}.in.{raw_name}"
-                            )
+        if isinstance(step_inputs := step.get("in", {}), Mapping):
+            for raw_name, definition in step_inputs.items():
+                if isinstance(definition, Mapping):
+                    findings.extend(
+                        _unconsumed_field_findings(
+                            definition, "WorkflowStepInput", path=f"{step_path}.in.{raw_name}"
                         )
-            case _:
-                pass
+                    )
     return findings
 
 
@@ -1960,29 +1856,12 @@ def _workflow_requirement_findings(
 ) -> list[str]:
     """Apply closed-world analysis to workflow-level requirements."""
     section = workflow.get("requirements")
-    match section:
-        case None:
-            return []
-        case Mapping() | list():
-            pass
-        case _:
-            return [f"{path}.requirements: CWL Workflow requirements must be a mapping or list"]
-    findings: list[str] = []
-    for class_name, suffix in _requirement_names(section):
-        requirement_path = f"{path}.requirements.{suffix}"
-        if not class_name:
-            findings.append(f"{requirement_path}: {_CLASSLESS_REQUIREMENT}")
-        elif class_name not in _SUPPORTED_WORKFLOW_REQUIREMENTS:
-            reason = _rejection(
-                REQUIREMENT_CLASSES["Workflow"], class_name,
-                otherwise=f"{class_name} is not supported at the Nextflow workflow level",
-            )
-            findings.append(f"{requirement_path}: {reason}")
-        elif definition := _requirement_definition(section, class_name=class_name, suffix=suffix):
-            findings.extend(
-                _unconsumed_field_findings(definition, class_name, path=requirement_path)
-            )
-    return findings
+    if section is not None and not isinstance(section, (Mapping, list)):
+        return [f"{path}.requirements: CWL Workflow requirements must be a mapping or list"]
+    return _requirement_findings(
+        section, "Workflow", path=f"{path}.requirements",
+        otherwise="{} is not supported at the Nextflow workflow level",
+    )
 
 
 _SCATTER_METHODS = frozenset({"dotproduct", "flat_crossproduct", "nested_crossproduct"})
@@ -2009,16 +1888,8 @@ def _scatter_names(step: Mapping[str, Any]) -> list[str]:
 
 
 def _step_indices_by_id(steps: list[Mapping[str, Any]]) -> dict[str, int]:
-    """Map every recognizable step identifier spelling to its step index."""
-    indices: dict[str, int] = {}
-    for index, step in enumerate(steps):
-        match step.get("id"):
-            case str() as raw_id:
-                for candidate in (raw_id, raw_id.rsplit("#", maxsplit=1)[-1]):
-                    indices[candidate] = index
-            case _:
-                continue
-    return indices
+    """Map every step id to its step index."""
+    return {step["id"]: index for index, step in enumerate(steps) if isinstance(step.get("id"), str)}
 
 
 def _scattered_names_by_index(steps: list[Mapping[str, Any]]) -> dict[int, set[str]]:
@@ -2167,54 +2038,49 @@ def _scatter_edge_findings(steps: list[Mapping[str, Any]]) -> list[str]:
     scattered = _scattered_names_by_index(steps)
     if not scattered:
         return findings
-    for step_index, step in enumerate(steps):
-        step_inputs = step.get("in", {})
-        if not isinstance(step_inputs, Mapping):
-            continue
-        for raw_name, raw_source in step_inputs.items():
-            try:
-                sources = _source_values(
-                    raw_source,
-                    context=f"step input {step_index}.{raw_name}",
-                )
-            except ValueError:
+    for step_index, raw_name, _raw_source, sources in _wired_inputs(steps):
+        for source in sources:
+            if "/" not in source:
                 continue
-            for source in sources:
-                if "/" not in source:
-                    continue
-                raw_process = source.rsplit("/", maxsplit=1)[0]
-                producer = indices.get(
-                    raw_process,
-                    indices.get(raw_process.rsplit("#", maxsplit=1)[-1]),
-                )
-                if producer is not None and producer in scattered:
-                    # Every scatter is indexed, so its outputs are gathered once, in
-                    # invocation order (design §6, Topology, Gather).
-                    if steps[producer].get("scatterMethod") == "nested_crossproduct":
-                        findings.append(
-                            f"steps[{step_index}].in.{raw_name}: {source!r} is a nested_crossproduct "
-                            "result, which reaches workflow outputs only"
-                        )
-                elif step_index in scattered:
+            producer = indices.get(source.rsplit("/", maxsplit=1)[0])
+            if producer is not None and producer in scattered:
+                # Every scatter is indexed, so its outputs are gathered once, in
+                # invocation order (design §6, Topology, Gather).
+                if steps[producer].get("scatterMethod") == "nested_crossproduct":
                     findings.append(
-                        f"steps[{step_index}].in.{raw_name}: a scattered step takes inputs from "
-                        f"workflow inputs or scattered steps; {source!r}, from a step that is not "
-                        "scattered, would truncate the scatter to one task"
+                        f"steps[{step_index}].in.{raw_name}: {source!r} is a nested_crossproduct "
+                        "result, which reaches workflow outputs only"
                     )
+            elif step_index in scattered:
+                findings.append(
+                    f"steps[{step_index}].in.{raw_name}: a scattered step takes inputs from "
+                    f"workflow inputs or scattered steps; {source!r}, from a step that is not "
+                    "scattered, would truncate the scatter to one task"
+                )
     return findings
 
 
-def _template_reference_names(templates: Iterable[NfTemplate]) -> tuple[set[str], set[str]]:
-    """Return (plainly-referenced, basename-referenced) input names across templates."""
-    plain: set[str] = set()
-    basenamed: set[str] = set()
-    for template in templates:
-        for segment in template.segments:
-            if isinstance(segment, NfInputReference):
-                plain.add(segment.name)
-            elif isinstance(segment, NfBasenameReference):
-                basenamed.add(segment.name)
-    return plain, basenamed
+def _referenced_names(tool: Mapping[str, Any]) -> set[str] | None:
+    """The input names a plain or basename reference reads in the command, a stream target or an output glob.
+
+    None when the tool's command or outputs cannot be lowered; lowering reports why.
+    """
+    try:
+        command = _command(tool)
+        outputs = _ports(tool.get("outputs", {}), outputs=True)
+    except (ValueError, TypeError):
+        return None
+    templates = [
+        *(token for token in command.tokens if isinstance(token, NfTemplate)),
+        *(stream for stream in (command.stdin, command.stdout, command.stderr) if stream),
+        *(port.glob for port in outputs if port.glob),
+    ]
+    return {
+        segment.name
+        for template in templates
+        for segment in template.segments
+        if isinstance(segment, (NfInputReference, NfBasenameReference))
+    }
 
 
 def _safe_absence_names(tool: Mapping[str, Any]) -> set[str] | None:
@@ -2227,21 +2093,13 @@ def _safe_absence_names(tool: Mapping[str, Any]) -> set[str] | None:
     calls ``.toString()`` on it). Returns None when the tool's command or
     outputs cannot be analyzed; lowering reports why, so absence is not judged.
     """
-    try:
-        command = _command(tool)
-        outputs = _ports(tool.get("outputs", {}), outputs=True)
-    except (ValueError, TypeError):
+    referenced = _referenced_names(tool)
+    if referenced is None:
         return None
-    templates = [
-        *(token for token in command.tokens if isinstance(token, NfTemplate)),
-        *(stream for stream in (command.stdin, command.stdout, command.stderr) if stream),
-        *(port.glob for port in outputs if port.glob),
-    ]
-    plain, basenamed = _template_reference_names(templates)
     # Every template reference dereferences the value, so it is unsafe even
     # when the same input also drives a flag: excusing it on the strength of
     # the flag use would let the absence sentinel render into a command line.
-    # A flag-only boolean has no template reference and never enters `plain`.
+    # A flag-only boolean has no template reference and never enters `referenced`.
     try:
         inputs = _as_mapping(tool.get("inputs", {}), error="")
         all_names = {_identifier(raw_name, context="input reference") for raw_name in inputs}
@@ -2254,8 +2112,7 @@ def _safe_absence_names(tool: Mapping[str, Any]) -> set[str] | None:
         }
     except ValueError:
         return None
-    unsafe = plain | basenamed | shell_literal_names
-    return all_names - unsafe
+    return all_names - referenced - shell_literal_names
 
 
 def _absent_optional_findings(
@@ -2349,13 +2206,9 @@ def _conditional_consumer_findings(
     findings: list[str] = []
     conditional_ids: dict[str, int] = {}
     for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True)):
-        if "when" not in step or tool.get("class") != "CommandLineTool":
+        if "when" not in step or tool.get("class") != "CommandLineTool" or not isinstance(step.get("id"), str):
             continue
-        raw_id = step.get("id")
-        if not isinstance(raw_id, str):
-            continue
-        conditional_ids[raw_id] = step_index
-        conditional_ids[raw_id.rsplit("#", maxsplit=1)[-1]] = step_index
+        conditional_ids[step["id"]] = step_index
         outputs = tool.get("outputs", {})
         if isinstance(outputs, Mapping):
             for raw_name, definition in outputs.items():
@@ -2370,61 +2223,54 @@ def _conditional_consumer_findings(
     if not conditional_ids:
         return findings
 
-    for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True)):
-        step_in = step.get("in", {})
-        tool_inputs = tool.get("inputs", {})
-        if not isinstance(step_in, Mapping) or not isinstance(tool_inputs, Mapping):
+    for step_index, raw_name, _raw_source, sources in _wired_inputs(steps):
+        consumes_conditional = any(
+            "/" in source and source.rsplit("/", maxsplit=1)[0] in conditional_ids
+            for source in sources
+        )
+        if not consumes_conditional:
             continue
-        for raw_name, raw_source in step_in.items():
-            try:
-                sources = _source_values(raw_source, context="")
-            except ValueError:
-                continue
-            consumes_conditional = any(
-                "/" in source and source.rsplit("/", maxsplit=1)[0] in conditional_ids
-                for source in sources
+        path = f"steps[{step_index}].in.{raw_name}"
+        tool = tools[step_index]
+        tool_inputs = tool.get("inputs", {})
+        definition = tool_inputs.get(raw_name) if isinstance(tool_inputs, Mapping) else None
+        if not isinstance(definition, Mapping):
+            continue
+        cwl_type = definition.get("type")
+        if _is_array_type(_required_type(cwl_type)):
+            findings.append(
+                f"{path}: an array-typed port cannot consume a conditional step's output; "
+                "[] already stands for a skipped step"
             )
-            if not consumes_conditional:
-                continue
-            path = f"steps[{step_index}].in.{raw_name}"
-            definition = tool_inputs.get(raw_name)
-            if not isinstance(definition, Mapping):
-                continue
-            cwl_type = definition.get("type")
-            if _is_array_type(_required_type(cwl_type)):
-                findings.append(
-                    f"{path}: an array-typed port cannot consume a conditional step's output; "
-                    "[] already stands for a skipped step"
-                )
-                continue
-            try:
-                qualifier = cwl_type_to_nf_qualifier(cwl_type)
-            except ValueError:
-                qualifier = None
-            if qualifier == "path":
-                findings.append(
-                    f"{path}: a path consumer of a possibly-null conditional step "
-                    "output is not supported"
-                )
-                continue
-            if not _is_optional(cwl_type):
-                findings.append(
-                    f"{path}: a non-optional port cannot consume a possibly-null "
-                    "conditional step output"
-                )
-                continue
-            safe_names = _safe_absence_names(tool)
-            if safe_names is None:
-                continue
-            try:
-                name = _identifier(raw_name, context="input reference")
-            except ValueError:
-                name = None
-            if name not in safe_names:
-                findings.append(
-                    f"{path}: this input's use of a possibly-null conditional step "
-                    "output is not one the absent-optional lowering admits"
-                )
+            continue
+        try:
+            qualifier = cwl_type_to_nf_qualifier(cwl_type)
+        except ValueError:
+            qualifier = None
+        if qualifier == "path":
+            findings.append(
+                f"{path}: a path consumer of a possibly-null conditional step "
+                "output is not supported"
+            )
+            continue
+        if not _is_optional(cwl_type):
+            findings.append(
+                f"{path}: a non-optional port cannot consume a possibly-null "
+                "conditional step output"
+            )
+            continue
+        safe_names = _safe_absence_names(tool)
+        if safe_names is None:
+            continue
+        try:
+            name = _identifier(raw_name, context="input reference")
+        except ValueError:
+            name = None
+        if name not in safe_names:
+            findings.append(
+                f"{path}: this input's use of a possibly-null conditional step "
+                "output is not one the absent-optional lowering admits"
+            )
     return findings
 
 
@@ -2450,26 +2296,17 @@ def _source_types(
 ) -> dict[str, Any]:
     """Map every wireable source name to the CWL type it carries."""
     types: dict[str, Any] = {}
-    match workflow.get("inputs", {}):
-        case Mapping() as inputs:
-            for raw_name, definition in inputs.items():
-                declared = definition.get("type") if isinstance(definition, Mapping) else definition
-                types[str(raw_name)] = declared
-        case _:
-            pass
+    if isinstance(inputs := workflow.get("inputs", {}), Mapping):
+        for raw_name, definition in inputs.items():
+            declared = definition.get("type") if isinstance(definition, Mapping) else definition
+            types[str(raw_name)] = declared
     for step, tool in zip(steps, tools, strict=True):
-        match step.get("id"):
-            case str() as raw_id:
-                pass
-            case _:
-                continue
         outputs = tool.get("outputs", {})
-        if not isinstance(outputs, Mapping):
+        if not isinstance(outputs, Mapping) or not isinstance(step.get("id"), str):
             continue
         for raw_port, definition in outputs.items():
             declared = definition.get("type") if isinstance(definition, Mapping) else definition
-            for step_key in (raw_id, raw_id.rsplit("#", maxsplit=1)[-1]):
-                types[f"{step_key}/{raw_port}"] = declared
+            types[f"{step['id']}/{raw_port}"] = declared
     return types
 
 
@@ -2534,11 +2371,6 @@ def _text_capture_endpoints(
     """Return every ``<step>/<port>`` source that captures file text."""
     endpoints: set[str] = set()
     for step, tool in zip(steps, tools, strict=True):
-        match step.get("id"):
-            case str() as raw_id:
-                pass
-            case _:
-                continue
         if "when" in step:
             # A conditional step's captured-text output is the one proven
             # exception (design §6, Topology): _conditional_consumer_findings
@@ -2546,7 +2378,7 @@ def _text_capture_endpoints(
             # a possibly-null value requires.
             continue
         outputs = tool.get("outputs", {})
-        if not isinstance(outputs, Mapping):
+        if not isinstance(outputs, Mapping) or not isinstance(step.get("id"), str):
             continue
         for raw_port, definition in outputs.items():
             if not isinstance(definition, Mapping):
@@ -2555,10 +2387,8 @@ def _text_capture_endpoints(
                 capture = _output_capture(raw_port, definition)
             except ValueError:
                 continue
-            if capture != "text":
-                continue
-            for step_key in (raw_id, raw_id.rsplit("#", maxsplit=1)[-1]):
-                endpoints.add(f"{step_key}/{raw_port}")
+            if capture == "text":
+                endpoints.add(f"{step['id']}/{raw_port}")
     return endpoints
 
 
@@ -2573,26 +2403,14 @@ def _text_capture_sink_findings(
     check for process edges to lean on.
     """
     endpoints = _text_capture_endpoints(steps, tools)
-    if not endpoints:
-        return []
-    findings: list[str] = []
-    for step_index, step in enumerate(steps):
-        step_inputs = step.get("in", {})
-        if not isinstance(step_inputs, Mapping):
-            continue
-        for raw_name, raw_source in step_inputs.items():
-            try:
-                sources = _source_values(raw_source, context=f"steps[{step_index}].in.{raw_name}")
-            except ValueError:
-                continue
-            for source in sources:
-                if source in endpoints:
-                    findings.append(
-                        f"steps[{step_index}].in.{raw_name}: {source!r} captures file text; "
-                        "its only approved sink is a workflow output, because the executable "
-                        "graph has no qualifier agreement check for process edges"
-                    )
-    return findings
+    return [
+        f"steps[{step_index}].in.{raw_name}: {source!r} captures file text; "
+        "its only approved sink is a workflow output, because the executable "
+        "graph has no qualifier agreement check for process edges"
+        for step_index, raw_name, _raw_source, sources in _wired_inputs(steps)
+        for source in sources
+        if source in endpoints
+    ]
 
 
 def _capability_error(findings: list[str]) -> ValueError:
@@ -2637,11 +2455,6 @@ def _condition_value(step: Mapping[str, Any], tool: Mapping[str, Any]) -> Expr:
 
 
 def _process(step: Mapping[str, Any], tool: Mapping[str, Any]) -> NfProcess:
-    match tool.get("class"):
-        case "CommandLineTool":
-            pass
-        case unsupported_class:
-            raise ValueError(f"unsupported compiled step class {unsupported_class!r}")
     when = step.get("when")
     return NfProcess(
         name=_identifier(step.get("id"), context="workflow step id", variable=False),
@@ -2678,26 +2491,32 @@ def _source_values(value: Any, *, context: str) -> list[str]:
             raise ValueError(f"{context} must be a source string or list of source strings")
 
 
+def _wired_inputs(steps: list[Mapping[str, Any]]) -> Iterator[tuple[int, Any, Any, list[str]]]:
+    """Yield (step index, input name, raw source, sources) for every step input of a recognized shape.
+
+    Every other shape is reported, by path, by the passes that own it.
+    """
+    for step_index, step in enumerate(steps):
+        step_inputs = step.get("in", {})
+        if not isinstance(step_inputs, Mapping):
+            continue
+        for raw_name, raw_source in step_inputs.items():
+            try:
+                sources = _source_values(raw_source, context=f"steps[{step_index}].in.{raw_name}")
+            except ValueError:
+                continue
+            yield step_index, raw_name, raw_source, sources
+
+
 def _step_name_map(steps: list[Mapping[str, Any]], processes: list[NfProcess]) -> dict[str, str]:
-    names: dict[str, str] = {}
-    for step, process in zip(steps, processes, strict=True):
-        match step.get("id"):
-            case str() as raw_name:
-                pass
-            case _:
-                raise ValueError("workflow step id must be a string")
-        for candidate in (raw_name, raw_name.rsplit("#", maxsplit=1)[-1]):
-            if candidate in names and names[candidate] != process.name:
-                raise ValueError(f"workflow step identifier {candidate!r} is ambiguous")
-            names[candidate] = process.name
-    return names
+    return {step["id"]: process.name for step, process in zip(steps, processes, strict=True)}
 
 
 def _source_endpoint(source: str, step_names: Mapping[str, str]) -> tuple[str | None, str]:
     if "/" not in source:
         return None, _identifier(source, context="workflow input source")
     raw_process, raw_port = source.rsplit("/", maxsplit=1)
-    process = step_names.get(raw_process, step_names.get(raw_process.rsplit("#", maxsplit=1)[-1]))
+    process = step_names.get(raw_process)
     if process is None:
         raise ValueError(f"connection references unknown source process {raw_process!r}")
     return process, _identifier(raw_port, context="process output source")
@@ -2858,18 +2677,12 @@ def _json_value(value: Any) -> Any:
             return copy.deepcopy(value)
 
 
-def _workflow_steps(workflow: Mapping[str, Any], *, child_count: int) -> list[Mapping[str, Any]]:
-    raw_steps = _as_list(workflow.get("steps", []), error="compiled CWL Workflow steps must be a list")
-    steps: list[Mapping[str, Any]] = []
-    for step in raw_steps:
-        match step:
-            case Mapping() as step_definition:
-                steps.append(step_definition)
-            case _:
-                raise ValueError("compiled CWL Workflow steps must be mappings")
-    if len(steps) != child_count:
-        raise ValueError("compiled CWL steps do not match compiled tool artifacts")
-    return steps
+def _workflow_steps(workflow: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """The steps a workflow document lists, in order."""
+    return [
+        _as_mapping(step, error="compiled CWL Workflow steps must be mappings")
+        for step in _as_list(workflow.get("steps", []), error="compiled CWL Workflow steps must be a list")
+    ]
 
 
 def _workflow_params(
@@ -2917,7 +2730,7 @@ def _container_policy_findings(tools: tuple[Mapping[str, Any], ...]) -> list[str
         requirement_names = [
             class_name
             for section_name in ("requirements", "hints")
-            for class_name, _suffix in _requirement_names(tool.get(section_name))
+            for class_name, _suffix, _payload in _requirement_entries(tool.get(section_name))
         ]
         target = containerized if "DockerRequirement" in requirement_names else host
         target.append(step_index)
@@ -2970,7 +2783,7 @@ def compiled_source_to_nextflow(
     compiled = replace(compiled, params=_local_locations_as_paths(compiled.params))
     workflow = compiled.workflow
     tools = compiled.tools
-    steps = _workflow_steps(workflow, child_count=len(tools))
+    steps = _workflow_steps(workflow)
     findings = list(nested_findings)
     processes: list[NfProcess] = []
     for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True)):
