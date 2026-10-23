@@ -3,7 +3,7 @@
 # pylint: disable=missing-function-docstring
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 import re
@@ -98,114 +98,6 @@ def test_a_literal_file_into_a_format_declaring_input_lowers_to_its_path(tmp_pat
 
 
 @pytest.mark.fast
-def test_rejects_value_from_aliasing_a_different_input_on_a_boolean_binding() -> None:
-    """Aliasing a different input's presence onto this flag has no approved lowering."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {
-                    "position": 1,
-                    "prefix": "--verbose",
-                    "valueFrom": "$(inputs.other)",
-                },
-            },
-            "other": {"type": "boolean"},
-        },
-    )
-    rose = one_step(flags, verbose=True, other=False)
-
-    with pytest.raises(ValueError, match=r"valueFrom on a boolean inputBinding is supported only as"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_literal_value_from_on_a_boolean_binding() -> None:
-    """A literal string is not a provably-boolean valueFrom result."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {
-                    "position": 1,
-                    "prefix": "--verbose",
-                    "valueFrom": "true",
-                },
-            }
-        },
-    )
-    rose = one_step(flags, verbose=True)
-
-    with pytest.raises(ValueError, match=r"valueFrom on a boolean inputBinding is supported only as"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_basename_suffixed_value_from_on_a_boolean_binding() -> None:
-    """A .basename suffix is never boolean-shaped, even on a self-reference."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {
-                    "position": 1,
-                    "prefix": "--verbose",
-                    "valueFrom": "$(inputs.verbose.basename)",
-                },
-            }
-        },
-    )
-    rose = one_step(flags, verbose=True)
-
-    with pytest.raises(ValueError, match=r"valueFrom on a boolean inputBinding is supported only as"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_file_output_wired_into_a_boolean_flag() -> None:
-    """A staged path is always truthy in Groovy, so the flag would never clear."""
-    producer = tool("MAKE", outputs={"out": {"type": "File", "outputBinding": {"glob": "f.txt"}}})
-    consumer = tool(
-        "SORT",
-        inputs={"reverse": {"type": "boolean", "inputBinding": {"position": 1, "prefix": "-r"}}},
-    )
-    rose = synthetic_source(
-        workflow_doc([
-            step("MAKE", out=["out"]),
-            step("SORT", **{"in": {"reverse": "MAKE/out"}}),
-        ]),
-        [producer, consumer],
-    )
-
-    with pytest.raises(ValueError, match=r"reverse.*boolean source"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize("supplied", ["false", "0", ""])
-def test_rejects_string_source_wired_into_a_boolean_flag(supplied: str) -> None:
-    """Groovy truthiness of a string would decide the flag, not the source value."""
-    consumer = tool(
-        "SORT",
-        inputs={"reverse": {"type": "boolean", "inputBinding": {"position": 1, "prefix": "-r"}}},
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [step("SORT", **{"in": {"reverse": "flagval"}})],
-            inputs={"flagval": {"type": "string"}},
-        ),
-        [consumer],
-        workflow_inputs={"flagval": supplied},
-    )
-
-    with pytest.raises(ValueError, match=r"reverse.*boolean source"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
 def test_accepts_a_boolean_source_wired_into_a_boolean_flag() -> None:
     """The supported wiring stays supported: boolean source into a flag input."""
     consumer = tool(
@@ -289,33 +181,6 @@ def test_boundary_missingness_is_not_conflated_with_defaults(
 
 
 @pytest.mark.fast
-def test_rejects_undeclared_workflow_input_values() -> None:
-    rose = synthetic_source(workflow_doc([]), [], workflow_inputs={"extra": "value"})
-    with pytest.raises(ValueError, match="has no declared workflow input"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_workflow_input_identifier_collisions() -> None:
-    rose = synthetic_source(
-        workflow_doc(
-            [],
-            inputs={
-                "out-dir": {"type": "string"},
-                "out_dir": {"type": "string"},
-            },
-        ),
-        [],
-        workflow_inputs={"out-dir": "first", "out_dir": "second"},
-    )
-    with pytest.raises(
-        ValueError,
-        match=r"workflow input identifiers 'out-dir', 'out_dir'.*normalize to 'out_dir'",
-    ):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
 def test_aggregates_workflow_input_collisions_with_other_findings() -> None:
     collision = tool("COLLISION")
     rose = synthetic_source(
@@ -337,59 +202,6 @@ def test_aggregates_workflow_input_collisions_with_other_findings() -> None:
     assert diagnostic.startswith("Nextflow capability analysis failed:\n")
     assert "workflow.inputs: workflow input identifiers" in diagnostic
     assert "steps[0].unknown_field" in diagnostic
-
-
-@pytest.mark.fast
-def test_rejects_step_identifier_collisions_naming_both_steps() -> None:
-    """A repeated id carries `@<position>`; it and an authored id may normalize alike."""
-    rose = synthetic_source(
-        workflow_doc([step("touch@2"), step("touch_2")]),
-        [tool("touch@2"), tool("touch_2")],
-    )
-    with pytest.raises(
-        ValueError,
-        match=r"workflow\.steps: workflow step identifiers 'touch@2', 'touch_2' normalize to 'touch_2'",
-    ):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_tool_port_identifier_collisions() -> None:
-    collision = tool(
-        "COLLISION",
-        inputs={
-            "out-dir": {"type": "string", "default": "first"},
-            "out_dir": {"type": "string", "default": "second"},
-        },
-    )
-    rose = synthetic_source(workflow_doc([step("COLLISION")]), [collision])
-    with pytest.raises(
-        ValueError,
-        match=r"tool input identifiers 'out-dir', 'out_dir'.*normalize to 'out_dir'",
-    ):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize(
-    ("cwl_type", "value"),
-    [
-        ("string", ["not", "a", "string"]),
-        ("int", True),
-        (
-            "File",
-            {"class": "File", "path": "reference.fa", "secondaryFiles": ["reference.fa.fai"]},
-        ),
-    ],
-)
-def test_rejects_boundary_values_outside_supported_shape(cwl_type: Any, value: Any) -> None:
-    rose = synthetic_source(
-        workflow_doc([], inputs={"value": {"type": cwl_type}}),
-        [],
-        workflow_inputs={"value": value},
-    )
-    with pytest.raises(ValueError, match="does not match its supported CWL type"):
-        compiled_source_to_nextflow(rose)
 
 
 @pytest.mark.fast
@@ -420,69 +232,6 @@ def test_rejects_absent_optional_input_bound_directly_into_the_command() -> None
         match=r"steps\[0\].run.inputs.message: absent optional values are supported only for "
         "a val input whose absence leaves command rendering unchanged",
     ):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_absent_optional_input_whose_binding_emits_a_shell_literal() -> None:
-    """CWL omits the entire binding when its optional source is absent."""
-    optional = tool(
-        "OPTIONAL",
-        inputs={
-            "message": {
-                "type": ["null", "string"],
-                "inputBinding": {
-                    "position": 1,
-                    "valueFrom": "printf optional",
-                    "shellQuote": False,
-                },
-            }
-        },
-        requirements={"ShellCommandRequirement": {}},
-    )
-    rose = one_step(optional, message=None)
-
-    with pytest.raises(
-        ValueError,
-        match=r"steps\[0\].run.inputs.message: absent optional values are supported only for ",
-    ):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_absent_optional_input_referenced_via_another_bindings_value_from() -> None:
-    """An optional input with no binding of its own but referenced elsewhere still rejects."""
-    aliased = tool(
-        "ALIASED",
-        inputs={"message": {"type": ["null", "string"]}},
-        arguments=[{"position": 1, "valueFrom": "$(inputs.message)"}],
-    )
-    rose = one_step(aliased, message=None)
-    with pytest.raises(ValueError, match=r"steps\[0\].run.inputs.message: absent optional"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_absent_optional_path_input() -> None:
-    """path-qualifier channel construction always stages unconditionally; absence stays rejected."""
-    optional = tool("OPTIONAL", inputs={"reference": {"type": ["null", "File"]}})
-    rose = one_step(optional, reference=None)
-    with pytest.raises(ValueError, match=r"steps\[0\].run.inputs.reference: absent optional"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_absent_optional_workflow_input_feeding_required_input() -> None:
-    required = tool("REQUIRED", inputs={"message": {"type": "string"}})
-    rose = synthetic_source(
-        workflow_doc(
-            [step("REQUIRED", **{"in": {"message": "message"}})],
-            inputs={"message": {"type": ["null", "string"]}},
-        ),
-        [required],
-        workflow_inputs={},
-    )
-    with pytest.raises(ValueError, match="absent required"):
         compiled_source_to_nextflow(rose)
 
 
@@ -521,22 +270,6 @@ def test_path_and_basename_require_a_file_or_directory_input(suffix: str, cwl_ty
         f"steps[0].run.inputs.value.inputBinding.valueFrom: {reason}",
         f"steps[0].run.stdout: {reason}",
     } <= set(_findings(rose))
-
-
-@pytest.mark.fast
-def test_rejects_output_glob_outside_typed_input_subset() -> None:
-    bad_glob = tool(
-        "BAD_GLOB",
-        outputs={
-            "result": {
-                "type": "File",
-                "outputBinding": {"glob": "$(runtime.outdir)/result.txt"},
-            }
-        },
-    )
-    rose = synthetic_source(workflow_doc([step("BAD_GLOB", out=["result"])]), [bad_glob])
-    with pytest.raises(ValueError, match="unsupported CWL expression"):
-        compiled_source_to_nextflow(rose)
 
 
 def _findings(source: CompiledNextflowSource | CompilationResult) -> list[str]:
@@ -623,14 +356,6 @@ def test_accepts_multi_input_scatter_under_every_method() -> None:
 
 
 @pytest.mark.fast
-def test_rejects_multi_input_scatter_without_a_scatter_method() -> None:
-    assert _findings(_two_input_scatter_rose(scatterMethod=None)) == [
-        "steps[0].scatterMethod: multi-input scatter over 2 inputs requires an explicit "
-        "scatterMethod"
-    ]
-
-
-@pytest.mark.fast
 def test_accepts_two_input_dotproduct_scatter() -> None:
     workflow = compiled_source_to_nextflow(_two_input_scatter_rose(scatterMethod="dotproduct"))
 
@@ -638,23 +363,6 @@ def test_accepts_two_input_dotproduct_scatter() -> None:
         NfWorkflowInputConnection("firsts", "_SCATTER", "first", "dotproduct"),
         NfWorkflowInputConnection("seconds", "_SCATTER", "second", "dotproduct"),
     }
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize("scatter", [[], {"item": True}, "", ["item", ""]], ids=[
-    "empty-list", "mapping", "empty-string", "empty-name",
-])
-def test_rejects_a_scatter_field_that_does_not_name_one_input(scatter: Any) -> None:
-    assert _findings(_scatter_rose(scatter=scatter)) == [
-        "steps[0].scatter: scatter must name one input, as a string or a non-empty list"
-    ]
-
-
-@pytest.mark.fast
-def test_rejects_an_unsupported_scatter_method() -> None:
-    assert _findings(_scatter_rose(scatterMethod="product")) == [
-        "steps[0].scatterMethod: unsupported CWL scatter method 'product'"
-    ]
 
 
 @pytest.mark.fast
@@ -687,62 +395,6 @@ def test_accepts_both_single_input_scatter_spellings(scatter: Any) -> None:
     assert workflow.connections == (
         NfWorkflowInputConnection("items", "_SCATTER", "item", "dotproduct"),
     )
-
-
-@pytest.mark.fast
-def test_rejects_scatter_over_a_non_array_workflow_input() -> None:
-    rose = synthetic_source(
-        workflow_doc(
-            [step("SCATTER", **{"in": {"item": "items"}, "out": ["result"], "scatter": ["item"]})],
-            inputs={"items": {"type": "string"}},
-        ),
-        [_scattered_tool()],
-        workflow_inputs={"items": "a"},
-    )
-
-    assert _findings(rose) == [
-        "steps[0].in.item: a scattered input needs an array-typed source; 'items' declares 'string'"
-    ]
-
-
-@pytest.mark.fast
-def test_rejects_scatter_over_an_array_typed_port() -> None:
-    assert _findings(_scatter_rose(port_type=_STRING_ARRAY)) == [
-        "steps[0].scatter: scattered input 'item' is array-typed; scattering over an "
-        "array of arrays is deferred beyond this lowering"
-    ]
-
-
-@pytest.mark.fast
-def test_rejects_scatter_whose_element_type_mismatches_its_port() -> None:
-    assert _findings(_scatter_rose(port_type="File")) == [
-        "steps[0].in.item: scattered source 'items' carries 'val' elements but the port "
-        "takes 'path[file]'"
-    ]
-
-
-@pytest.mark.fast
-def test_rejects_scatter_naming_an_undeclared_input() -> None:
-    assert _findings(_scatter_rose(scatter=("missing",))) == [
-        "steps[0].scatter: scattered input 'missing' is not declared by the step's tool"
-    ]
-
-
-@pytest.mark.fast
-def test_rejects_an_unwired_scattered_input() -> None:
-    rose = synthetic_source(
-        workflow_doc(
-            [step("SCATTER", **{"out": ["result"], "scatter": ["item"]})],
-            inputs={"items": {"type": _STRING_ARRAY}},
-        ),
-        [_scattered_tool()],
-        workflow_inputs={"items": ["a"]},
-    )
-
-    assert _findings(rose) == [
-        "steps[0].scatter: scattered input 'item' has no source; wire it to an "
-        "array-typed workflow input or a scattered step's output"
-    ]
 
 
 def _producer() -> Yaml:
@@ -800,33 +452,6 @@ def test_rejects_a_process_output_source_on_a_scattered_steps_other_input() -> N
         "steps[1].in.extra: a scattered step takes inputs from workflow inputs or scattered steps; "
         "'PRODUCER/out', from a step that is not scattered, would truncate the scatter to one task"
     ]
-
-
-@pytest.mark.fast
-def test_rejects_a_scalar_consumer_of_a_scattered_step() -> None:
-    """A scattered step's output is an array; a scalar port cannot take it."""
-    consumer = tool(
-        "CONSUMER",
-        inputs={"source": {"type": "File", "inputBinding": {"position": 1}}},
-        outputs={"result": {"type": "File", "outputBinding": {"glob": "copy.txt"}}},
-    )
-    rose = synthetic_source(
-        workflow_doc(
-            [
-                step(
-                    "SCATTER",
-                    **{"in": {"item": "items"}, "out": ["result"], "scatter": ["item"]},
-                ),
-                step("CONSUMER", **{"in": {"source": "SCATTER/result"}, "out": ["result"]}),
-            ],
-            inputs={"items": {"type": _STRING_ARRAY}},
-        ),
-        [_scattered_tool(), consumer],
-        workflow_inputs={"items": ["a"]},
-    )
-
-    with pytest.raises(ValueError, match="gathers into a port that is not array-typed"):
-        compiled_source_to_nextflow(rose)
 
 
 @pytest.mark.fast
@@ -924,18 +549,6 @@ def test_rejects_unsupported_workflow_level_requirements(
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize("section", ["requirements", "hints"])
-def test_rejects_tool_requirement_without_class(section: str) -> None:
-    classless = tool("CLASSLESS")
-    classless[section] = [{"directive": "${System.exit(3)}"}]
-    rose = one_step(classless)
-
-    assert _findings(rose) == [
-        f"steps[0].run.{section}.0: a requirement or hint needs a string `class`"
-    ]
-
-
-@pytest.mark.fast
 def test_rejects_an_optional_output_with_a_pattern_glob() -> None:
     logs = tool("LOGS", baseCommand="true", outputs={"o": {"type": "File?", "outputBinding": {"glob": "*.log"}}})
     workflow = workflow_doc([step("LOGS", out=["o"])], outputs={"o": {"type": "File?", "outputSource": "LOGS/o"}})
@@ -973,39 +586,6 @@ def test_rejects_fractional_cpu_requirements_before_lowering() -> None:
         compiled_source_to_nextflow(rose)
     with pytest.raises(ValueError, match="cpus must be a positive integer"):
         NfResources(cpus=cast(Any, 2.5))
-
-
-@pytest.mark.fast
-def test_rejects_unknown_connection_source() -> None:
-    consumer = tool("B", inputs={"value": {"type": "File"}})
-    rose = synthetic_source(
-        workflow_doc([step("B", **{"in": {"value": "MISSING/out"}})]),
-        [consumer],
-    )
-    with pytest.raises(ValueError, match="unknown source process"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize("raw_source", [[], 42])
-def test_rejects_a_flag_input_wired_to_an_unrecognized_source_shape(raw_source: Any) -> None:
-    """A shape _source_values cannot read must still fail closed, not silently skip the boolean-source check."""
-    flags = tool(
-        "FLAGS",
-        inputs={
-            "verbose": {
-                "type": "boolean",
-                "inputBinding": {"position": 1, "prefix": "--verbose"},
-            }
-        },
-    )
-    rose = synthetic_source(
-        workflow_doc([step("FLAGS", **{"in": {"verbose": raw_source}})]),
-        [flags],
-    )
-
-    with pytest.raises(ValueError):
-        compiled_source_to_nextflow(rose)
 
 
 @pytest.mark.fast
@@ -1061,67 +641,6 @@ def _array_rose_from_producer(items: Any, **binding: Any) -> CompiledNextflowSou
     )
 
 
-@pytest.mark.fast
-def test_rejects_nested_arrays() -> None:
-    rose = _array_rose_from_producer({"type": "array", "items": "string"})
-    with pytest.raises(ValueError, match="nested arrays are deferred"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_per_item_input_binding_on_array_items() -> None:
-    rose = _array_rose_from_producer({"type": "File", "inputBinding": {"prefix": "-I"}})
-    with pytest.raises(ValueError, match="per-item array element bindings are deferred"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_separate_false_on_an_array_binding() -> None:
-    rose = _array_rose("string", ["a", "b"], separate=False)
-    with pytest.raises(ValueError, match=r"separate: false on an array-typed inputBinding.*deferred"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_array_typed_outputs() -> None:
-    array_output = tool(
-        "MAKE",
-        outputs={
-            "results": {
-                "type": {"type": "array", "items": "File"},
-                "outputBinding": {"glob": "*.txt"},
-            }
-        },
-    )
-    rose = synthetic_source(workflow_doc([step("MAKE", out=["results"])]), [array_output])
-    with pytest.raises(ValueError, match=r"results\.type: an output is collected by glob as a File or Directory"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_absent_optional_array_input() -> None:
-    """Absence (no array at all) is out of scope for the array lowering; empty is not absence."""
-    optional_array = tool(
-        "ARRAY",
-        inputs={
-            "values": {
-                "type": ["null", {"type": "array", "items": "string"}],
-                "inputBinding": {"position": 1, "prefix": "--value"},
-            }
-        },
-    )
-    rose = one_step(optional_array, values=None)
-    with pytest.raises(ValueError, match=r"steps\[0\].run.inputs.values: absent optional"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_array_value_with_a_mismatched_item_type() -> None:
-    rose = _array_rose("string", ["a", 1])
-    with pytest.raises(ValueError, match="does not match its supported CWL type"):
-        compiled_source_to_nextflow(rose)
-
-
 def _shell_tool(arguments: list[Any], *, shell_command: bool = True) -> Yaml:
     extra: dict[str, Any] = {"arguments": arguments}
     if shell_command:
@@ -1145,27 +664,6 @@ def test_accepts_shell_command_requirement_with_no_shell_quote_false() -> None:
     assert converted.processes[0].command.tokens[0] == NfTemplate((NfLiteral("SHELL"),))
 
 
-@pytest.mark.fast
-def test_rejects_shell_quote_false_without_shell_command_requirement() -> None:
-    rose = _shell_rose([{"valueFrom": ">>", "shellQuote": False}], shell_command=False)
-    with pytest.raises(ValueError, match="requires ShellCommandRequirement"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_shell_quote_false_with_no_value_from() -> None:
-    rose = _shell_rose([{"shellQuote": False}])
-    with pytest.raises(ValueError, match="has no valueFrom"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_shell_quote_false_with_a_prefix() -> None:
-    rose = _shell_rose([{"valueFrom": ">>", "shellQuote": False, "prefix": "-x"}])
-    with pytest.raises(ValueError, match="does not support a prefix"):
-        compiled_source_to_nextflow(rose)
-
-
 def _shell_tool_with_input(value_from: str) -> Yaml:
     return tool(
         "SHELL",
@@ -1174,38 +672,6 @@ def _shell_tool_with_input(value_from: str) -> Yaml:
         requirements={"ShellCommandRequirement": {}},
         arguments=[{"valueFrom": value_from, "shellQuote": False}],
     )
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize(
-    "value_from",
-    ["$(inputs.message)", "prefix-$(inputs.message)-suffix", "$(inputs.message.basename)"],
-    ids=["bare", "embedded", "basename-suffix"],
-)
-def test_rejects_shell_quote_false_referencing_an_input(value_from: str) -> None:
-    """Unquoting a value derived from any input -- directly or via a suffix -- is the boundary."""
-    rose = one_step(_shell_tool_with_input(value_from), ["result"], message="hi")
-    with pytest.raises(ValueError, match="references an input"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_shell_quote_false_input_binding_with_no_value_from() -> None:
-    """The real append.cwl adapter's shape: shellQuote:false on a plain, no-valueFrom inputBinding."""
-    append_tool = tool(
-        "APPEND",
-        inputs={
-            "text": {
-                "type": "string",
-                "inputBinding": {"shellQuote": False, "position": 1, "prefix": "echo"},
-            }
-        },
-        outputs={"result": {"type": "File", "outputBinding": {"glob": "out.txt"}}},
-        requirements={"ShellCommandRequirement": {}},
-    )
-    rose = one_step(append_tool, ["result"], text="Hello")
-    with pytest.raises(ValueError, match="does not support a prefix"):
-        compiled_source_to_nextflow(rose)
 
 
 @pytest.mark.fast
@@ -1267,145 +733,6 @@ def test_accepts_iwdr_dirent_literal_rename() -> None:
     rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "renamed.txt"}])
     converted = compiled_source_to_nextflow(rose)
     assert converted.processes[0].inputs[0].stage_as == "renamed.txt"
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_writable_true() -> None:
-    rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "renamed.txt", "writable": True}])
-    with pytest.raises(ValueError, match="writable: true"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_inline_content_entry() -> None:
-    rose = _iwdr_rose([{"entry": "literal file content", "entryname": "x.txt"}])
-    with pytest.raises(ValueError, match="inline content construction is deferred"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_computed_entryname() -> None:
-    rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "$(inputs.source.path)"}])
-    with pytest.raises(ValueError, match="computed or differently-referencing entryname"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_entryname_with_path_separator() -> None:
-    rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "sub/dir.txt"}])
-    with pytest.raises(ValueError, match="path separator"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize("entryname", ["reads*.fq", "sample?.txt"])
-def test_rejects_iwdr_entryname_with_nextflow_stage_as_wildcard(entryname: str) -> None:
-    rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": entryname}])
-    with pytest.raises(ValueError, match="stageAs wildcard"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_undeclared_input() -> None:
-    rose = _iwdr_rose(["$(inputs.nope)"])
-    with pytest.raises(ValueError, match="undeclared input"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_val_typed_target() -> None:
-    rose = _iwdr_rose(["$(inputs.name)"], extra_inputs={"name": {"type": "string"}})
-    with pytest.raises(ValueError, match="non-path input"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_array_typed_target() -> None:
-    rose = _iwdr_rose(
-        ["$(inputs.files)"],
-        extra_inputs={"files": {"type": {"type": "array", "items": "File"}}},
-    )
-    with pytest.raises(ValueError, match="array-typed input"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_unsupported_dirent_field() -> None:
-    rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "x.txt", "foo": 1}])
-    with pytest.raises(ValueError, match=r"listing\[0\]\.foo: foo is not consumed"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_listing_entry_of_unsupported_shape() -> None:
-    rose = _iwdr_rose([123])
-    with pytest.raises(ValueError, match="bare .* reference or a Dirent mapping"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_listing_that_is_not_a_list() -> None:
-    broken = tool(
-        "STAGE",
-        outputs={"result": {"type": "File", "outputBinding": {"glob": "out.txt"}}},
-        requirements={"InitialWorkDirRequirement": {"listing": "not-a-list"}},
-    )
-    rose = synthetic_source(
-        workflow_doc([step("STAGE", out=["result"])]),
-        [broken],
-    )
-    with pytest.raises(ValueError, match="listing must be a list"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_renamed_input_referenced_elsewhere() -> None:
-    rose = _iwdr_rose(
-        [{"entry": "$(inputs.source)", "entryname": "renamed.txt"}],
-        arguments=["cat", "$(inputs.source)"],
-    )
-    with pytest.raises(ValueError, match="staged under an explicit rename"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize(
-    "listing",
-    [
-        [
-            {"entry": "$(inputs.source)", "entryname": "one.txt"},
-            {"entry": "$(inputs.source)", "entryname": "two.txt"},
-        ],
-        [
-            "$(inputs.source)",
-            {"entry": "$(inputs.source)", "entryname": "renamed.txt"},
-        ],
-    ],
-)
-def test_rejects_iwdr_listing_that_repeats_an_input(listing: list[object]) -> None:
-    rose = _iwdr_rose(listing)
-    with pytest.raises(ValueError, match="input 'source' appears more than once"):
-        compiled_source_to_nextflow(rose)
-
-
-@pytest.mark.fast
-def test_rejects_iwdr_collision_same_literal_name() -> None:
-    collision_tool = tool(
-        "STAGE",
-        inputs={"a": {"type": "File"}, "b": {"type": "File"}},
-        outputs={"result": {"type": "File", "outputBinding": {"glob": "out.txt"}}},
-        requirements={"InitialWorkDirRequirement": {"listing": [
-            {"entry": "$(inputs.a)", "entryname": "same.txt"},
-            {"entry": "$(inputs.b)", "entryname": "same.txt"},
-        ]}},
-        arguments=["cat", "same.txt"],
-        stdout="out.txt",
-    )
-    rose = one_step(
-        collision_tool, ["result"], a={"class": "File", "path": "a.txt"}, b={"class": "File", "path": "b.txt"}
-    )
-    with pytest.raises(ValueError, match="staged under the same literal name"):
-        compiled_source_to_nextflow(rose)
 
 
 def _copy_tool() -> CommandLineTool:
@@ -1592,20 +919,6 @@ def test_a_step_input_its_tool_does_not_declare_is_rejected_by_name(when: str | 
 
 
 @pytest.mark.fast
-def test_rejects_scatter_on_a_resolved_subworkflow_call() -> None:
-    result = _with_wrapper_semantic(_nested_result(), scatter=["source"])
-    with pytest.raises(ValueError, match="scatter on a nested workflow step"):
-        compiled_source_to_nextflow(result)
-
-
-@pytest.mark.fast
-def test_rejects_when_on_a_resolved_subworkflow_call() -> None:
-    result = _with_wrapper_semantic(_nested_result(), when="$(true)")
-    with pytest.raises(ValueError, match="a when on a nested-workflow step is not supported"):
-        compiled_source_to_nextflow(result)
-
-
-@pytest.mark.fast
 def test_inner_input_source_is_taken_from_the_resolved_graph(
     real_nested_result: CompilationResult,
 ) -> None:
@@ -1627,22 +940,6 @@ def test_accepts_an_inert_nested_subworkflow_feature_requirement() -> None:
 
 
 @pytest.mark.fast
-def test_rejects_unsupported_nested_workflow_requirements() -> None:
-    result = copy.deepcopy(_nested_result())
-    _nested_artifacts(result)[0].cwl["requirements"] = {"MultipleInputFeatureRequirement": {}}
-    with pytest.raises(ValueError, match="MultipleInputFeatureRequirement is not supported"):
-        compiled_source_to_nextflow(result)
-
-
-@pytest.mark.fast
-def test_rejects_every_unconsumed_nested_workflow_field() -> None:
-    result = copy.deepcopy(_nested_result())
-    _nested_artifacts(result)[0].cwl["hints"] = {"ResourceRequirement": {}}
-    with pytest.raises(ValueError, match=r"\.run\.hints: workflow hints are not supported"):
-        compiled_source_to_nextflow(result)
-
-
-@pytest.mark.fast
 def test_rejects_unconsumed_nested_workflow_port_fields() -> None:
     result = copy.deepcopy(_nested_result())
     child = _nested_artifacts(result)[0].cwl
@@ -1656,15 +953,6 @@ def test_rejects_unconsumed_nested_workflow_port_fields() -> None:
     assert "a workflow output's pickValue is not supported" in str(error.value)
     for section in ("inputs", "outputs"):
         assert re.search(rf"\.run\.{section}\.\w+\.type\.name: an array schema's name", str(error.value))
-
-
-@pytest.mark.fast
-def test_rejects_a_nested_workflow_input_default_before_projection() -> None:
-    result = copy.deepcopy(_nested_result())
-    child = _nested_artifacts(result)[0].cwl
-    next(iter(child["inputs"].values()))["default"] = "fallback.txt"
-    with pytest.raises(ValueError, match=r"\.run\.inputs\.\w+\.default: a nested workflow input's default is not"):
-        compiled_source_to_nextflow(result)
 
 
 @pytest.mark.fast
@@ -2065,23 +1353,6 @@ def test_a_lowering_only_rejection_is_a_finding_at_its_step(inputs: Any, message
 
 
 @pytest.mark.fast
-def test_a_workflow_output_forwarding_an_input_is_a_workflow_finding() -> None:
-    rose = synthetic_source(
-        workflow_doc(
-            [step("ECHO")],
-            inputs={"a": "string"},
-            outputs={"a_out": {"type": "string", "outputSource": "a"}},
-        ),
-        [tool("ECHO")],
-        workflow_inputs={"a": "x"},
-    )
-    assert _findings(rose) == [
-        "workflow: workflow output 'a_out' directly forwards a workflow input; "
-        "boundary passthrough is not executable on the Nextflow target"
-    ]
-
-
-@pytest.mark.fast
 def test_a_command_error_is_reported_instead_of_a_wrong_cause_absence_finding() -> None:
     produce = tool(
         "PRODUCE",
@@ -2137,20 +1408,6 @@ def test_a_file_reference_embedded_in_text_is_rejected(argument: str, admitted: 
 
 
 @pytest.mark.fast
-def test_a_step_consuming_an_optional_output_is_a_finding() -> None:
-    maybe = tool("MAYBE", outputs={"o": {"type": "File?", "outputBinding": {"glob": "maybe.txt"}}})
-    consume = tool("CONSUME", inputs={"source": {"type": "File?", "inputBinding": {"position": 1}}})
-    rose = synthetic_source(
-        workflow_doc([step("MAYBE", out=["o"]), step("CONSUME", **{"in": {"source": "MAYBE/o"}})]),
-        [maybe, consume],
-    )
-    assert _findings(rose) == [
-        "workflow: connection _MAYBE.o -> _CONSUME.source consumes an optional output, which may be null; "
-        "only a workflow output can take it"
-    ]
-
-
-@pytest.mark.fast
 @pytest.mark.parametrize("number", ["long", "double"])
 @pytest.mark.parametrize(("where", "path"), [
     ("tool input", "steps[0].run.inputs.n"),
@@ -2176,11 +1433,422 @@ def test_long_and_double_are_rejected_naming_the_type(number: str, where: str, p
         compiled_source_to_nextflow(synthetic_source(workflow, [produce], workflow_inputs={}))
 
 
-@pytest.mark.fast
-@pytest.mark.parametrize("section", ["inputs", "outputs"])
-def test_long_on_a_nested_workflow_port_is_rejected_naming_the_type(section: str) -> None:
+def _with_child(mutate: Callable[[Yaml], Any]) -> CompilationResult:
+    """A copy of the nested result whose child workflow document `mutate` changes."""
     result = copy.deepcopy(_nested_result())
-    name, definition = next(iter(_nested_artifacts(result)[0].cwl[section].items()))
-    definition["type"] = "long"
-    with pytest.raises(ValueError, match=re.escape(f".run.{section}.{name}.type: long is not supported")):
-        compiled_source_to_nextflow(result)
+    mutate(_nested_artifacts(result)[0].cwl)
+    return result
+
+
+_SORT = tool("SORT", inputs={"reverse": {"type": "boolean", "inputBinding": {"position": 1, "prefix": "-r"}}})
+
+
+def _flags(value_from: str, **inputs: Any) -> CompiledNextflowSource:
+    """A boolean --verbose binding whose valueFrom is `value_from`, beside `inputs`."""
+    binding = {"position": 1, "prefix": "--verbose", "valueFrom": value_from}
+    run = tool("FLAGS", inputs={"verbose": {"type": "boolean", "inputBinding": binding}, **inputs})
+    values: dict[str, Any] = {"verbose": True, **dict.fromkeys(inputs, False)}
+    return one_step(run, **values)
+
+
+def _classless(section: str) -> CompiledNextflowSource:
+    run = tool("CLASSLESS")
+    run[section] = [{"directive": "${System.exit(3)}"}]
+    return one_step(run)
+
+
+def _string_into_flag(supplied: str) -> CompiledNextflowSource:
+    document = workflow_doc([step("SORT", **{"in": {"reverse": "flagval"}})], inputs={"flagval": {"type": "string"}})
+    return synthetic_source(document, [_SORT], workflow_inputs={"flagval": supplied})
+
+
+def _flag_wired_to(raw_source: Any) -> CompiledNextflowSource:
+    run = tool("FLAGS", inputs={"verbose": {"type": "boolean", "inputBinding": {"position": 1, "prefix": "--verbose"}}})
+    return synthetic_source(workflow_doc([step("FLAGS", **{"in": {"verbose": raw_source}})]), [run])
+
+
+def _boundary_value(cwl_type: Any, value: Any) -> CompiledNextflowSource:
+    document = workflow_doc([], inputs={"value": {"type": cwl_type}})
+    return synthetic_source(document, [], workflow_inputs={"value": value})
+
+
+_EMPTY_SCATTER = "steps[0].scatter: scatter must name one input, as a string or a non-empty list"
+_SCATTER_ITEM = {"in": {"item": "items"}, "out": ["result"], "scatter": ["item"]}
+_FILE_RESULT = {"result": {"type": "File", "outputBinding": {"glob": "out.txt"}}}
+
+# Each source, built when its test runs, and the exact findings that reject it.
+FINDINGS = [
+    pytest.param(lambda: _two_input_scatter_rose(scatterMethod=None), [
+        "steps[0].scatterMethod: multi-input scatter over 2 inputs requires an explicit scatterMethod"
+    ], id="multi_input_scatter_without_a_scatter_method"),
+    *(
+        pytest.param(
+            lambda scatter=scatter: _scatter_rose(scatter=scatter), [_EMPTY_SCATTER],
+            id=f"a_scatter_field_that_does_not_name_one_input-{name}",
+        )
+        for scatter, name in (
+            ([], "empty-list"), ({"item": True}, "mapping"), ("", "empty-string"), (["item", ""], "empty-name")
+        )
+    ),
+    pytest.param(lambda: _scatter_rose(scatterMethod="product"), [
+        "steps[0].scatterMethod: unsupported CWL scatter method 'product'"
+    ], id="an_unsupported_scatter_method"),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("SCATTER", **_SCATTER_ITEM)], inputs={"items": {"type": "string"}}),
+        [_scattered_tool()], workflow_inputs={"items": "a"},
+    ), [
+        "steps[0].in.item: a scattered input needs an array-typed source; 'items' declares 'string'"
+    ], id="scatter_over_a_non_array_workflow_input"),
+    pytest.param(lambda: _scatter_rose(port_type=_STRING_ARRAY), [
+        "steps[0].scatter: scattered input 'item' is array-typed; scattering over an "
+        "array of arrays is deferred beyond this lowering"
+    ], id="scatter_over_an_array_typed_port"),
+    pytest.param(lambda: _scatter_rose(port_type="File"), [
+        "steps[0].in.item: scattered source 'items' carries 'val' elements but the port takes 'path[file]'"
+    ], id="scatter_whose_element_type_mismatches_its_port"),
+    pytest.param(lambda: _scatter_rose(scatter=("missing",)), [
+        "steps[0].scatter: scattered input 'missing' is not declared by the step's tool"
+    ], id="scatter_naming_an_undeclared_input"),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc(
+            [step("SCATTER", **{"out": ["result"], "scatter": ["item"]})], inputs={"items": {"type": _STRING_ARRAY}}
+        ),
+        [_scattered_tool()], workflow_inputs={"items": ["a"]},
+    ), [
+        "steps[0].scatter: scattered input 'item' has no source; wire it to an "
+        "array-typed workflow input or a scattered step's output"
+    ], id="an_unwired_scattered_input"),
+    # A step id that is not a string is a finding beside the rest, not a crash of a pass keyed by step id.
+    *(
+        pytest.param(lambda fields=fields: synthetic_source(
+            workflow_doc([{"run": "S.cwl", **_SCATTER_ITEM, **fields}], inputs={"items": {"type": _STRING_ARRAY}}),
+            [tool("S", inputs={"item": {"type": "string"}},
+                  outputs={"result": {"type": "string", "outputBinding": _ADMITTED_TEXT_BINDING}})],
+            workflow_inputs={"items": ["a"]},
+        ), [
+            "steps[0]: workflow step id must be a non-empty string",
+            "workflow.steps: workflow step identifier must be a non-empty string",
+        ], id=f"a_step_id_that_is_not_a_string-{name}")
+        for fields, name in (({}, "missing"), ({"id": ["a"], "when": "$(inputs.item == 'a')"}, "list-in-a-when-step"))
+    ),
+    *(
+        pytest.param(
+            lambda section=section: _classless(section),
+            [f"steps[0].run.{section}.0: a requirement or hint needs a string `class`"],
+            id=f"tool_requirement_without_class-{section}",
+        )
+        for section in ("requirements", "hints")
+    ),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc(
+            [step("ECHO")], inputs={"a": "string"}, outputs={"a_out": {"type": "string", "outputSource": "a"}}
+        ),
+        [tool("ECHO")], workflow_inputs={"a": "x"},
+    ), [
+        "workflow: workflow output 'a_out' directly forwards a workflow input; "
+        "boundary passthrough is not executable on the Nextflow target"
+    ], id="a_workflow_output_forwarding_an_input_is_a_workflow_finding"),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("MAYBE", out=["o"]), step("CONSUME", **{"in": {"source": "MAYBE/o"}})]),
+        [
+            tool("MAYBE", outputs={"o": {"type": "File?", "outputBinding": {"glob": "maybe.txt"}}}),
+            tool("CONSUME", inputs={"source": {"type": "File?", "inputBinding": {"position": 1}}}),
+        ],
+    ), [
+        "workflow: connection _MAYBE.o -> _CONSUME.source consumes an optional output, which may be null; "
+        "only a workflow output can take it"
+    ], id="a_step_consuming_an_optional_output_is_a_finding"),
+]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("build", "expected"), FINDINGS)
+def test_a_rejected_source_has_exactly_its_findings(
+    build: Callable[[], CompiledNextflowSource], expected: list[str]
+) -> None:
+    assert _findings(build()) == expected
+
+
+_BOOLEAN_VALUE_FROM = r"valueFrom on a boolean inputBinding is supported only as"
+_ABSENT_OPTIONAL = r"steps\[0\].run.inputs.{}: absent optional"
+
+# Each source, built when its test runs, and a pattern its rejection matches.
+MATCHES = [
+    # A scattered step's output is an array; a scalar port cannot take it.
+    pytest.param(lambda: synthetic_source(
+        workflow_doc(
+            [
+                step("SCATTER", **_SCATTER_ITEM),
+                step("CONSUMER", **{"in": {"source": "SCATTER/result"}, "out": ["result"]}),
+            ],
+            inputs={"items": {"type": _STRING_ARRAY}},
+        ),
+        [
+            _scattered_tool(),
+            tool(
+                "CONSUMER", inputs={"source": {"type": "File", "inputBinding": {"position": 1}}},
+                outputs={"result": {"type": "File", "outputBinding": {"glob": "copy.txt"}}},
+            ),
+        ],
+        workflow_inputs={"items": ["a"]},
+    ), "gathers into a port that is not array-typed", id="a_scalar_consumer_of_a_scattered_step"),
+    pytest.param(
+        lambda: _array_rose_from_producer({"type": "array", "items": "string"}), "nested arrays are deferred",
+        id="nested_arrays",
+    ),
+    pytest.param(
+        lambda: _array_rose_from_producer({"type": "File", "inputBinding": {"prefix": "-I"}}),
+        "per-item array element bindings are deferred", id="per_item_input_binding_on_array_items",
+    ),
+    pytest.param(
+        lambda: _array_rose("string", ["a", "b"], separate=False),
+        r"separate: false on an array-typed inputBinding.*deferred", id="separate_false_on_an_array_binding",
+    ),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("MAKE", out=["results"])]),
+        [tool("MAKE", outputs={
+            "results": {"type": {"type": "array", "items": "File"}, "outputBinding": {"glob": "*.txt"}}
+        })],
+    ), r"results\.type: an output is collected by glob as a File or Directory", id="array_typed_outputs"),
+    # Absence (no array at all) is out of scope for the array lowering; empty is not absence.
+    pytest.param(lambda: one_step(tool("ARRAY", inputs={"values": {
+        "type": ["null", {"type": "array", "items": "string"}],
+        "inputBinding": {"position": 1, "prefix": "--value"},
+    }}), values=None), _ABSENT_OPTIONAL.format("values"), id="absent_optional_array_input"),
+    pytest.param(
+        lambda: _array_rose("string", ["a", 1]), "does not match its supported CWL type",
+        id="array_value_with_a_mismatched_item_type",
+    ),
+    pytest.param(
+        lambda: _shell_rose([{"valueFrom": ">>", "shellQuote": False}], shell_command=False),
+        "requires ShellCommandRequirement", id="shell_quote_false_without_shell_command_requirement",
+    ),
+    pytest.param(
+        lambda: _shell_rose([{"shellQuote": False}]), "has no valueFrom", id="shell_quote_false_with_no_value_from"
+    ),
+    pytest.param(
+        lambda: _shell_rose([{"valueFrom": ">>", "shellQuote": False, "prefix": "-x"}]), "does not support a prefix",
+        id="shell_quote_false_with_a_prefix",
+    ),
+    # Unquoting a value derived from any input, directly or via a suffix, is the boundary.
+    *(
+        pytest.param(
+            lambda value_from=value_from: one_step(_shell_tool_with_input(value_from), ["result"], message="hi"),
+            "references an input", id=f"shell_quote_false_referencing_an_input-{name}",
+        )
+        for value_from, name in (
+            ("$(inputs.message)", "bare"),
+            ("prefix-$(inputs.message)-suffix", "embedded"),
+            ("$(inputs.message.basename)", "basename-suffix"),
+        )
+    ),
+    # The real append.cwl adapter's shape: shellQuote: false on a plain, no-valueFrom inputBinding.
+    pytest.param(lambda: one_step(tool(
+        "APPEND",
+        inputs={"text": {"type": "string", "inputBinding": {"shellQuote": False, "position": 1, "prefix": "echo"}}},
+        outputs=_FILE_RESULT,
+        requirements={"ShellCommandRequirement": {}},
+    ), ["result"], text="Hello"), "does not support a prefix", id="shell_quote_false_input_binding_with_no_value_from"),
+    pytest.param(
+        lambda: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "renamed.txt", "writable": True}]),
+        "writable: true", id="iwdr_writable_true",
+    ),
+    pytest.param(
+        lambda: _iwdr_rose([{"entry": "literal file content", "entryname": "x.txt"}]),
+        "inline content construction is deferred", id="iwdr_inline_content_entry",
+    ),
+    pytest.param(
+        lambda: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "$(inputs.source.path)"}]),
+        "computed or differently-referencing entryname", id="iwdr_computed_entryname",
+    ),
+    pytest.param(
+        lambda: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "sub/dir.txt"}]), "path separator",
+        id="iwdr_entryname_with_path_separator",
+    ),
+    *(
+        pytest.param(
+            lambda entryname=entryname: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": entryname}]),
+            "stageAs wildcard", id=f"iwdr_entryname_with_nextflow_stage_as_wildcard-{entryname}",
+        )
+        for entryname in ("reads*.fq", "sample?.txt")
+    ),
+    pytest.param(lambda: _iwdr_rose(["$(inputs.nope)"]), "undeclared input", id="iwdr_undeclared_input"),
+    pytest.param(
+        lambda: _iwdr_rose(["$(inputs.name)"], extra_inputs={"name": {"type": "string"}}), "non-path input",
+        id="iwdr_val_typed_target",
+    ),
+    pytest.param(
+        lambda: _iwdr_rose(["$(inputs.files)"], extra_inputs={"files": {"type": {"type": "array", "items": "File"}}}),
+        "array-typed input", id="iwdr_array_typed_target",
+    ),
+    pytest.param(
+        lambda: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "x.txt", "foo": 1}]),
+        r"listing\[0\]\.foo: foo is not consumed", id="iwdr_unsupported_dirent_field",
+    ),
+    pytest.param(
+        lambda: _iwdr_rose([123]), "bare .* reference or a Dirent mapping", id="iwdr_listing_entry_of_unsupported_shape"
+    ),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("STAGE", out=["result"])]),
+        [tool("STAGE", outputs=_FILE_RESULT, requirements={"InitialWorkDirRequirement": {"listing": "not-a-list"}})],
+    ), "listing must be a list", id="iwdr_listing_that_is_not_a_list"),
+    pytest.param(
+        lambda: _iwdr_rose(
+            [{"entry": "$(inputs.source)", "entryname": "renamed.txt"}], arguments=["cat", "$(inputs.source)"]
+        ),
+        "staged under an explicit rename", id="iwdr_renamed_input_referenced_elsewhere",
+    ),
+    pytest.param(lambda: _iwdr_rose([
+        {"entry": "$(inputs.source)", "entryname": "one.txt"},
+        {"entry": "$(inputs.source)", "entryname": "two.txt"},
+    ]), "input 'source' appears more than once", id="iwdr_listing_that_repeats_an_input-two-dirents"),
+    pytest.param(lambda: _iwdr_rose([
+        "$(inputs.source)",
+        {"entry": "$(inputs.source)", "entryname": "renamed.txt"},
+    ]), "input 'source' appears more than once", id="iwdr_listing_that_repeats_an_input-bare-and-dirent"),
+    pytest.param(lambda: one_step(tool(
+        "STAGE",
+        inputs={"a": {"type": "File"}, "b": {"type": "File"}},
+        outputs=_FILE_RESULT,
+        requirements={"InitialWorkDirRequirement": {"listing": [
+            {"entry": "$(inputs.a)", "entryname": "same.txt"},
+            {"entry": "$(inputs.b)", "entryname": "same.txt"},
+        ]}},
+        arguments=["cat", "same.txt"],
+        stdout="out.txt",
+    ), ["result"], a={"class": "File", "path": "a.txt"}, b={"class": "File", "path": "b.txt"}),
+        "staged under the same literal name", id="iwdr_collision_same_literal_name"),
+    # Aliasing a different input's presence onto this flag has no approved lowering.
+    pytest.param(
+        lambda: _flags("$(inputs.other)", other={"type": "boolean"}), _BOOLEAN_VALUE_FROM,
+        id="value_from_aliasing_a_different_input_on_a_boolean_binding",
+    ),
+    # A literal string is not a provably-boolean valueFrom result.
+    pytest.param(lambda: _flags("true"), _BOOLEAN_VALUE_FROM, id="literal_value_from_on_a_boolean_binding"),
+    # A .basename suffix is never boolean-shaped, even on a self-reference.
+    pytest.param(
+        lambda: _flags("$(inputs.verbose.basename)"), _BOOLEAN_VALUE_FROM,
+        id="basename_suffixed_value_from_on_a_boolean_binding",
+    ),
+    # A staged path is always truthy in Groovy, so the flag would never clear.
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("MAKE", out=["out"]), step("SORT", **{"in": {"reverse": "MAKE/out"}})]),
+        [tool("MAKE", outputs={"out": {"type": "File", "outputBinding": {"glob": "f.txt"}}}), _SORT],
+    ), r"reverse.*boolean source", id="file_output_wired_into_a_boolean_flag"),
+    # Groovy truthiness of a string would decide the flag, not the source value.
+    *(
+        pytest.param(
+            lambda supplied=supplied: _string_into_flag(supplied), r"reverse.*boolean source",
+            id=f"string_source_wired_into_a_boolean_flag-{supplied!r}",
+        )
+        for supplied in ("false", "0", "")
+    ),
+    # A shape _source_values cannot read must still fail closed, not skip the boolean-source check.
+    pytest.param(lambda: _flag_wired_to([]), "", id="a_flag_input_wired_to_an_unrecognized_source_shape-list"),
+    pytest.param(lambda: _flag_wired_to(42), "", id="a_flag_input_wired_to_an_unrecognized_source_shape-int"),
+    # CWL omits the entire binding when its optional source is absent.
+    pytest.param(lambda: one_step(tool(
+        "OPTIONAL",
+        inputs={"message": {
+            "type": ["null", "string"],
+            "inputBinding": {"position": 1, "valueFrom": "printf optional", "shellQuote": False},
+        }},
+        requirements={"ShellCommandRequirement": {}},
+    ), message=None), r"steps\[0\].run.inputs.message: absent optional values are supported only for ",
+        id="absent_optional_input_whose_binding_emits_a_shell_literal"),
+    # An optional input with no binding of its own but referenced elsewhere still rejects.
+    pytest.param(lambda: one_step(tool(
+        "ALIASED", inputs={"message": {"type": ["null", "string"]}},
+        arguments=[{"position": 1, "valueFrom": "$(inputs.message)"}],
+    ), message=None), _ABSENT_OPTIONAL.format("message"),
+        id="absent_optional_input_referenced_via_another_bindings_value_from"),
+    # path-qualifier channel construction always stages unconditionally; absence stays rejected.
+    pytest.param(
+        lambda: one_step(tool("OPTIONAL", inputs={"reference": {"type": ["null", "File"]}}), reference=None),
+        _ABSENT_OPTIONAL.format("reference"), id="absent_optional_path_input",
+    ),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc(
+            [step("REQUIRED", **{"in": {"message": "message"}})], inputs={"message": {"type": ["null", "string"]}}
+        ),
+        [tool("REQUIRED", inputs={"message": {"type": "string"}})],
+    ), "absent required", id="absent_optional_workflow_input_feeding_required_input"),
+    pytest.param(
+        lambda: synthetic_source(workflow_doc([]), [], workflow_inputs={"extra": "value"}),
+        "has no declared workflow input", id="undeclared_workflow_input_values",
+    ),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([], inputs={"out-dir": {"type": "string"}, "out_dir": {"type": "string"}}),
+        [], workflow_inputs={"out-dir": "first", "out_dir": "second"},
+    ), r"workflow input identifiers 'out-dir', 'out_dir'.*normalize to 'out_dir'",
+        id="workflow_input_identifier_collisions"),
+    # A repeated id carries `@<position>`; it and an authored id may normalize alike.
+    pytest.param(
+        lambda: synthetic_source(workflow_doc([step("touch@2"), step("touch_2")]), [tool("touch@2"), tool("touch_2")]),
+        r"workflow\.steps: workflow step identifiers 'touch@2', 'touch_2' normalize to 'touch_2'",
+        id="step_identifier_collisions_naming_both_steps",
+    ),
+    pytest.param(lambda: synthetic_source(workflow_doc([step("COLLISION")]), [tool("COLLISION", inputs={
+        "out-dir": {"type": "string", "default": "first"},
+        "out_dir": {"type": "string", "default": "second"},
+    })]), r"tool input identifiers 'out-dir', 'out_dir'.*normalize to 'out_dir'",
+        id="tool_port_identifier_collisions"),
+    *(
+        pytest.param(
+            lambda cwl_type=cwl_type, value=value: _boundary_value(cwl_type, value),
+            "does not match its supported CWL type", id=f"boundary_values_outside_supported_shape-{cwl_type}",
+        )
+        for cwl_type, value in (
+            ("string", ["not", "a", "string"]),
+            ("int", True),
+            ("File", {"class": "File", "path": "reference.fa", "secondaryFiles": ["reference.fa.fai"]}),
+        )
+    ),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("BAD_GLOB", out=["result"])]),
+        [tool("BAD_GLOB", outputs={
+            "result": {"type": "File", "outputBinding": {"glob": "$(runtime.outdir)/result.txt"}}
+        })],
+    ), "unsupported CWL expression", id="output_glob_outside_typed_input_subset"),
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("B", **{"in": {"value": "MISSING/out"}})]), [tool("B", inputs={"value": {"type": "File"}})]
+    ), "unknown source process", id="unknown_connection_source"),
+    pytest.param(
+        lambda: _with_wrapper_semantic(_nested_result(), scatter=["source"]), "scatter on a nested workflow step",
+        id="scatter_on_a_resolved_subworkflow_call",
+    ),
+    pytest.param(
+        lambda: _with_wrapper_semantic(_nested_result(), when="$(true)"),
+        "a when on a nested-workflow step is not supported", id="when_on_a_resolved_subworkflow_call",
+    ),
+    pytest.param(
+        lambda: _with_child(lambda cwl: cwl.update(requirements={"MultipleInputFeatureRequirement": {}})),
+        "MultipleInputFeatureRequirement is not supported", id="unsupported_nested_workflow_requirements",
+    ),
+    pytest.param(
+        lambda: _with_child(lambda cwl: cwl.update(hints={"ResourceRequirement": {}})),
+        r"\.run\.hints: workflow hints are not supported", id="every_unconsumed_nested_workflow_field",
+    ),
+    pytest.param(
+        lambda: _with_child(lambda cwl: cwl["inputs"]["source"].update(default="fallback.txt")),
+        r"\.run\.inputs\.\w+\.default: a nested workflow input's default is not",
+        id="a_nested_workflow_input_default_before_projection",
+    ),
+    *(
+        pytest.param(
+            lambda section=section, name=name: _with_child(lambda cwl: cwl[section][name].update(type="long")),
+            re.escape(f".run.{section}.{name}.type: long is not supported"),
+            id=f"long_on_a_nested_workflow_port_is_rejected_naming_the_type-{section}",
+        )
+        for section, name in (("inputs", "source"), ("outputs", "result"))
+    ),
+]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("build", "pattern"), MATCHES)
+def test_a_rejected_source_raises_a_matching_error(
+    build: Callable[[], CompiledNextflowSource | CompilationResult], pattern: str
+) -> None:
+    with pytest.raises(ValueError, match=pattern):
+        compiled_source_to_nextflow(build())
