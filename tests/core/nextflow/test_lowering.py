@@ -11,6 +11,7 @@ from sophios.ir.artifacts import CompilationResult
 from sophios.nf_types import (
     NfArrayBinding,
     NfBasenameReference,
+    NfEnvVar,
     NfFlag,
     NfInputReference,
     NfLiteral,
@@ -22,7 +23,11 @@ from sophios.nf_types import (
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
 )
-from sophios.utils_nf import compiled_source_to_nextflow, cwl_type_to_nf_qualifier
+from sophios.lang.diagnostics import Diagnostic, Locator, Severity
+from sophios.lang.error_codes import SophiosErrorCode
+from sophios.utils_nf import (
+    compiled_source_to_nextflow, compiled_source_to_nextflow_with_notes, cwl_type_to_nf_qualifier, nextflow_names,
+)
 
 from .testkit import one_step, step, synthetic_source, tool, workflow_doc
 
@@ -304,39 +309,6 @@ def test_command_of_only_shell_literals_still_runs_a_program() -> None:
 
 
 @pytest.mark.fast
-def test_iwdr_own_basename_listing_lowers_to_no_stage_as() -> None:
-    """The bare $(inputs.<name>) shorthand is a no-op: Nextflow already stages this way."""
-    stage_tool = tool(
-        "STAGE",
-        inputs={"source": {"type": "File", "inputBinding": {"position": 1}}},
-        requirements={"InitialWorkDirRequirement": {"listing": ["$(inputs.source)"]}},
-    )
-    rose = one_step(stage_tool, source={"class": "File", "path": "in.txt"})
-
-    process = compiled_source_to_nextflow(rose).processes[0]
-
-    assert process.inputs[0] == NfPort("source", "path")
-    assert process.inputs[0].stage_as is None
-
-
-@pytest.mark.fast
-def test_iwdr_literal_entryname_lowers_to_a_stage_as_port() -> None:
-    stage_tool = tool(
-        "STAGE",
-        inputs={"source": {"type": "File"}},
-        requirements={"InitialWorkDirRequirement": {"listing": [
-            {"entry": "$(inputs.source)", "entryname": "renamed.txt"},
-        ]}},
-        arguments=["cat", "renamed.txt"],
-    )
-    rose = one_step(stage_tool, source={"class": "File", "path": "in.txt"})
-
-    process = compiled_source_to_nextflow(rose).processes[0]
-
-    assert process.inputs[0] == NfPort("source", "path", stage_as="renamed.txt")
-
-
-@pytest.mark.fast
 def test_basename_lowers_to_a_typed_segment_in_every_template_position() -> None:
     copy_tool = tool(
         "COPY",
@@ -576,3 +548,105 @@ def test_a_whole_boolean_valuefrom_is_a_flag(owner: dict[str, Any] | None) -> No
 def test_a_boolean_valuefrom_on_an_optional_input_is_rejected() -> None:
     with pytest.raises(ValueError, match="a boolean valueFrom on optional input 's' is not supported"):
         _boolean_valuefrom_tokens({"prefix": "--flag"}, owner={"type": "string?"})
+
+
+def _argument_tokens(*arguments: Any) -> tuple[Any, ...]:
+    rose = one_step(tool("ARGS", inputs={"x": {"type": "string"}}, baseCommand="echo", arguments=[*arguments]), x="v")
+    return tuple(compiled_source_to_nextflow(rose).processes[0].command.tokens[1:])
+
+
+# design §6, Commands: a `$` that is not followed by `(` or `{` is plain text.
+PLAIN_DOLLARS = ["$", "cost $5", "$HOME", "a $ b", "$$", ' mv a "$1" ', "trailing $\n", "$)", "$}"]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("text", PLAIN_DOLLARS)
+def test_a_dollar_not_starting_an_expression_is_plain_text(text: str) -> None:
+    assert _argument_tokens(text, {"valueFrom": text}) == (NfTemplate((NfLiteral(text),)),) * 2
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("text", PLAIN_DOLLARS)
+def test_a_plain_dollar_stays_text_beside_a_reference(text: str) -> None:
+    [token] = _argument_tokens(f"{text}$(inputs.x){text}")
+    assert token == NfTemplate((NfLiteral(text.lstrip()), NfInputReference("x"), NfLiteral(text.rstrip())))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("text", ["$(runtime.cores)", "${return 1}", "cost $5 $(inputs.x.size)", "$$(self)"])
+def test_a_dollar_starting_any_other_expression_is_rejected(text: str) -> None:
+    with pytest.raises(ValueError, match="unsupported CWL expression"):
+        _argument_tokens(text)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("env_def", [
+    [{"envName": "A", "envValue": "cost $5"}, {"envName": "B", "envValue": " $(inputs.s) "}],
+    {"A": "cost $5", "B": {"envName": "C", "envValue": " $(inputs.s) "}},
+], ids=["list", "map"])
+def test_env_var_requirement_lowers_each_variable_to_an_export(env_def: Any) -> None:
+    """The map form's key names the variable, over an envName inside it, as schema-salad resolves it."""
+    rose = one_step(
+        tool("ENV", inputs={"s": {"type": "string"}}, requirements={"EnvVarRequirement": {"envDef": env_def}}), s="v"
+    )
+    workflow = compiled_source_to_nextflow(rose)
+    assert workflow.processes[0].command.env == (
+        NfEnvVar("A", NfTemplate((NfLiteral("cost $5"),))), NfEnvVar("B", NfTemplate((NfInputReference("s"),))),
+    )
+    script = render_nextflow(workflow).split('    """\n')[1]
+    assert script.splitlines()[:2] == [
+        "    export A=${__sophios_shell_quote_9f72e('cost $5')}",
+        "    export B=${__sophios_shell_quote_9f72e(s.toString())}",
+    ]
+
+
+def _gpu_lowering(cuda: Any, section: str = "hints") -> tuple[Any, tuple[Diagnostic, ...]]:
+    return compiled_source_to_nextflow_with_notes(one_step(tool("GPU", **{section: {"cwltool:CUDARequirement": cuda}})))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("section", ["requirements", "hints"])
+@pytest.mark.parametrize(("cuda", "count"), [
+    ({}, 1),
+    ({"cudaDeviceCountMin": 2}, 2),
+    ({"cudaDeviceCountMax": 3}, 3),
+    ({"cudaDeviceCountMin": 2, "cudaDeviceCountMax": 4}, 2),
+])
+def test_cuda_requirement_lowers_to_the_accelerator_directive(cuda: Any, count: int, section: str) -> None:
+    """The count cwltool's job requests: the minimum, else the maximum, else 1 (design §6)."""
+    workflow, notes = _gpu_lowering(cuda, section)
+    assert workflow.processes[0].resources == NfResources(accelerator=count)
+    assert f"\n    accelerator {count}\n" in render_nextflow(workflow)
+    assert notes == ()
+
+
+@pytest.mark.fast
+def test_the_unchecked_cuda_fields_are_notes_and_leave_the_model_unchanged() -> None:
+    plain, _ = _gpu_lowering({"cudaDeviceCountMin": 1})
+    workflow, notes = _gpu_lowering(
+        {"cudaDeviceCountMin": 1, "cudaVersionMin": "11.4", "cudaComputeCapability": ["3.0", "7.5"]}
+    )
+    assert workflow == plain
+    assert [(note.severity, note.code, note.locator) for note in notes] == [
+        (Severity.NOTE, SophiosErrorCode.UNCHECKED_CUDA_FIELD, Locator("GPU"))
+    ] * 2
+    assert [note.message.split(" is not checked")[0] for note in notes] == [
+        "cwltool:CUDARequirement cudaVersionMin '11.4'",
+        "cwltool:CUDARequirement cudaComputeCapability ['3.0', '7.5']",
+    ]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("fixture", ["real_supported_result", "real_scattered_result", "real_nested_result"])
+def test_the_names_a_run_maps_back_are_the_names_the_lowering_makes(
+    fixture: str, request: pytest.FixtureRequest
+) -> None:
+    """Each process and workflow output of the lowered model has exactly one Sophios name."""
+    result: CompilationResult = request.getfixturevalue(fixture)
+    workflow = compiled_source_to_nextflow(result)
+    names = nextflow_names(result)
+    assert sorted(names["processes"]) == sorted(process.name for process in workflow.processes)
+    assert sorted(names["outputs"]) == sorted(
+        connection.to_port for connection in workflow.connections
+        if isinstance(connection, NfWorkflowOutputConnection)
+    )

@@ -15,6 +15,8 @@ from sophios.input_output_nf import (
     render_nextflow_config,
     write_nextflow_artifacts,
 )
+from sophios.api.python._workflow_runtime import compile_workflow_result
+from sophios.api.python.workflow import Workflow
 from sophios.ir.artifacts import CompilationResult
 from sophios.nf_types import (
     ExecutableNextflowWorkflow,
@@ -23,6 +25,7 @@ from sophios.nf_types import (
     NfArrayBinding,
     NfBasenameReference,
     NfCommand,
+    NfEntry,
     NfFlag,
     NfInputReference,
     NfLiteral,
@@ -35,7 +38,8 @@ from sophios.nf_types import (
 )
 from sophios.utils_nf import compiled_source_to_nextflow
 
-from .testkit import command, flag_workflow, output_port, runtime_workflow
+from .test_phase3_cells import _scatter_step
+from .testkit import command, flag_workflow, output_port, ref, runtime_workflow, template
 
 
 @pytest.mark.serial
@@ -67,6 +71,11 @@ def test_write_artifacts_rejects_non_executable_representation(tmp_path: Path) -
         write_nextflow_artifacts(cast(Any, {"representation_kind": "structural"}), tmp_path)
 
 
+#: The entry workflow's record of `runtime_workflow()`'s one output, an unscattered file.
+RESULT_RECORD = ("    PIPELINE.out.result.toList().subscribe { items -> println('sophios-output ' + "
+                 "groovy.json.JsonOutput.toJson(['result', __sophios_output_9f72e(items[0], 0)])) }\n")
+
+
 @pytest.mark.serial
 def test_renders_named_workflow_and_entry_wrapper() -> None:
     rendered = render_nextflow(runtime_workflow())
@@ -75,7 +84,7 @@ def test_renders_named_workflow_and_entry_wrapper() -> None:
     assert "COPY(PRODUCE.out.result)" in rendered
     assert "result = COPY.out.copy" in rendered
     entry = "Channel.value(__sophios_input_9f72e('message', params.message, 'string'))"
-    assert f"workflow {{\n{NF_PARSER_CHECK}    PIPELINE({entry})\n}}" in rendered
+    assert f"workflow {{\n{NF_PARSER_CHECK}    PIPELINE({entry})\n{RESULT_RECORD}}}" in rendered
 
 
 @pytest.mark.fast
@@ -87,7 +96,7 @@ def test_a_parameter_no_step_reads_is_checked_before_the_call() -> None:
     )
     assert render_nextflow(workflow).endswith(
         f"workflow {{\n{NF_PARSER_CHECK}    __sophios_input_9f72e('unread', params.unread, 'int')\n"
-        "    PIPELINE(Channel.value(__sophios_input_9f72e('message', params.message, 'string')))\n}\n"
+        f"    PIPELINE(Channel.value(__sophios_input_9f72e('message', params.message, 'string')))\n{RESULT_RECORD}}}\n"
     )
 
 
@@ -96,6 +105,23 @@ def test_every_process_ends_with_the_stub_that_refuses_a_dry_run() -> None:
     rendered = render_nextflow(runtime_workflow())
     stub = "".join(f"\n    {line}" for line in NF_STUB_LINES)
     assert rendered.count(f'    """\n{stub}\n}}') == rendered.count("process ") == 2
+
+
+@pytest.mark.fast
+def test_an_output_record_has_one_array_level_per_scattered_dimension(
+    real_scattered_result: CompilationResult,
+) -> None:
+    """An unscattered output records its one value, a scatter its list, a nested crossproduct one level per input."""
+    nested = _scatter_step("NEST", "nested_crossproduct", {"a": ["a"], "b": ["x"]})
+    shapes = {
+        "unscattered": render_nextflow(runtime_workflow()),
+        "scattered": render_nextflow(compiled_source_to_nextflow(real_scattered_result)),
+        "nested": render_nextflow(compiled_source_to_nextflow(compile_workflow_result(Workflow([nested], "nest")))),
+    }
+    values = {shape: [line.split("__sophios_output_9f72e(", 1)[1].split(")", 1)[0]
+                      for line in rendered.splitlines() if "subscribe { items" in line]
+              for shape, rendered in shapes.items()}
+    assert values == {"unscattered": ["items[0], 0"], "scattered": ["items, 1"], "nested": ["items, 2"]}
 
 
 @pytest.mark.serial
@@ -130,24 +156,60 @@ def test_renders_supported_process_metadata() -> None:
 
 
 @pytest.mark.serial
-def test_renders_stage_as_rename_and_bare_input_declarations() -> None:
+def test_renders_each_entry_staged_hidden_and_made_by_the_task() -> None:
+    """design §6, Inputs and channels: a hidden staging name, then a symlink or a copy under the CWL name."""
     process = NfProcess(
         "STAGE",
-        [NfPort("source", "path", stage_as="renamed.txt"), NfPort("other", "path")],
-        [output_port("report", "report.txt")],
-        NfCommand((NfTemplate((NfLiteral("cat"),)), NfTemplate((NfLiteral("renamed.txt"),)))),
+        [
+            NfPort("source", "path", entry=NfEntry("renamed.txt")),
+            NfPort("outDir", "path", path_kind="directory", entry=NfEntry(copy=True)),
+            NfPort("other", "path"),
+        ],
+        [NfPort("result", "path", "result", NfTemplate((NfBasenameReference("outDir"),)), "directory")],
+        NfCommand((template("cat"), template("renamed.txt"), template("--outDir"), template(ref("outDir")))),
     )
     rendered = render_nextflow(ExecutableNextflowWorkflow(
         "WF",
         [process],
-        [
-            NfWorkflowInputConnection("source", "STAGE", "source"),
-            NfWorkflowInputConnection("other", "STAGE", "other"),
-        ],
-        {"source": "input.txt", "other": "input2.txt"}, {"source": "File", "other": "File"},
+        [NfWorkflowInputConnection(name, "STAGE", name) for name in ("source", "outDir", "other")],
+        {"source": "input.txt", "outDir": "out", "other": "input2.txt"},
+        {"source": "File", "outDir": "Directory", "other": "File"},
     ))
-    assert "path source, stageAs: 'renamed.txt'" in rendered
-    assert "path other\n" in rendered
+    quote = "__sophios_shell_quote_9f72e"
+    entry = "(outDir.toString() - '.sophios_entry_outDir/')"
+    assert (
+        "    path source, stageAs: '.sophios_entry_source/*'\n"
+        "    path outDir, stageAs: '.sophios_entry_outDir/*'\n"
+        "    path other\n"
+    ) in rendered
+    assert f'    path "${{{entry}}}", glob: false, emit: result\n' in rendered
+    exists = "InitialWorkDirRequirement entry already exists in the task directory:"
+    renamed, own = f"${{{quote}('renamed.txt')}}", f"${{{quote}({entry})}}"
+    assert (
+        f"    if [ -e {renamed} ] || [ -L {renamed} ]; then echo '{exists}' {renamed} >&2; exit 1; fi\n"
+        f"    ln -s -- ${{{quote}(source.toString())}} {renamed}\n"
+        f"    if [ -e {own} ] || [ -L {own} ]; then echo '{exists}' {own} >&2; exit 1; fi\n"
+        f"    cp -RL -- ${{{quote}(outDir.toString())}} {own}\n"
+        f"    ${{{quote}('cat')}} ${{{quote}('renamed.txt')}} ${{{quote}('--outDir')}} ${{{quote}({entry})}}\n"
+    ) in rendered
+
+
+@pytest.mark.serial
+def test_a_scattered_entry_is_staged_hidden_in_its_tuple() -> None:
+    process = NfProcess(
+        "STAGE",
+        [NfPort("source", "path", entry=NfEntry(copy=True))],
+        [NfPort("result", "path", "result", NfTemplate((NfBasenameReference("source"),)))],
+        NfCommand((template("touch"), template(ref("source")))),
+    )
+    rendered = render_nextflow(ExecutableNextflowWorkflow(
+        "WF",
+        [process],
+        [NfWorkflowInputConnection("sources", "STAGE", "source", "dotproduct")],
+        {"sources": ["a.txt", "b.txt"]}, {"sources": "File[]"},
+    ))
+    assert "    tuple val(__sophios_scatter_index_9f72e), path(source, stageAs: '.sophios_entry_source/*')\n" in rendered
+    assert "    cp -RL -- ${__sophios_shell_quote_9f72e(source.toString())} " in rendered
 
 
 @pytest.mark.serial
@@ -343,8 +405,9 @@ def test_renders_array_of_path_input_with_a_list_arity_and_array_of_val_without(
     ))
 
     # A path input holding one file reaches the script as a bare Path, so the
-    # arity is what lets the array binding call list operations on it.
-    assert "    path sources, arity: '0..*'\n" in rendered
+    # arity is what lets the array binding call list operations on it; the
+    # numbered directories keep same-named files apart.
+    assert "    path sources, arity: '0..*', stageAs: 'gather_sources_*/*'\n" in rendered
     assert "    val names\n" in rendered
 
 

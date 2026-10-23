@@ -104,6 +104,11 @@ class SophiosErrorCode(StrEnum):
     #: (`sophios.lang.names`).
     INVALID_NAME = 'wic045'
 
+    #: A note, not an error: under ``--target nextflow``, a ``cwltool:CUDARequirement``
+    #: field the generated pipeline does not check, ``cudaVersionMin`` or
+    #: ``cudaComputeCapability``.
+    UNCHECKED_CUDA_FIELD = 'wic046'
+
     #: --- Python API. The document is valid; the call was not. ---
     INVALID_INPUT_VALUE = 'api001'
     INVALID_STEP = 'api002'
@@ -223,7 +228,8 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         'The container engine cannot be used: not installed, not running, not yours to use, or overloaded. '
         'Checked only when a step runs in a container.',
         'Do what the message says: install the engine, start it, or give your user access to it; '
-        '`--container_engine` names another engine, and `--ignore_docker_install` skips the check.'),
+        'under `--target cwl`, `--container_engine` names another engine, and `--ignore_docker_install` skips the '
+        'check.'),
     SophiosErrorCode.MISSING_INPUT_FILE: Explanation(
         Kind.MACHINE,
         'An input file or directory cannot be used: it does not exist, it is the other kind, or you may not read it.',
@@ -352,6 +358,12 @@ EXPLANATIONS: Final[Mapping[SophiosErrorCode, Explanation]] = {
         '`_`, `.` and `-`, or starting with `.`.',
         'Rename it with letters, digits, `_`, `.` and `-`: the name becomes part of file names and of the names '
         'Sophios makes with `~` and `@`.'),
+    SophiosErrorCode.UNCHECKED_CUDA_FIELD: Explanation(
+        Kind.DOCUMENT,
+        'Note: under `--target nextflow`, a `cwltool:CUDARequirement` names a `cudaVersionMin` or '
+        '`cudaComputeCapability`, which the generated pipeline does not check; it asks only for a number of GPUs.',
+        'Run the pipeline where the GPUs and the container image provide that CUDA version and compute '
+        'capability, or remove the field.'),
     SophiosErrorCode.INVALID_INPUT_VALUE: Explanation(
         Kind.CALL,
         'A value bound to a step input that the input cannot take.',
