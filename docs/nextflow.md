@@ -212,7 +212,9 @@ items is supported. It carries the same qualifier its item type would carry
 alone (`path` for File/Directory, `val` for scalars); a `path` array stages
 every element for one process call rather than fanning the channel out, and
 renders as `path <name>, arity: '0..*'` so the process always receives a list,
-whether the array holds no file, one, or many. The one supported command-line
+whether the array holds no file, one, or many. Each file is staged in its own
+numbered directory, so same-named files from different directories never
+collide. The one supported command-line
 binding shape (no `itemSeparator`) contributes its optional prefix once,
 followed by each element as its own argument, and contributes nothing at all
 when the array is empty. An empty array is a present, valid value — distinct

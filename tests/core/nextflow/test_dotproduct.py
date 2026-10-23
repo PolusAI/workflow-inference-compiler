@@ -318,7 +318,8 @@ def _scatter_with_file_array(method: str, sources: list[str]) -> ExecutableNextf
 def test_an_unscattered_file_array_declares_the_list_arity_beside_the_scattered_tuple(method: str) -> None:
     rendered = render_nextflow(_scatter_with_file_array(method, ["source_0.txt"]))
     assert (
-        "tuple val(__sophios_scatter_index_9f72e), val(item), val(tag)\n    path sources, arity: '0..*'\n"
+        "tuple val(__sophios_scatter_index_9f72e), val(item), val(tag)\n"
+        "    path sources, arity: '0..*', stageAs: 'gather_sources_*/*'\n"
     ) in rendered
 
 
@@ -335,5 +336,5 @@ def test_dotproduct_broadcasts_an_unscattered_file_array_as_a_list(names: list[s
     result = _sink(workflow, tmp_path, emit_name="result")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     gathered = (tmp_path / "gathered.txt").read_text(encoding="utf-8").split("\x01")
-    suffix = "".join(f" {name}" for name in names)
+    suffix = "".join(f" gather_sources_{index}/{name}" for index, name in enumerate(names, 1))
     assert gathered == [f"a x{suffix}\n", f"b y{suffix}\n"]

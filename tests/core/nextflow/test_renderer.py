@@ -343,8 +343,9 @@ def test_renders_array_of_path_input_with_a_list_arity_and_array_of_val_without(
     ))
 
     # A path input holding one file reaches the script as a bare Path, so the
-    # arity is what lets the array binding call list operations on it.
-    assert "    path sources, arity: '0..*'\n" in rendered
+    # arity is what lets the array binding call list operations on it; the
+    # numbered directories keep same-named files apart.
+    assert "    path sources, arity: '0..*', stageAs: 'gather_sources_*/*'\n" in rendered
     assert "    val names\n" in rendered
 
 
