@@ -2412,7 +2412,7 @@ def test_the_admitted_output_eval_table_is_closed_in_both_directions() -> None:
         "$(self[0])": "single",
         "$(self[0].contents)": "text",
     }
-    assert set(_ADMITTED_OUTPUT_EVAL.values()) <= NfPort.ALLOWED_CAPTURES
+    assert set(_ADMITTED_OUTPUT_EVAL.values()) <= set(NfPort.CAPTURE_QUALIFIERS)
     assert not set(_ADMITTED_OUTPUT_EVAL) & set(_NAMED_OUTPUT_EVAL_REJECTIONS)
     assert set(_NAMED_OUTPUT_EVAL_REJECTIONS) == {
         "$(self[0].checksum)",

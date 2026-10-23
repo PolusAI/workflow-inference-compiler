@@ -116,39 +116,25 @@ def _mapping(value: Any, *, type_name: str) -> Mapping[str, Any]:
             raise TypeError(f"{type_name} hydration requires a mapping")
 
 
-def _check_fields(
-    value: Mapping[str, Any],
+def _fields(
+    value: Any,
     *,
     type_name: str,
     required: set[str],
-) -> None:
-    missing = required - set(value)
-    unknown = set(value) - required
-    if missing:
-        raise ValueError(f"{type_name} is missing required fields: {', '.join(sorted(missing))}")
-    if unknown:
-        raise ValueError(f"{type_name} has unknown fields: {', '.join(sorted(unknown))}")
+    optional: frozenset[str] | set[str] = frozenset(),
+) -> Mapping[str, Any]:
+    """The mapping `value`, holding every `required` field and no field but those and the `optional` ones.
 
-
-def _check_fields_with_optional(
-    value: Mapping[str, Any],
-    *,
-    type_name: str,
-    required: set[str],
-    optional: set[str],
-) -> None:
-    """Like :func:`_check_fields`, but tolerates a declared set of optional keys.
-
-    Used for fields that earlier schema versions never wrote, so their
+    An optional field is one earlier schema versions never wrote, so its
     absence in an older payload is a valid, unambiguous default rather than
     a hydration error.
     """
-    missing = required - set(value)
-    unknown = set(value) - required - optional
-    if missing:
+    item = _mapping(value, type_name=type_name)
+    if missing := required - set(item):
         raise ValueError(f"{type_name} is missing required fields: {', '.join(sorted(missing))}")
-    if unknown:
+    if unknown := set(item) - required - optional:
         raise ValueError(f"{type_name} has unknown fields: {', '.join(sorted(unknown))}")
+    return item
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,13 +205,13 @@ def _segment_from_dict(value: Mapping[str, Any]) -> NfTemplateSegment:
     item = _mapping(value, type_name="NfTemplateSegment")
     match item.get("kind"):
         case "literal":
-            _check_fields(item, type_name="NfLiteral", required={"kind", "value"})
+            _fields(item, type_name="NfLiteral", required={"kind", "value"})
             return NfLiteral(item["value"])
         case "input":
-            _check_fields(item, type_name="NfInputReference", required={"kind", "name"})
+            _fields(item, type_name="NfInputReference", required={"kind", "name"})
             return NfInputReference(item["name"])
         case "basename":
-            _check_fields(item, type_name="NfBasenameReference", required={"kind", "name"})
+            _fields(item, type_name="NfBasenameReference", required={"kind", "name"})
             return NfBasenameReference(item["name"])
         case kind:
             raise ValueError(f"unsupported template segment kind {kind!r}")
@@ -274,8 +260,7 @@ class NfTemplate:
         Returns:
             Self: The validated template.
         """
-        item = _mapping(value, type_name=cls.__name__)
-        _check_fields(item, type_name=cls.__name__, required={"segments"})
+        item = _fields(value, type_name=cls.__name__, required={"segments"})
         if not isinstance(item["segments"], list):
             raise TypeError("NfTemplate segments must be a list")
         return cls(tuple(_segment_from_dict(segment) for segment in item["segments"]))
@@ -371,13 +356,13 @@ def _command_token_from_dict(value: Mapping[str, Any]) -> NfCommandToken:
     item = _mapping(value, type_name="NfCommandToken")
     match item.get("kind"):
         case "flag":
-            _check_fields(item, type_name="NfFlag", required={"kind", "name", "prefix"})
+            _fields(item, type_name="NfFlag", required={"kind", "name", "prefix"})
             return NfFlag(item["name"], item["prefix"])
         case "array":
-            _check_fields(item, type_name="NfArrayBinding", required={"kind", "name", "prefix"})
+            _fields(item, type_name="NfArrayBinding", required={"kind", "name", "prefix"})
             return NfArrayBinding(item["name"], item["prefix"])
         case "shell_literal":
-            _check_fields(item, type_name="NfShellLiteral", required={"kind", "text"})
+            _fields(item, type_name="NfShellLiteral", required={"kind", "text"})
             return NfShellLiteral(item["text"])
         case "computed":
             # A removed kind is refused in a payload of any version (design §5.3).
@@ -435,8 +420,7 @@ class NfCommand:
         Returns:
             Self: The validated command.
         """
-        item = _mapping(value, type_name=cls.__name__)
-        _check_fields(item, type_name=cls.__name__, required={"tokens", "stdin", "stdout", "stderr"})
+        item = _fields(value, type_name=cls.__name__, required={"tokens", "stdin", "stdout", "stderr"})
         if not isinstance(item["tokens"], list):
             raise TypeError("NfCommand tokens must be a list")
 
@@ -465,16 +449,8 @@ class NfResources:
         ):
             raise ValueError("cpus must be a positive integer or None")
         memory = self.memory_mb
-        if (
-            isinstance(memory, bool)
-            or (
-                memory is not None
-                and (
-                    not isinstance(memory, (int, float))
-                    or memory <= 0
-                    or (isinstance(memory, float) and not math.isfinite(memory))
-                )
-            )
+        if memory is not None and (
+            isinstance(memory, bool) or not isinstance(memory, (int, float)) or not 0 < memory < math.inf
         ):
             raise ValueError("memory_mb must be a positive finite number or None")
 
@@ -501,8 +477,7 @@ class NfResources:
         Returns:
             Self: The validated resources.
         """
-        item = _mapping(value, type_name=cls.__name__)
-        _check_fields(item, type_name=cls.__name__, required={"cpus", "memory_mb"})
+        item = _fields(value, type_name=cls.__name__, required={"cpus", "memory_mb"})
         return cls(item["cpus"], item["memory_mb"])
 
 
@@ -559,7 +534,6 @@ class NfPort:
 
     # Phase 1 lowers only these qualifiers; the renderer is total over them.
     ALLOWED_QUALIFIERS: ClassVar[frozenset[str]] = frozenset({"path", "val"})
-    ALLOWED_CAPTURES: ClassVar[frozenset[str]] = frozenset({"single", "text"})
     # The qualifier each capture marker requires of the port declaring it.
     CAPTURE_QUALIFIERS: ClassVar[Mapping[str, str]] = MappingProxyType(
         {"single": "path", "text": "val"}
@@ -609,8 +583,8 @@ class NfPort:
             if "*" in self.stage_as or "?" in self.stage_as:
                 raise ValueError("stage_as must not contain a Nextflow wildcard ('*' or '?')")
         if self.capture is not None:
-            if self.capture not in self.ALLOWED_CAPTURES:
-                allowed = ", ".join(sorted(self.ALLOWED_CAPTURES))
+            if self.capture not in self.CAPTURE_QUALIFIERS:
+                allowed = ", ".join(sorted(self.CAPTURE_QUALIFIERS))
                 raise ValueError(
                     f"port capture must be one of {allowed}, got {self.capture!r}"
                 )
@@ -699,9 +673,8 @@ class NfPort:
         Returns:
             Self: The validated port.
         """
-        item = _mapping(value, type_name=cls.__name__)
-        _check_fields_with_optional(
-            item,
+        item = _fields(
+            value,
             type_name=cls.__name__,
             required={"name", "qualifier", "emit", "glob", "path_kind"},
             optional={"is_array", "stage_as", "capture", "optional"},
@@ -787,36 +760,24 @@ class NfProcess:
             raise ValueError(
                 f"process {self.name!r} templates reference unknown inputs: {', '.join(sorted(unknown))}"
             )
-        qualifiers = {port.name: port.qualifier for port in inputs}
-        is_array_by_name = {port.name: port.is_array for port in inputs}
-        if invalid := {name for name in flag_names if qualifiers[name] != "val"}:
-            raise ValueError(
-                f"process {self.name!r} flag tokens must reference val inputs: "
-                f"{', '.join(sorted(invalid))}"
-            )
-        if invalid := {name for name in basename_names if qualifiers[name] != "path"}:
-            raise ValueError(
-                f"process {self.name!r} basename references must target path inputs: "
-                f"{', '.join(sorted(invalid))}"
-            )
-        if invalid := {name for name in array_binding_names if not is_array_by_name[name]}:
-            raise ValueError(
-                f"process {self.name!r} array bindings must reference array-marked inputs: "
-                f"{', '.join(sorted(invalid))}"
-            )
-        # The converse direction: every reference to an array-marked input
-        # must be an array binding. Plain and basename references render the
-        # collection as a Groovy list, while a flag lets list truthiness decide
-        # whether its prefix appears.
-        if invalid := {
-            name
-            for name in plain_reference_names | basename_names | flag_names
-            if is_array_by_name[name]
-        }:
-            raise ValueError(
-                f"process {self.name!r} array-marked inputs may only be referenced by "
-                f"array bindings: {', '.join(sorted(invalid))}"
-            )
+        input_ports = {port.name: port for port in inputs}
+        rules: tuple[tuple[set[str], Callable[[NfPort], bool], str], ...] = (
+            (flag_names, lambda port: port.qualifier == "val", "flag tokens must reference val inputs"),
+            (basename_names, lambda port: port.qualifier == "path", "basename references must target path inputs"),
+            (array_binding_names, lambda port: port.is_array, "array bindings must reference array-marked inputs"),
+            # The converse direction: every reference to an array-marked input
+            # must be an array binding. Plain and basename references render the
+            # collection as a Groovy list, while a flag lets list truthiness decide
+            # whether its prefix appears.
+            (
+                plain_reference_names | basename_names | flag_names,
+                lambda port: not port.is_array,
+                "array-marked inputs may only be referenced by array bindings",
+            ),
+        )
+        for referencing, admits, rule in rules:
+            if invalid := sorted(name for name in referencing if not admits(input_ports[name])):
+                raise ValueError(f"process {self.name!r} {rule}: {', '.join(invalid)}")
         stage_as_names = {port.name for port in inputs if port.stage_as is not None}
         if overlap := stage_as_names & referenced_names:
             raise ValueError(
@@ -850,13 +811,13 @@ class NfProcess:
                     "input to gate on"
                 )
             condition_names = references(self.condition)
-            if invalid := {
+            if invalid := sorted(
                 name for name in condition_names
-                if name not in qualifiers or qualifiers[name] != "val" or is_array_by_name[name]
-            }:
+                if name not in input_ports or input_ports[name].qualifier != "val" or input_ports[name].is_array
+            ):
                 raise ValueError(
                     f"process {self.name!r} condition must reference scalar val inputs: "
-                    f"{', '.join(sorted(invalid))}"
+                    f"{', '.join(invalid)}"
                 )
 
     def to_dict(self) -> dict[str, Any]:
@@ -893,9 +854,8 @@ class NfProcess:
         Returns:
             Self: The validated process.
         """
-        item = _mapping(value, type_name=cls.__name__)
-        _check_fields_with_optional(
-            item,
+        item = _fields(
+            value,
             type_name=cls.__name__,
             required={"name", "inputs", "outputs", "command", "container", "resources"},
             optional={"condition"},
@@ -1108,7 +1068,7 @@ def _connection_from_dict(value: Mapping[str, Any]) -> NfConnection:
             # adapter is optional on hydration: every schema version before it
             # was introduced never wrote it, and its absence there always
             # means an unadapted connection.
-            _check_fields_with_optional(
+            _fields(
                 item,
                 type_name="NfWorkflowInputConnection",
                 required={"kind", "from_port", "to_process", "to_port"},
@@ -1121,7 +1081,7 @@ def _connection_from_dict(value: Mapping[str, Any]) -> NfConnection:
                 item.get("adapter"),
             )
         case "process":
-            _check_fields_with_optional(
+            _fields(
                 item,
                 type_name="NfProcessConnection",
                 required={"kind", "from_process", "from_port", "to_process", "to_port"},
@@ -1131,7 +1091,7 @@ def _connection_from_dict(value: Mapping[str, Any]) -> NfConnection:
                 item["from_process"], item["from_port"], item["to_process"], item["to_port"], item.get("adapter")
             )
         case "workflow_output":
-            _check_fields(
+            _fields(
                 item,
                 type_name="NfWorkflowOutputConnection",
                 required={"kind", "from_process", "from_port", "to_port"},
@@ -1149,25 +1109,26 @@ class ExecutableNextflowWorkflow:
     # Earlier versions whose value space is a strict subset of the current
     # model hydrate unchanged; serialization always writes SCHEMA_VERSION.
     SUPPORTED_SCHEMA_VERSIONS: ClassVar[frozenset[int]] = frozenset(range(2, 17))
-    # Each additive token or segment kind declares the version that
-    # introduced it, so the subset property is enforced rather than assumed.
-    KIND_SCHEMA_VERSIONS: ClassVar[Mapping[str, int]] = MappingProxyType(
-        {"flag": 3, "basename": 4, "array": 5, "shell_literal": 6}
-    )
-    # Version an additive non-kind-tagged field was introduced in, keyed by
-    # the field name it appears under. is_array, stage_as, and capture
-    # predate a "kind" tag on NfPort, and adapter is additive on an existing
-    # connection kind, so each needs its own gate alongside
-    # KIND_SCHEMA_VERSIONS.
-    FIELD_SCHEMA_VERSIONS: ClassVar[Mapping[str, int]] = MappingProxyType(
-        {"is_array": 5, "stage_as": 7, "adapter": 8, "capture": 9, "condition": 11, "optional": 16}
-    )
-    # A specific field VALUE introduced after the field itself: "dotproduct",
-    # "flat_crossproduct", "gather" and "nested_crossproduct" are values of the
-    # existing "adapter" field, not new fields, so each needs its own gate keyed
-    # by (field, value) rather than by field alone.
-    FIELD_VALUE_SCHEMA_VERSIONS: ClassVar[Mapping[tuple[str, str], int]] = MappingProxyType(
+    # The version each additive part of the payload was introduced in, so the
+    # subset property is enforced rather than assumed. (field, value) gates a
+    # field holding that value, and (field, None) a field holding any truthy
+    # value. A token or segment kind is the value of its "kind" tag. is_array,
+    # stage_as and capture predate a "kind" tag on NfPort, and adapter is
+    # additive on an existing connection kind, so each is gated as a field.
+    # "dotproduct", "flat_crossproduct", "gather" and "nested_crossproduct"
+    # are values of the existing "adapter" field, introduced after it.
+    SCHEMA_GATES: ClassVar[Mapping[tuple[str, str | None], int]] = MappingProxyType(
         {
+            ("kind", "flag"): 3,
+            ("kind", "basename"): 4,
+            ("kind", "array"): 5,
+            ("kind", "shell_literal"): 6,
+            ("is_array", None): 5,
+            ("stage_as", None): 7,
+            ("adapter", None): 8,
+            ("capture", None): 9,
+            ("condition", None): 11,
+            ("optional", None): 16,
             ("adapter", "dotproduct"): 12,
             ("adapter", "flat_crossproduct"): 13,
             ("adapter", "gather"): 14,
@@ -1204,12 +1165,7 @@ class ExecutableNextflowWorkflow:
             )
         if not isinstance(self.params, Mapping):
             raise TypeError("workflow params must be a mapping")
-        frozen_params = _freeze_json(self.params)
-        try:
-            json.dumps(_thaw_json(frozen_params), allow_nan=False)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("workflow params must contain JSON-compatible values") from exc
-        object.__setattr__(self, "params", frozen_params)
+        object.__setattr__(self, "params", _freeze_json(self.params))
         self._validate_graph()
 
     @property
@@ -1235,7 +1191,6 @@ class ExecutableNextflowWorkflow:
         workflow_input_qualifiers: dict[str, str] = {}
         param_destinations: dict[str, tuple[bool, str, str]] = {}
         workflow_outputs: set[str] = set()
-        dependencies: dict[str, set[str]] = {name: set() for name in process_by_name}
         adapters_by_process: dict[str, set[str]] = {}
         multi_scattered = {
             connection.to_process: connection.adapter
@@ -1361,7 +1316,6 @@ class ExecutableNextflowWorkflow:
                             "its only approved sink is a workflow output"
                         )
                     self._record_incoming(incoming, to_process, to_port)
-                    dependencies[to_process].add(from_process)
                 case NfWorkflowOutputConnection(from_process, from_port, to_port):
                     self._source_port(process_by_name, from_process, from_port)
                     if to_port in workflow_outputs:
@@ -1392,7 +1346,9 @@ class ExecutableNextflowWorkflow:
                     f"which expects {'an array' if is_array else 'a scalar'}"
                 )
 
-        topological_order(dependencies, error="workflow connections contain a cycle")
+        topological_order(
+            process_dependencies(process_by_name, self.connections), error="workflow connections contain a cycle"
+        )
         expected_inputs = {
             (process.name, port.name)
             for process in self.processes
@@ -1477,9 +1433,8 @@ class ExecutableNextflowWorkflow:
         Returns:
             Self: The validated executable workflow.
         """
-        item = _mapping(value, type_name=cls.__name__)
-        _check_fields(
-            item,
+        item = _fields(
+            value,
             type_name=cls.__name__,
             required={
                 "schema_version",
@@ -1518,24 +1473,13 @@ class ExecutableNextflowWorkflow:
         """Reject a payload carrying a kind or field newer than its declared version."""
         match value:
             case Mapping() as mapping:
-                introduced = cls.KIND_SCHEMA_VERSIONS.get(str(mapping.get("kind")))
-                if introduced is not None and declared < introduced:
-                    raise ValueError(
-                        f"{mapping['kind']!r} requires executable Nextflow schema version "
-                        f"{introduced}, but the payload declares schema version {declared}"
-                    )
-                for field_name, field_introduced in cls.FIELD_SCHEMA_VERSIONS.items():
-                    if mapping.get(field_name) and declared < field_introduced:
+                for (name, gated), introduced in cls.SCHEMA_GATES.items():
+                    found = mapping.get(name)
+                    if (found == gated if gated is not None else found) and declared < introduced:
+                        label = repr(gated) if name == "kind" else repr(name) if gated is None else f"{name}={gated!r}"
                         raise ValueError(
-                            f"{field_name!r} requires executable Nextflow schema version "
-                            f"{field_introduced}, but the payload declares schema version {declared}"
-                        )
-                for (field_name, field_value), value_introduced in cls.FIELD_VALUE_SCHEMA_VERSIONS.items():
-                    if mapping.get(field_name) == field_value and declared < value_introduced:
-                        raise ValueError(
-                            f"{field_name}={field_value!r} requires executable Nextflow schema "
-                            f"version {value_introduced}, but the payload declares schema "
-                            f"version {declared}"
+                            f"{label} requires executable Nextflow schema version {introduced}, "
+                            f"but the payload declares schema version {declared}"
                         )
                 for item in mapping.values():
                     cls._reject_newer_kinds(item, declared=declared)
