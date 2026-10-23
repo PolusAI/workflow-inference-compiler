@@ -330,6 +330,12 @@ warning naming every file and line where it was load-bearing. Because source
 spans exist, a `--migrate` mode can insert the `!cwl` tags mechanically. Adding
 `!cwl` is purely additive.
 
+The flag has a second, separate meaning: when the source file is itself a plain
+CWL `Workflow` (a conformant `.cwl` document with no Sophios syntax), it is run
+as it is and not compiled. The deprecation and `--migrate` above concern only
+the first meaning; retiring the flag would need another way to ask for
+pass-through.
+
 **The `wic:` sidecar** is unchanged on the surface, including its
 `"(1, step_name)"` string keys. The AST normalises them to an `(index, name)`
 pair on the way in.
@@ -545,8 +551,9 @@ must never be findable again by chance.
 
 ### 6.3 Benchmarks
 
-Benchmarks run **weekly in CI, and are not gates.** They do not fail a build and
-carry no thresholds. They exist to make the trend visible.
+Benchmarks run **weekly in CI, and their timings are not gates.** No number fails
+a build and there are no thresholds; they exist to make the trend visible. A case
+that raises does fail the run, once the whole table is written.
 
 Running them in the CI matrix rather than on developer machines settles the
 question of what baseline they are measured against: the runner is not fast, but
@@ -643,7 +650,7 @@ is not the justification for this work.
 | Fix stale corpus files by default | Bend the language per exception | Accommodating every exception erodes the specification one case at a time. |
 | Physically separate `contrib/`; leave core in place | Symmetric `core/` + `contrib/`; or linter only | A visible boundary is noticed before it is crossed. Moving core would rename every public import path, which §1 forbids. |
 | Contrib tests in core CI, zoned by directory | Separate schedule | A separate cadence means a separate cadence of attention. Zoning gives attribution without giving up coverage. |
-| Weekly non-gating benchmarks in CI | On-demand local runs; a gating perf job | No laptop baseline is comparable; the CI matrix supplies consistency. Non-gating because an untriaged perf gate becomes noise or gets bypassed. |
+| Weekly benchmarks in CI, timings never gate | On-demand local runs; a gating perf job | No laptop baseline is comparable; the CI matrix supplies consistency. Non-gating because an untriaged perf gate becomes noise or gets bypassed. |
 | Four independently shippable specs | One large refactor | Work can stop after any one without leaving anything half-built. |
 
 ---

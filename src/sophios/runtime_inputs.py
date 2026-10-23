@@ -16,20 +16,10 @@ from sophios.wic_types import Json
 _INPUT_REFERENCE = re.compile(r"\binputs\.([A-Za-z_][A-Za-z0-9_-]*)")
 
 
-def normalize_job_inputs(cwl_workflow: Mapping[str, Any], job_inputs: Mapping[str, Any]) -> Json:
-    """Return job inputs with output-target directories as runner-local names."""
-    return _normalize_job_inputs(cwl_workflow, {}, job_inputs)
-
-
 def normalize_artifact_job_inputs(artifact: CompilationArtifact,
                                   job_inputs: Mapping[str, Any]) -> Json:
     """Normalize job inputs from the graph-derived artifact tree."""
     return _normalize_job_inputs(artifact.cwl, _runs_by_artifact_id(artifact), job_inputs)
-
-
-def normalize_cwl_document(cwl_document: Mapping[str, Any]) -> Json:
-    """Return generated CWL with output-target Directory inputs converted to strings."""
-    return _normalize_cwl_document(cwl_document, {})
 
 
 def normalize_artifact_cwl(artifact: CompilationArtifact) -> Json:

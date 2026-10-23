@@ -12,13 +12,18 @@ Compiled, never executed; whether a runner can execute the result belongs to
 the workflow-running lane.
 """
 import json
+import re
+import shutil
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 from sophios.api.python.workflow import Step, Workflow
 from sophios.python_cwl_adapter import import_python_file
+
+from .test_setup import home_with_shipped_tools, use_home
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ADAPTERS = REPO_ROOT / 'cwl_adapters'
@@ -128,7 +133,7 @@ def test_two_in_memory_tools_chain_and_keep_their_output_binding() -> None:
     `test_python_api_tool_builder.py` already owns that claim.
     """
     example = REPO_ROOT / 'examples' / 'scripts' / 'tool_builder_workflow.py'
-    assert example.is_file(), f'{example} is linked from docs/tool_builder_workflow.md'
+    assert example.is_file(), f'{example} is linked from docs/tool-builder.md'
     module = import_python_file(example.stem, example.resolve())
 
     compiled = module.build_workflow('hello from test').compile()
@@ -144,3 +149,83 @@ def test_two_in_memory_tools_chain_and_keep_their_output_binding() -> None:
     emitted = compiled.cwl_workflow['outputs']['result']
     assert emitted['type'] == 'string'
     assert emitted['outputSource'] == f"{steps['read_text']['id']}/result"
+
+
+_INPUTS = {'input_dir': '/data/in', 'output_dir': '/data/out', 'model_file': '/data/sam3.pt'}
+
+
+def _compile_ichnaea_script(script: str, tmp_path: Path) -> None:
+    """Both scripts build a tool with a GPU hint and a Docker requirement, which
+    cwl_utils renders as lists. `Workflow.compile()` crashed on the list, and the
+    only test ran the tool through `validate()`, which never takes the compile path.
+
+    The script is imported from a copy: `ichnaea_integrated.workflow()` writes
+    `built-ichnaea-autosegmentation.cwl` next to its own file, which would leave
+    an untracked file in `examples/scripts/` after every run."""
+    source = tmp_path / f'{script}.py'
+    shutil.copyfile(REPO_ROOT / 'examples' / 'scripts' / f'{script}.py', source)
+    module = import_python_file(script, source)
+    compiled = module.workflow(dict(_INPUTS), 'autoseg_workflow').compile()
+    run = compiled.cwl_workflow['steps'][0]['run']
+    assert any(entry.get('class') == 'DockerRequirement' for entry in run['requirements'])
+    assert any(entry.get('class') == 'cwltool:CUDARequirement' for entry in run['hints'])
+
+
+@pytest.mark.fast
+def test_the_compact_ichnaea_script_compiles_its_hinted_tool(tmp_path: Path) -> None:
+    """The hinted tool compiles; see `_compile_ichnaea_script`."""
+    _compile_ichnaea_script('ichnaea_compact', tmp_path)
+
+
+@pytest.mark.fast
+@pytest.mark.needs_cwltool
+def test_the_integrated_ichnaea_script_compiles_its_hinted_tool(tmp_path: Path) -> None:
+    """The hinted tool compiles; see `_compile_ichnaea_script`. The script also
+    writes the tool with `validate=True`, which runs cwltool in-process."""
+    _compile_ichnaea_script('ichnaea_integrated', tmp_path)
+
+
+@pytest.mark.fast
+def test_the_sam3_handoff_snippet_compiles_with_stdout_and_stderr_outputs() -> None:
+    """docs/tool-builder.md hands a built tool with `Output.stdout()` to the
+    workflow API. `stdout` and `stderr` are tool-only shorthands that cwltool
+    rejects at the workflow boundary, so each promoted output must be a `File`."""
+    tool = CommandLineTool('echo_tool', Inputs(message=Input(cwl.string, position=1)),
+                           Outputs(out=Output.stdout(), err=Output.stderr())
+                           ).base_command('echo').stdout('stdout.txt').stderr('stderr.txt')
+    step = Step(tool, step_name='say_hello')
+    step.inputs.message = 'hello'
+    compiled = Workflow([step], 'wf').compile().cwl_workflow
+    step_id = compiled['steps'][0]['id']
+    assert compiled['outputs'][f'{step_id}~out']['type'] == 'File'
+    assert compiled['outputs'][f'{step_id}~err']['type'] == 'File'
+    declared = {output['id']: output['type'] for output in compiled['steps'][0]['run']['outputs']}
+    assert declared == {'out': 'stdout', 'err': 'stderr'}, 'the tool keeps its own shorthand'
+
+
+@pytest.mark.fast
+def test_the_word_count_example_runs_wc_on_the_greeting(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """`examples/scripts/count_words.py` is the tool-builder example the README, the landing page and
+    docs/tool-builder.md show: its third step runs `wc -w` and keeps what it prints as `counts.txt`."""
+    # It names the shipped tools under `Path.home() / 'wic' / 'cwl_adapters'`, as the docs run it.
+    use_home(monkeypatch, home_with_shipped_tools(tmp_path, REPO_ROOT))
+    example = REPO_ROOT / 'examples' / 'scripts' / 'count_words.py'
+    module = import_python_file(example.stem, example)
+    count = module.workflow().compile().cwl_workflow['steps'][2]
+    assert count['run']['baseCommand'] == ['wc', '-w']
+    assert count['run']['stdout'] == 'counts.txt'
+    assert count['in']['text'] == {'source': count['in']['text']['source']}
+    assert count['in']['text']['source'] == 'append/file'
+
+
+@pytest.mark.fast
+def test_the_landing_page_shows_the_whole_word_count_tool() -> None:
+    """docs/index.md includes the `word_count` expression of count_words.py by line numbers; they must still
+    frame exactly that expression."""
+    index = (REPO_ROOT / 'docs' / 'index.md').read_text(encoding='utf-8')
+    included = re.search(r'count_words\.py\n:language: python\n:lines: (\d+)-(\d+)', index)
+    assert included is not None, 'docs/index.md no longer includes count_words.py by line numbers'
+    first, last = map(int, included.groups())
+    lines = (REPO_ROOT / 'examples' / 'scripts' / 'count_words.py').read_text(encoding='utf-8').splitlines()
+    shown = lines[first - 1:last]
+    assert (shown[0], shown[-1]) == ('word_count = (', ')')

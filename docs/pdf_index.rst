@@ -1,35 +1,89 @@
-Sophios User and Developer Documentation
-========================================
-
-User Documentation
-------------------
+Sophios documentation
+=====================
 
 .. toctree::
    :maxdepth: 2
+   :caption: Introduction
 
-   overview.md
-   installguide.md
-   userguide.md
-   multistep_runner.md
-   tool_builder_sam3.md
-   tool_builder_workflow.md
-   compute_request_workflow.md
-   ichnaea_compact_compute.md
-   python_api_reference.rst
-   advanced.md
-   sophios_language_reference.md
-   tutorials/tutorials.rst
-   validation.md
-
-Developer Documentation
------------------------
+   landing
 
 .. toctree::
    :maxdepth: 2
+   :caption: Get started
 
-   dev/installguide.md
-   dev/devguide.md
-   dev/algorithms.md
-   dev/codingstandards.md
-   dev/gitetiquette.md
-   dev/api.rst
+   install
+   first-workflow
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Write workflows
+
+   inputs-and-values
+   connecting-steps
+   edge-inference
+   steps-and-tools
+   scatter-and-conditions
+   types-and-records
+   subworkflows
+   converting
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Write tools
+
+   tool-builder
+   cwl-you-still-need
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Run and manage
+
+   running
+   checks-and-errors
+   partial-failures
+   realtime-analysis
+   drawing
+   configuration
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Concepts
+
+   workflow-model
+   compiling-to-cwl
+   nextflow
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+   wic-reference
+   python-api-reference
+   cli-reference
+   configuration-reference
+   error_codes
+   cookbook
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Extras
+
+   contrib
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Developers
+
+   dev/devguide
+   dev/architecture
+   dev/language_spec
+   validation
+   dev/codingstandards
+   dev/gitetiquette
+   dev/api
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Compute client
+
+   compute

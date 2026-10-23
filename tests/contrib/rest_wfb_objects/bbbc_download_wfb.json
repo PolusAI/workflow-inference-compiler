@@ -8,7 +8,7 @@
                 "z": 1,
                 "name": "BBBC Download",
                 "expanded": true,
-                "pluginId": "polusai/bbbc-download-plugin@0.1.0-dev1",
+                "pluginId": "vjaganat90/bbbc-download-plugin@0.1.1-dev1",
                 "height": 50,
                 "width": 250,
                 "settings": {
@@ -25,8 +25,8 @@
     },
     "plugins": [
         {
-            "name": "polusai/bbbc-download-plugin:0.1.0-dev1",
-            "version": "0.1.0-dev1",
+            "name": "vjaganat90/bbbc-download-plugin:0.1.1-dev1",
+            "version": "0.1.1-dev1",
             "title": "BBBC Download",
             "description": "Downloads the datasets on the Broad Bioimage Benchmark Collection website",
             "createdBy": "Serebryakov, Artem (NIH/NCATS) [C]",
@@ -35,7 +35,7 @@
                 "Hamdah Abbasi"
             ],
             "contact": "hamdahshafqat.abbasi@nih.gov",
-            "container": "polusai/bbbc-download-plugin:0.1.0-dev1",
+            "container": "vjaganat90/bbbc-download-plugin:0.1.1-dev1",
             "entrypoint": "",
             "inputs": [
                 {
@@ -79,7 +79,7 @@
             "createdAt": "2024-10-29T18:59:55.843Z",
             "updatedAt": "2024-10-29T20:01:42.463Z",
             "id": "672130abad801ccee7f5eaad",
-            "pid": "polusai/bbbc-download-plugin@0.1.0-dev1"
+            "pid": "vjaganat90/bbbc-download-plugin@0.1.1-dev1"
         }
     ]
 }

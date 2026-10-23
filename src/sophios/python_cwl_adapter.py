@@ -115,7 +115,6 @@ def generate_CWL_CommandLineTool(module_inputs: dict[str, Any], module_outputs: 
     yaml_tree['cwlVersion'] = CWL_VERSION
     yaml_tree['class'] = 'CommandLineTool'
     yaml_tree['$namespaces'] = {'edam': 'https://edamontology.org/'}
-    yaml_tree['$schemas'] = ['https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl']
     yaml_tree['baseCommand'] = 'python3'
 
     requirements: dict[str, Any] = {'InlineJavascriptRequirement': {}}

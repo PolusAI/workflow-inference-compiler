@@ -1,0 +1,234 @@
+# Install
+
+This page sets up a computer to write and run Sophios workflows. You will
+install a container engine, create a conda environment with the programs
+Sophios relies on, install Sophios itself, and finish by running a small
+workflow that ships with it. Each step ends with a check, so if something
+goes wrong you find out at the step that caused it.
+
+If you want to work on Sophios's own code instead, follow the
+[developer guide](dev/devguide.md).
+
+## Before you begin
+
+You need:
+
+- **macOS or Linux**, or **Windows with WSL 2**. On Windows itself, Sophios
+  can compile workflows but cannot run them; see
+  [Platform notes](#platform-notes).
+- **conda**. If you do not have it, install
+  [Miniforge](https://github.com/conda-forge/miniforge#install), which sets
+  up conda with the conda-forge channel, then run `conda init` once and open
+  a new terminal, so that `conda activate` works.
+- **Permission to install software**, which Docker needs.
+- **A network connection.** Sophios fetches each tool's container image
+  before a run.
+
+## 1. Install Docker
+
+Most tools name the container image their program runs in, so that the
+program is the same on every machine. Sophios runs each of those tools inside
+its container, and for that it needs a container engine. Docker is the
+default.
+
+1. Install Docker: [Docker Desktop](https://docs.docker.com/get-docker/) on
+   macOS and Windows, or
+   [Docker Engine](https://docs.docker.com/engine/install/) on Linux.
+2. Start it. On Linux, also let your account use it without `sudo`:
+
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+
+   then log out and back in.
+
+To check that Docker works, run a test container:
+
+```bash
+docker run --rm hello-world
+```
+
+Docker downloads a tiny image and runs it, and the output includes the line
+`Hello from Docker!`. If it does not, see [Troubleshooting](#troubleshooting)
+before going on.
+
+Sophios also works with Podman and Singularity. If you already
+use one of those, you can skip Docker and name your engine when you run a
+workflow; [Running workflows](running.md) shows how.
+
+## 2. Create a conda environment
+
+Sophios is a Python package, but running a workflow needs two programs that
+pip cannot install. cwltool, the program that runs workflows for Sophios,
+uses **Node.js** to evaluate the small JavaScript expressions inside tool
+descriptions, and **Graphviz** draws pictures of your workflows. A conda
+environment holds both, together with the Python that Sophios runs on:
+
+```bash
+conda create --name sophios --channel conda-forge python=3.11 "nodejs<26.8" graphviz
+conda activate sophios
+```
+
+Sophios needs Python 3.11 or newer; 3.11 is the version its test suite runs
+on. Node.js is kept below 26.8 because one conda-forge build, 26.8.0, has a
+version string cwltool cannot parse, and with it every run fails. Graphviz is
+optional: without it, Sophios runs your workflows and skips the pictures.
+
+To check the environment, print each program's version:
+
+```bash
+python --version
+node --version
+dot -V
+```
+
+You should see `Python 3.11` followed by a patch number, a Node.js version
+such as `v26.6.0`, and a line that starts with `dot - graphviz version`. If
+a command is not found, see [Troubleshooting](#troubleshooting).
+
+Activate the environment, `conda activate sophios`, in every new terminal
+before you use Sophios.
+
+## 3. Install Sophios
+
+Install the package, then let Sophios write its configuration:
+
+```bash
+python -m pip install sophios
+sophios --generate_config
+```
+
+The first command installs the compiler, the `sophios` command and the
+Python API, together with cwltool and Toil, the two runners Sophios can hand
+a compiled workflow to. The second writes Sophios's configuration file,
+`~/wic/global_config.json`, and copies the tools and example workflows that
+ship with Sophios into `~/wic/cwl_adapters/` and `~/wic/examples/`. The
+configuration tells Sophios where to look for tools;
+[Configuration](configuration.md) explains how to add your own places. If the
+file already exists, the command leaves it alone and says so.
+
+To check the installation:
+
+```bash
+sophios --version
+ls ~/wic
+```
+
+The first command prints the version you installed. The second lists
+`cwl_adapters`, `examples` and `global_config.json`. If `sophios` is not
+found, see [Troubleshooting](#troubleshooting).
+
+## 4. Check that everything works
+
+Run one of the example workflows. It creates a file, writes two lines into
+it and reads the file back, and two of its steps run in a container, so it
+exercises every piece you just installed. Run it from a new, empty directory,
+because Sophios writes its results into the directory you run it from:
+
+```bash
+mkdir sophios-check
+cd sophios-check
+sophios --yaml ~/wic/examples/multistep1.wic --run_local --quiet
+```
+
+`--quiet` keeps the log short. The run takes a few seconds, a little longer
+the first time while Docker downloads the image the steps run in. It prints a
+few lines about compiling and running, and ends with:
+
+```text
+Success! Runner outputs are under /home/you/sophios-check/autogenerated/outdir_cwltool_multistep1_2026_10_18_18.42.15/
+```
+
+That directory holds `empty.txt`, which now contains two lines, `Hello` and
+`World!`. Sophios is installed. You can delete `sophios-check/`.
+
+If the run stops with a line that has a code in brackets, such as
+`error [wic015]`, find the code under [Troubleshooting](#troubleshooting).
+
+## Platform notes
+
+### macOS
+
+Docker Desktop must be running before you run a workflow; its
+whale icon in the menu bar shows that it is.
+
+### Linux
+
+If `docker run` works only with `sudo`, your account is not in the
+`docker` group yet. Run the `usermod` command from step 1, then log out and
+back in.
+
+### Windows
+
+The programs that run workflows, cwltool and Toil, do not run on
+Windows itself. Install [WSL 2](https://learn.microsoft.com/windows/wsl/install)
+with a Linux distribution such as Ubuntu, turn on Docker Desktop's WSL
+integration, and follow steps 2 to 4 in the WSL terminal. On Windows itself,
+Sophios compiles workflows, but a run stops before it starts with `wic029`
+and a pointer to WSL. Validating a tool you build in Python,
+`write_cwl(validate=True)` or `CommandLineTool.validate()`, raises
+`ToolBuilderValidationError: Generated CommandLineTool failed validation`,
+whose cause, a `ModuleNotFoundError` about `cwltool/schema_salad`, is
+misleading: cwltool is installed, and what fails is an import that exists only
+on POSIX. `sophios --validate_plugins` fails on Windows too, with a
+`NotImplementedError`.
+
+## Troubleshooting
+
+### `conda activate` fails and asks you to run `conda init`
+
+conda is not set up for your shell yet. Run `conda init` once, open a new
+terminal, and activate the environment again.
+
+### `sophios: command not found`, or `python --version` shows another version
+
+The conda environment is not active in this terminal. Run
+`conda activate sophios` and try again. Install with `python -m pip`, as in
+step 3, so that pip installs into the environment's Python and no other.
+
+### Docker is not running
+
+```text
+error [wic015] docker is installed, but `docker info` exited with status 1 (Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?): run `docker info` to see why, and start the engine if it is stopped.
+```
+
+Docker is installed but not running. Start Docker Desktop, or on Linux
+`sudo systemctl start docker`, wait until `docker info` succeeds, and run
+again.
+
+### `error [wic015] docker is installed, but you may not use its socket ...`
+
+On Linux, your account is not in the `docker` group. Run
+`sudo usermod -aG docker $USER`, log out and back in, and run again.
+
+### `error [wic015] docker is not installed (it is not on PATH) ...`
+
+Sophios cannot find the `docker` program. Install Docker (step 1), or, if
+you use Podman or Singularity, name it with `--container_engine podman` or
+`--container_engine singularity`.
+
+### `error [wic037] docker could not pull docker.io/bash:4.4 (...)`
+
+```text
+error [wic037] docker could not pull docker.io/bash:4.4 (cwl-docker-extract exited with status 1: Error response from daemon: Get "https://registry-1.docker.io/v2/": dial tcp: lookup registry-1.docker.io: no such host): check the image name or source, the network and your registry login, then run again.
+```
+
+Sophios fetches each tool's image before every run, and this time it could
+not. The part in parentheses is Docker's own explanation; here, there was no
+network. Check your connection, and your registry login if the image is
+private, then run again.
+
+### `error [wic029] cwltool cannot run here (...)`
+
+You are running on Windows outside WSL. Follow the Windows steps under
+[Platform notes](#platform-notes).
+
+### Every run fails with `I'm sorry, I couldn't load this CWL file`
+
+Check `node --version`. If it shows `v26.8.0`, you have the build cwltool
+cannot parse. Install the range from step 2:
+`conda install --channel conda-forge "nodejs<26.8"`.
+
+## Next
+
+Write and run [your first workflow](first-workflow.md).

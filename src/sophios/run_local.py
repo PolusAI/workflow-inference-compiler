@@ -1,39 +1,32 @@
-import glob
-import json
+"""Running a workflow on this machine: the one path every front door takes.
+
+A front door describes the run as a `backends.RunRequest`; `run` starts the runner its
+backend launches as a child process, streams what it prints, and reports how it ended.
+`start` returns the `RunHandle` that `run` waits on, which `Workflow.start()` hands to its caller.
+"""
+import atexit
+import os
+import shlex
+import signal
+import stat
 import subprocess as sub
 import sys
-import os
-import re
-import stat
-from contextlib import contextmanager
-from pathlib import Path
-import shutil
+import threading
+import time
 import traceback
-from dataclasses import dataclass
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Iterator, Mapping
-from sophios.ir.names import Names
-from sophios.ir.types import DerivedName, WorkflowGraph
+from pathlib import Path
+from collections.abc import Mapping
+from typing import IO, Final
+
 from sophios.wic_types import Json
+from . import auto_gen_header, backends, preflight, realtime
+from . import utils
+from .backends import Backend, Launch, RunRequest
 from .compute_request import ComputeRequest
-
-try:
-    import cwltool.main
-    import toil.cwl.cwltoil  # transitively imports cwltool
-except ImportError as exc:
-    print('Could not import cwltool.main and/or toil.cwl.cwltoil')
-    # (pwd is imported transitively in cwltool.provenance)
-    print(exc)
-    if exc.msg == "No module named 'pwd'":
-        print('Windows does not have a pwd module')
-        print('If you want to run on windows, you need to install')
-        print('Windows Subsystem for Linux')
-        print('See https://pypi.org/project/cwltool/#ms-windows-users')
-    else:
-        raise exc
-
-from . import auto_gen_header
-from . import utils  # , utils_graphs
+from .run_status import RunResult, RunState, RunStatus, StepStatus
 from .plugins import logging_filters
 
 
@@ -42,52 +35,6 @@ class _CompiledWorkflowForCompute:
     name: str
     cwl_workflow: Json
     cwl_job_inputs: Json
-
-
-def _sanitize_env_vars(env_vars: dict[str, str]) -> dict[str, str]:
-    """Drop keys that aren't valid Bash variable names and strip dangerous characters from values."""
-    sanitized = {}
-
-    # Regex for a valid Bash variable name
-    valid_key_pattern = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
-
-    # Characters to remove from values to prevent command injection
-    dangerous_chars_pattern = re.compile(r'[;`\'"$()|<>&!\n\r]')
-
-    for key, value in env_vars.items():
-        # Step 1: Validate the key.
-        if not valid_key_pattern.fullmatch(key):
-            print(
-                f"Warning: Invalid environment variable key '{key}' skipped.")
-            continue
-
-        # Step 2: Sanitize the value.
-        sanitized_value = dangerous_chars_pattern.sub('', value)
-        sanitized[key] = sanitized_value
-
-    return sanitized
-
-
-def create_safe_env(user_env: dict[str, str]) -> dict:
-    """Generate a sanitized environment dict without applying it"""
-    sanitized_user_env = _sanitize_env_vars(user_env)
-    return {**os.environ, **sanitized_user_env}
-
-
-@contextmanager
-def _temporary_env(user_env: dict[str, str]) -> Iterator[dict[str, str]]:
-    """Temporarily apply sanitized environment variables and restore them after use."""
-    sanitized_user_env = _sanitize_env_vars(user_env)
-    previous_values = {key: os.environ.get(key) for key in sanitized_user_env}
-    os.environ.update(sanitized_user_env)
-    try:
-        yield {**os.environ}
-    finally:
-        for key, previous_value in previous_values.items():
-            if previous_value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = previous_value
 
 
 def generate_run_script(cmdline: str) -> None:
@@ -106,185 +53,434 @@ def generate_run_script(cmdline: str) -> None:
     os.chmod('run.sh', st.st_mode | stat.S_IEXEC)
 
 
-def _runner_outdir(basepath: str, cwl_runner: str, date_time: str, outdir: str | None) -> str:
-    """Return the explicit or default output directory for a CWL runner."""
-    if outdir:
-        return str(Path(outdir).absolute().resolve())
-    runner_name = 'cwltool' if cwl_runner == 'cwltool' else 'toil'
-    return f'{basepath}/outdir_{runner_name}_{date_time}'
+#: What an exit status means on its own (shell conventions), said after it.
+_STATUS_MEANS: Final = {
+    126: 'its command could not be executed (not executable, or built for another platform)',
+    127: "its command was not found: the tool's baseCommand is not installed in its container image, "
+         'or on this machine for a tool with none',
+    137: 'it was killed, usually for running out of memory: give the container engine more memory '
+         '(Docker Desktop: Settings, Resources), or the step less input',
+}
 
 
-def build_cmd(workflow_name: str, basepath: str, cwl_runner: str,
-              container_cmd: str, passthrough_args: list[str], outdir: str | None = None) -> list[str]:
-    """Build the command to run the workflow in an environment
+def _failure_lines(failed: Mapping[str, int | str | None]) -> list[str]:
+    """One line per failed step: who, how it ended, what that means, where its messages are."""
+    if not failed:
+        return ['Failure! Above, the first ERROR line, or the error the runner itself raised, says why the run failed.']
+    lines = []
+    for job, ended in failed.items():
+        means: str | None
+        if isinstance(ended, int):
+            how, means = f'exited with status {ended}', _STATUS_MEANS.get(ended)
+        elif ended is not None:
+            how, means = f'was ended by {ended}', _STATUS_MEANS[137] if ended == 'SIGKILL' else None
+        else:
+            how, means = 'could not run, or its outputs could not be collected', None
+        lines.append(f"Failure! step '{job}' {how}" + (f', which means {means}' if means else '')
+                     + '. Its own messages are above, under its name.')
+    return lines
 
-    Args:
-        workflow_name (str): Name of the .cwl workflow file to be executed
-        basepath (str): The path at which the workflow to be executed
-        cwl_runner (str): The CWL runner used to execute the workflow
-        container_cmd (str): The container engine command
-    Returns:
-        cmd (list[str]): The command to run the workflow
+
+def log_path(request: RunRequest) -> Path:
+    """The file a run's two streams are written to, as they come: `<basepath>/run_<workflow>.log`."""
+    return request.basepath / f'run_{request.workflow_name}.log'
+
+
+#: How long a runner asked to stop has to stop the containers it started before it is killed.
+STOP_GRACE_SECONDS: Final = 30.0
+
+
+def _spawn(launch: Launch) -> sub.Popen[bytes]:
+    """Start `launch` with its streams piped, in its own session, where a terminal's Ctrl-C does not reach it:
+    Sophios stops it.
+
+    The program is this Python environment's own when it has one (`preflight.runner_program`). POSIX
+    only: no runner runs on Windows, and the pre-flight stops a run there first (`PLATFORM_LACKS_RUNNERS`).
     """
-    basepath = str(Path(basepath).absolute().resolve())
-    quiet = ['--quiet']
-    # NOTE: By default, cwltool will attempt to download schema files.
-    # $schemas:
-    #   - https://raw.githubusercontent.com/edamontology/edamontology/master/EDAM_dev.owl
-    # If you have connection issues (e.g. firewall, VPN, etc) then failure to download will
-    # not actually cause any problems immediately (except ~30s timeout).
-    # However, cwltool does not appear to cache these files, so it will attempt to download them repeatedly.
-    # These ~30 second timeouts will eventually add up to >6 hours, which will cause github to terminate the CI Action!
-    skip_schemas = ['--skip-schemas']
-    provenance = ['--provenance', f'{basepath}/provenance/{workflow_name}']
-    container_cmd_: list[str] = []
-    if container_cmd == 'docker':
-        container_cmd_ = []
-    elif container_cmd == 'singularity':
-        container_cmd_ = ['--singularity']
-    else:
-        container_cmd_ = ['--user-space-docker-cmd', container_cmd]
-    write_summary = ['--write-summary',
-                     f'{basepath}/output_{workflow_name}.json']
-    path_check = ['--relax-path-checks']
-    now = datetime.now()
-    date_time = now.strftime("%Y_%m_%d_%H.%M.%S")
-    runner_outdir = _runner_outdir(basepath, cwl_runner, date_time, outdir)
-    # NOTE: Using --leave-outputs to disable --outdir
-    # See https://github.com/dnanexus/dx-cwl/issues/20
-    # --outdir has one or more bugs which will cause workflows to fail!!!
-    # Use cwl-docker-extract to pull images
-    container_pull = ['--disable-pull']
-    script = 'cwltool_filterlog' if cwl_runner == 'cwltool' else cwl_runner
-    cmd = [script] + container_pull + quiet + provenance + \
-        container_cmd_ + write_summary + skip_schemas + path_check
-    if cwl_runner == 'cwltool':
-        cmd += ['--move-outputs', '--enable-ext',
-                '--outdir', runner_outdir]
-        cmd += passthrough_args
-        cmd += [f'{basepath}/{workflow_name}.cwl',
-                f'{basepath}/{workflow_name}_inputs.yml']
-    elif cwl_runner == 'toil-cwl-runner':
-        cmd = [script] + container_cmd_ + path_check
-        if 'slurm' not in passthrough_args:
-            cmd += provenance
-
-        cmd += ['--outdir', runner_outdir,
-                # NOTE: This is the equivalent of --cachedir
-                '--jobStore', f'file:{basepath}/jobStore_{workflow_name}',
-                '--clean', 'always',
-                '--noLinkImports',
-                '--disableProgress',  # disable the progress bar in the terminal, saves UI cycles
-                ]
-        cmd += passthrough_args
-        cmd += [f'{basepath}/{workflow_name}.cwl',
-                f'{basepath}/{workflow_name}_inputs.yml']
-    return cmd
+    if sys.platform == 'win32':
+        raise AssertionError('the pre-flight stops a run on Windows')
+    executable = preflight.runner_program(launch.argv[0])
+    return sub.Popen(launch.argv, executable=executable, env=dict(launch.env), cwd=launch.cwd,
+                     stdin=sub.DEVNULL, stdout=sub.PIPE, stderr=sub.PIPE, start_new_session=True)
 
 
-def _execute_inprocess(cmd: list[str], cwl_runner: str, workflow_name: str,
-                       run_args_dict: dict[str, str], user_env_vars: dict[str, str] | None,
-                       yaml_path: Path, cachedir: str,
-                       output_directories: Mapping[str, str] | None) -> int:
-    """Execute the workflow in-process via the cwltool or toil python API, handling errors."""
-    retval = 1
-    try:
-        with _temporary_env(user_env_vars or {}):
-            if cwl_runner == 'cwltool':
-                print('via cwltool.main.main python API')
-                retval = cwltool.main.main(cmd[1:])
-                print(
-                    f'Final output json metadata blob is in output_{workflow_name}.json')
-                if run_args_dict.get('copy_output_files', 'no') == 'yes':
-                    copy_output_files(workflow_name, output_directories=output_directories)
-            elif cwl_runner == 'toil-cwl-runner':
-                print('via toil.cwl.cwltoil.main python API')
-                retval = toil.cwl.cwltoil.main(cmd[1:])
-            else:
-                raise ValueError('unsupported cwl_runner')
+#: Runs beside every runner, in a session of its own, reading a pipe only Sophios writes to. When
+#: Sophios ends, however it ends (a signal, `kill -9`, a crash), the pipe closes with nothing written,
+#: or, if something Sophios forked still holds the pipe, the watcher's parent is no longer Sophios. Then
+#: the watcher stops the runner's session: SIGTERM, then SIGKILL if it has not stopped within the grace.
+#: A byte written first means the run is over, and the watcher leaves without touching anything.
+_WATCHER: Final = """
+import os, select, signal, sys, time
+group, grace, sophios = int(sys.argv[1]), float(sys.argv[2]), int(sys.argv[3])
+while os.getppid() == sophios:
+    if select.select([0], [], [], 0.5)[0]:
+        if os.read(0, 1):
+            sys.exit(0)
+        break
+try:
+    os.killpg(group, signal.SIGTERM)
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        time.sleep(0.1)
+        os.killpg(group, 0)
+    os.killpg(group, signal.SIGKILL)
+except (ProcessLookupError, PermissionError):
+    pass
+"""
 
-    except Exception as e:
-        retval = 1
-        print('Failed to execute', yaml_path)
-        print(
-            f'See error_{workflow_name}.txt for detailed technical information.')
+
+def _watch(runner: sub.Popen[bytes]) -> sub.Popen[bytes]:
+    """Start the watcher that stops `runner`'s session if this process ends before the run does."""
+    return sub.Popen([sys.executable, '-I', '-c', _WATCHER, str(runner.pid), str(STOP_GRACE_SECONDS), str(os.getpid())],
+                     stdin=sub.PIPE, stdout=sub.DEVNULL, stderr=sub.DEVNULL, start_new_session=True)
+
+
+@dataclass
+class _Streams:
+    """What the runner printed, as the run goes: echoed, written to the log, and its stdout kept."""
+
+    log: IO[str]
+    stdout: list[str] = field(default_factory=list)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    error: BaseException | None = None
+
+    def pump(self, stream: IO[bytes], name: str) -> None:
+        """Copy `stream` line by line to `sys.<name>` and to the log, until the runner closes it."""
+        try:
+            for raw in iter(stream.readline, b''):
+                line = raw.decode('utf-8', errors='replace')
+                echo = getattr(sys, name)
+                echo.write(line)
+                echo.flush()
+                with self.lock:
+                    self.log.write(line)
+                    self.log.flush()
+                    if name == 'stdout':
+                        self.stdout.append(line)
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            self.error = error
+            for _ in iter(stream.readline, b''):   # keep draining, so the runner never blocks on a full pipe
+                pass
+        finally:
+            stream.close()
+
+
+class RunHandle:  # pylint: disable=too-many-instance-attributes
+    """A run whose runner is a child of this process, for as long as this process lives.
+
+    Made started, by `start` (`Workflow.start()`), never by calling the class. There is
+    no detaching from it: when the interpreter exits with the run still going, the run
+    is cancelled. `wait` blocks until it ends; `status`, `logs` and `outputs` say where
+    it is without blocking; `cancel` stops it, as Ctrl-C during `wait` does. Every method
+    may be called from any thread.
+    """
+
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
+    def __init__(self, request: RunRequest, backend: Backend, launch: Launch,
+                 plans: tuple[realtime.Plan, ...], analysis: realtime.Command | None) -> None:
+        """Start the run; ``Workflow.start()`` does this, so a script never calls the class itself."""
+        self._request = request
+        self._backend = backend
+        self._launch = launch
+        self._plans = plans
+        self._analysis = analysis
+        self._log = log_path(request).absolute()
+        self._status = RunStatus(RunState.QUEUED)
+        self._process: sub.Popen[bytes] | None = None
+        self._watcher: sub.Popen[bytes] | None = None
+        self._streams: _Streams | None = None
+        self._readers: list[threading.Thread] = []
+        self._watching: AbstractContextManager[None] | None = None
+        self._settle_lock = threading.Lock()
+        self._start()
+
+    def _start(self) -> None:
+        """Start the runner, and the real-time analyses beside it.
+
+        A runner that cannot be started is a FAILED run, its traceback in `error_<workflow>.txt`.
+        """
+        print('Running ' + shlex.join(self._launch.argv), flush=True)
+        if self._analysis is not None:
+            self._watching = realtime.watching(self._plans, Path(self._request.cachedir), self._analysis,
+                                               env=self._launch.env)
+            self._watching.__enter__()  # pylint: disable=unnecessary-dunder-call
+        started_at = datetime.now()
+        try:
+            self._log.parent.mkdir(parents=True, exist_ok=True)
+            self._streams = _Streams(self._log.open('w', encoding='utf-8'))
+            self._process = _spawn(self._launch)
+            self._watcher = _watch(self._process)
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            reason = f'the runner could not be started: {error}'
+            if self._process is not None:   # started, with nothing to stop it should this process end
+                self._kill(self._process)
+                self._process.wait()
+                self._process = None
+                reason = f'the runner was stopped: the watcher that stops it if Sophios ends could not start: {error}'
+            self._unsupervised(error)
+            if self._streams is not None:
+                self._streams.log.close()
+            self._stop_watching(cancelled=True)
+            for line in _failure_lines({}):
+                print(line, file=sys.stderr)
+            self._status = RunStatus(RunState.FAILED, reason, started_at, datetime.now(), exit_code=1)
+            return
+        self._status = RunStatus(RunState.RUNNING, started_at=started_at)
+        atexit.register(self._end_with_interpreter)
+        try:
+            assert self._process.stdout is not None and self._process.stderr is not None
+            self._readers = [threading.Thread(target=self._streams.pump, args=(pipe, name), daemon=True)
+                             for pipe, name in ((self._process.stdout, 'stdout'), (self._process.stderr, 'stderr'))]
+            for reader in self._readers:
+                reader.start()
+        except KeyboardInterrupt:
+            self.cancel()
+            raise
+
+    def _end_with_interpreter(self) -> None:
+        """As the interpreter exits, cancel the run if its runner is still going, so nothing outlives it;
+        report on a runner that has exited, so its analyses end and its log is closed."""
+        if self._process is not None and self._process.poll() is None:
+            print('Python is exiting before the run ended, so it is cancelled.', file=sys.stderr)
+        self.cancel()
+
+    def _unsupervised(self, error: BaseException) -> None:
+        """Say that Sophios could not start or follow the runner; keep the traceback in `error_<workflow>.txt`."""
+        name = self._request.workflow_name
+        print('Failed to execute', self._request.basepath / name)
+        print(error)
+        print(f'See error_{name}.txt for detailed technical information.')
         # Do not display a nasty stack trace to the user; hide it in a file.
-        with open(f'error_{workflow_name}.txt', mode='w', encoding='utf-8') as f:
-            traceback.print_exception(type(e), value=e, tb=None, file=f)
-        if not cachedir:  # if running on CI
-            print(e)
-    return retval
+        with open(f'error_{name}.txt', mode='w', encoding='utf-8') as f:
+            traceback.print_exception(error, file=f)
+
+    def _stop_watching(self, *, cancelled: bool) -> None:
+        """End the real-time analyses: with their final runs, or at once when the run was cancelled."""
+        watching, self._watching = self._watching, None
+        if watching is None:
+            return
+        if cancelled:
+            interrupt = KeyboardInterrupt()
+            watching.__exit__(KeyboardInterrupt, interrupt, None)
+        else:
+            watching.__exit__(None, None, None)
+
+    def _join_readers(self, deadline: float | None = None) -> None:
+        """Wait until the runner's streams are read to their end.
+
+        Raises:
+            TimeoutError: `deadline` has passed with the runner exited and its output still being read.
+        """
+        try:
+            for reader in self._readers:
+                while reader.is_alive():
+                    reader.join(_slice(deadline))
+        except TimeoutError:
+            raise TimeoutError('the runner has exited and its output is still being read; wait again') from None
+
+    def wait(self, timeout: float | None = None) -> RunResult:
+        """Block until the run ends, and say how it ended.
+
+        A run that FAILED or was CANCELLED is returned as one: nothing is raised for it.
+
+        Args:
+            timeout: How many seconds to wait at most; None waits as long as the run takes.
+
+        Raises:
+            TimeoutError: The run had not ended within `timeout` seconds. It goes on.
+            KeyboardInterrupt: On Ctrl-C, after the runner was stopped (`cancel`).
+        """
+        deadline = None if timeout is None else time.monotonic() + timeout
+        try:
+            if self._process is not None:
+                while self._process.poll() is None:
+                    try:
+                        self._process.wait(_slice(deadline))
+                    except sub.TimeoutExpired:
+                        pass
+                self._join_readers(deadline)
+        except KeyboardInterrupt:
+            self.cancel()
+            raise
+        status = self._settle()
+        assert status.exit_code is not None
+        return RunResult(status.state, status.outputs, self._launch.cwd / self._launch.outdir, self._log,
+                         status.exit_code)
+
+    def status(self) -> RunStatus:
+        """Where the run is now, without blocking. A runner that has exited, its output read to the end,
+        is reported on, as `wait` does; while something it started still holds its output, it is RUNNING."""
+        if self._process is not None and self._process.poll() is not None \
+                and not any(reader.is_alive() for reader in self._readers):
+            return self._settle()
+        return self._status
+
+    def logs(self) -> str:
+        """Everything the runner has printed so far, both streams as they came: the run log's text."""
+        try:
+            return self._log.read_text(encoding='utf-8', errors='replace')
+        except FileNotFoundError:
+            return ''
+
+    def outputs(self) -> Json | None:
+        """The workflow's output object, once the run COMPLETED; else None."""
+        return self.status().outputs
+
+    def cancel(self) -> None:
+        """Stop the runner and the analyses beside it, and mark the run CANCELLED.
+
+        A runner that has already exited is reported on as it ended, COMPLETED or FAILED, as `wait` does.
+        On POSIX the runner is sent SIGTERM, on which cwltool stops the containers it started,
+        and killed with everything it started when it has not exited within `STOP_GRACE_SECONDS`.
+        """
+        # Held throughout, so a `wait` in another thread reports the run CANCELLED and not FAILED.
+        with self._settle_lock:
+            process = self._process
+            if process is None or self._status.state not in (RunState.QUEUED, RunState.RUNNING):
+                return
+            running = process.poll() is None
+            if running:
+                try:
+                    process.send_signal(signal.SIGTERM)
+                    process.wait(STOP_GRACE_SECONDS)
+                except (sub.TimeoutExpired, KeyboardInterrupt):
+                    self._kill(process)
+                    process.wait()
+            # Whatever the runner left in its session, which would also keep its streams open.
+            self._kill(process)
+            self._release_watcher()
+            self._join_readers()
+            if not running:
+                self._settle_locked()
+                return
+            if self._streams is not None:
+                self._streams.log.close()
+            self._stop_watching(cancelled=True)
+            atexit.unregister(self._end_with_interpreter)
+            print("Interrupted; the runner's processes were terminated.", file=sys.stderr)
+            self._status = RunStatus(RunState.CANCELLED, 'cancelled: the runner was stopped',
+                                     self._status.started_at, datetime.now(), exit_code=process.returncode)
+
+    def _release_watcher(self) -> None:
+        """Tell the watcher the run is over, so it leaves the runner's session alone."""
+        watcher, self._watcher = self._watcher, None
+        if watcher is None:
+            return
+        assert watcher.stdin is not None
+        try:
+            watcher.stdin.write(b'.')
+            watcher.stdin.close()
+        except OSError:
+            pass   # it has gone already
+        watcher.wait()
+
+    @staticmethod
+    def _kill(process: sub.Popen[bytes]) -> None:
+        """Kill the runner and every process left in its session."""
+        if sys.platform == 'win32':
+            raise AssertionError('the pre-flight stops a run on Windows')
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass   # nothing is left in it
+
+    def _settle(self) -> RunStatus:
+        """Report on a runner that has exited, once: its outcome, the analyses' final runs, the summary lines."""
+        with self._settle_lock:
+            return self._settle_locked()
+
+    def _settle_locked(self) -> RunStatus:
+        """`_settle`, with `_settle_lock` held."""
+        if self._status.state not in (RunState.QUEUED, RunState.RUNNING) or self._process is None:
+            return self._status
+        assert self._streams is not None
+        exit_code = self._process.returncode
+        self._release_watcher()
+        self._streams.log.close()
+        outcome = self._backend.outcome(self._request, exit_code, ''.join(self._streams.stdout), self._log)
+        if outcome.summary is not None:
+            print(f'Final output json metadata blob is in output_{self._request.workflow_name}.json')
+        self._stop_watching(cancelled=False)
+        atexit.unregister(self._end_with_interpreter)
+        if self._streams.error is not None:
+            self._unsupervised(self._streams.error)
+        steps = tuple(StepStatus(name, RunState.FAILED, ended if isinstance(ended, int) else None,
+                                 ended if isinstance(ended, str) else None)
+                      for name, ended in outcome.failed.items())
+        if exit_code == 0:
+            print(f'Success! Runner outputs are under {self._launch.outdir}/')
+            self._status = RunStatus(RunState.COMPLETED, None, self._status.started_at, datetime.now(),
+                                     steps, outcome.outputs, exit_code=0)
+        else:
+            for line in _failure_lines(outcome.failed):
+                print(line, file=sys.stderr)
+            self._status = RunStatus(RunState.FAILED, f'the runner exited with status {exit_code}',
+                                     self._status.started_at, datetime.now(), steps, exit_code=exit_code)
+        return self._status
 
 
-def _report_outcome(retval: int | None, cmd: list[str], basepath: str) -> None:
-    """Print the success/failure summary message after execution."""
-    if retval == 0:
-        output_location = cmd[cmd.index('--outdir') + 1] if '--outdir' in cmd else basepath
-        print(f'Success! Runner outputs are under {output_location}/')
-    else:
-        print('Failure! Please scroll up and find the FIRST error message.')
-        print('(You may have to scroll up A LOT.)')
+def _slice(deadline: float | None) -> float:
+    """How long to block before looking again: a fifth of a second, or what is left before `deadline`.
+
+    Raises:
+        TimeoutError: `deadline` has passed.
+    """
+    if deadline is None:
+        return 0.2
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise TimeoutError('the run has not ended yet; it goes on')
+    return min(0.2, left)
 
 
-def _cleanup_cachedir(cachedir: str) -> None:
-    """Remove the annoying cachedir* directories. NOTE: cachedir must not be absolute, or this deletes the drive."""
-    cachedir_path = str(cachedir)
-    if not Path(cachedir_path).is_absolute():
-        for d in glob.glob(cachedir_path + '*'):
-            if not d == cachedir_path:
-                # Be VERY careful when programmatically deleting directories!
-                shutil.rmtree(d)
+def _realtime(request: RunRequest, backend: Backend) -> tuple[RunRequest, realtime.Command | None]:
+    """`request` ready to run its real-time analyses, and how each is run; or, when it cannot, a line saying
+    why and no analyses. With analyses and no cachedir, cwltool caches in `cachedir/`."""
+    if not request.realtime_plans:
+        return request, None
+    if request.generate_run_script:
+        print('Real-time analysis runs only with --run_local; run.sh runs the workflow without it.',
+              file=sys.stderr)
+        return replace(request, realtime_plans=()), None
+    command = backend.realtime_command(request)
+    if isinstance(command, str):
+        print(command, file=sys.stderr)
+        return replace(request, realtime_plans=()), None
+    if not request.cachedir:
+        request = replace(request, cachedir='cachedir')
+        print(f"Real-time analysis watches the runner's cache, so cwltool caches in {request.cachedir}/")
+    return request, command
 
 
-def run_local(run_args_dict: dict[str, str], use_subprocess: bool,
-              passthrough_args: list[str], workflow_name: str,
-              basepath: str, user_env_vars: dict[str, str] | None = None,
-              output_directories: Mapping[str, str] | None = None) -> int | None:
-    """This function runs the compiled workflow locally.
+def start(request: RunRequest) -> RunHandle:
+    """Start the run `request` describes, and return its handle once the runner has started.
 
-    Args:
-        run_args_dict (dict[str,str]): The command line arguments dict for run_local
-        use_subprocess (bool): When using cwltool, determines whether to use subprocess.run(...)
-        or use the cwltool python api.
-        basepath (str): The path at which the workflow to be executed
-        user_env_vars (dict[str, str] | None): User supplied environment variables.
-        output_directories (Mapping[str, str] | None): Passed to `copy_output_files`.
+    Raises:
+        ValueError: No backend runs the request's target with its runner, or it asks for a run script.
+    """
+    if request.generate_run_script:
+        raise ValueError('a run script is written by run(), not started')
+    backend = backends.backend(request.target, request.runner)
+    request, analysis = _realtime(request, backend)
+    return RunHandle(request, backend, backend.launch(request), request.realtime_plans, analysis)
+
+
+def run(request: RunRequest) -> int:
+    """Run the workflow `request` describes and wait for it, or write run.sh for it.
 
     Returns:
-        retval (int | None): The return value indicating if run succeeded (0) or not
+        int: 0 on success, else the runner's exit code; 1 when the runner could not be started.
+
+    Raises:
+        KeyboardInterrupt: On Ctrl-C, after the runner was stopped.
+        ValueError: No backend runs the request's target with its runner.
     """
-    yaml_path = Path(basepath) / workflow_name
-    cwl_runner = run_args_dict['cwl_runner']
-    # 'cachedir' is the default value
-    cachedir = run_args_dict.get('cachedir', 'cachedir')
-    container_engine = run_args_dict['container_engine']
-
-    # build the runner command
-    cmd = build_cmd(workflow_name, basepath, cwl_runner,
-                    container_engine, passthrough_args, run_args_dict.get('outdir') or None)
-    cmdline = ' '.join(cmd)
-    exec_env = create_safe_env(user_env_vars or {})
-
-    if run_args_dict.get('generate_run_script', 'no') == 'yes':
-        generate_run_script(cmdline)
+    backend = backends.backend(request.target, request.runner)
+    if request.generate_run_script:
+        _realtime(request, backend)
+        generate_run_script(shlex.join(backend.launch(request).argv))
         return 0  # Do not actually run
-
-    print('Running ' + cmdline)
-    if use_subprocess:
-        # To run in parallel (i.e. pytest ... --workers 8 ...), we need to
-        # use separate processes. Otherwise:
-        # "signal only works in main thread or with __pypy__.thread.enable_signals()"
-        proc = sub.run(cmd, check=False, env=exec_env)
-        return proc.returncode  # Skip copying files to outdir/ for CI
-
-    retval = _execute_inprocess(cmd, cwl_runner, workflow_name, run_args_dict,
-                                user_env_vars, yaml_path, cachedir, output_directories)
-
-    _report_outcome(retval, cmd, basepath)
-
-    _cleanup_cachedir(cachedir)
-
-    return retval
+    return start(request).wait().exit_code
 
 
 def run_compute(workflow_name: str, workflow: Json, workflow_inputs: Json,
@@ -319,91 +515,20 @@ def run_compute(workflow_name: str, workflow: Json, workflow_inputs: Json,
     return submission.exit_code
 
 
-def output_directories(graph: WorkflowGraph) -> dict[str, str]:
-    """Where `copy_output_files` puts each of `graph`'s outputs, under `outdir/`.
-
-    A derived output sits below the root workflow's name in one
-    `step <i> <name>` directory per step it was exposed through, outermost
-    first, numbered as the document numbers them; an authored output is its
-    own directory. Keyed by the name the emitted document gives the output,
-    which is the key the runner's provenance JSON uses.
-
-    Args:
-        graph (WorkflowGraph): The compiled root graph.
-
-    Returns:
-        dict[str, str]: Each root output's directory, relative to `outdir/`.
-    """
-    names = Names.of(graph)
-    directories: dict[str, str] = {}
-    for port in graph.workflow_outputs:
-        name, parts = port.name, []
-        while isinstance(name, DerivedName):
-            parts.append(f'step {names.position(name.step)} {name.step.name}')
-            name = name.port
-        directories[names.port(port.name)] = '/'.join((graph.name, *parts, name)) if parts else name
-    return directories
-
-
-def copy_output_files(yaml_stem: str, basepath: str = '',
-                      output_directories: Mapping[str, str] | None = None) -> None:
-    """Copies output files from the cachedir to outdir/
-
-    Args:
-        yaml_stem (str): The --yaml filename (without .extension)
-        output_directories (Mapping[str, str] | None): Each root output's directory under
-            `outdir/`, as `output_directories()` computes it. An output it does not name is
-            copied to `outdir/<its name>`.
-    """
-    output_json_file_prov = Path(
-        f'provenance/{yaml_stem}/workflow/primary-output.json')
-    # NOTE: The contents of --write-summary is
-    # slightly different than provenance/{yaml_stem}/workflow/primary-output.json!
-    # They are NOT the same file!
-    if output_json_file_prov.exists():
-        with open(output_json_file_prov, mode='r', encoding='utf-8') as f:
-            output_json = json.loads(f.read())
-        directories = output_directories or {}
-        files = [file for name, obj in output_json.items()
-                 for file in utils.parse_provenance_output_files(obj, directories.get(name, name))]
-        dests: set[str] = set()
-        for location, parentdirs, basename in files:
-            Path('outdir/' + parentdirs).mkdir(parents=True, exist_ok=True)
-            source = f'provenance/{yaml_stem}/workflow/' + location
-            # NOTE: Even though we are using subdirectories (not just a single output directory),
-            # there is still the possibility of filename collisions, i.e. when scattering.
-            # For now, let's use a similar trick as cwltool of append _2, _3 etc.
-            # except do it BEFORE the extension.
-            # This could still cause problems with slicing, i.e. if you scatter across
-            # indices 11-20 first, then 1-10 second, the output file indices will get switched.
-            if basepath:
-                dest = basepath + '/' + 'outdir/' + parentdirs + '/' + basename
-            else:
-                dest = 'outdir/' + parentdirs + '/' + basename
-            if dest in dests:
-                idx = 2
-                while Path(dest).exists():
-                    stem = Path(basename).stem
-                    suffix = Path(basename).suffix
-                    dest = 'outdir/' + parentdirs + \
-                        '/' + stem + f'_{idx}' + suffix
-                    idx += 1
-            dests.add(dest)
-            cmd = ['cp', source, dest]
-            sub.run(cmd, check=True)
-
-
 def cwltool_main() -> int:
-    """Another entrypoint for filtering regular logged output"""
+    """Another entrypoint for filtering regular logged output.
+
+    `cwltool.main.run`, not `main`: it stops the containers the run started when the run is sent SIGTERM.
+    """
+    import cwltool.main  # pylint: disable=import-outside-toplevel
     logging_filters()
-    cmd = sys.argv
-    retval: int = cwltool.main.main(cmd[1:])
+    retval: int = cwltool.main.run(sys.argv[1:])
     return retval
 
 
 def cwltool_main_pf() -> int:
     """Another entrypoint for filtering partial failures logged output"""
+    import cwltool.main  # pylint: disable=import-outside-toplevel
     logging_filters(True)
-    cmd = sys.argv
-    retval: int = cwltool.main.main(cmd[1:])
+    retval: int = cwltool.main.run(sys.argv[1:])
     return retval

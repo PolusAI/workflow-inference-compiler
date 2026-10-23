@@ -1,51 +1,44 @@
 """The typed compiler boundary over the phase pipeline."""
+import re
+import sys
 from copy import deepcopy
-from dataclasses import replace
 from pathlib import Path
 from typing import Final
 
-import graphviz
-import networkx as nx
+import yaml
 
-from . import utils_graphs
+from . import utils_cwl
+
 from .ir.complete import complete
 from .ir.artifacts import CompilationArtifact, CompilationResult
 from .ir.emit import emit, emit_job_inputs, surface
 from .ir.infer import InferencePolicy, InsertionCatalog, infer
 from .ir.link import link
+from .ir.namespaces import declare_namespaces
 from .ir.frontdoor import SourceBundle
 from .ir.pipeline import front_end
-from .ir.resolve import RegistrySnapshot
-from .ir.names import Names
-from .ir.types import AuthoredName, Binding, PortName, WorkflowGraph
+from .ir.realtime import extract
+from .ir.resolve import RegistrySnapshot, ToolDefinition
+from .ir.names import NAMESPACE_SEPARATOR, Names
+from .ir.types import RegistryKey, StepNode, WorkflowGraph
 from .lang import versions
-from .lang.diagnostics import SophiosError
-from .lang.nodes import InlineLiteral
-from .lang.spans import SourceSpan
+from .lang.diagnostics import Locator, SophiosError
+from .lang.nodes import CwlRecord, UnresolvedName
+from .lang.parser import Grammar
 from .lang.error_codes import SophiosErrorCode
-from .wic_types import (
-    CompilerOptions,
-    GraphData,
-    GraphReps,
-    GraphSettings,
-    YamlTagPaths,
-)
+from .wic_types import CompilerOptions, Cwl
 
 
 # pylint: disable-next=too-many-locals
 def compile_source(bundle: SourceBundle,
                    compiler_options: CompilerOptions,
-                   graph_settings: GraphSettings,
-                   yaml_tag_paths: YamlTagPaths,
                    *,
-                   relative_run_path: bool,
-                   testing: bool,
-                   graph_target: GraphReps | None = None) -> CompilationResult:
+                   testing: bool) -> CompilationResult:
     """Compile a parsed root workflow and every workflow it reaches.
 
     The one door. A bundle read from files carries the spans of the text its
     author wrote, so a diagnostic names a position the reader can open; one
-    the Python API built carries none, and its diagnostics name a `Locator`.
+    the Python API built carries the span of the Python line that made each node.
     """
     if not testing:
         print(' starting compilation of', bundle.name)
@@ -58,9 +51,12 @@ def compile_source(bundle: SourceBundle,
     if not front.graph.steps:
         raise SophiosError.error(SophiosErrorCode.SUBWORKFLOW_INVALID,
                                  'workflows must define at least one step')
-    _check_unresolved_names(front.graph, compiler_options['allow_raw_cwl'])
+    authored, realtime = extract(front.graph)
+    _check_unresolved_names(authored, compiler_options['allow_raw_cwl'])
+    for note in dict.fromkeys(_authored_spelling_notes(authored)):
+        print(note, file=sys.stderr)
 
-    prepared = complete(_bind_subinterpreter_locations(front.graph, yaml_tag_paths))
+    prepared = complete(authored)
     linked = link(prepared)
     if linked.graph is None:
         raise SophiosError(linked.diagnostics)
@@ -70,49 +66,85 @@ def compile_source(bundle: SourceBundle,
         renaming_conventions=tuple(compiler_options.get('renaming_conventions', ())),
         insert_steps_automatically=compiler_options['insert_steps_automatically'],
         format_rules=tuple(compiler_options.get('inference_rules', {}).items()),
+        strict=compiler_options['inference_strict'],
     )
     inferred = infer(linked.graph, policy, InsertionCatalog.from_registry(bundle.registry))
     if inferred.graph is None:
         raise SophiosError(inferred.diagnostics)
-    graph = complete(inferred.graph)
+    graph = declare_namespaces(complete(inferred.graph), bundle.registry)
     names = Names.of(graph)
-    graph_reps = _project_graph(graph, names, graph_settings, graph_target)
-    artifact = _artifact_tree(graph, names, bundle.registry, graph_settings, graph_reps,
-                              relative_run_path=relative_run_path,
+    for note in dict.fromkeys(_when_notes(graph, names)):
+        print(note, file=sys.stderr)
+    artifact = _artifact_tree(graph, graph.name, names, _Descriptions(bundle.registry),
                               partial_failure=compiler_options['partial_failure_enable'])
     if not testing:
         print('finishing compilation of', bundle.name)
-    return CompilationResult(graph, artifact)
+    return CompilationResult(graph, artifact, inferred.diagnostics, realtime)
 
 
-#: The runtime adapter's own declared inputs, whose values come from the
-#: invocation rather than from the document.
-_LOCATION_SPAN: Final = SourceSpan('<subinterpreter locations>', 1, 1, 1, 1)
+#: `inputs.name` and `inputs["name"]` inside a `when:` expression.
+_EXPRESSION_INPUT: Final = re.compile(r'inputs(?:\.([A-Za-z_]\w*)|\[\s*["\']([^"\']+)["\']\s*\])')
 
 
-def _bind_subinterpreter_locations(graph: WorkflowGraph,
-                                   yaml_tag_paths: YamlTagPaths) -> WorkflowGraph:
-    """Bind the three locations the runtime adapter declares as inputs, leaving any existing binding alone."""
-    values: dict[PortName, str] = {
-        AuthoredName('root_workflow_yml_path'): str(Path(yaml_tag_paths['yaml']).parent.absolute()),
-        AuthoredName('cachedir_path'): str(Path(yaml_tag_paths['cachedir']).absolute()),
-        AuthoredName('homedir'): yaml_tag_paths['homedir'],
-    }
-    steps = []
-    for step in graph.steps:
-        if Path(step.id.name).stem != 'cwl_subinterpreter':
-            steps.append(step)
+def _expression_inputs(expression: object) -> tuple[str, ...]:
+    """Every step input a CWL expression reads, in order of first mention."""
+    if not isinstance(expression, str):
+        return ()
+    return tuple(dict.fromkeys(a or b for a, b in _EXPRESSION_INPUT.findall(expression)))
+
+
+def _authored_spelling_notes(graph: WorkflowGraph) -> list[str]:
+    """One plain line for each `outputSource` that names a step by an id more than one step
+    has: it means the first.
+
+    Such a spelling still compiles, so nothing here fails the compile; each line says what
+    to write instead. A document the Python API built names the script that built it.
+    """
+    notes: list[str] = []
+    spans = [step.span for step in graph.steps if step.span is not None]
+    if not spans:
+        return [note for child in graph.children for note in _authored_spelling_notes(child)]
+    file = spans[0].file
+    sources = {port.name: port.output_source for port in graph.workflow_outputs}
+    ids = [step.id.name for step in graph.steps]
+    for name, source in graph.output_mapping:
+        written = str(sources[name]).rsplit('/', 1)[0]
+        if Grammar.WIC_STEP_KEY.match(written) or ids.count(source.step.name) == 1:
             continue
-        already = {binding.sink.port for binding in step.bindings}
-        supplied = tuple(
-            Binding(port.id, InlineLiteral(values[port.id.port], _LOCATION_SPAN))
-            for port in step.inputs
-            if port.id.port in values and port.id.port not in already)
-        steps.append(replace(step, bindings=step.bindings + supplied))
-    return replace(
-        graph, steps=tuple(steps),
-        children=tuple(_bind_subinterpreter_locations(child, yaml_tag_paths)
-                       for child in graph.children))
+        position = [step.id for step in graph.steps].index(source.step) + 1
+        notes.append(f"Warning! {file}: output {str(name)!r} has outputSource '{sources[name]}', but "
+                     f'{ids.count(source.step.name)} steps have the id {written!r} and it means the first. '
+                     f"Write '({position}, {source.step.name})/{source.port}' to say so.")
+    for child in graph.children:
+        notes.extend(_authored_spelling_notes(child))
+    return notes
+
+
+def _when_notes(graph: WorkflowGraph, names: Names) -> list[str]:
+    """One plain line for each `when:` that reads an input its step does not declare: CWL
+    evaluates it as null.
+
+    Read from the finished graph, where a call declares every name its child exposes, as
+    `names` spells it. A dotted read of a made name (`inputs.touch~filename`) reads
+    `inputs.touch`; the line names the bracket form.
+    """
+    notes: list[str] = []
+    spans = [step.span for step in graph.steps if step.span is not None]
+    if not spans:
+        return [note for child in graph.children for note in _when_notes(child, names)]
+    file = spans[0].file
+    for step in graph.steps:
+        declared = [names.port(port.id.port) for port in step.inputs]
+        for read in _expression_inputs(dict(step.interpreted).get('when')):
+            if read not in declared:
+                made = [name for name in declared if name.startswith(f'{read}{NAMESPACE_SEPARATOR}')]
+                hint = f" Write {' or '.join(f'inputs[{name!r}]' for name in made)} to read one it declares." \
+                    if made else ''
+                notes.append(f"Warning! {file}: step {step.id.name!r} reads inputs.{read} in `when:`, which "
+                             f'its process does not declare; CWL evaluates it as null.{hint}')
+    for child in graph.children:
+        notes.extend(_when_notes(child, names))
+    return notes
 
 
 def _check_unresolved_names(graph: WorkflowGraph, allow_raw_cwl: bool,
@@ -125,96 +157,89 @@ def _check_unresolved_names(graph: WorkflowGraph, allow_raw_cwl: bool,
     for step in graph.steps:
         for binding in step.bindings:
             value = binding.value
-            if value.__class__.__name__ != 'UnresolvedName':
-                continue
-            name = getattr(value, 'name')
-            if name not in declared and not allow_raw_cwl:
+            for reference in value.sources if isinstance(value, CwlRecord) else (value,):
+                if not isinstance(reference, UnresolvedName) or reference.name in declared or allow_raw_cwl:
+                    continue
+                name = reference.name
                 raise SophiosError.error(
                     SophiosErrorCode.UNRESOLVED_INPUT,
-                    f'Warning! Did you forget to use !ii before {name} in {graph.name}.wic?',
-                    'If you want to compile the workflow anyway, use --allow_raw_cwl')
+                    f'Did you forget to use !ii before {name}?',
+                    span=getattr(value, 'span', None),
+                    locator=Locator(step=step.id.name, index=step.id.index, port=names.port(binding.sink.port)))
     for child in graph.children:
         _check_unresolved_names(child, allow_raw_cwl, names)
 
 
-def _artifact_tree(graph: WorkflowGraph, names: Names, registry: RegistrySnapshot,
-                   graph_settings: GraphSettings,
-                   graph_reps: GraphReps | None = None,
-                   *, relative_run_path: bool = True,
-                   partial_failure: bool = False) -> CompilationArtifact:
-    """One artifact per emitted document, each surfaced exactly once."""
-    document = surface(graph, names, relative_run_path=relative_run_path,
-                       partial_failure=partial_failure)
+def _artifact_tree(graph: WorkflowGraph, name: str, names: Names, descriptions: '_Descriptions', *,
+                   partial_failure: bool) -> CompilationArtifact:
+    """One artifact per emitted document, each surfaced exactly once, a child
+    named as the `run:` its parent emits, so the file written is the one it runs."""
+    document = surface(graph, names, partial_failure=partial_failure)
     children: list[CompilationArtifact] = []
     for step in document.steps:
         assert step.run is not None
         child = step.run.child
         if child is not None:
-            child_reps = _project_graph(child, names, graph_settings)
-            children.append(_artifact_tree(child, names, registry, graph_settings, child_reps,
-                                           relative_run_path=relative_run_path,
+            children.append(_artifact_tree(child, names.file(step.id), names, descriptions,
                                            partial_failure=partial_failure))
             continue
-        key = step.run.process_id
-        definition = registry.tool(key)
-        if definition is None:
-            raise SophiosError.error(
-                SophiosErrorCode.SUBWORKFLOW_INVALID,
-                f'process {key.namespace}/{key.name} disappeared after resolution')
-        leaf_graph = utils_graphs.get_graph_reps(key.name)
+        tool = descriptions.tool(step)
+        # Named by the `run:` the parent emits, so the file written is the one it runs.
         children.append(CompilationArtifact(
-            (names.step(step.id),), Path(definition.run_path).stem,
-            definition.run_path, deepcopy(definition.cwl), {}, None,
-            leaf_graph,
+            (names.step(step.id),), names.file(step.id), tool.run_path, descriptions.of(step, tool), {}, None,
         ))
 
-    reps = graph_reps or _project_graph(graph, names, graph_settings)
     return CompilationArtifact(
         tuple(names.step(part) for part in graph.namespace.parts),
-        graph.name,
-        f'{graph.name}.cwl',
+        name,
+        f'{name}.cwl',
         emit(document, names),
         emit_job_inputs(document, names),
         graph,
-        reps,
         tuple(children),
     )
 
 
-def _project_graph(graph: WorkflowGraph, names: Names, settings: GraphSettings,
-                   target: GraphReps | None = None) -> GraphReps:
-    reps = target or GraphReps(graphviz.Digraph(name=f'cluster_{graph.name}'),
-                               nx.DiGraph(), GraphData(graph.name))
-    reps.networkx.clear()
-    reps.graphdata.name = graph.name
-    reps.graphdata.nodes = []
-    reps.graphdata.edges = []
-    reps.graphdata.subgraphs = []
-    for step in graph.steps:
+class _Descriptions:
+    """The tool each step runs, as its artifact carries it, for one compile.
+
+    As read, unless it refers to a file by a path relative to where it was
+    written: then packed by cwltool there, once however many steps run it, so
+    it means the same wherever it is written. Inference and linking have
+    already read every tool as written.
+    """
+
+    def __init__(self, registry: RegistrySnapshot) -> None:
+        self._registry = registry
+        self._packed: dict[RegistryKey, Cwl] = {}
+
+    def tool(self, step: StepNode) -> ToolDefinition:
+        """The registry's definition of the tool `step` runs."""
         assert step.run is not None
-        name = names.qualified(step.id)
-        label = names.step(step.id) if settings['graph_label_stepname'] else step.id.name
-        attrs = {'label': label, 'shape': 'box', 'style': 'rounded, filled',
-                 'fillcolor': 'lightblue'}
-        reps.graphviz.node(name, **attrs)
-        reps.networkx.add_node(name)
-        reps.graphdata.nodes.append((name, attrs))
-    for edge in graph.edges:
-        source = names.qualified(edge.source.step)
-        sink = names.qualified(edge.sink.step)
-        edge_attrs: dict[str, str] = {}
-        if settings['graph_label_edges']:
-            edge_attrs['label'] = names.port(edge.source.port)
-        if not reps.networkx.has_edge(source, sink) or settings['graph_label_edges']:
-            if source != sink:
-                reps.graphviz.edge(source, sink, **edge_attrs)
-            reps.networkx.add_edge(source, sink)
-            reps.graphdata.edges.append((source, sink, edge_attrs))
-    for child in graph.children:
-        child_reps = _project_graph(child, names, settings)
-        reps.graphdata.subgraphs.append(child_reps.graphdata)
-        reps.networkx.add_nodes_from(child_reps.networkx.nodes)
-        reps.networkx.add_edges_from(child_reps.networkx.edges)
-        if len(graph.namespace.parts) < settings['graph_inline_depth']:
-            reps.graphviz.subgraph(child_reps.graphviz)
-    return reps
+        key = step.run.process_id
+        definition = self._registry.tool(key)
+        if definition is None:
+            raise SophiosError.error(
+                SophiosErrorCode.SUBWORKFLOW_INVALID,
+                f'process {key.namespace}/{key.name} disappeared after resolution')
+        return definition
+
+    def of(self, step: StepNode, tool: ToolDefinition) -> Cwl:
+        """The description written for `step`, which runs `tool`.
+
+        Raises:
+            SophiosError: `wic013` at the step, with cwltool's message, when cwltool cannot pack the tool.
+        """
+        if not utils_cwl.has_relative_reference(tool.cwl):
+            return deepcopy(tool.cwl)
+        if tool.key not in self._packed:
+            try:
+                self._packed[tool.key] = utils_cwl.packed(yaml.safe_dump(tool.cwl, sort_keys=False),
+                                                          Path(tool.run_path).absolute().as_uri())
+            except utils_cwl.PackError as error:
+                raise SophiosError.error(
+                    SophiosErrorCode.SUBWORKFLOW_INVALID,
+                    f'step {step.id.name!r} runs {tool.run_path}, which refers to files relative to itself, '
+                    f'and cwltool cannot read them:\n{error}',
+                    span=step.span, locator=Locator(step=step.id.name, index=step.id.index)) from error
+        return deepcopy(self._packed[tool.key])
