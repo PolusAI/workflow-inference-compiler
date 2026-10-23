@@ -2,8 +2,10 @@
 
 # pylint: disable=missing-function-docstring
 
+from collections.abc import Callable
 import json
 from pathlib import Path
+import re
 from typing import Any, cast
 
 import pytest
@@ -34,7 +36,9 @@ from sophios.nf_types import (
     NfWorkflowOutputConnection,
 )
 
-from .testkit import command, output_port, template
+from .test_conditions import _when_workflow
+from .test_reader_symmetry import BUILDERS
+from .testkit import command, flag_workflow, output_port, template
 
 
 @pytest.mark.fast
@@ -164,22 +168,6 @@ def test_rejects_qualifiers_without_an_approved_lowering(qualifier: str) -> None
 
 
 @pytest.mark.fast
-def test_flag_token_survives_hydration() -> None:
-    process = NfProcess(
-        "SORT",
-        [NfPort("reverse", "val")],
-        [output_port("result", "sorted.txt")],
-        NfCommand((NfTemplate((NfLiteral("sort"),)), NfFlag("reverse", "-r"))),
-    )
-    assert NfProcess.from_dict(process.to_dict()) == process
-    assert process.command.tokens[1].to_dict() == {
-        "kind": "flag",
-        "name": "reverse",
-        "prefix": "-r",
-    }
-
-
-@pytest.mark.fast
 @pytest.mark.parametrize("prefix", ["", "   "])
 def test_flag_requires_a_non_empty_prefix(prefix: str) -> None:
     with pytest.raises(ValueError, match="prefix"):
@@ -201,15 +189,6 @@ def test_public_module_exports_flag_and_command_token() -> None:
 
 
 @pytest.mark.fast
-def test_flag_must_reference_a_declared_value_input() -> None:
-    flag_command = NfCommand((NfTemplate((NfLiteral("sort"),)), NfFlag("reverse", "-r")))
-    with pytest.raises(ValueError, match="unknown inputs"):
-        NfProcess("SORT", [], [], flag_command)
-    with pytest.raises(ValueError, match="flag.*val"):
-        NfProcess("SORT", [NfPort("reverse", "path")], [], flag_command)
-
-
-@pytest.mark.fast
 def test_flags_are_unrepresentable_outside_command_position() -> None:
     with pytest.raises(TypeError) as excinfo:
         NfTemplate((cast(Any, NfFlag("reverse", "-r")),))
@@ -219,30 +198,6 @@ def test_flags_are_unrepresentable_outside_command_position() -> None:
     assert message == (
         "template segments must be one of: NfLiteral, NfInputReference, NfBasenameReference"
     )
-
-
-@pytest.mark.fast
-def test_basename_segment_survives_hydration() -> None:
-    process = NfProcess(
-        "COPY",
-        [NfPort("source", "path")],
-        [NfPort("result", "path", "result", NfTemplate((NfBasenameReference("source"),)))],
-        NfCommand((NfTemplate((NfLiteral("cp"),)), NfTemplate((NfBasenameReference("source"),)))),
-    )
-    assert NfProcess.from_dict(process.to_dict()) == process
-    assert NfBasenameReference("source").to_dict() == {
-        "kind": "basename",
-        "name": "source",
-    }
-
-
-@pytest.mark.fast
-def test_basename_segment_must_reference_a_path_input() -> None:
-    command = NfCommand((NfTemplate((NfLiteral("cp"),)), NfTemplate((NfBasenameReference("source"),))))
-    with pytest.raises(ValueError, match="unknown inputs"):
-        NfProcess("COPY", [], [], command)
-    with pytest.raises(ValueError, match="basename.*path"):
-        NfProcess("COPY", [NfPort("source", "val")], [], command)
 
 
 @pytest.mark.fast
@@ -257,48 +212,81 @@ def test_basename_segment_accepts_both_path_kinds() -> None:
         assert process.inputs[0].path_kind == path_kind
 
 
-@pytest.mark.fast
-def test_basename_port_rule_covers_stream_and_glob_positions() -> None:
-    """The design claims validity in every template position, so check them all."""
-    derived = NfTemplate((NfBasenameReference("source"),))
-    with pytest.raises(ValueError, match="basename.*path"):
-        NfProcess(
-            "COPY",
-            [NfPort("source", "val")],
-            [],
-            NfCommand((NfTemplate((NfLiteral("cp"),)),), stdout=derived),
-        )
-    with pytest.raises(ValueError, match="basename.*path"):
-        NfProcess(
-            "COPY",
-            [NfPort("source", "val")],
-            [NfPort("result", "path", "result", derived)],
-            NfCommand((NfTemplate((NfLiteral("cp"),)),)),
-        )
+def _proc(
+    port: NfPort, *tokens: NfCommandToken, stdout: NfTemplate | None = None, outputs: tuple[NfPort, ...] = ()
+) -> NfProcess:
+    """A process with the one input `port` whose command is `echo` and then `tokens`."""
+    return NfProcess("P", [port], list(outputs), NfCommand((NfTemplate((NfLiteral("echo"),)), *tokens), stdout=stdout))
+
+
+_BASENAME = NfTemplate((NfBasenameReference("v"),))
+_PLAIN = NfTemplate((NfInputReference("v"),))
+_ARRAY_ONLY = "array-marked inputs may only be referenced by array bindings"
 
 
 @pytest.mark.fast
-def test_array_binding_survives_hydration() -> None:
-    process = NfProcess(
-        "NAMES",
-        [NfPort("names", "val", is_array=True)],
-        [],
-        NfCommand((NfTemplate((NfLiteral("echo"),)), NfArrayBinding("names", "--name"))),
-    )
-    assert NfProcess.from_dict(process.to_dict()) == process
-    assert process.command.tokens[1].to_dict() == {
-        "kind": "array",
-        "name": "names",
-        "prefix": "--name",
-    }
-    assert process.inputs[0].to_dict()["is_array"] is True
+@pytest.mark.parametrize(("build_process", "message"), [
+    (lambda: _proc(NfPort("other", "val"), NfFlag("v", "-r")), "unknown inputs"),
+    (lambda: _proc(NfPort("other", "val"), NfArrayBinding("v", "-n")), "unknown inputs"),
+    (lambda: _proc(NfPort("v", "path"), NfFlag("v", "-r")), "flag tokens must reference val inputs"),
+    # The design claims a basename is valid in every template position, so each is checked.
+    (lambda: _proc(NfPort("v", "val"), _BASENAME), "basename references must target path inputs"),
+    (lambda: _proc(NfPort("v", "val"), stdout=_BASENAME), "basename references must target path inputs"),
+    (
+        lambda: _proc(NfPort("v", "val"), outputs=(NfPort("out", "path", "out", _BASENAME),)),
+        "basename references must target path inputs",
+    ),
+    (
+        lambda: _proc(NfPort("v", "val"), NfArrayBinding("v", "--name")),
+        "array bindings must reference array-marked inputs",
+    ),
+    # A plain reference renders values.toString(), so a two-item array reaches the command line as "[a, b]".
+    (
+        lambda: _proc(NfPort("v", "val", is_array=True), NfTemplate((NfLiteral("--joined="), NfInputReference("v")))),
+        _ARRAY_ONLY,
+    ),
+    (lambda: _proc(NfPort("v", "val", is_array=True), _PLAIN), _ARRAY_ONLY),
+    (lambda: _proc(NfPort("v", "val", is_array=True), stdout=_PLAIN), _ARRAY_ONLY),
+    (lambda: _proc(NfPort("v", "val", is_array=True), outputs=(NfPort("out", "path", "out", _PLAIN),)), _ARRAY_ONLY),
+    # values.name.toString() is a GPath spread over the list, so a File[] read as a basename renders
+    # --tag=[a.txt, b.txt]; in glob position the rendered name is a list, breaking the literal-name rule.
+    (
+        lambda: _proc(NfPort("v", "path", is_array=True), NfTemplate((NfLiteral("--tag="), NfBasenameReference("v")))),
+        _ARRAY_ONLY,
+    ),
+    (
+        lambda: _proc(
+            NfPort("v", "path", is_array=True),
+            outputs=(NfPort("out", "path", "out", NfTemplate((NfBasenameReference("v"), NfLiteral(".done")))),),
+        ),
+        _ARRAY_ONLY,
+    ),
+    # A flag lets list truthiness decide whether its prefix appears; checked on hydration too.
+    (
+        lambda: NfProcess.from_dict(
+            {**(payload := _proc(NfPort("v", "val"), NfFlag("v", "--verbose")).to_dict()),
+             "inputs": [{**payload["inputs"][0], "is_array": True}]}
+        ),
+        f"{_ARRAY_ONLY}: v",
+    ),
+])
+def test_a_process_reference_to_an_input_it_does_not_admit_is_rejected(
+    build_process: Callable[[], NfProcess], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        build_process()
 
 
 @pytest.mark.fast
-def test_array_binding_prefix_may_be_none() -> None:
-    binding = NfArrayBinding("names")
-    assert binding.prefix is None
-    assert binding.to_dict() == {"kind": "array", "name": "names", "prefix": None}
+@pytest.mark.parametrize(("part", "payload"), [
+    (NfArrayBinding("names"), {"kind": "array", "name": "names", "prefix": None}),
+    (NfFlag("reverse", "-r"), {"kind": "flag", "name": "reverse", "prefix": "-r"}),
+    (NfBasenameReference("source"), {"kind": "basename", "name": "source"}),
+    (NfShellLiteral(">>"), {"kind": "shell_literal", "text": ">>"}),
+])
+def test_a_command_part_writes_its_payload_fields(part: Any, payload: dict[str, Any]) -> None:
+    """A round trip cannot see a field renamed on both sides, so each part's payload is pinned."""
+    assert part.to_dict() == payload
 
 
 @pytest.mark.fast
@@ -306,101 +294,6 @@ def test_array_binding_prefix_may_be_none() -> None:
 def test_array_binding_rejects_a_blank_prefix(prefix: str) -> None:
     with pytest.raises(ValueError, match="prefix"):
         NfArrayBinding("names", prefix)
-
-
-@pytest.mark.fast
-def test_array_binding_must_reference_an_array_marked_input() -> None:
-    array_command = NfCommand(
-        (NfTemplate((NfLiteral("echo"),)), NfArrayBinding("names", "--name"))
-    )
-    with pytest.raises(ValueError, match="unknown inputs"):
-        NfProcess("NAMES", [], [], array_command)
-    with pytest.raises(ValueError, match="array bindings must reference array-marked inputs"):
-        NfProcess("NAMES", [NfPort("names", "val")], [], array_command)
-
-
-@pytest.mark.fast
-def test_array_marked_input_rejects_a_plain_reference() -> None:
-    # The converse direction: a plain reference renders values.toString(), so
-    # a two-item array would reach the command line as "[a, b]" rather than
-    # expanding per item.
-    message = "array-marked inputs may only be referenced by array bindings"
-    for template in (
-        NfTemplate((NfLiteral("--joined="), NfInputReference("values"))),
-        NfTemplate((NfInputReference("values"),)),
-    ):
-        with pytest.raises(ValueError, match=message):
-            NfProcess(
-                "JOIN",
-                [NfPort("values", "val", is_array=True)],
-                [],
-                NfCommand((NfTemplate((NfLiteral("echo"),)), template)),
-            )
-    # Reachable through a stream target and an output glob too, since both
-    # take the same reference type.
-    with pytest.raises(ValueError, match=message):
-        NfProcess(
-            "JOIN",
-            [NfPort("values", "val", is_array=True)],
-            [],
-            NfCommand(
-                (NfTemplate((NfLiteral("echo"),)),),
-                stdout=NfTemplate((NfInputReference("values"),)),
-            ),
-        )
-    with pytest.raises(ValueError, match=message):
-        NfProcess(
-            "JOIN",
-            [NfPort("values", "val", is_array=True)],
-            [NfPort("out", "path", "out", NfTemplate((NfInputReference("values"),)))],
-            NfCommand((NfTemplate((NfLiteral("echo"),)),)),
-        )
-
-
-@pytest.mark.fast
-def test_array_marked_input_rejects_a_basename_reference() -> None:
-    # Same route as a plain reference: values.name.toString() is a GPath
-    # spread over the list, so a File[] read as a basename renders
-    # --tag=[a.txt, b.txt]. In glob position it also breaks the premise the
-    # literal-name rule rests on, since the rendered name is a list.
-    message = "array-marked inputs may only be referenced by array bindings"
-    with pytest.raises(ValueError, match=message):
-        NfProcess(
-            "TAG",
-            [NfPort("values", "path", is_array=True)],
-            [],
-            NfCommand((
-                NfTemplate((NfLiteral("echo"),)),
-                NfTemplate((NfLiteral("--tag="), NfBasenameReference("values"))),
-            )),
-        )
-    with pytest.raises(ValueError, match=message):
-        NfProcess(
-            "TAG",
-            [NfPort("values", "path", is_array=True)],
-            [NfPort(
-                "out", "path", "out",
-                NfTemplate((NfBasenameReference("values"), NfLiteral(".done"))),
-            )],
-            NfCommand((NfTemplate((NfLiteral("echo"),)),)),
-        )
-
-
-@pytest.mark.fast
-def test_array_marked_input_rejects_a_flag_reference_during_hydration() -> None:
-    payload = NfProcess(
-        "FLAG",
-        [NfPort("verbose", "val")],
-        [],
-        NfCommand((NfTemplate((NfLiteral("echo"),)), NfFlag("verbose", "--verbose"))),
-    ).to_dict()
-    payload["inputs"][0]["is_array"] = True
-
-    with pytest.raises(
-        ValueError,
-        match="array-marked inputs may only be referenced by array bindings: verbose",
-    ):
-        NfProcess.from_dict(payload)
 
 
 @pytest.mark.fast
@@ -516,18 +409,6 @@ def test_array_marker_participates_in_channel_qualifier_consistency() -> None:
 
 
 @pytest.mark.fast
-def test_shell_literal_token_survives_hydration() -> None:
-    process = NfProcess(
-        "REDIRECT",
-        [],
-        [],
-        NfCommand((NfTemplate((NfLiteral("true"),)), NfShellLiteral(">>"))),
-    )
-    assert NfProcess.from_dict(process.to_dict()) == process
-    assert process.command.tokens[1].to_dict() == {"kind": "shell_literal", "text": ">>"}
-
-
-@pytest.mark.fast
 def test_shell_literal_rejects_non_string_text() -> None:
     with pytest.raises(TypeError, match="must be a string"):
         NfShellLiteral(cast(Any, 3))
@@ -547,27 +428,6 @@ def test_public_module_exports_shell_literal() -> None:
 
     assert nextflow.NfShellLiteral is NfShellLiteral
     assert "NfShellLiteral" in nextflow.__all__
-
-
-@pytest.mark.fast
-def test_hydration_rejects_a_shell_literal_kind_older_than_schema_version_6() -> None:
-    payload = ExecutableNextflowWorkflow(
-        "wf",
-        [NfProcess(
-            "REDIRECT",
-            [],
-            [],
-            NfCommand((NfTemplate((NfLiteral("true"),)), NfShellLiteral(">>"))),
-        )],
-        [],
-        {},
-    ).to_dict()
-
-    assert ExecutableNextflowWorkflow.from_dict(payload).to_dict() == payload
-
-    payload["schema_version"] = 5
-    with pytest.raises(ValueError, match=r"'shell_literal'.*schema version 6.*schema version 5"):
-        ExecutableNextflowWorkflow.from_dict(payload)
 
 
 @pytest.mark.fast
@@ -636,48 +496,6 @@ def test_process_rejects_referencing_a_renamed_input_elsewhere_via_basename() ->
 
 
 @pytest.mark.fast
-def test_hydration_rejects_a_stage_as_field_older_than_schema_version_7() -> None:
-    payload = ExecutableNextflowWorkflow(
-        "wf",
-        [NfProcess(
-            "STAGE",
-            [NfPort("source", "path", stage_as="renamed.txt")],
-            [],
-            NfCommand((NfTemplate((NfLiteral("cat"),)), NfTemplate((NfLiteral("renamed.txt"),)))),
-        )],
-        [NfWorkflowInputConnection("source", "STAGE", "source")],
-        {"source": "in.txt"},
-    ).to_dict()
-
-    assert ExecutableNextflowWorkflow.from_dict(payload).to_dict() == payload
-
-    payload["schema_version"] = 6
-    with pytest.raises(ValueError, match=r"'stage_as'.*schema version 7.*schema version 6"):
-        ExecutableNextflowWorkflow.from_dict(payload)
-
-
-@pytest.mark.fast
-def test_hydration_rejects_an_array_kind_or_field_older_than_schema_version_5() -> None:
-    process = NfProcess(
-        "NAMES",
-        [NfPort("names", "val", is_array=True)],
-        [],
-        NfCommand((NfTemplate((NfLiteral("echo"),)), NfArrayBinding("names", "--name"))),
-    )
-    payload = ExecutableNextflowWorkflow(
-        "wf",
-        [process],
-        [NfWorkflowInputConnection("names", "NAMES", "names")],
-        {"names": ["a", "b"]},
-    ).to_dict()
-    assert ExecutableNextflowWorkflow.from_dict(payload).to_dict() == payload
-
-    payload["schema_version"] = 4
-    with pytest.raises(ValueError, match=r"'is_array'.*schema version 5.*schema version 4"):
-        ExecutableNextflowWorkflow.from_dict(payload)
-
-
-@pytest.mark.fast
 def test_hydration_rejects_an_array_kind_token_older_than_schema_version_5() -> None:
     """A hand-crafted payload can carry the array kind without is_array; the kind gate still fires."""
     process = NfProcess(
@@ -734,28 +552,6 @@ def test_hydration_treats_parameter_keys_as_opaque_user_data() -> None:
     hydrated = ExecutableNextflowWorkflow.from_dict(payload)
 
     assert hydrated.to_dict()["params"] == payload["params"]
-
-
-@pytest.mark.fast
-def test_hydration_rejects_a_kind_newer_than_its_declared_version() -> None:
-    """A version is a claim about the value space, so it has to be enforced."""
-    payload = ExecutableNextflowWorkflow(
-        "wf",
-        [NfProcess(
-            "SORT",
-            [NfPort("reverse", "val")],
-            [],
-            NfCommand((NfTemplate((NfLiteral("sort"),)), NfFlag("reverse", "-r"))),
-        )],
-        [NfWorkflowInputConnection("reverse", "SORT", "reverse")],
-        {"reverse": True},
-    ).to_dict()
-
-    assert ExecutableNextflowWorkflow.from_dict(payload).to_dict() == payload
-
-    payload["schema_version"] = 2
-    with pytest.raises(ValueError, match="flag.*schema version 2"):
-        ExecutableNextflowWorkflow.from_dict(payload)
 
 
 @pytest.mark.fast
@@ -902,13 +698,6 @@ def _adapted_workflow(
 
 
 @pytest.mark.fast
-def test_channel_adapter_survives_hydration() -> None:
-    payload = _adapted_workflow().to_dict()
-    assert ExecutableNextflowWorkflow.from_dict(payload) == _adapted_workflow()
-    assert payload["connections"][0]["adapter"] == "scatter"
-
-
-@pytest.mark.fast
 def test_hydration_defaults_a_missing_adapter_to_none() -> None:
     """Every version before 8 never wrote the key, so its absence is unadapted."""
     payload = _adapted_workflow(adapter=None).to_dict()
@@ -1002,17 +791,6 @@ def test_accepts_one_parameter_adapted_at_every_sink() -> None:
     )
 
 
-@pytest.mark.fast
-def test_hydration_rejects_an_adapter_field_older_than_schema_version_8() -> None:
-    payload = _adapted_workflow().to_dict()
-
-    assert ExecutableNextflowWorkflow.from_dict(payload).to_dict() == payload
-
-    payload["schema_version"] = 7
-    with pytest.raises(ValueError, match=r"'adapter'.*schema version 8.*schema version 7"):
-        ExecutableNextflowWorkflow.from_dict(payload)
-
-
 def _multi_input_workflow(method: str) -> ExecutableNextflowWorkflow:
     process = NfProcess("PAIR", [NfPort("first", "val"), NfPort("second", "val")], [], command("true"))
     return ExecutableNextflowWorkflow(
@@ -1024,33 +802,6 @@ def _multi_input_workflow(method: str) -> ExecutableNextflowWorkflow:
         ],
         {"firsts": ["a", "b"], "seconds": ["c", "d"]},
     )
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize("method", ["dotproduct", "flat_crossproduct"])
-def test_multi_input_adapter_survives_hydration(method: str) -> None:
-    payload = _multi_input_workflow(method).to_dict()
-    assert ExecutableNextflowWorkflow.from_dict(payload) == _multi_input_workflow(method)
-    assert {c["adapter"] for c in payload["connections"]} == {method}
-
-
-@pytest.mark.fast
-@pytest.mark.parametrize(
-    ("method", "introduced"), [("dotproduct", 12), ("flat_crossproduct", 13)]
-)
-def test_hydration_rejects_a_multi_input_adapter_older_than_its_schema_version(
-    method: str, introduced: int
-) -> None:
-    payload = _multi_input_workflow(method).to_dict()
-
-    assert ExecutableNextflowWorkflow.from_dict(payload).to_dict() == payload
-
-    payload["schema_version"] = introduced - 1
-    with pytest.raises(
-        ValueError,
-        match=rf"adapter='{method}'.*schema version {introduced}.*schema version {introduced - 1}",
-    ):
-        ExecutableNextflowWorkflow.from_dict(payload)
 
 
 @pytest.mark.fast
@@ -1144,14 +895,6 @@ def _captured_workflow(capture: str = "single") -> ExecutableNextflowWorkflow:
 
 
 @pytest.mark.fast
-def test_a_capture_marker_survives_serialization_unchanged() -> None:
-    workflow = _captured_workflow()
-
-    assert ExecutableNextflowWorkflow.from_json(workflow.to_json()) == workflow
-    assert workflow.processes[0].outputs[0].to_dict()["capture"] == "single"
-
-
-@pytest.mark.fast
 def test_the_port_capture_set_is_closed() -> None:
     """A capture marker is closed data, so it can never hold expression text."""
     assert frozenset(NfPort.CAPTURE_QUALIFIERS) == frozenset({"single", "text"})
@@ -1196,17 +939,6 @@ def test_a_capture_marker_cannot_combine_with_an_array_or_stage_as_marker() -> N
         NfPort("result", "path", "result", glob, is_array=True, capture="single")
     with pytest.raises(ValueError, match="cannot combine with an array marker"):
         NfPort("result", "path", "result", glob, stage_as="staged.txt", capture="single")
-
-
-@pytest.mark.fast
-def test_hydration_rejects_a_capture_field_older_than_schema_version_9() -> None:
-    payload = _captured_workflow().to_dict()
-
-    assert ExecutableNextflowWorkflow.from_dict(payload).to_dict() == payload
-
-    payload["schema_version"] = 8
-    with pytest.raises(ValueError, match=r"'capture'.*schema version 9.*schema version 8"):
-        ExecutableNextflowWorkflow.from_dict(payload)
 
 
 def _text_capture_process(name: str = "READ") -> NfProcess:
@@ -1365,3 +1097,60 @@ def test_an_optional_output_reaches_only_an_unscattered_workflow_output(adapter:
     with pytest.raises(ValueError, match="optional output"):
         ExecutableNextflowWorkflow("WF", [_optional_producer(), consume], connections,
                                    {"xs": [1]} if adapter else {"x": 1})
+
+
+def _wf(process: NfProcess, **params: Any) -> ExecutableNextflowWorkflow:
+    """`process` alone, each input wired from a same-named parameter."""
+    connections = [NfWorkflowInputConnection(port.name, process.name, port.name) for port in process.inputs]
+    return ExecutableNextflowWorkflow("wf", [process], connections, params)
+
+
+_ECHO = NfTemplate((NfLiteral("echo"),))
+
+# Each schema gate's label and version, and a builder whose newest part is the gated one.
+GATES = [
+    pytest.param(build, label, introduced, id=label)
+    for build, label, introduced in [
+        (flag_workflow, "'flag'", 3),
+        (lambda: _wf(
+            NfProcess("COPY", [NfPort("s", "path")], [], NfCommand((_ECHO, NfTemplate((NfBasenameReference("s"),))))),
+            s="a.txt",
+        ), "'basename'", 4),
+        (lambda: _wf(
+            NfProcess("NAMES", [NfPort("n", "val", is_array=True)], [], NfCommand((_ECHO, NfArrayBinding("n", "-n")))),
+            n=["a", "b"],
+        ), "'is_array'", 5),
+        (lambda: _wf(NfProcess("REDIRECT", [], [], NfCommand((_ECHO, NfShellLiteral(">>"))))), "'shell_literal'", 6),
+        (lambda: _wf(
+            NfProcess("STAGE", [NfPort("s", "path", stage_as="renamed.txt")], [], command("cat", "renamed.txt")),
+            s="in.txt",
+        ), "'stage_as'", 7),
+        (_adapted_workflow, "'adapter'", 8),
+        (_captured_workflow, "'capture'", 9),
+        (lambda: _when_workflow("$(inputs.a > 0)", {"a": 3}, a="int"), "'condition'", 11),
+        (lambda: _multi_input_workflow("dotproduct"), "adapter='dotproduct'", 12),
+        (lambda: _multi_input_workflow("flat_crossproduct"), "adapter='flat_crossproduct'", 13),
+        (BUILDERS["gather and rescatter"], "adapter='gather'", 14),
+        (BUILDERS["nested_crossproduct"], "adapter='nested_crossproduct'", 15),
+        (lambda: ExecutableNextflowWorkflow(
+            "WF", [_optional_producer()],
+            [NfWorkflowInputConnection("x", "MAYBE", "x"), NfWorkflowOutputConnection("MAYBE", "o", "o")], {"x": 1},
+        ), "'optional'", 16),
+    ]
+]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("build", "gate_label", "introduced"), GATES)
+def test_a_payload_round_trips_and_its_newest_part_needs_its_schema_version(
+    build: Callable[[], ExecutableNextflowWorkflow], gate_label: str, introduced: int
+) -> None:
+    """A version is a claim about the value space, so each additive part's version is enforced."""
+    payload = build().to_dict()
+    assert ExecutableNextflowWorkflow.from_dict(payload) == build()
+    payload["schema_version"] = introduced - 1
+    with pytest.raises(ValueError, match=re.escape(
+        f"{gate_label} requires executable Nextflow schema version {introduced}, "
+        f"but the payload declares schema version {introduced - 1}"
+    )):
+        ExecutableNextflowWorkflow.from_dict(payload)
