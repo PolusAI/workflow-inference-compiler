@@ -89,8 +89,8 @@ Every program runs in the container image its tool names, so it behaves the
 same on your laptop, on a colleague's workstation and on a cluster node.
 Sophios fetches the images before the run, then hands the workflow to a
 runner, cwltool or Toil, using Docker, Podman or Singularity. The machine you
-run Sophios on can be your laptop, a cloud instance or the login node of an
-HPC cluster: with Toil as the runner, each step can go to the cluster's
+run Sophios on can be your laptop, a cloud instance or a lead compute node of
+an HPC cluster: with Toil as the runner, each step can go to the cluster's
 scheduler, such as Slurm or LSF, as [Running workflows](running.md) shows.
 The runner starts each step once the data it needs exists, so the order
 comes from the graph, not from the order in which you wrote the steps.
