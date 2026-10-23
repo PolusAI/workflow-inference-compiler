@@ -3,6 +3,7 @@
 # pylint: disable=missing-function-docstring
 
 from collections.abc import Callable
+from dataclasses import replace
 import json
 from pathlib import Path
 import re
@@ -23,9 +24,12 @@ from sophios.nf_types import (
     NfCommand,
     NfCommandToken,
     NfConnection,
+    NfEntry,
+    NfEnvVar,
     NfFlag,
     NfInputReference,
     NfLiteral,
+    NfOptionalBinding,
     NfPort,
     NfProcess,
     NfProcessConnection,
@@ -36,7 +40,7 @@ from sophios.nf_types import (
     NfWorkflowOutputConnection,
 )
 
-from .testkit import command, output_port, template
+from .testkit import command, output_port, ref, template
 
 
 @pytest.mark.fast
@@ -231,6 +235,10 @@ _ARRAY_ONLY = "array-marked inputs may only be referenced by array bindings"
     (lambda: _proc(NfPort("other", "val"), NfFlag("v", "-r")), "unknown inputs"),
     (lambda: _proc(NfPort("other", "val"), NfArrayBinding("v", "-n")), "unknown inputs"),
     (lambda: _proc(NfPort("v", "path"), NfFlag("v", "-r")), "flag tokens must reference val inputs"),
+    (
+        lambda: _env_process(NfEnvVar("A", template(ref("x"))), qualifier="path"),
+        "environment variables must reference val inputs: x",
+    ),
     # The design claims a basename is valid in every template position, so each is checked.
     (lambda: _proc(NfPort("v", "val"), _BASENAME), "basename references must target path inputs"),
     (lambda: _proc(NfPort("v", "val"), stdout=_BASENAME), "basename references must target path inputs"),
@@ -242,6 +250,8 @@ _ARRAY_ONLY = "array-marked inputs may only be referenced by array bindings"
         lambda: _proc(NfPort("v", "val"), NfArrayBinding("v", "--name")),
         "array bindings must reference array-marked inputs",
     ),
+    (lambda: _proc(NfPort("v", "path"), NfOptionalBinding("v")), "optional bindings must reference val inputs"),
+    (lambda: _proc(NfPort("v", "val", is_array=True), NfOptionalBinding("v")), f"{_ARRAY_ONLY}: v"),
     # A plain reference renders values.toString(), so a two-item array reaches the command line as "[a, b]".
     (
         lambda: _proc(NfPort("v", "val", is_array=True), NfTemplate((NfLiteral("--joined="), NfInputReference("v")))),
@@ -285,6 +295,8 @@ def test_a_process_reference_to_an_input_it_does_not_admit_is_rejected(
     (NfFlag("reverse", "-r"), {"kind": "flag", "name": "reverse", "prefix": "-r"}),
     (NfBasenameReference("source"), {"kind": "basename", "name": "source"}),
     (NfShellLiteral(">>"), {"kind": "shell_literal", "text": ">>"}),
+    (NfOptionalBinding("name", "--name=", False),
+     {"kind": "optional_binding", "name": "name", "prefix": "--name=", "separate": False}),
 ])
 def test_a_command_part_writes_its_payload_fields(part: Any, payload: dict[str, Any]) -> None:
     """A round trip cannot see a field renamed on both sides, so each part's payload is pinned."""
@@ -296,6 +308,15 @@ def test_a_command_part_writes_its_payload_fields(part: Any, payload: dict[str, 
 def test_array_binding_rejects_a_blank_prefix(prefix: str) -> None:
     with pytest.raises(ValueError, match="prefix"):
         NfArrayBinding("names", prefix)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("prefix", "separate", "message"), [(" ", True, "prefix"), (None, False, "needs a prefix")])
+def test_an_optional_binding_has_a_non_blank_prefix_and_one_unless_separate(
+    prefix: str | None, separate: bool, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        NfOptionalBinding("name", prefix, separate)
 
 
 @pytest.mark.fast
@@ -407,69 +428,108 @@ def test_public_module_exports_shell_literal() -> None:
     assert "NfShellLiteral" in nextflow.__all__
 
 
-@pytest.mark.fast
-def test_stage_as_port_survives_hydration() -> None:
-    port = NfPort("source", "path", stage_as="renamed.txt")
-    assert NfPort.from_dict(port.to_dict()) == port
-    assert port.to_dict()["stage_as"] == "renamed.txt"
+def _env_process(*env: NfEnvVar, qualifier: str = "val") -> NfProcess:
+    return NfProcess("ENV", [NfPort("x", qualifier)], [], NfCommand((NfTemplate((NfLiteral("env"),)),), env=env))
 
 
 @pytest.mark.fast
-def test_stage_as_requires_a_path_qualifier() -> None:
-    with pytest.raises(ValueError, match="only path ports may declare a stage_as"):
-        NfPort("source", "val", stage_as="renamed.txt")
+def test_an_env_var_is_literal_text_or_one_input_reference_and_survives_hydration() -> None:
+    process = _env_process(NfEnvVar("A", template("a $b")), NfEnvVar("_B2", template(ref("x"))))
+    payload = ExecutableNextflowWorkflow(
+        "wf", [process], [NfWorkflowInputConnection("x", "ENV", "x")], {"x": "v"}, {"x": "string"}
+    )
+    assert ExecutableNextflowWorkflow.from_dict(payload.to_dict()) == payload
+    for value in (template("a", ref("x")), NfTemplate((NfBasenameReference("x"),))):
+        with pytest.raises(ValueError, match="literal text or one input reference"):
+            NfEnvVar("A", value)
 
 
 @pytest.mark.fast
-def test_stage_as_rejects_array_marked_ports() -> None:
-    with pytest.raises(ValueError, match="array-marked ports cannot declare a stage_as"):
-        NfPort("source", "path", is_array=True, stage_as="renamed.txt")
+@pytest.mark.parametrize("name", ["", "1A", "A-B", "A B", "A=B"])
+def test_an_env_var_name_is_a_shell_variable_name(name: str) -> None:
+    with pytest.raises(ValueError, match="shell variable name"):
+        NfEnvVar(name, template("v"))
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize("stage_as", ["", "   ", "sub/dir.txt", "reads*.fq", "sample?.txt"])
-def test_stage_as_rejects_blank_or_separator_containing_names(stage_as: str) -> None:
-    with pytest.raises(ValueError, match="stage_as"):
-        NfPort("source", "path", stage_as=stage_as)
+def test_a_command_sets_an_env_var_once() -> None:
+    with pytest.raises(ValueError, match="more than once"):
+        _env_process(NfEnvVar("A", template("1")), NfEnvVar("A", template("2")))
 
 
 @pytest.mark.fast
-def test_process_rejects_duplicate_stage_as_literal() -> None:
-    with pytest.raises(ValueError, match="same literal name"):
-        NfProcess(
-            "STAGE",
-            [
-                NfPort("a", "path", stage_as="same.txt"),
-                NfPort("b", "path", stage_as="same.txt"),
-            ],
-            [],
-            NfCommand((NfTemplate((NfLiteral("cat"),)), NfTemplate((NfLiteral("same.txt"),)))),
-        )
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "2"])
+def test_an_accelerator_count_is_a_positive_integer(value: Any) -> None:
+    with pytest.raises(ValueError, match="accelerator must be a positive integer"):
+        NfResources(accelerator=value)
+
+
+def _entry_workflow(
+    *inputs: NfPort, outputs: tuple[NfPort, ...] = (), tokens: tuple[str | NfTemplate, ...] = ("true",),
+) -> ExecutableNextflowWorkflow:
+    process = NfProcess("STAGE", inputs, outputs, command(*tokens))
+    connections = [NfWorkflowInputConnection(port.name, "STAGE", port.name) for port in inputs]
+    return ExecutableNextflowWorkflow(
+        "wf", [process], connections, {port.name: "in.txt" for port in inputs}, {port.name: "File" for port in inputs}
+    )
 
 
 @pytest.mark.fast
-def test_process_rejects_referencing_a_renamed_input_elsewhere_plainly() -> None:
-    with pytest.raises(ValueError, match="references a renamed IWDR input elsewhere"):
-        NfProcess(
-            "STAGE",
-            [NfPort("source", "path", stage_as="renamed.txt")],
-            [],
-            NfCommand((
-                NfTemplate((NfLiteral("cat"),)),
-                NfTemplate((NfInputReference("source"),)),
-            )),
-        )
+@pytest.mark.parametrize("entry", [NfEntry(), NfEntry(copy=True), NfEntry("renamed.txt"), NfEntry("a*b?.txt", True)])
+def test_an_entry_port_survives_hydration(entry: NfEntry) -> None:
+    workflow = _entry_workflow(NfPort("source", "path", entry=entry))
+    assert workflow.processes[0].inputs[0].to_dict()["entry"] == {"name": entry.name, "copy": entry.copy}
+    assert ExecutableNextflowWorkflow.from_dict(workflow.to_dict()) == workflow
 
 
 @pytest.mark.fast
-def test_process_rejects_referencing_a_renamed_input_elsewhere_via_basename() -> None:
-    with pytest.raises(ValueError, match="references a renamed IWDR input elsewhere"):
-        NfProcess(
-            "STAGE",
-            [NfPort("source", "path", stage_as="renamed.txt")],
-            [output_port("result", NfTemplate((NfBasenameReference("source"),)))],
-            NfCommand((NfTemplate((NfLiteral("cat"),)), NfTemplate((NfLiteral("renamed.txt"),)))),
-        )
+@pytest.mark.parametrize("port", [
+    lambda: NfPort("source", "val", entry=NfEntry()),
+    lambda: NfPort("source", "path", is_array=True, entry=NfEntry()),
+    lambda: NfPort("source", "path", "source", template("out"), entry=NfEntry()),
+], ids=["val", "array", "output"])
+def test_only_a_path_input_that_is_not_an_array_is_an_entry(port: Callable[[], NfPort]) -> None:
+    with pytest.raises(ValueError, match="only a path input that is not array-marked"):
+        port()
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("name", "reason"), [
+    ("", "non-empty"), ("   ", "non-empty"), ("sub/dir.txt", "path separator"), ("a\x00b", "NUL byte"),
+    (".sophios_entry_x", "Sophios reserves"), (".", "names a directory"), ("..", "names a directory"),
+])
+def test_an_entry_name_is_one_path_component_outside_the_reserved_prefix(name: str, reason: str) -> None:
+    with pytest.raises(ValueError, match=reason):
+        NfEntry(name)
+
+
+@pytest.mark.fast
+def test_process_rejects_two_entries_with_one_literal_name() -> None:
+    with pytest.raises(ValueError, match="two InitialWorkDirRequirement entries with one literal name"):
+        _entry_workflow(NfPort("a", "path", entry=NfEntry("same.txt")), NfPort("b", "path", entry=NfEntry("same.txt")))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("segment", [NfInputReference("source"), NfBasenameReference("source")])
+def test_only_an_entry_under_its_own_basename_is_referenced(segment: NfInputReference | NfBasenameReference) -> None:
+    own = _entry_workflow(NfPort("source", "path", entry=NfEntry(copy=True)), tokens=("cat", NfTemplate((segment,))))
+    assert ExecutableNextflowWorkflow.from_dict(own.to_dict()) == own
+    with pytest.raises(ValueError, match="references an input whose InitialWorkDirRequirement entry has a literal name"):
+        _entry_workflow(NfPort("source", "path", entry=NfEntry("renamed.txt")), tokens=("cat", NfTemplate((segment,))))
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("segment", [NfInputReference("source"), NfBasenameReference("source")])
+def test_a_glob_of_only_a_staged_input_is_rejected_unless_the_input_is_an_entry(
+    segment: NfInputReference | NfBasenameReference,
+) -> None:
+    """design §6, Outputs and globs: a staged input is not a file a CWL glob matches; an entry is."""
+    output = NfPort("result", "path", "result", NfTemplate((segment,)))
+    with pytest.raises(ValueError, match="output 'result' globs only the staged input 'source'"):
+        _entry_workflow(NfPort("source", "path"), outputs=(output,))
+    _entry_workflow(NfPort("source", "path", entry=NfEntry()), outputs=(output,))
+    derived = replace(output, glob=NfTemplate((segment, NfLiteral(".copy"))))
+    _entry_workflow(NfPort("source", "path"), outputs=(derived,))
 
 
 @pytest.mark.fast
@@ -544,14 +604,6 @@ def test_rejects_mixed_path_kinds_for_one_parameter() -> None:
             ],
             {"shared": "input"}, {"shared": "File"},
         )
-
-
-@pytest.mark.fast
-def test_rejects_mixed_container_policy() -> None:
-    containerized = NfProcess("CONTAINERIZED", [], [], command("true"), container="ubuntu:24.04")
-    host = NfProcess("HOST", [], [], command("true"))
-    with pytest.raises(ValueError, match="mixed container execution is not supported"):
-        ExecutableNextflowWorkflow("WF", [containerized, host], [], {})
 
 
 @pytest.mark.serial
@@ -828,12 +880,10 @@ def test_a_capture_marker_requires_a_glob_and_its_own_qualifier() -> None:
 
 
 @pytest.mark.fast
-def test_a_capture_marker_cannot_combine_with_an_array_or_stage_as_marker() -> None:
+def test_a_capture_marker_cannot_combine_with_an_array_marker() -> None:
     glob = NfTemplate((NfLiteral("out.txt"),))
     with pytest.raises(ValueError, match="cannot combine with an array marker"):
         NfPort("result", "path", "result", glob, is_array=True, capture="single")
-    with pytest.raises(ValueError, match="cannot combine with an array marker"):
-        NfPort("result", "path", "result", glob, stage_as="staged.txt", capture="single")
 
 
 def _text_capture_process(name: str = "READ") -> NfProcess:
@@ -978,10 +1028,21 @@ def test_an_optional_output_round_trips_and_reads_back() -> None:
 
 @pytest.mark.fast
 @pytest.mark.parametrize(("glob", "capture"), [("*.log", None), ("maybe.txt", "single")], ids=["pattern", "single"])
-def test_an_optional_output_never_requires_exactly_one_file(glob: str, capture: str | None) -> None:
-    # Nextflow fails arity '1' when nothing matches, optional or not.
-    with pytest.raises(ValueError, match="optional output cannot require exactly one file"):
-        NfPort("o", "path", "o", template(glob), capture=capture, optional=True)
+def test_an_optional_output_of_at_most_one_file_is_checked_at_its_workflow_output(
+    glob: str, capture: str | None
+) -> None:
+    # Nextflow fails arity '1' when nothing matches, optional or not, and refuses '0..1'.
+    process = NfProcess(
+        "MAYBE", [], [NfPort("o", "path", "o", template(glob), capture=capture, optional=True)], command("true")
+    )
+    with pytest.raises(ValueError, match="optional outputs o must match at most one file and must reach a workflow"):
+        ExecutableNextflowWorkflow("WF", [process], [], {})
+    workflow = ExecutableNextflowWorkflow("WF", [process], [NfWorkflowOutputConnection("MAYBE", "o", "result")], {})
+    rendered = render_nextflow(workflow)
+    assert "arity: '0..*', emit: o" in rendered and "optional: true" not in rendered
+    assert ExecutableNextflowWorkflow.from_json(workflow.to_json()) == workflow
+    [port] = parse_nf_text(rendered, params={}).processes[0].outputs
+    assert (port.optional, port.capture) == (True, capture)
 
 
 @pytest.mark.fast

@@ -24,7 +24,7 @@ from .nf_types import (
     topological_order,
 )
 from .nf_expr import NF_EXPRESSION_FUNCTIONS
-from .nf_types import NF_LOAD_CONTENTS_HELPER
+from .nf_types import NF_ENTRY_STAGING_PREFIX, NF_LOAD_CONTENTS_HELPER
 from .input_output_nf import (
     NEXTFLOW_JSON,
     NEXTFLOW_PARAMS,
@@ -36,6 +36,8 @@ from .input_output_nf import (
     NF_SHELL_QUOTE_FUNCTION,
     NF_STEP_INPUT_FUNCTION,
     NF_STUB_LINES,
+    at_most_one_suffix,
+    container_directives,
     render_nextflow,
     render_number,
 )
@@ -52,13 +54,19 @@ _PORT = re.compile(
     # option order mirrors the renderer's.
     r"^(?P<qualifier>path|val|tuple|env|stdin)\s+(?P<target>.+?)"
     r"(?P<literal>,\s*glob:\s*false)?"
-    r"(?:,\s*arity:\s*'(?P<arity>1)')?"
+    r"(?:,\s*arity:\s*'(?P<arity>1|0\.\.\*)')?"
     r"(?:,\s*optional:\s*(?P<optional>true))?"
     r"(?:,\s*emit:\s*(?P<emit>\S+))?$"
 )
-# The one input option read from text: an array-typed path input declares its arity.
+# The inputs with options read from text: an array-typed path input, which
+# declares its arity and stages each file in a numbered directory, and an
+# InitialWorkDirRequirement entry's input, staged in its hidden directory.
 _ARRAY_PATH_INPUT = re.compile(
-    rf"^path\s+(?P<target>[^\s,]+),\s*arity:\s*'{re.escape(NF_ARRAY_PATH_ARITY)}'$"
+    rf"^path\s+(?P<target>[^\s,]+),\s*arity:\s*'{re.escape(NF_ARRAY_PATH_ARITY)}',"
+    r"\s*stageAs:\s*'gather_(?P=target)_\*/\*'$"
+)
+_ENTRY_PATH_INPUT = re.compile(
+    rf"^path\s+(?P<target>[^\s,]+),\s*stageAs:\s*'{re.escape(NF_ENTRY_STAGING_PREFIX)}(?P=target)/\*'$"
 )
 # The one generated val-output form: file-text capture over the emitted helper.
 _TEXT_CAPTURE_OUTPUT = re.compile(
@@ -101,6 +109,7 @@ class NextflowProcess:
     container: str | None = None
     cpus: str | None = None
     memory: str | None = None
+    accelerator: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +229,7 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
     container: str | None = None
     cpus: str | None = None
     memory: str | None = None
+    accelerator: str | None = None
     script: list[str] = []
     stub: list[str] = []
     unparsed: list[str] = []
@@ -243,8 +253,8 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
             (script if section == "script" else stub).append(raw_line[4:] if raw_line.startswith("    ") else raw_line)
             continue
         if section == "input":
-            if array_path := _ARRAY_PATH_INPUT.match(stripped):
-                inputs.append(NextflowPort(array_path["target"], "path"))
+            if option_path := _ARRAY_PATH_INPUT.match(stripped) or _ENTRY_PATH_INPUT.match(stripped):
+                inputs.append(NextflowPort(option_path["target"], "path"))
                 continue
             match = _PORT.match(stripped)
             if match is None or match["emit"] is not None or match["arity"] is not None:
@@ -275,7 +285,8 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
                 target,
                 # Only a single capture renders both; a pattern output has arity alone.
                 "single" if match["arity"] and match["literal"] else None,
-                match["optional"] is not None,
+                # An optional output that matches at most one file declares arity '0..*'.
+                match["optional"] is not None or match["arity"] == NF_ARRAY_PATH_ARITY,
             ))
             continue
         if stripped.startswith("container "):
@@ -284,6 +295,8 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
                 container = _unquote(literal)
             else:
                 unparsed.append(stripped)
+        elif container is not None and stripped in container_directives(container)[1:]:
+            pass  # the entrypoint directives every container renders
         elif stripped.startswith("cpus "):
             candidate = stripped.removeprefix("cpus ").strip()
             if _static_cpu_value(candidate) is None:
@@ -296,6 +309,12 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
                 unparsed.append(stripped)
             else:
                 memory = candidate
+        elif stripped.startswith("accelerator "):
+            candidate = stripped.removeprefix("accelerator ").strip()
+            if _static_cpu_value(candidate) is None:
+                unparsed.append(stripped)
+            else:
+                accelerator = candidate
         else:
             unparsed.append(stripped)
 
@@ -304,7 +323,7 @@ def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[s
     if stub and tuple(stub) != NF_STUB_LINES[2:-1]:
         unparsed.append("stub: " + "\n".join(stub))  # only the generated stub is read
     return (
-        NextflowProcess(name, tuple(inputs), tuple(outputs), "\n".join(script), container, cpus, memory),
+        NextflowProcess(name, tuple(inputs), tuple(outputs), "\n".join(script), container, cpus, memory, accelerator),
         tuple(unparsed),
     )
 
@@ -395,9 +414,11 @@ def _parse_workflow(
                 output_name, expression = (part.strip() for part in stripped.split("=", maxsplit=1))
             else:
                 output_name, expression = stripped, stripped
-            # An optional output reports null as `.ifEmpty([])`, the renderer's one emit suffix.
-            optional = expression.endswith(".ifEmpty([])")
-            source = _PROCESS_OUTPUT.match(expression.removesuffix(".ifEmpty([])"))
+            # An optional output reports null by one of the renderer's two emit suffixes.
+            suffix = next((suffix for suffix in (".ifEmpty([])", at_most_one_suffix(output_name))
+                           if expression.endswith(suffix)), "")
+            optional = bool(suffix)
+            source = _PROCESS_OUTPUT.match(expression.removesuffix(suffix))
             if source is None or source.group(1) not in process_by_name:
                 unparsed.append(stripped)
                 continue
@@ -591,6 +612,7 @@ def _document_from_model(executable: ExecutableNextflowWorkflow, source_text: st
             process.container,
             None if process.resources.cpus is None else str(process.resources.cpus),
             None if process.resources.memory_mb is None else f"{render_number(process.resources.memory_mb)} MB",
+            None if process.resources.accelerator is None else str(process.resources.accelerator),
         )
         for process in executable.processes
     )
@@ -698,6 +720,8 @@ def nextflow_to_cwl(workflow: NextflowDocument) -> tuple[dict[str, Any], list[di
                 resources["ramMin"] = memory
         if resources:
             requirements["ResourceRequirement"] = resources
+        # The accelerator count is not written back: cwltool's CUDARequirement also
+        # requires cudaVersionMin and cudaComputeCapability, which the directive lacks.
         outputs: dict[str, Any] = {}
         for port in process.outputs:
             output: dict[str, Any] = {

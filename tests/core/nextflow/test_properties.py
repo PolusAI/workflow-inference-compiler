@@ -16,6 +16,7 @@ from sophios.input_output_nf import (
     _render_template,
     _shell_quote,
     render_nextflow,
+    render_nextflow_config,
 )
 from sophios.nf_expr import Expr, groovy_literal
 from sophios.nf_symbols import is_nextflow_identifier, normalize_nextflow_identifier
@@ -23,6 +24,7 @@ from sophios.nf_reader import parse_nf_text, promote_nextflow_document
 from sophios.nf_types import (
     ExecutableNextflowWorkflow,
     NfCommand,
+    NfEntry,
     NfInputReference,
     NfLiteral,
     NfPort,
@@ -89,7 +91,7 @@ def test_identifier_normalization_collisions_are_never_last_wins(
 def test_literal_template_is_exactly_one_shell_argument(value: str) -> None:
     assert shlex.split(_shell_quote(value)) == [value]
     assert "__sophios_shell_quote_9f72e" in _render_template(
-        NfTemplate((NfLiteral(value),))
+        NfTemplate((NfLiteral(value),)), {}
     )
 
 
@@ -100,7 +102,7 @@ def test_interpolated_template_remains_one_argument(prefix: str, suffix: str) ->
     template = NfTemplate(
         (NfLiteral(prefix), NfInputReference("value"), NfLiteral(suffix))
     )
-    rendered = _render_template(template)
+    rendered = _render_template(template, {})
     assert "value.toString()" in rendered
     assert shlex.split(_shell_quote(f"{prefix}{value}{suffix}")) == [
         f"{prefix}{value}{suffix}"
@@ -110,7 +112,7 @@ def test_interpolated_template_remains_one_argument(prefix: str, suffix: str) ->
 @settings(max_examples=150, deadline=None)
 @given(SAFE_TEXT | st.just(""))
 def test_literal_globs_never_become_gstrings(value: str) -> None:
-    rendered = _render_glob(NfTemplate((NfLiteral(value),)))
+    rendered = _render_glob(NfTemplate((NfLiteral(value),)), {})
     assert rendered.startswith("'") and rendered.endswith("'")
 
 
@@ -120,7 +122,7 @@ def test_interpolated_glob_literals_use_only_valid_gstring_escapes(value: str) -
     rendered = _render_glob(NfTemplate((
         NfLiteral(f"`{value}"),
         NfInputReference("name"),
-    )))
+    )), {})
     # Groovy has no \\` escape, so no backtick may be escaped. A bare
     # substring check is not that property: the escaper doubles every
     # backslash, so a literal backslash before a backtick also matches it
@@ -137,11 +139,12 @@ def test_interpolated_glob_literals_use_only_valid_gstring_escapes(value: str) -
 @settings(max_examples=150, deadline=None)
 @given(st.text(alphabet=st.characters(blacklist_categories=SURROGATE_CATEGORIES)).filter(str.strip))
 def test_every_single_quoted_groovy_position_uses_the_one_escaper(value: str) -> None:
-    staged = value.translate(str.maketrans("/*?\x00", "____"))  # a stageAs name is one literal component
+    # An entry name is one path component, and never `.`, `..` or the reserved staging prefix.
+    staged = "_" + value.translate(str.maketrans("/\x00", "__"))
     spoken = "".join(char for char in value if " " <= char <= "~" and char != "\\")  # a when literal's alphabet
     process = NfProcess(
         "TASK",
-        [NfPort("s", "val"), NfPort("src", "path", stage_as=staged)],
+        [NfPort("s", "val"), NfPort("src", "path", entry=NfEntry(staged))],
         [],
         NfCommand((NfTemplate((NfLiteral("true"),)),)),
         container=value,
@@ -269,12 +272,8 @@ def test_memory_rendering_is_non_exponential_and_value_preserving(
 
 
 @settings(max_examples=60, deadline=None)
-@given(
-    st.lists(st.booleans(), min_size=2, max_size=10).filter(
-        lambda modes: any(modes) and not all(modes)
-    )
-)
-def test_mixed_container_policy_is_unrepresentable(modes: list[bool]) -> None:
+@given(st.lists(st.booleans(), max_size=10))
+def test_docker_is_enabled_exactly_when_a_process_has_a_container(modes: list[bool]) -> None:
     processes = tuple(
         NfProcess(
             f"P{index}",
@@ -285,8 +284,8 @@ def test_mixed_container_policy_is_unrepresentable(modes: list[bool]) -> None:
         )
         for index, containerized in enumerate(modes)
     )
-    with pytest.raises(ValueError, match="mixed container execution"):
-        ExecutableNextflowWorkflow("wf", processes, (), {})
+    workflow = ExecutableNextflowWorkflow("wf", processes, (), {})
+    assert render_nextflow_config(workflow) == f"docker.enabled = {str(any(modes)).lower()}\n"
 
 
 @settings(max_examples=80, deadline=None)
@@ -320,7 +319,7 @@ def test_value_from_literal_and_reference_is_one_typed_token() -> None:
         "arguments": [{"valueFrom": "my report $(inputs.name).txt"}],
         "inputs": {"name": {"type": "string"}},
     })
-    rendered = _render_template(command.tokens[-1])
+    rendered = _render_template(command.tokens[-1], {})
     assert "'my report ' + name.toString() + '.txt'" in rendered
 
 

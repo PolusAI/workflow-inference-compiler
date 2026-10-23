@@ -19,6 +19,8 @@ from .nf_types import (
     ExecutableNextflowWorkflow,
     NF_LOAD_CONTENTS_HELPER,
     NF_LOAD_CONTENTS_LIMIT,
+    NF_ENTRY_STAGING_PREFIX,
+    NF_ENTRYPOINT_FILE,
     NF_SCATTER_INDEX_NAME,
     NF_SHELL_QUOTE_HELPER,
     NfArrayBinding,
@@ -26,6 +28,7 @@ from .nf_types import (
     NfFlag,
     NfInputReference,
     NfLiteral,
+    NfOptionalBinding,
     NfPort,
     NfProcess,
     NfProcessConnection,
@@ -70,9 +73,10 @@ NF_SHELL_QUOTE_FUNCTION = f'''def {NF_SHELL_QUOTE_HELPER}(value) {{
 # passes, and a float is finite; a command-line value is text, and text
 # converts only when it is exact. A File or Directory is path text, or a
 # mapping with a path and, if it has one, the declared class, naming an entry
-# of that kind, and the check returns its path text. [] stands for an absent optional value; no
-# path has a lowering of one. Anything else stops the run, naming the
-# parameter.
+# of that kind, and the check returns its path text; path text that names no
+# entry of that kind stops the run, naming the path. [] stands for an absent
+# optional value; no path has a lowering of one. Anything else stops the run,
+# naming the parameter.
 NF_INPUT_FUNCTION = f'''def {NF_INPUT_HELPER}(String name, value, String type) {{
     def item = type.replace('[]', '').replace('?', '')
     if( type.contains('[]') ) {{
@@ -96,9 +100,12 @@ NF_INPUT_FUNCTION = f'''def {NF_INPUT_HELPER}(String name, value, String type) {
         if( item == 'float' && text && value ==~ /[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?/ &&
             Double.isFinite(value.toDouble()) )
             return value.toDouble()
-        if( item in ['File', 'Directory'] && path instanceof String && path != '' &&
-            (item == 'File' ? file(path, glob: false).isFile() : file(path, glob: false).isDirectory()) )
-            return path
+        if( item in ['File', 'Directory'] && path instanceof String && path != '' ) {{
+            if( item == 'File' ? file(path, glob: false).isFile() : file(path, glob: false).isDirectory() )
+                return path
+            throw new IllegalArgumentException("Sophios workflow input '" + name + "' must be " + type + "; no " +
+                item + " exists at '" + path + "'")
+        }}
     }}
     throw new IllegalArgumentException("Sophios workflow input '" + name + "' must be " + type + ", not " +
         value.inspect())
@@ -162,18 +169,19 @@ def _groovy_gstring_fragment(value: str) -> str:
     return value.translate(_GSTRING_FRAGMENT_TABLE)
 
 
-def _segment_expression(segment: Any) -> str:
-    match segment:
-        case NfInputReference():
-            return f"{segment.name}.toString()"
-        case NfBasenameReference():
-            return f"{segment.name}.name.toString()"
-        case _:
-            return groovy_literal(segment.value)
+def _value(segment: NfInputReference | NfBasenameReference) -> str:
+    """The Groovy value a reference names: the input itself, or its staged file's name."""
+    return segment.name if isinstance(segment, NfInputReference) else f"{segment.name}.name"
 
 
-def _template_expression(template: Any) -> str:
-    return " + ".join(_segment_expression(segment) for segment in template.segments)
+def _segment_expression(segment: Any, entries: Mapping[str, str]) -> str:
+    if isinstance(segment, NfLiteral):
+        return groovy_literal(segment.value)
+    return entries.get(segment.name, f"{_value(segment)}.toString()")
+
+
+def _template_expression(template: Any, entries: Mapping[str, str]) -> str:
+    return " + ".join(_segment_expression(segment, entries) for segment in template.segments)
 
 
 def _shell_quote(value: str) -> str:
@@ -181,9 +189,9 @@ def _shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
-def _render_template(template: Any) -> str:
+def _render_template(template: Any, entries: Mapping[str, str]) -> str:
     """Render one typed token through the generated shell-quoting function."""
-    return f"${{{NF_SHELL_QUOTE_HELPER}({_template_expression(template)})}}"
+    return f"${{{NF_SHELL_QUOTE_HELPER}({_template_expression(template, entries)})}}"
 
 
 def _render_array_binding(token: NfArrayBinding) -> str:
@@ -197,6 +205,18 @@ def _render_array_binding(token: NfArrayBinding) -> str:
     return f"${{{token.name}.isEmpty() ? '' : {joined}}}"
 
 
+def _render_optional_binding(token: NfOptionalBinding) -> str:
+    """Render an optional input's binding: nothing for the [] sentinel, else the prefix and the value."""
+    value = f"{token.name}.toString()"
+    if token.prefix is None:
+        words = f"{NF_SHELL_QUOTE_HELPER}({value})"
+    elif token.separate:
+        words = f"{NF_SHELL_QUOTE_HELPER}({groovy_literal(token.prefix)}) + ' ' + {NF_SHELL_QUOTE_HELPER}({value})"
+    else:
+        words = f"{NF_SHELL_QUOTE_HELPER}({groovy_literal(token.prefix)} + {value})"
+    return f"${{{token.name} == [] ? '' : {words}}}"
+
+
 def _render_shell_literal(token: NfShellLiteral) -> str:
     """Render one approved shellQuote:false literal exactly as written, unquoted.
 
@@ -207,31 +227,29 @@ def _render_shell_literal(token: NfShellLiteral) -> str:
     return _groovy_gstring_fragment(token.text)
 
 
-def _render_command_token(token: Any) -> str:
-    """Render one argv token; flags and array bindings collapse away when falsy/empty."""
+def _render_command_token(token: Any, entries: Mapping[str, str]) -> str:
+    """Render one argv token; flags, array and optional bindings collapse away when false, empty or absent."""
     if isinstance(token, NfFlag):
         quoted = f"{NF_SHELL_QUOTE_HELPER}({groovy_literal(token.prefix)})"
         return f"${{{token.name} ? {quoted} : ''}}"
     if isinstance(token, NfArrayBinding):
         return _render_array_binding(token)
+    if isinstance(token, NfOptionalBinding):
+        return _render_optional_binding(token)
     if isinstance(token, NfShellLiteral):
         return _render_shell_literal(token)
-    return _render_template(token)
+    return _render_template(token, entries)
 
 
-def _render_glob(template: Any) -> str:
+def _render_glob(template: Any, entries: Mapping[str, str]) -> str:
     if all(isinstance(segment, NfLiteral) for segment in template.segments):
         return groovy_literal("".join(segment.value for segment in template.segments))
-    rendered: list[str] = []
-    for segment in template.segments:
-        match segment:
-            case NfInputReference():
-                rendered.append(f"${{{segment.name}}}")
-            case NfBasenameReference():
-                rendered.append(f"${{{segment.name}.name}}")
-            case _:
-                rendered.append(_groovy_gstring_fragment(segment.value))
-    return f'"{"".join(rendered)}"'
+    rendered = "".join(
+        _groovy_gstring_fragment(segment.value) if isinstance(segment, NfLiteral)
+        else f"${{{entries.get(segment.name, _value(segment))}}}"
+        for segment in template.segments
+    )
+    return f'"{rendered}"'
 
 
 def render_number(value: int | float) -> str:
@@ -254,7 +272,7 @@ def _capture_literal(port: NfPort) -> str:
     return groovy_literal(segment.value)
 
 
-def _process_output(port: NfPort, *, tuple_element: bool = False) -> str:
+def _process_output(port: NfPort, entries: Mapping[str, str], *, tuple_element: bool = False) -> str:
     # NfProcess guarantees every output has a typed glob, and the val
     # qualifier only for a text capture.
     assert port.glob is not None
@@ -265,8 +283,12 @@ def _process_output(port: NfPort, *, tuple_element: bool = False) -> str:
         return body if tuple_element else f"{body}, emit: {emit}"
     # A text capture returns above, so neither option reaches a val declaration.
     literal = ", glob: false" if port.literal_glob else ""
-    arity = ", arity: '1'" if port.one_file else ""
-    arity += ", optional: true" if port.optional else ""
+    if port.one_file:
+        # Nextflow refuses arity '0..1' and fails arity '1' on no match even
+        # when optional; the workflow output checks at most one match.
+        arity = f", arity: '{NF_ARRAY_PATH_ARITY}'" if port.optional else ", arity: '1'"
+    else:
+        arity = ", optional: true" if port.optional else ""
     glob = port.glob if literal else NfTemplate(tuple(
         NfLiteral(segment.value.translate(_BRACE_ESCAPES)) if isinstance(segment, NfLiteral) else segment
         for segment in port.glob.segments
@@ -276,8 +298,35 @@ def _process_output(port: NfPort, *, tuple_element: bool = False) -> str:
         # index alongside every output, one tuple line per output port
         # (design §6, Topology), so the "path ..." spelling used inside a
         # standalone output line becomes a parenthesized tuple element here.
-        return f"path({_render_glob(glob)}{literal}{arity})"
-    return f"path {_render_glob(glob)}{literal}{arity}, emit: {emit}"
+        return f"path({_render_glob(glob, entries)}{literal}{arity})"
+    return f"path {_render_glob(glob, entries)}{literal}{arity}, emit: {emit}"
+
+
+def at_most_one_suffix(output: str) -> str:
+    """The operator an optional output that must match at most one file reaches its workflow output by.
+
+    Its port declares ``arity: '0..*'``, so each task emits a list: one file
+    is the value, none is null as ``[]``, and more stop the run, as in CWL.
+    """
+    message = groovy_literal(f"Sophios workflow output '{output}' matched ")
+    return (
+        f".map {{ files -> files.size() > 1 ? error({message} + files.size() + ' files; it takes at most one')"
+        " : files ? files[0] : [] }"
+    )
+
+
+def _entry_directory(port: NfPort) -> str:
+    """The hidden directory Nextflow stages an entry's input in; the input keeps its own name there."""
+    return f"{NF_ENTRY_STAGING_PREFIX}{port.name}"
+
+
+def _entry_names(process: NfProcess) -> dict[str, str]:
+    """The Groovy expression of each entry's name, by port: its literal, or the input's own basename."""
+    return {
+        port.name: groovy_literal(port.entry.name) if port.entry.name is not None
+        else f"({port.name}.toString() - {groovy_literal(_entry_directory(port) + '/')})"
+        for port in process.inputs if port.entry is not None
+    }
 
 
 def _path_input(port: NfPort, stage_as: str | None) -> str:
@@ -294,36 +343,67 @@ def _path_input(port: NfPort, stage_as: str | None) -> str:
 
 
 def _process_input(port: NfPort, *, tuple_element: bool = False) -> str:
+    stage_as = None if port.entry is None else f"{_entry_directory(port)}/*"
     if tuple_element:
-        if port.stage_as is not None:
-            return f"{port.qualifier}({port.name}, stageAs: {groovy_literal(port.stage_as)})"
+        if stage_as is not None:
+            return f"{port.qualifier}({port.name}, stageAs: {groovy_literal(stage_as)})"
         return f"{port.qualifier}({port.name})"
     if port.qualifier == "path":
-        return _path_input(port, port.stage_as)
+        return _path_input(port, stage_as)
     return f"{port.qualifier} {port.name}"
 
 
-def _unscattered_input(port: NfPort, gathered_ports: frozenset[str]) -> str:
-    # A gathered File array holds one file per invocation, and a list a step
-    # input joins one or more per source, often all with the same basename;
-    # each is staged in its own numbered directory, as cwltool does, so the
-    # names cannot collide. Nextflow numbers the directories per port, so the
-    # port name in the pattern keeps two such ports apart.
-    if port.name in gathered_ports and port.qualifier == "path":
+def _unscattered_input(port: NfPort) -> str:
+    # The files of an array, whether a workflow input, a gather or a step
+    # input, may share a basename; each is staged in its own numbered
+    # directory, as cwltool does, so the names cannot collide. Nextflow
+    # numbers the directories per port, so the port name in the pattern keeps
+    # two such ports apart.
+    if port.is_array and port.qualifier == "path":
         return _path_input(port, f"gather_{port.name}_*/*")
     return _process_input(port)
 
 
-def _render_process(
-    process: NfProcess, multi_input_ports: tuple[str, ...] = (), gathered_ports: frozenset[str] = frozenset()
-) -> str:
+# A task's script reads its image's ENTRYPOINT words, NUL-separated, and runs its command after them.
+NF_ENTRYPOINT_READ = (
+    f"__sophios_entrypoint=(); while IFS= read -r -d '' word; do __sophios_entrypoint+=(\"\\$word\"); "
+    f"done < {NF_ENTRYPOINT_FILE}"
+)
+NF_ENTRYPOINT_WORDS = '\\${__sophios_entrypoint[@]+"\\${__sophios_entrypoint[@]}"}'
+
+
+def container_directives(container: str) -> tuple[str, ...]:
+    """The directives of a process that runs in ``container``.
+
+    CWL runs the command as the container's arguments, after the image's
+    ENTRYPOINT; Nextflow runs the task script as the container's command. So
+    the entrypoint is cleared, and a ``beforeScript``, on the host where
+    Nextflow starts the container, writes the image's ENTRYPOINT words for
+    the script to run the command after.
+    """
+    image = _shell_quote(container)
+    entrypoint = "'{{range .Config.Entrypoint}}{{.}}{{\"\\x00\"}}{{end}}'"
+    return (
+        f"container {groovy_literal(container)}",
+        "containerOptions \"--entrypoint ''\"",
+        "beforeScript " + groovy_literal(
+            f"docker image inspect {image} > /dev/null 2>&1 || docker pull -q {image} > /dev/null; "
+            f"docker image inspect --format {entrypoint} {image} > {NF_ENTRYPOINT_FILE}"
+        ),
+    )
+
+
+def _render_process(process: NfProcess, multi_input_ports: tuple[str, ...] = ()) -> str:
+    entries = _entry_names(process)
     lines = [f"process {process.name} {{"]
     if process.container is not None:
-        lines.append(f"    container {groovy_literal(process.container)}")
+        lines.extend(f"    {directive}" for directive in container_directives(process.container))
     if process.resources.cpus is not None:
         lines.append(f"    cpus {process.resources.cpus}")
     if process.resources.memory_mb is not None:
         lines.append(f'    memory "{render_number(process.resources.memory_mb)} MB"')
+    if process.resources.accelerator is not None:
+        lines.append(f"    accelerator {process.resources.accelerator}")
 
     if process.inputs:
         lines.extend(["", "    input:"])
@@ -335,9 +415,9 @@ def _render_process(
                 + [_process_input(port, tuple_element=True) for port in scattered]
             )
             lines.append(f"    tuple {tuple_elements}")
-            lines.extend(f"    {_unscattered_input(port, gathered_ports)}" for port in other)
+            lines.extend(f"    {_unscattered_input(port)}" for port in other)
         else:
-            lines.extend(f"    {_unscattered_input(port, gathered_ports)}" for port in process.inputs)
+            lines.extend(f"    {_unscattered_input(port)}" for port in process.inputs)
     if process.outputs:
         lines.extend(["", "    output:"])
         if multi_input_ports:
@@ -345,21 +425,39 @@ def _render_process(
                 emit = port.emit or port.name
                 lines.append(
                     f"    tuple val({NF_SCATTER_INDEX_NAME}), "
-                    f"{_process_output(port, tuple_element=True)}, emit: {emit}"
+                    f"{_process_output(port, entries, tuple_element=True)}, emit: {emit}"
                 )
         else:
-            lines.extend(f"    {_process_output(port)}" for port in process.outputs)
+            lines.extend(f"    {_process_output(port, entries)}" for port in process.outputs)
 
-    command = " ".join(_render_command_token(token) for token in process.command.tokens)
+    command = " ".join(_render_command_token(token, entries) for token in process.command.tokens)
     streams = (
         ("<", process.command.stdin),
         (">", process.command.stdout),
         ("2>", process.command.stderr),
     )
     redirects = "".join(
-        f" {operator} {_render_template(stream)}" for operator, stream in streams if stream is not None
+        f" {operator} {_render_template(stream, entries)}" for operator, stream in streams if stream is not None
     )
     lines.extend(["", "    script:", '    \"\"\"'])
+    # The task makes each entry before the command runs: a copy the command may change, or a symlink.
+    # A name the task directory already holds stops the task, since cp and ln would make the entry inside it.
+    for port in process.inputs:
+        if port.entry is not None:
+            name = f"${{{NF_SHELL_QUOTE_HELPER}({entries[port.name]})}}"
+            lines.extend([
+                f"    if [ -e {name} ] || [ -L {name} ]; then "
+                f"echo 'InitialWorkDirRequirement entry already exists in the task directory:' {name} >&2; "
+                "exit 1; fi",
+                f"    {'cp -RL' if port.entry.copy else 'ln -s'} -- "
+                f"${{{NF_SHELL_QUOTE_HELPER}({port.name}.toString())}} {name}",
+            ])
+    lines.extend(
+        f"    export {variable.name}={_render_template(variable.value, entries)}" for variable in process.command.env
+    )
+    if process.container is not None:
+        lines.append(f"    {NF_ENTRYPOINT_READ}")
+        command = f"{NF_ENTRYPOINT_WORDS} {command}"
     if redirects and any(isinstance(token, NfShellLiteral) for token in process.command.tokens):
         # CWL redirects the whole command, not just the last one a shell literal starts;
         # on separate lines, a trailing `&` or `#` in the literal cannot swallow the `)`.
@@ -655,9 +753,11 @@ def _argument(
 
     ``methods`` maps every multi-input-scattered process to its method when
     the input broadcasts to the tasks of a scattered one. An unscattered
-    process emits one element per output; taken as it is, that queue would
-    pair with the first invocation only, so it is taken as one value
-    (design §6, Topology, Collection cardinality).
+    process emits one element per output. The output is a queue when one of
+    the process's inputs is, such as a conditional step's output, and taken
+    as it is that queue would pair with the first invocation only; on a value
+    channel ``.first()`` changes nothing (design §6, Topology, Collection
+    cardinality).
     """
     if isinstance(connection, NfStepInputConnection):
         return _step_input_expression(workflow, connection)
@@ -743,9 +843,11 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
                     f".combine({_shape_channel(connection.from_process)})"
                     f".flatMap {{ flat, shape -> {NF_NEST_HELPER}(flat, shape) }}"
                 )
-            elif any(port.optional for port in processes[connection.from_process].outputs if port.name == connection.from_port):
-                # An optional output that matched nothing emits nothing: report CWL null.
-                expression = f"{expression}.ifEmpty([])"
+            elif (port := next(
+                port for port in processes[connection.from_process].outputs if port.name == connection.from_port
+            )).optional:
+                # An optional output that matched nothing reports CWL null.
+                expression += at_most_one_suffix(connection.to_port) if port.one_file else ".ifEmpty([])"
             elif connection.from_process in methods:
                 # Sort by the hidden invocation index before stripping it, so
                 # the gathered workflow output never depends on task
@@ -814,17 +916,7 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
     if any(isinstance(connection, NfStepInputConnection) for connection in workflow.connections):
         sections.append(NF_STEP_INPUT_FUNCTION)
     sections.extend(
-        _render_process(
-            process,
-            tuple(name for name, _, _ in _multi_input_sources(workflow, process)),
-            frozenset(
-                connection.to_port
-                for connection in workflow.connections
-                if (isinstance(connection, NfProcessConnection) and connection.adapter == "gather"
-                    or isinstance(connection, NfStepInputConnection) and connection.gives_list)
-                and connection.to_process == process.name
-            ),
-        )
+        _render_process(process, tuple(name for name, _, _ in _multi_input_sources(workflow, process)))
         for process in workflow.processes
     )
     sections.append(_render_named_workflow(workflow))

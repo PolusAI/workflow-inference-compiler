@@ -30,10 +30,12 @@ from sophios.ir.frontdoor import SourceBundle
 from sophios.ir.resolve import RegistrySnapshot
 from sophios.lang import Diagnostics, EdgeDef, EdgeRef, OutputBinding, ParseResult
 from sophios.nf_types import (
+    NfEntry,
     NfFlag,
     NfPort,
     NfProcessConnection,
     NfLiteral,
+    NfOptionalBinding,
     NfResources,
     NfShellLiteral,
     NfTemplate,
@@ -74,9 +76,8 @@ def test_real_unsupported_compilation_aggregates_capability_errors(
     assert "steps[1].run.inputs.file.inputBinding.shellQuote" in message
     # cat.cwl's string output is the approved file-text capture shape
     # (loadContents: true, outputEval: $(self[0].contents), literal glob), so
-    # it no longer produces a finding at all; the mixed container policy does.
+    # it no longer produces a finding at all.
     assert "steps[2].run.outputs.output" not in message
-    assert "workflow.steps: mixed container execution is not supported" in message
 
 
 @pytest.mark.fast
@@ -216,8 +217,8 @@ def test_accepts_unreferenced_absent_optional_input() -> None:
 
 
 @pytest.mark.fast
-def test_rejects_absent_optional_input_bound_directly_into_the_command() -> None:
-    """A general presence-gated value binding (the value analogue of a flag) is deferred."""
+def test_absent_optional_input_bound_directly_into_the_command_lowers_to_an_optional_binding() -> None:
+    """CWL adds nothing for a null input: its own binding is presence-gated, prefix included."""
     optional = tool(
         "OPTIONAL",
         inputs={
@@ -228,12 +229,9 @@ def test_rejects_absent_optional_input_bound_directly_into_the_command() -> None
         },
     )
     rose = one_step(optional, message=None)
-    with pytest.raises(
-        ValueError,
-        match=r"steps\[0\].run.inputs.message: absent optional values are supported only for "
-        "a val input whose absence leaves command rendering unchanged",
-    ):
-        compiled_source_to_nextflow(rose)
+    workflow = compiled_source_to_nextflow(rose)
+    assert workflow.processes[0].command.tokens[-1] == NfOptionalBinding("message", "--message")
+    assert workflow.params == {"message": ()}
 
 
 @pytest.mark.fast
@@ -529,29 +527,27 @@ def test_rejects_unsupported_workflow_level_requirements(
 
 
 @pytest.mark.fast
-def test_rejects_an_optional_output_with_a_pattern_glob() -> None:
+def test_an_optional_output_with_a_pattern_glob_must_reach_a_workflow_output() -> None:
     logs = tool("LOGS", baseCommand="true", outputs={"o": {"type": "File?", "outputBinding": {"glob": "*.log"}}})
-    workflow = workflow_doc([step("LOGS", out=["o"])], outputs={"o": {"type": "File?", "outputSource": "LOGS/o"}})
+    assert compiled_source_to_nextflow(one_step(logs, ["o"])).processes[0].outputs[0].optional
 
-    assert _findings(synthetic_source(workflow, [logs])) == [
-        "steps[0]: an optional output cannot require exactly one file (a pattern glob or a $(self[0]) "
-        "capture): Nextflow fails that output when nothing matches"
-    ]
+    with pytest.raises(ValueError, match="optional outputs o must match at most one file and must reach a workflow"):
+        compiled_source_to_nextflow(synthetic_source(workflow_doc([step("LOGS", out=["o"])]), [logs]))
 
 
 @pytest.mark.fast
-def test_rejects_mixed_container_execution_policy() -> None:
+def test_host_and_container_tools_lower_into_one_workflow() -> None:
     containerized = tool(
         "CONTAINERIZED",
         requirements={"DockerRequirement": {"dockerPull": "ubuntu:24.04"}},
     )
     host = tool("HOST")
-    rose = synthetic_source(
+    workflow = compiled_source_to_nextflow(synthetic_source(
         workflow_doc([step("CONTAINERIZED"), step("HOST")]),
         [containerized, host],
-    )
-    with pytest.raises(ValueError, match="mixed container execution is not supported"):
-        compiled_source_to_nextflow(rose)
+    ))
+    assert [process.container for process in workflow.processes] == ["ubuntu:24.04", None]
+    assert workflow.containers_enabled
 
 
 @pytest.mark.fast
@@ -661,6 +657,44 @@ def test_accepts_literal_shell_quote_false_binding() -> None:
     assert NfShellLiteral(">>") in converted.processes[0].command.tokens
 
 
+_ENV_INPUTS = {"s": {"type": "string"}, "n": {"type": "int"}, "f": {"type": "File"}, "o": {"type": "string?"}}
+
+
+def _env_rose(env_def: Any, *, supply_optional: bool = True) -> CompiledNextflowSource:
+    run = tool("ENV", inputs=_ENV_INPUTS, requirements={"EnvVarRequirement": {"envDef": env_def}})
+    values: dict[str, Any] = {"s": "v", "n": 1, "f": {"class": "File", "path": "x.txt"}, "o": "w"}
+    return one_step(run, **{name: value for name, value in values.items() if supply_optional or name != "o"})
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("entry", "reason"), [
+    ({"envName": "A", "envValue": "$(inputs.n)"}, "needs a string input, read whole as $(inputs.<name>); n is declared 'int'"),
+    ({"envName": "A", "envValue": "$(inputs.f.path)"}, "needs a string input"),
+    ({"envName": "A", "envValue": "$(inputs.s.basename)"}, "needs a string input"),
+    ({"envName": "A", "envValue": "pre-$(inputs.s)"}, "is not supported: write literal text or exactly $(inputs.<name>)"),
+    ({"envName": "A", "envValue": "${return 1}"}, "is not supported"),
+    ({"envName": "A", "envValue": "$(runtime.cores)"}, "is not supported"),
+    ({"envName": "1A", "envValue": "x"}, "environment variable name must be a shell variable name, got '1A'"),
+    ({"envName": "A", "envValue": 3}, "an envDef entry needs a string envName and a string envValue"),
+    ("A=x", "an envDef entry needs a string envName and a string envValue"),
+])
+def test_env_var_requirement_rejects_every_other_value_by_name(entry: Any, reason: str) -> None:
+    [finding] = _findings(_env_rose([entry]))
+    assert finding.startswith("steps[0].run.requirements.EnvVarRequirement.envDef[0]: ")
+    assert reason in finding
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("field", ["cudaDeviceCountMin", "cudaDeviceCountMax"])
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "2", "$(inputs.n)"])
+def test_a_cuda_device_count_is_a_positive_whole_number(field: str, value: Any) -> None:
+    rose = one_step(tool("GPU", hints={"cwltool:CUDARequirement": {"cudaDeviceCountMin": 1, field: value}}))
+    assert _findings(rose) == [
+        f"steps[0].run.hints.cwltool:CUDARequirement.{field}: a CUDA device count must be a positive whole "
+        f"number, got {value!r}"
+    ]
+
+
 def _iwdr_tool(
     listing: list[Any],
     *,
@@ -693,26 +727,33 @@ def _iwdr_rose(listing: list[Any], **kwargs: Any) -> CompiledNextflowSource:
 
 
 @pytest.mark.fast
-def test_accepts_iwdr_bare_shorthand_own_basename() -> None:
-    """The real append.cwl shape: a bare $(inputs.<name>) listing entry is a no-op."""
-    rose = _iwdr_rose(["$(inputs.source)"])
-    converted = compiled_source_to_nextflow(rose)
-    assert converted.processes[0].inputs[0].stage_as is None
+@pytest.mark.parametrize(("item", "entry"), [
+    ("$(inputs.source)", NfEntry()),  # the real append.cwl shape
+    ({"entry": "$(inputs.source)", "entryname": "$(inputs.source.basename)"}, NfEntry()),  # tool_builder .stage()
+    ({"entry": "$(inputs.source)", "writable": False}, NfEntry()),
+    ({"entry": "$(inputs.source)", "writable": True}, NfEntry(copy=True)),  # the image-workflows plugins' outDir
+    ({"entry": "$(inputs.source)", "entryname": "renamed.txt"}, NfEntry("renamed.txt")),
+    ({"entry": "$(inputs.source)", "entryname": "reads*.fq", "writable": True}, NfEntry("reads*.fq", copy=True)),
+])
+def test_every_iwdr_entry_is_one_the_task_makes(item: Any, entry: NfEntry) -> None:
+    """design §6, Inputs and channels: under its own basename or a literal name, linked or copied."""
+    converted = compiled_source_to_nextflow(_iwdr_rose([item]))
+    assert converted.processes[0].inputs[0].entry == entry
 
 
 @pytest.mark.fast
-def test_accepts_iwdr_dirent_self_basename_entryname() -> None:
-    """The tool_builder .stage() default: entryname restates the input's own basename."""
-    rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "$(inputs.source.basename)"}])
-    converted = compiled_source_to_nextflow(rose)
-    assert converted.processes[0].inputs[0].stage_as is None
-
-
-@pytest.mark.fast
-def test_accepts_iwdr_dirent_literal_rename() -> None:
-    rose = _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "renamed.txt"}])
-    converted = compiled_source_to_nextflow(rose)
-    assert converted.processes[0].inputs[0].stage_as == "renamed.txt"
+@pytest.mark.parametrize("item", ["$(inputs.source)", {"entry": "$(inputs.source)", "writable": True}])
+@pytest.mark.parametrize("reference", ["$(inputs.source)", "$(inputs.source.path)", "$(inputs.source.basename)"])
+def test_an_entry_under_its_own_basename_may_be_referenced(item: Any, reference: str) -> None:
+    """The plugin shape: --outDir $(inputs.outDir) and glob: $(inputs.outDir.basename) name the entry."""
+    rose = one_step(tool(
+        "STAGE",
+        inputs={"source": {"type": "Directory", "inputBinding": {"prefix": "--outDir"}}},
+        outputs={"result": {"type": "Directory", "outputBinding": {"glob": "$(inputs.source.basename)"}}},
+        requirements={"InitialWorkDirRequirement": {"listing": [item]}},
+        arguments=[reference],
+    ), ["result"], source={"class": "Directory", "path": "out"})
+    assert compiled_source_to_nextflow(rose).processes[0].inputs[0].entry is not None
 
 
 def _copy_tool() -> CommandLineTool:
@@ -1433,6 +1474,13 @@ def _boundary_value(cwl_type: Any, value: Any) -> CompiledNextflowSource:
     return synthetic_source(document, [], workflow_inputs={"value": value})
 
 
+def _absent_message(declared: str, binding: Yaml | None = None, **extra: Any) -> CompiledNextflowSource:
+    """A step whose optional `message` input, declared `declared` and bound by `binding`, is absent."""
+    definition = {"type": ["null", declared], **({"inputBinding": binding} if binding else {})}
+    return one_step(tool("OPTIONAL", inputs={"message": definition}, **extra), message=None)
+
+
+_DOCKER = {"DockerRequirement": {"dockerPull": "ubuntu:24.04"}}
 _EMPTY_SCATTER = "steps[0].scatter: scatter must name one input, as a string or a non-empty list"
 _SCATTER_ITEM = {"in": {"item": "items"}, "out": ["result"], "scatter": ["item"]}
 _FILE_RESULT = {"result": {"type": "File", "outputBinding": {"glob": "out.txt"}}}
@@ -1539,6 +1587,50 @@ FINDINGS = [
     pytest.param(lambda: one_step(tool("ARGS", arguments=[{"valueFrom": "x", "loadContents": True}])), [
         "steps[0].run.arguments[0].loadContents: a binding's loadContents is not supported"
     ], id="loadContents_on_an_arguments_entry"),
+    pytest.param(lambda: _env_rose({"A": {"envValue": "x", "foo": 1}}), [
+        "steps[0].run.requirements.EnvVarRequirement.envDef.A.foo: foo is not consumed by the Nextflow lowering"
+    ], id="an_env_def_entry_with_an_unknown_field"),
+    pytest.param(lambda: _env_rose([{"envName": "A", "envValue": "$(inputs.o)"}], supply_optional=False), [
+        "steps[0].run.inputs.o: absent optional values are supported only for a val input whose absence "
+        "leaves command rendering unchanged"
+    ], id="an_env_var_from_an_absent_input"),
+    pytest.param(lambda: one_step(tool(
+        "GPU", hints=[{"class": "cwltool:CUDARequirement", "cudaComputeCapabilityMin": "3.0"}]
+    )), [
+        "steps[0].run.hints.0.cudaComputeCapabilityMin: cudaComputeCapabilityMin is not consumed by the "
+        "Nextflow lowering"
+    ], id="a_cuda_field_cwltool_does_not_declare"),
+    *(
+        pytest.param(
+            lambda writable=writable: _iwdr_rose([{"entry": "$(inputs.source)", "writable": writable}]),
+            ["steps[0].run.requirements.InitialWorkDirRequirement.listing[0]: writable must be a literal boolean"],
+            id=f"iwdr_writable_that_is_not_a_literal_boolean-{writable}",
+        )
+        for writable in ("true", 1, "$(inputs.flag)")
+    ),
+    # F84: the task directory holds the staged input under that name, which a CWL glob does not match.
+    *(
+        pytest.param(lambda glob=glob: one_step(tool(
+            "copy", inputs={"source": {"type": "File"}},
+            outputs={"result": {"type": "File", "outputBinding": {"glob": glob}}},
+        ), ["result"], source={"class": "File", "path": "in.txt"}), [
+            "steps[0]: process 'copy' output 'result' globs only the staged input 'source', which a CWL glob "
+            "does not match: derive a new name from it, or make the input an InitialWorkDirRequirement entry"
+        ], id=f"a_glob_of_only_a_staged_input-{glob.strip()}")
+        for glob in ("$(inputs.source)", "$(inputs.source.basename)", " $(inputs.source.path) ")
+    ),
+    pytest.param(lambda: one_step(tool("SHELL", requirements={**_DOCKER, "ShellCommandRequirement": {}})), [
+        "steps[0].run: ShellCommandRequirement beside a DockerRequirement is not supported: CWL runs the command "
+        "as /bin/sh -c after the image's ENTRYPOINT, which the Nextflow task does not"
+    ], id="shell_mode_in_a_container"),
+    pytest.param(lambda: one_step(tool("ENTRY", baseCommand=None, requirements=_DOCKER, inputs={
+        "name": {"type": "string?", "inputBinding": {"prefix": "--name"}},
+        "verbose": {"type": "boolean", "inputBinding": {"prefix": "-v"}},
+    }), verbose=False), [
+        "steps[0]: a containerized tool whose command can render empty is not supported: CWL then gives the "
+        "container no arguments, so the image runs its CMD, after its ENTRYPOINT if it has one, which the "
+        "Nextflow task does not; name the program in baseCommand"
+    ], id="a_containerized_command_that_can_render_empty"),
 ]
 
 
@@ -1552,6 +1644,10 @@ def test_a_rejected_source_has_exactly_its_findings(
 
 _BOOLEAN_VALUE_FROM = r"valueFrom on a boolean inputBinding is supported only as"
 _ABSENT_OPTIONAL = r"steps\[0\].run.inputs.{}: absent optional"
+_ABSENT_MESSAGE = (
+    _ABSENT_OPTIONAL.format("message")
+    + " values are supported only for a val input whose absence leaves command rendering unchanged"
+)
 
 # Each source, built when its test runs, and a pattern its rejection matches.
 MATCHES = [
@@ -1630,9 +1726,17 @@ MATCHES = [
         outputs=_FILE_RESULT,
         requirements={"ShellCommandRequirement": {}},
     ), ["result"], text="Hello"), "does not support a prefix", id="shell_quote_false_input_binding_with_no_value_from"),
+    # design §6, Commands: the task's bash -ue would expand it, not CWL's sh -c.
+    *(
+        pytest.param(
+            lambda value_from=value_from: _shell_rose([{"valueFrom": value_from, "shellQuote": False}]),
+            "holds a '\\$', which the task's shell would expand", id=f"a_dollar_in_a_shell_quote_false_literal-{name}",
+        )
+        for value_from, name in (("[$UNSET]", "variable"), ("\\$(date)", "escaped_substitution"))
+    ),
     pytest.param(
-        lambda: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "renamed.txt", "writable": True}]),
-        "writable: true", id="iwdr_writable_true",
+        lambda: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": ".sophios_entry_source"}]),
+        r"listing\[0\]: entryname must not begin with '.sophios_entry_'", id="iwdr_entryname_under_the_reserved_prefix",
     ),
     pytest.param(
         lambda: _iwdr_rose([{"entry": "literal file content", "entryname": "x.txt"}]),
@@ -1645,13 +1749,6 @@ MATCHES = [
     pytest.param(
         lambda: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": "sub/dir.txt"}]), "path separator",
         id="iwdr_entryname_with_path_separator",
-    ),
-    *(
-        pytest.param(
-            lambda entryname=entryname: _iwdr_rose([{"entry": "$(inputs.source)", "entryname": entryname}]),
-            "stageAs wildcard", id=f"iwdr_entryname_with_nextflow_stage_as_wildcard-{entryname}",
-        )
-        for entryname in ("reads*.fq", "sample?.txt")
     ),
     pytest.param(lambda: _iwdr_rose(["$(inputs.nope)"]), "undeclared input", id="iwdr_undeclared_input"),
     pytest.param(
@@ -1677,7 +1774,7 @@ MATCHES = [
         lambda: _iwdr_rose(
             [{"entry": "$(inputs.source)", "entryname": "renamed.txt"}], arguments=["cat", "$(inputs.source)"]
         ),
-        "staged under an explicit rename", id="iwdr_renamed_input_referenced_elsewhere",
+        "has an InitialWorkDirRequirement entry with a literal name", id="iwdr_renamed_input_referenced_elsewhere",
     ),
     pytest.param(lambda: _iwdr_rose([
         {"entry": "$(inputs.source)", "entryname": "one.txt"},
@@ -1727,27 +1824,27 @@ MATCHES = [
     # A shape _source_values cannot read must still fail closed, not skip the boolean-source check.
     pytest.param(lambda: _flag_wired_to([]), "", id="a_flag_input_wired_to_an_unrecognized_source_shape-list"),
     pytest.param(lambda: _flag_wired_to(42), "", id="a_flag_input_wired_to_an_unrecognized_source_shape-int"),
+    # Only the input's own binding is presence-gated; a reference elsewhere would render the sentinel.
+    pytest.param(lambda: _absent_message(
+        "string", {"position": 1, "prefix": "--message"}, arguments=[{"position": 2, "valueFrom": "$(inputs.message)"}]
+    ), _ABSENT_MESSAGE, id="absent_optional_input_referenced_outside_its_own_binding"),
     # CWL omits the entire binding when its optional source is absent.
-    pytest.param(lambda: one_step(tool(
-        "OPTIONAL",
-        inputs={"message": {
-            "type": ["null", "string"],
-            "inputBinding": {"position": 1, "valueFrom": "printf optional", "shellQuote": False},
-        }},
+    pytest.param(lambda: _absent_message(
+        "string", {"position": 1, "valueFrom": "printf optional", "shellQuote": False},
         requirements={"ShellCommandRequirement": {}},
-    ), message=None), r"steps\[0\].run.inputs.message: absent optional values are supported only for ",
-        id="absent_optional_input_whose_binding_emits_a_shell_literal"),
-    # An optional input with no binding of its own but referenced elsewhere still rejects.
-    pytest.param(lambda: one_step(tool(
-        "ALIASED", inputs={"message": {"type": ["null", "string"]}},
-        arguments=[{"position": 1, "valueFrom": "$(inputs.message)"}],
-    ), message=None), _ABSENT_OPTIONAL.format("message"),
-        id="absent_optional_input_referenced_via_another_bindings_value_from"),
-    # path-qualifier channel construction always stages unconditionally; absence stays rejected.
+    ), _ABSENT_MESSAGE, id="absent_optional_input_whose_binding_emits_a_shell_literal"),
+    # CWL omits the prefix and the literal when the optional source is absent.
     pytest.param(
-        lambda: one_step(tool("OPTIONAL", inputs={"reference": {"type": ["null", "File"]}}), reference=None),
-        _ABSENT_OPTIONAL.format("reference"), id="absent_optional_path_input",
+        lambda: _absent_message("string", {"position": 1, "prefix": "--message", "valueFrom": "literal"}),
+        _ABSENT_MESSAGE, id="absent_optional_input_whose_binding_has_a_literal_value_from",
     ),
+    # No binding of its own, but referenced elsewhere.
+    pytest.param(
+        lambda: _absent_message("string", arguments=[{"position": 1, "valueFrom": "$(inputs.message)"}]),
+        _ABSENT_MESSAGE, id="absent_optional_input_referenced_via_another_bindings_value_from",
+    ),
+    # path-qualifier channel construction always stages unconditionally.
+    pytest.param(lambda: _absent_message("File"), _ABSENT_MESSAGE, id="absent_optional_path_input"),
     pytest.param(lambda: synthetic_source(
         workflow_doc(
             [step("REQUIRED", **{"in": {"message": "message"}})], inputs={"message": {"type": ["null", "string"]}}

@@ -60,7 +60,10 @@ number within the 32-bit range for an `int`, and a finite decimal number for
 a `float`; a number given for a `float` must be finite too. A `File` or
 `Directory` value is a path, or a CWL File or Directory object with a `path`
 and, if it has a `class`, the declared one, and must name an existing file or
-directory of that kind. An array comes only from the params file, and `[]`
+directory of that kind; a relative path is relative to the directory Nextflow
+is launched from. A path that names nothing of that kind stops the run with
+`Sophios workflow input '<name>' must be <type>; no <kind> exists at
+'<path>'`. An array comes only from the params file, and `[]`
 stands for an absent optional value that is not a `File` or `Directory`; an
 absent optional `File` or `Directory` workflow input is rejected when the
 workflow compiles. Any other value stops the run with `Sophios workflow input
@@ -153,12 +156,17 @@ omits the whole binding when that input is absent.
 An absent optional `val` input (string/int/float/boolean) lowers to a
 reserved `[]` sentinel parameter when its consuming tool input is never
 dereferenced in that tool's command, stream targets, or output globs, or is
-referenced solely as the boolean flag it drives. `[]` is used instead of
-`null` because `Channel.value(null)` never binds under the pinned Nextflow
-runtime and the run hangs; `[]` is Groovy-falsy like `null`, so flag
-rendering is unaffected. Any other reference position, and any absent
-optional `File`/`Directory` or array input, still rejects: those need their
-own sentinel or presence-gated binding, not yet approved.
+referenced only by the boolean flag it drives or by its own binding. `[]` is
+used instead of `null` because `Channel.value(null)` never binds under the
+pinned Nextflow runtime and the run hangs; `[]` is Groovy-falsy like `null`,
+so flag rendering is unaffected.
+
+An optional `string`, `int` or `float` input's own `inputBinding`, with no
+`valueFrom`, adds nothing for `[]`, prefix included, as CWL adds nothing for
+a null input; any other value adds the prefix and the value as the binding of
+a required input does. Any other reference to an absent input, a `valueFrom`
+on its own binding included, and any absent optional `File`/`Directory` or
+array input, is rejected.
 
 ## Basename references
 
@@ -184,11 +192,14 @@ object as JSON, so it is rejected; write `$(inputs.f.path)` there instead.
 A string holding a `$(…)` reference is interpolated as cwltool does: it is
 stripped of surrounding whitespace, `\$(` writes a literal `$(`, and `\\`
 writes one backslash. A string with no reference is used exactly as written.
+A `$` that is not followed by `(` or `{` is plain text, so a literal argument
+such as `mv a "$1"` reaches the command as written.
 
 The `.copy` suffix above is load-bearing: a basename glob must derive a **new**
-name. A Nextflow output declaration does not capture staged inputs, so a glob
-naming only the input itself compiles cleanly and then fails at run time with
-`Missing output file(s)`.
+name. A glob that is only a reference to a `File` or `Directory` input names
+the staged input, which a CWL glob does not match, so it is rejected. The
+exception is an input made an `InitialWorkDirRequirement` entry under its own
+name, below: the glob then names the entry.
 
 A glob built only from basename references is matched literally, so a staged
 name containing `*`, `?`, `[`, `{` or `}` still finds the file. A `*`, `?` or
@@ -212,7 +223,9 @@ items is supported. It carries the same qualifier its item type would carry
 alone (`path` for File/Directory, `val` for scalars); a `path` array stages
 every element for one process call rather than fanning the channel out, and
 renders as `path <name>, arity: '0..*'` so the process always receives a list,
-whether the array holds no file, one, or many. The one supported command-line
+whether the array holds no file, one, or many. Each file is staged in its own
+numbered directory, so same-named files from different directories never
+collide. The one supported command-line
 binding shape (no `itemSeparator`) contributes its optional prefix once,
 followed by each element as its own argument, and contributes nothing at all
 when the array is empty. An empty array is a present, valid value — distinct
@@ -247,23 +260,105 @@ arguments:
 whose `valueFrom` references any input — directly, or via a `.path`/
 `.basename` suffix — is rejected: unquoting a runtime-supplied value would
 let workflow input data or a chosen file name be interpreted as shell
-syntax, which is exactly the boundary this lowering must not cross.
+syntax, which is exactly the boundary this lowering must not cross. A `$` in
+the literal is rejected too: the task's shell would expand it in its own
+environment, not CWL's.
+
+## Environment variables
+
+`EnvVarRequirement` sets variables for the command, in list or map form:
+
+```yaml
+requirements:
+  EnvVarRequirement:
+    envDef:
+      RDKIT_ERROR_LOGGING: $(inputs.rdkit_error_logging)
+      CONDA_PREFIX: /opt/conda/
+```
+
+A value is literal text, or exactly `$(inputs.<name>)` of a `string` input.
+The task exports each variable, its value shell-quoted, before the command
+runs, so the command sees the value byte for byte. In literal text a `$` that
+is not followed by `(` or `{` is plain text. A referenced optional input
+needs a value. Any other value is rejected by name: a reference to an input
+of another type, `.path` or `.basename`, a reference inside other text, or any
+other expression. So is a name that is not a shell variable name.
+
+## Containers
+
+A tool's `DockerRequirement` image becomes its process's `container`
+directive, and a tool without one runs on the host; one workflow may hold
+both. `nextflow.config` enables Docker when any process has a container.
+
+CWL gives the command to the container as its arguments, so the image's
+`ENTRYPOINT` runs first, and a tool with no `baseCommand` relies on it.
+Each containerized process clears the entrypoint and runs its command after
+the entrypoint's words: its `beforeScript`, on the host where the task
+starts, pulls the image if it is missing and writes its `ENTRYPOINT` to a
+hidden file in the task directory, which the script reads. The host needs
+the `docker` command, as Nextflow's own Docker support does. A tool with
+both `DockerRequirement` and `ShellCommandRequirement` is rejected: CWL runs
+its command as `/bin/sh -c` after the entrypoint. So is a containerized tool
+whose command can render empty, with no `baseCommand`, no `arguments` and no
+bound input but optional, boolean or array ones: CWL then gives its container
+no arguments, so the image runs its `CMD`; name the program in `baseCommand`.
+
+## GPUs
+
+`cwltool:CUDARequirement`, as a requirement or a hint, becomes the
+`accelerator` directive. The count is `cudaDeviceCountMin`, else
+`cudaDeviceCountMax`, else 1, the count cwltool asks for. A count is a whole
+number; an expression is rejected. `cudaVersionMin` and
+`cudaComputeCapability` have no Nextflow counterpart. The generated pipeline
+does not check them, and compiling reports each one with the note
+[`wic046`](error_codes.md). The command line prints the note with the other
+diagnostics; the Python API gives it as a `UserWarning`. Where a task runs is
+the executor's choice: the local executor accepts the directive and runs the
+task on the machine as it is. Structural import does not write the count back:
+cwltool's `CUDARequirement` requires `cudaVersionMin` and
+`cudaComputeCapability`, which the directive does not hold.
 
 ## Staging with InitialWorkDirRequirement
 
-Nextflow already stages every `File`/`Directory` input under its own
-original name, so a `listing` entry that only asks for that — the bare
-`$(inputs.<name>)` shorthand, or a `Dirent` whose `entryname` is absent or
-`$(inputs.<name>.basename)` — is a no-op and is accepted:
+A `listing` entry names one `File` or `Directory` input: the bare
+`$(inputs.<name>)` shorthand, or a `Dirent` whose `entry` is that reference.
+The entry keeps the input's own name when `entryname` is absent or
+`$(inputs.<name>.basename)`, and takes a literal `entryname` otherwise.
+Nextflow stages the input in a hidden directory, and the task makes the entry
+before the command runs: a copy when `writable: true`, so the command may
+change it without touching the input, and a symlink otherwise. Because the
+task makes the entry, an output glob matches it as a CWL glob does.
+
+An entry under the input's own name is what the input names: a reference to
+the input, plain, `.path` or `.basename`, names the entry. This is how a tool
+writes into an output directory it is given:
 
 ```yaml
 requirements:
   InitialWorkDirRequirement:
     listing:
-    - $(inputs.source)
+    - entry: $(inputs.outDir)
+      writable: true
+inputs:
+  outDir:
+    type: Directory
+    inputBinding:
+      prefix: --outDir
+outputs:
+  outDir:
+    type: Directory
+    outputBinding:
+      glob: $(inputs.outDir.basename)
 ```
 
-Staging under a different, literal name is supported too:
+The `outDir` given to such a tool must be an existing directory when the
+pipeline starts, as every `Directory` input must; the task works on its copy.
+Sophios's CWL runs make an output directory given as a bare name, but the
+generated pipeline does not, so make each one first, for example an empty
+directory under the name `nextflow_params.json` gives it, in the directory
+Nextflow is launched from.
+
+An entry with a literal name is named by that literal:
 
 ```yaml
 requirements:
@@ -276,17 +371,19 @@ arguments:
 - renamed.txt
 ```
 
-The renamed port stays bound to its own variable but stages under the
-literal name via Nextflow's `stageAs` option. A renamed input's own `.name`
-reports the staged name, not its original CWL basename, so the same input
-cannot also be referenced elsewhere in that tool's command, stream targets,
-or output globs — the command must address the staged file by the literal
-name directly, as above.
+Such an input cannot also be referenced in that tool's command, stream
+targets, or output globs; the command names the entry by its literal, as
+above.
 
-`writable: true`, an `entry` that isn't a bare reference to one File or
-Directory input (inline content construction), an `entryname` that is any
-other expression, a listing entry naming a `val`-qualifier or array-typed
-input, and two inputs staged under the same literal name are all rejected.
+Rejected: an `entry` that is not a bare reference to one `File` or
+`Directory` input (inline content construction), an `entryname` that is any
+other expression, holds a `/`, or is `.` or `..`, an `entryname` that begins with
+`.sophios_entry_` (the hidden directory's prefix), a `writable` that is not a
+literal boolean, a listing entry naming a `val`-qualifier or array-typed
+input, an input listed twice, and two entries with one literal name. A name
+that collides only when the task runs, such as two entries of inputs with one
+basename, or an entry and a staged input with one basename, stops the task
+with an error naming the entry.
 
 ## Scatter
 
@@ -449,9 +546,12 @@ nothing matches, a workflow output reports `null`, carried by the `[]`
 sentinel. Such an output reaches workflow outputs only: a later step
 consuming it, or an optional output of a scattered step, is rejected, since a
 `path` port has no lowering of `null` and a gather would drop the position.
-An optional output with a pattern glob or a `$(self[0])` capture is rejected
-too: Nextflow fails `arity: '1'` when nothing matches, even beside
-`optional: true`.
+An optional output with a pattern glob or a `$(self[0])` capture renders
+`arity: '0..*'` instead, since Nextflow fails `arity: '1'` when nothing
+matches, even beside `optional: true`. Its workflow output takes the one
+file, reports `null` for none, and stops the run with `Sophios workflow
+output '<name>' matched <n> files; it takes at most one` for more, as cwltool
+fails the step. Such an output must reach a workflow output.
 
 The paired `glob` must be one literal with no `*`, `?`, or `[` and no
 `$(inputs...)` reference. `self[0]` is the first of the matched list, which is
@@ -536,7 +636,7 @@ skipped upstream step, as in CWL.
 That possibly-null value is admitted only where the sentinel is sound: at a
 workflow output (which reports `null`), or at an optional `val` input of a
 later step whose use the absent-optional lowering already admits (never
-referenced, or referenced only as a boolean flag). Every other consumer is
+referenced, or referenced only as a boolean flag or by its own binding). Every other consumer is
 rejected by name — a non-optional port, a `path` consumer, an array-typed
 port, or an array-typed output of a conditional step outside scatter.
 
@@ -545,6 +645,34 @@ inlined sub-DAG is not this lowering's single-process shape. A step input the
 step's tool does not declare, which CWL allows so that a `when` can read it, is
 rejected. A conditional step needs at least one input to gate on, so `when`
 on a tool that declares no inputs is rejected.
+
+## The corpus lane
+
+`.github/workflows/nextflow_corpus.yml` compiles corpus workflows with
+`--target nextflow`, runs each under Nextflow with Docker, and checks that the
+run succeeds and that every declared workflow output exists. It runs every
+standalone image-workflows workflow (`bbbc.wic`, `bbbc.py`, `bbbc_sub.py`) and
+the standalone mm-workflows workflows the target compiles (`molgan.wic`,
+`load_trained_molgan.wic`); the list is in
+`tests/core/nextflow/test_corpus.py`. The target rejects the other standalone
+mm-workflows workflows: they scatter over a nested workflow step, compute an
+output with JavaScript `outputEval`, or declare an optional union of a
+`boolean` and a string array.
+
+The lane runs only when dispatched, on a self-hosted Linux runner, since the
+tools pull their images and download their data. Dispatch it from the
+*Nextflow Corpus* workflow in the Actions tab, or:
+
+```console
+gh workflow run nextflow_corpus.yml --ref <branch> \
+  -f mm-workflows_ref=main -f image-workflows_ref=main
+```
+
+`mm-workflows_owner` and `image-workflows_owner` default to the repository's
+owner, and both refs to `main`. Before each run the lane makes the output
+directories the image-workflows tools write into, as a user must (see
+Staging with InitialWorkDirRequirement): an empty directory for every
+`Directory` input given as a bare name that names nothing yet.
 
 ## Current limits
 
