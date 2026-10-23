@@ -57,6 +57,11 @@ NF_STUB_LINES = (
     "exit 1",
     '"""',
 )
+NF_PARSER_MESSAGE = "Sophios-generated Nextflow needs the v2 script parser: unset NXF_SYNTAX_PARSER or set it to v2"
+# The entry workflow's first statement. The v1 script parser converts a
+# command-line value itself, so '--name 010' arrives as the Integer 10 and the
+# entry check cannot tell it from a number; the pipeline stops before any task.
+NF_PARSER_CHECK = f"    if( !nextflow.NF.isSyntaxParserV2() )\n        error '{NF_PARSER_MESSAGE}'\n"
 NF_SHELL_QUOTE_FUNCTION = f'''def {NF_SHELL_QUOTE_HELPER}(value) {{
     return "'" + value.toString().replace("'", "'\\\"'\\\"'") + "'"
 }}'''
@@ -827,7 +832,7 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
     # A parameter no step reads is checked all the same, before the call.
     unread = "".join(f"    {_checked_parameter(workflow, name)}\n" for name in workflow.params if name not in connected)
     arguments = ",\n        ".join(_parameter_expression(workflow, name) for name in connected)
-    sections.append(f"workflow {{\n{unread}    {workflow.name}({arguments})\n}}")
+    sections.append(f"workflow {{\n{NF_PARSER_CHECK}{unread}    {workflow.name}({arguments})\n}}")
     return "\n\n".join(sections) + "\n"
 
 

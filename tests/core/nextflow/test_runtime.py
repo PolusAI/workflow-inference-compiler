@@ -14,7 +14,7 @@ import sophios.main as sophios_main
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 from sophios.api.python._workflow_runtime import compile_workflow_result
 from sophios.api.python.workflow import Step, Workflow
-from sophios.input_output_nf import write_nextflow_artifacts
+from sophios.input_output_nf import NF_PARSER_CHECK, write_nextflow_artifacts
 from sophios.ir.artifacts import CompilationResult
 from sophios.nf_reader import parse_nf_file, promote_nextflow_document
 from sophios.nf_types import (
@@ -1412,7 +1412,7 @@ def _probe_captured_value(directory: Path, workflow_name: str) -> None:
     """
     script = directory / "workflow.nf"
     source = script.read_text(encoding="utf-8")
-    entry = f"workflow {{\n    {workflow_name}("
+    entry = f"workflow {{\n{NF_PARSER_CHECK}    {workflow_name}("
     assert entry in source, source
     probe = (
         f"    {workflow_name}.out.captured.view "

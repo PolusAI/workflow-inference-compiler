@@ -9,6 +9,7 @@ import pytest
 
 from sophios.input_output_nf import (
     NF_LOAD_CONTENTS_FUNCTION,
+    NF_PARSER_CHECK,
     NF_STUB_LINES,
     render_nextflow,
     render_nextflow_config,
@@ -74,7 +75,7 @@ def test_renders_named_workflow_and_entry_wrapper() -> None:
     assert "COPY(PRODUCE.out.result)" in rendered
     assert "result = COPY.out.copy" in rendered
     entry = "Channel.value(__sophios_input_9f72e('message', params.message, 'string'))"
-    assert f"workflow {{\n    PIPELINE({entry})\n}}" in rendered
+    assert f"workflow {{\n{NF_PARSER_CHECK}    PIPELINE({entry})\n}}" in rendered
 
 
 @pytest.mark.fast
@@ -85,7 +86,7 @@ def test_a_parameter_no_step_reads_is_checked_before_the_call() -> None:
         {**workflow.params, "unread": 1}, {**workflow.param_types, "unread": "int"},
     )
     assert render_nextflow(workflow).endswith(
-        "workflow {\n    __sophios_input_9f72e('unread', params.unread, 'int')\n"
+        f"workflow {{\n{NF_PARSER_CHECK}    __sophios_input_9f72e('unread', params.unread, 'int')\n"
         "    PIPELINE(Channel.value(__sophios_input_9f72e('message', params.message, 'string')))\n}\n"
     )
 

@@ -60,9 +60,8 @@ def _sink(
         f"\n    PIPELINE.out.{emit_name}.toList().subscribe {{ list -> "
         f"new File('{sink_name}').text = list.join('\\u0001') }}\n"
     )
-    # The entry point is exactly "workflow {\n    PIPELINE(...)\n}\n" at the end
-    # of the file, so appending before its closing brace keeps PIPELINE.out
-    # in scope.
+    # The entry workflow ends the file with "}\n", so appending before its
+    # closing brace keeps PIPELINE.out in scope.
     script.write_text(text[:-2] + sink + "}\n", encoding="utf-8")
     return execute_nextflow(directory)
 

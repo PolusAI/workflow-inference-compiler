@@ -18,7 +18,7 @@ import pytest
 from sophios.api.python._workflow_runtime import compile_workflow_result
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 from sophios.api.python.workflow import Step, Workflow
-from sophios.input_output_nf import NF_INPUT_FUNCTION, NF_STUB_MESSAGE, write_nextflow_artifacts
+from sophios.input_output_nf import NF_INPUT_FUNCTION, NF_PARSER_MESSAGE, NF_STUB_MESSAGE, write_nextflow_artifacts
 from sophios.nf_types import (
     NF_INPUT_HELPER, ExecutableNextflowWorkflow, NfWorkflowInputConnection, NfWorkflowOutputConnection,
 )
@@ -256,6 +256,17 @@ def test_a_mistyped_value_stops_the_run_naming_the_parameter(value: str, tmp_pat
     result, _ = _run(workflow, tmp_path, f"--{n}", value)
     assert result.returncode != 0
     assert f"Sophios workflow input '{n}' must be int, not '{value}'" in result.stdout + result.stderr
+    assert not (tmp_path / "work").exists() or not list((tmp_path / "work").glob("*/*"))
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+def test_the_v1_script_parser_stops_the_run_before_any_task(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The v1 parser would convert a command-line value before the entry check sees it."""
+    monkeypatch.setenv("NXF_SYNTAX_PARSER", "v1")
+    result, _ = _run(_echo_flow(), tmp_path)
+    assert result.returncode != 0
+    assert NF_PARSER_MESSAGE in result.stdout + result.stderr
     assert not (tmp_path / "work").exists() or not list((tmp_path / "work").glob("*/*"))
 
 
