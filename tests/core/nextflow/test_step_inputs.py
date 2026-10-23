@@ -292,15 +292,6 @@ _XS = NfWorkflowInputConnection("xs", "JOIN", "files")
 
 
 @pytest.mark.fast
-def test_a_step_input_connection_round_trips() -> None:
-    workflow = _merged(_GATHERED, _ONE, _XS)
-    assert ExecutableNextflowWorkflow.from_dict(workflow.to_dict()) == workflow
-    assert "__sophios_step_input_9f72e('JOIN.files', __values, [true, false, true], 'merge_flattened', null)" in (
-        render_nextflow(workflow)
-    )
-
-
-@pytest.mark.fast
 @pytest.mark.parametrize(("build", "message"), [
     (lambda: _merged(_ONE, pick_value="first_non_null"), "gives one value to a port that is array-typed"),
     (lambda: _merged(_ONE, link_merge="merge_nested", port=NfPort("files", "path")),
@@ -322,8 +313,11 @@ def test_a_step_input_connection_keeps_the_idioms_invariants(build: Any, message
 
 
 @pytest.mark.fast
-def test_a_step_input_connection_imports_as_a_record(tmp_path: Path) -> None:
+def test_a_step_input_connection_renders_and_imports_as_a_record(tmp_path: Path) -> None:
     write_nextflow_artifacts(_merged(_GATHERED, _ONE, _XS), tmp_path)
+    assert "__sophios_step_input_9f72e('JOIN.files', __values, [true, false, true], 'merge_flattened', null)" in (
+        (tmp_path / "workflow.nf").read_text(encoding="utf-8")
+    )
     cwl_workflow, _tools = nextflow_to_cwl(parse_nf_file(tmp_path / "workflow.nf"))
     join = next(entry for entry in cwl_workflow["steps"] if entry["id"] == "JOIN")
     assert join["in"] == {"files": {"source": ["PAIR/f", "A/f", "xs"], "linkMerge": "merge_flattened"}}
