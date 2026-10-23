@@ -204,6 +204,25 @@ def parse(text: str) -> Expr:
     return _Parser(match.group("body")).parse()
 
 
+def _number_literal(value: Any) -> None:
+    """Reject a number literal that is not a finite strict-mode decimal."""
+    if not isinstance(value, str) or _NUMBER.fullmatch(value) is None:
+        raise ValueError(f"number literal {value!r} is not a strict-mode decimal")
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ValueError(f"number literal {value} is not finite") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"number literal {value} is not finite")
+
+
+def _call_arity(call: str, args: tuple[Expr, ...]) -> None:
+    """Reject a call given a number of arguments its function does not take."""
+    arity = _CALLS[call]
+    if (arity > 0 and len(args) != arity) or (arity < 0 and len(args) < -arity):
+        raise ValueError(f"{call} takes {abs(arity)}{' or more' if arity < 0 else ''} arguments")
+
+
 def check(node: Expr, input_types: Mapping[str, Any]) -> str:
     """Return the node's subset type, or raise naming the ill-typed construct.
 
@@ -216,14 +235,7 @@ def check(node: Expr, input_types: Mapping[str, Any]) -> str:
 
     match node.op:
         case "number":
-            if not isinstance(node.value, str) or _NUMBER.fullmatch(node.value) is None:
-                raise ValueError(f"number literal {node.value!r} is not a strict-mode decimal")
-            try:
-                parsed = float(node.value)
-            except ValueError as exc:
-                raise ValueError(f"number literal {node.value} is not finite") from exc
-            if not math.isfinite(parsed):
-                raise ValueError(f"number literal {node.value} is not finite")
+            _number_literal(node.value)
             return NUMBER
         case "string" | "boolean" | "null":
             return {"string": STRING, "boolean": BOOLEAN, "null": NULL}[node.op]
@@ -262,9 +274,7 @@ def check(node: Expr, input_types: Mapping[str, Any]) -> str:
                 _require(NUMBER, operand(child), node.op)
             return NUMBER
         case call if call in _CALLS:
-            arity = _CALLS[call]
-            if (arity > 0 and len(node.args) != arity) or (arity < 0 and len(node.args) < -arity):
-                raise ValueError(f"{call} takes {abs(arity)}{' or more' if arity < 0 else ''} arguments")
+            _call_arity(call, node.args)
             for child in node.args:
                 _require(NUMBER, operand(child), call)
             return NUMBER
@@ -302,14 +312,7 @@ def validate(node: Expr) -> None:
     """
     match node.op:
         case "number":
-            if not isinstance(node.value, str) or _NUMBER.fullmatch(node.value) is None:
-                raise ValueError(f"number literal {node.value!r} is not a strict-mode decimal")
-            try:
-                parsed = float(node.value)
-            except ValueError as exc:
-                raise ValueError(f"number literal {node.value} is not finite") from exc
-            if not math.isfinite(parsed):
-                raise ValueError(f"number literal {node.value} is not finite")
+            _number_literal(node.value)
             if node.args:
                 raise ValueError("a number literal takes no arguments")
         case "string":
@@ -337,9 +340,7 @@ def validate(node: Expr) -> None:
             if len(node.args) != 2:
                 raise ValueError(f"{op} takes two operands")
         case call if call in _CALLS:
-            arity = _CALLS[call]
-            if (arity > 0 and len(node.args) != arity) or (arity < 0 and len(node.args) < -arity):
-                raise ValueError(f"{call} takes {abs(arity)}{' or more' if arity < 0 else ''} arguments")
+            _call_arity(call, node.args)
         case _:
             raise ValueError(f"unsupported construct {node.op!r}")
     for arg in node.args:
