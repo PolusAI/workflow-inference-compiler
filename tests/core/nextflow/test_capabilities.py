@@ -1565,6 +1565,9 @@ FINDINGS = [
         "steps[0].run.inputs.n.type: long is not supported: the Nextflow target lowers int and float; "
         "declare one of those"
     ], id="a_long_input_with_a_default_has_only_the_type_finding"),
+    pytest.param(lambda: one_step(tool("ARGS", arguments=[{"valueFrom": "x", "loadContents": True}])), [
+        "steps[0].run.arguments[0].loadContents: a binding's loadContents is not supported"
+    ], id="loadContents_on_an_arguments_entry"),
 ]
 
 

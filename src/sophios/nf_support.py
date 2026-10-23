@@ -41,8 +41,6 @@ _INTENT = Row(_C, 'documentation: an ontology term for what it is for')
 _FORMAT = Row(_C, 'read by EDAM inference')
 _STREAMABLE = Row(_C, 'a hint to the runner; a task reads a staged file')
 _SECONDARY_FILES = Row(_R, 'secondaryFiles are not supported: stage each file as its own input')
-_LOAD_CONTENTS = Row(_R, "loadContents on an input is not supported: an input's contents would have to "
-                         'become a value channel read at staging time')
 _LOAD_LISTING = Row(_R, 'loadListing is not supported: a Directory is staged whole')
 _ARRAY_TYPE = Row(_L, '`array`')
 _ARRAY_ITEMS = Row(_L, 'the element type: one the parameter could declare itself, not an array')
@@ -152,7 +150,8 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'id': Row(_L, 'names the port'),
         'inputBinding': Row(_L, 'command tokens'),
         'label': _DOC,
-        'loadContents': _LOAD_CONTENTS,
+        'loadContents': Row(_R, "loadContents on an input is not supported: an input's contents would have to "
+                                'become a value channel read at staging time'),
         'loadListing': _LOAD_LISTING,
         'secondaryFiles': _SECONDARY_FILES,
         'streamable': _STREAMABLE,
@@ -169,7 +168,7 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
     }),
     'CommandLineBinding': MappingProxyType({
         'itemSeparator': Row(_R, 'itemSeparator is not supported: an array binding gives each element its own word'),
-        'loadContents': _LOAD_CONTENTS,
+        'loadContents': Row(_R, "a binding's loadContents is not supported"),
         'position': Row(_L, 'orders the tokens'),
         'prefix': Row(_L, "literal text before the value, or a `boolean`'s flag"),
         'separate': Row(_L, '`false` joins the prefix and the value into one word'),
