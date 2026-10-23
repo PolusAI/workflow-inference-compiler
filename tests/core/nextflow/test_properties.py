@@ -151,7 +151,7 @@ def test_every_single_quoted_groovy_position_uses_the_one_escaper(value: str) ->
         "PIPELINE",
         [process],
         [NfWorkflowInputConnection(name, "TASK", name) for name in ("s", "src")],
-        {"s": "x", "src": "in.txt"},
+        {"s": "x", "src": "in.txt"}, {"s": "string", "src": "File"},
     ))
     for literal in (groovy_literal(value), groovy_literal(staged), groovy_literal(spoken)):
         assert literal in rendered
@@ -174,7 +174,7 @@ def test_template_interpolation_agrees_with_cwltool(text: str) -> None:
 @settings(max_examples=150, deadline=None)
 @given(st.dictionaries(SAFE_TEXT, JSON_VALUES, max_size=8))
 def test_executable_json_roundtrip_is_canonical(params: dict[str, object]) -> None:
-    workflow = ExecutableNextflowWorkflow("wf", (), (), params)
+    workflow = ExecutableNextflowWorkflow("wf", (), (), params, dict.fromkeys(params, "string"))
     hydrated = ExecutableNextflowWorkflow.from_json(workflow.to_json())
     assert hydrated == workflow
     assert hydrated.to_json() == workflow.to_json()
@@ -195,16 +195,16 @@ def test_path_parameter_script_does_not_depend_on_compiled_value_shape(path: str
         "wf",
         (process,),
         connections,
-        {"source": path},
+        {"source": path}, {"source": "File"},
     )
     from_mapping = ExecutableNextflowWorkflow(
         "wf",
         (process,),
         connections,
-        {"source": {"class": "File", "path": path}},
+        {"source": {"class": "File", "path": path}}, {"source": "File"},
     )
     assert render_nextflow(from_string) == render_nextflow(from_mapping)
-    assert "type: 'file', glob: false" in render_nextflow(from_string)
+    assert "file(__sophios_input_9f72e('source', params.source, 'File'), glob: false)" in render_nextflow(from_string)
 
 
 @settings(max_examples=100, deadline=None)
@@ -212,6 +212,7 @@ def test_path_parameter_script_does_not_depend_on_compiled_value_shape(path: str
 def test_path_kind_is_serialized_and_controls_exact_channel_staging(
     path_kind: str,
 ) -> None:
+    declared = "Directory" if path_kind == "directory" else "File"
     process = NfProcess(
         "READ",
         (NfPort("source", "path", path_kind=path_kind),),
@@ -222,12 +223,12 @@ def test_path_kind_is_serialized_and_controls_exact_channel_staging(
         "wf",
         (process,),
         (NfWorkflowInputConnection("source", "READ", "source"),),
-        {"source": "input[1]"},
+        {"source": "input[1]"}, {"source": declared},
     )
-    expected_type = "dir" if path_kind == "directory" else "file"
 
     assert workflow.to_dict()["processes"][0]["inputs"][0]["path_kind"] == path_kind
-    assert f"type: '{expected_type}', glob: false" in render_nextflow(workflow)
+    entry = f"file(__sophios_input_9f72e('source', params.source, '{declared}'), glob: false)"
+    assert entry in render_nextflow(workflow)
 
 
 @settings(max_examples=100, deadline=None)

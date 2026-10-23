@@ -73,7 +73,21 @@ def test_renders_named_workflow_and_entry_wrapper() -> None:
     assert "take:\n    message" in rendered
     assert "COPY(PRODUCE.out.result)" in rendered
     assert "result = COPY.out.copy" in rendered
-    assert "workflow {\n    PIPELINE(Channel.value(params.message))\n}" in rendered
+    entry = "Channel.value(__sophios_input_9f72e('message', params.message, 'string'))"
+    assert f"workflow {{\n    PIPELINE({entry})\n}}" in rendered
+
+
+@pytest.mark.fast
+def test_a_parameter_no_step_reads_is_checked_before_the_call() -> None:
+    workflow = runtime_workflow()
+    workflow = ExecutableNextflowWorkflow(
+        workflow.name, workflow.processes, workflow.connections,
+        {**workflow.params, "unread": 1}, {**workflow.param_types, "unread": "int"},
+    )
+    assert render_nextflow(workflow).endswith(
+        "workflow {\n    __sophios_input_9f72e('unread', params.unread, 'int')\n"
+        "    PIPELINE(Channel.value(__sophios_input_9f72e('message', params.message, 'string')))\n}\n"
+    )
 
 
 @pytest.mark.fast
@@ -106,7 +120,7 @@ def test_renders_supported_process_metadata() -> None:
         "WF",
         [process],
         [NfWorkflowInputConnection("source", "TASK", "source")],
-        {"source": "input.txt"},
+        {"source": "input.txt"}, {"source": "File"},
     ))
     assert "container 'ubuntu:24.04'" in rendered
     assert "cpus 2" in rendered
@@ -129,7 +143,7 @@ def test_renders_stage_as_rename_and_bare_input_declarations() -> None:
             NfWorkflowInputConnection("source", "STAGE", "source"),
             NfWorkflowInputConnection("other", "STAGE", "other"),
         ],
-        {"source": "input.txt", "other": "input2.txt"},
+        {"source": "input.txt", "other": "input2.txt"}, {"source": "File", "other": "File"},
     ))
     assert "path source, stageAs: 'renamed.txt'" in rendered
     assert "path other\n" in rendered
@@ -164,20 +178,19 @@ def test_path_parameter_rendering_is_runtime_shape_independent() -> None:
         "WF",
         [process],
         connections,
-        {"source": "input.txt"},
+        {"source": "input.txt"}, {"source": "File"},
     )
     from_mapping = ExecutableNextflowWorkflow(
         "WF",
         [process],
         connections,
-        {"source": {"class": "File", "path": "input.txt"}},
+        {"source": {"class": "File", "path": "input.txt"}}, {"source": "File"},
     )
 
     rendered = render_nextflow(from_string)
     assert rendered == render_nextflow(from_mapping)
     assert (
-        "Channel.value(file(params.source instanceof Map ? params.source.path : "
-        "params.source, checkIfExists: true, type: 'file', glob: false))"
+        "Channel.value(file(__sophios_input_9f72e('source', params.source, 'File'), glob: false))"
     ) in rendered
 
 
@@ -196,7 +209,7 @@ def test_renders_boolean_flag_as_a_conditional_argv_word() -> None:
         "WF",
         [process],
         [NfWorkflowInputConnection("reverse", "SORT", "reverse")],
-        {"reverse": True},
+        {"reverse": True}, {"reverse": "boolean"},
     ))
 
     assert "${reverse ? __sophios_shell_quote_9f72e('-r') : ''}" in rendered
@@ -217,7 +230,7 @@ def test_renders_array_binding_with_prefix_as_a_conditional_expression() -> None
         "WF",
         [process],
         [NfWorkflowInputConnection("names", "NAMES", "names")],
-        {"names": ["alice", "bob"]},
+        {"names": ["alice", "bob"]}, {"names": "string[]"},
     ))
 
     assert (
@@ -241,7 +254,7 @@ def test_renders_array_binding_without_a_prefix() -> None:
         "WF",
         [process],
         [NfWorkflowInputConnection("names", "NAMES", "names")],
-        {"names": ["alice"]},
+        {"names": ["alice"]}, {"names": "string[]"},
     ))
 
     assert (
@@ -297,13 +310,12 @@ def test_renders_array_of_path_channel_construction_with_staging_per_element() -
         "WF",
         [process],
         [NfWorkflowInputConnection("sources", "CAT", "sources")],
-        {"sources": ["a.txt", "b.txt"]},
+        {"sources": ["a.txt", "b.txt"]}, {"sources": "File[]"},
     ))
 
     assert (
-        "Channel.value(params.sources.collect { entry -> file("
-        "entry instanceof Map ? entry.path : entry, "
-        "checkIfExists: true, type: 'file', glob: false) })"
+        "Channel.value(__sophios_input_9f72e('sources', params.sources, 'File[]')"
+        ".collect { entry -> file(entry, glob: false) })"
     ) in rendered
 
 
@@ -326,7 +338,7 @@ def test_renders_array_of_path_input_with_a_list_arity_and_array_of_val_without(
             NfWorkflowInputConnection("sources", "CAT", "sources"),
             NfWorkflowInputConnection("names", "CAT", "names"),
         ],
-        {"sources": ["a.txt"], "names": ["alice"]},
+        {"sources": ["a.txt"], "names": ["alice"]}, {"sources": "File[]", "names": "string[]"},
     ))
 
     # A path input holding one file reaches the script as a bare Path, so the
@@ -360,7 +372,7 @@ def test_renders_basename_segments_in_commands_and_globs() -> None:
         "WF",
         [process],
         [NfWorkflowInputConnection("source", "COPY", "source")],
-        {"source": "lines.txt"},
+        {"source": "lines.txt"}, {"source": "File"},
     ))
 
     assert "source.name.toString() + '.copy'" in rendered
@@ -397,7 +409,7 @@ def test_assembled_name_with_an_author_written_metacharacter_keeps_globbing_on()
         "WF",
         [process],
         [NfWorkflowInputConnection("source", "COPY", "source")],
-        {"source": "lines.txt"},
+        {"source": "lines.txt"}, {"source": "File"},
     ))
 
     assert "path \"${source.name}*.txt\", arity: '1', emit: result" in rendered
@@ -419,7 +431,7 @@ def test_pattern_valued_input_glob_keeps_globbing_on() -> None:
         "WF",
         [process],
         [NfWorkflowInputConnection("pattern", "MATCH", "pattern")],
-        {"pattern": "*.txt"},
+        {"pattern": "*.txt"}, {"pattern": "string"},
     ))
 
     assert "path \"${pattern}\", arity: '1', emit: matched" in rendered
@@ -449,13 +461,12 @@ def test_config_uses_validated_workflow_container_policy() -> None:
     [
         (
             NfPort("item", "val"),
-            "Channel.value(params.items)",
+            "Channel.value(__sophios_input_9f72e('items', params.items, 'string[]'))",
         ),
         (
             NfPort("item", "path"),
-            "Channel.value(params.items.collect { entry -> file("
-            "entry instanceof Map ? entry.path : entry, "
-            "checkIfExists: true, type: 'file', glob: false) })",
+            "Channel.value(__sophios_input_9f72e('items', params.items, 'File[]')"
+            ".collect { entry -> file(entry, glob: false) })",
         ),
     ],
     ids=["val", "path"],
@@ -475,6 +486,7 @@ def test_a_scattered_parameter_carries_its_whole_array(
         [process],
         [NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct")],
         {"items": ["a", "b"]},
+        {"items": "string[]" if port.qualifier == "val" else "File[]"},
     ))
 
     assert construction in rendered
@@ -492,7 +504,7 @@ def test_renders_an_unadapted_workflow_input_without_an_operator() -> None:
         "WF",
         [process],
         [NfWorkflowInputConnection("items", "TASK", "item")],
-        {"items": "a"},
+        {"items": "a"}, {"items": "string"},
     ))
 
     assert "    TASK(items)" in rendered

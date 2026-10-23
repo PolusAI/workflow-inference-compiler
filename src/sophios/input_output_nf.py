@@ -12,6 +12,7 @@ from .nf_expr import (
     render_groovy, source_text,
 )
 from .nf_types import (
+    NF_INPUT_HELPER,
     NF_NEST_HELPER,
     MULTI_INPUT_ADAPTERS,
     ExecutableNextflowWorkflow,
@@ -57,6 +58,42 @@ NF_STUB_LINES = (
 )
 NF_SHELL_QUOTE_FUNCTION = f'''def {NF_SHELL_QUOTE_HELPER}(value) {{
     return "'" + value.toString().replace("'", "'\\\"'\\\"'") + "'"
+}}'''
+# Checks one workflow input value against its declared type when the pipeline
+# starts (design §6, Inputs and channels). A value of the declared type
+# passes; a command-line value is text, and text converts only when it is
+# exact. A File or Directory is path text, or a mapping with a path, naming an
+# entry of that kind, and the check returns its path text. [] stands for an
+# absent optional value; no path has a lowering of one. Anything else stops
+# the run, naming the parameter.
+NF_INPUT_FUNCTION = f'''def {NF_INPUT_HELPER}(String name, value, String type) {{
+    def item = type.replace('[]', '').replace('?', '')
+    if( type.contains('[]') ) {{
+        if( value instanceof List )
+            return value.collect {{ element -> {NF_INPUT_HELPER}(name, element, item) }}
+    }}
+    else {{
+        def text = value instanceof String
+        def path = value instanceof Map ? value.path : value
+        if( type.endsWith('?') && value == [] && !(item in ['File', 'Directory']) )
+            return value
+        if( item == 'boolean' && value instanceof Boolean || item == 'int' && value instanceof Integer ||
+            item == 'float' && value instanceof Number || item == 'string' && text )
+            return value
+        if( item == 'boolean' && value in ['true', 'false'] )
+            return value == 'true'
+        if( item == 'int' && text && value ==~ /[+-]?[0-9]+/ &&
+            value.toBigInteger() == value.toBigInteger().intValue() )
+            return value.toInteger()
+        if( item == 'float' && text && value ==~ /[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?/ &&
+            Double.isFinite(value.toDouble()) )
+            return value.toDouble()
+        if( item in ['File', 'Directory'] && path instanceof String &&
+            (item == 'File' ? file(path, glob: false).isFile() : file(path, glob: false).isDirectory()) )
+            return path
+    }}
+    throw new IllegalArgumentException("Sophios workflow input '" + name + "' must be " + type + ", not " +
+        value.inspect())
 }}'''
 # CWL v1.2 loadContents semantics, verbatim: read the whole file, fail above
 # the byte limit, and decode UTF-8 strictly. CharsetDecoder.decode reports
@@ -658,28 +695,25 @@ def _workflow_input_sink(
     raise ValueError(f"workflow input {name!r} is not connected")
 
 
+def _checked_parameter(workflow: ExecutableNextflowWorkflow, name: str) -> str:
+    return f"{NF_INPUT_HELPER}({groovy_literal(name)}, params.{name}, {groovy_literal(workflow.param_types[name])})"
+
+
 def _parameter_expression(workflow: ExecutableNextflowWorkflow, name: str) -> str:
     # The graph validator keeps every sink of one parameter in agreement on
     # this construction, so one sink decides it for all of them.
     channel = channel_construction(*_workflow_input_sink(workflow, name))
-    if channel.path_kind is not None:
-        path_type = "dir" if channel.path_kind == "directory" else "file"
-        if channel.carries_list:
-            # One Channel.value(...) element holding a Groovy list, so
-            # Nextflow stages every element for a single process call
-            # instead of fanning the channel out over several calls.
-            return (
-                f"Channel.value(params.{name}.collect {{ entry -> file("
-                f"entry instanceof Map ? entry.path : entry, "
-                f"checkIfExists: true, type: '{path_type}', glob: false) }})"
-            )
-        # A workflow input is one value, which CWL passes unchanged to every
-        # job of a scattered step: a value channel, as for every other input.
-        return (
-            f"Channel.value(file(params.{name} instanceof Map ? params.{name}.path : "
-            f"params.{name}, checkIfExists: true, type: '{path_type}', glob: false))"
-        )
-    return f"Channel.value(params.{name})"
+    checked = _checked_parameter(workflow, name)
+    if channel.path_kind is None:
+        return f"Channel.value({checked})"
+    if channel.carries_list:
+        # One Channel.value(...) element holding a Groovy list, so Nextflow
+        # stages every element for a single process call instead of fanning
+        # the channel out over several calls.
+        return f"Channel.value({checked}.collect {{ entry -> file(entry, glob: false) }})"
+    # A workflow input is one value, which CWL passes unchanged to every job
+    # of a scattered step: a value channel, as for every other input.
+    return f"Channel.value(file({checked}, glob: false))"
 
 
 def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
@@ -699,6 +733,7 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
     sections = [
         "nextflow.enable.dsl=2",
         NF_SHELL_QUOTE_FUNCTION,
+        NF_INPUT_FUNCTION,
     ]
     # Emitted only where the capture is used, so artifacts for models that
     # predate it stay byte-identical and existing artifact pairs keep
@@ -728,11 +763,11 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
         for process in workflow.processes
     )
     sections.append(_render_named_workflow(workflow))
-    arguments = ",\n        ".join(
-        _parameter_expression(workflow, name) for name in _workflow_input_names(workflow)
-    )
-    invocation = f"    {workflow.name}({arguments})" if arguments else f"    {workflow.name}()"
-    sections.append(f"workflow {{\n{invocation}\n}}")
+    connected = _workflow_input_names(workflow)
+    # A parameter no step reads is checked all the same, before the call.
+    unread = "".join(f"    {_checked_parameter(workflow, name)}\n" for name in workflow.params if name not in connected)
+    arguments = ",\n        ".join(_parameter_expression(workflow, name) for name in connected)
+    sections.append(f"workflow {{\n{unread}    {workflow.name}({arguments})\n}}")
     return "\n\n".join(sections) + "\n"
 
 

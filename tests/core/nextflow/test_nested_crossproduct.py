@@ -34,7 +34,8 @@ def _run(names: list[str], params: dict[str, list[str]], directory: Path) -> lis
         NfWorkflowInputConnection(f"{name}s", "NEST", name, "nested_crossproduct") for name in names
     ]
     connections.append(NfWorkflowOutputConnection("NEST", "line", "line"))
-    result = _write_and_sink(process, connections, params, directory, emit_name="line")
+    types = {f"{name}s": "string[]" for name in names}
+    result = _write_and_sink(process, connections, params, types, directory, emit_name="line")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     return (directory / "gathered.txt").read_text(encoding="utf-8").split("\x01")
 
@@ -171,6 +172,8 @@ def test_a_nested_step_over_gathered_arrays_emits_one_array_per_outer_element(
         NfWorkflowOutputConnection("JOIN", "line", "all"),
     ]
     run = tmp_path / "run"
-    result = _sink(ExecutableNextflowWorkflow("PIPELINE", [pair, join], connections, params), run, emit_name="all")
+    types = {"items": "string[]", "delays": "string[]", **({"gs": "File[]"} if "gs" in params else {})}
+    workflow = ExecutableNextflowWorkflow("PIPELINE", [pair, join], connections, params, types)
+    result = _sink(workflow, run, emit_name="all")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert (run / "gathered.txt").read_text(encoding="utf-8").split("\x01") == expected

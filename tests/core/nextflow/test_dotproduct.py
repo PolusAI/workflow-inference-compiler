@@ -71,13 +71,14 @@ def _write_and_sink(
     process: NfProcess,
     connections: list[NfConnection],
     params: dict,
+    param_types: dict[str, str],
     directory: Path,
     *,
     emit_name: str,
     sink_name: str = "gathered.txt",
 ) -> subprocess.CompletedProcess[str]:
     """Run one process as ``PIPELINE`` and observe its ``emit_name`` output through ``_sink``."""
-    workflow = ExecutableNextflowWorkflow("PIPELINE", [process], connections, params)
+    workflow = ExecutableNextflowWorkflow("PIPELINE", [process], connections, params, param_types)
     return _sink(workflow, directory, emit_name=emit_name, sink_name=sink_name)
 
 
@@ -123,7 +124,9 @@ def test_two_input_dotproduct_pairs_by_index_and_gathers_in_order(tmp_path: Path
     ]
     params = {"items": ["a", "b", "c"], "tags": ["2", "1", "0"]}
 
-    result = _write_and_sink(process, connections, params, tmp_path, emit_name="result")
+    result = _write_and_sink(
+        process, connections, params, {"items": "string[]", "tags": "string[]"}, tmp_path, emit_name="result"
+    )
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     gathered = (tmp_path / "gathered.txt").read_text(encoding="utf-8").split("\x01")
     assert gathered == ["a-2", "b-1", "c-0"]
@@ -146,8 +149,9 @@ def test_three_input_dotproduct_pairs_by_index_and_gathers_in_order(tmp_path: Pa
         NfWorkflowOutputConnection("TRIPLE", "line", "result"),
     ]
     params = {"items": ["a", "b", "c"], "tags": ["x", "y", "z"], "notes": ["0", "0", "0"]}
+    types = {"items": "string[]", "tags": "string[]", "notes": "string[]"}
 
-    result = _write_and_sink(process, connections, params, tmp_path, emit_name="result")
+    result = _write_and_sink(process, connections, params, types, tmp_path, emit_name="result")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     gathered = (tmp_path / "gathered.txt").read_text(encoding="utf-8").split("\x01")
     assert gathered == ["a-x-0", "b-y-0", "c-z-0"]
@@ -171,7 +175,7 @@ def test_mismatched_lengths_name_each_scattered_input_and_its_length() -> None:
             NfWorkflowInputConnection("tags", "PAIR", "tag", "dotproduct"),
             NfWorkflowOutputConnection("PAIR", "line", "result"),
         ],
-        {"items": ["a"], "tags": ["b"]},
+        {"items": ["a"], "tags": ["b"]}, {"items": "string[]", "tags": "string[]"},
     )
 
     rendered = render_nextflow(workflow)
@@ -201,6 +205,7 @@ def test_empty_dotproduct_inputs_run_zero_tasks_and_succeed(tmp_path: Path) -> N
             NfWorkflowOutputConnection("PAIR", "line", "result"),
         ],
         {"items": [], "tags": []},
+        {"items": "string[]", "tags": "string[]"},
     )
 
     result = run_nextflow(workflow, tmp_path)
@@ -225,8 +230,9 @@ def test_dotproduct_broadcasts_an_unscattered_scalar(tmp_path: Path) -> None:
         NfWorkflowOutputConnection("PAIR", "line", "result"),
     ]
     params = {"items": ["a", "b"], "tags": ["x", "y"], "note": "0"}
+    types = {"items": "string[]", "tags": "string[]", "note": "string"}
 
-    result = _write_and_sink(process, connections, params, tmp_path, emit_name="result")
+    result = _write_and_sink(process, connections, params, types, tmp_path, emit_name="result")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     gathered = (tmp_path / "gathered.txt").read_text(encoding="utf-8").split("\x01")
     assert gathered == ["a-x-0", "b-y-0"]
@@ -278,8 +284,9 @@ def test_dotproduct_scatters_file_arrays_and_broadcasts_a_file(tmp_path: Path) -
         ],
         "reference": {"class": "File", "path": str(reference)},
     }
+    types = {"firsts": "File[]", "seconds": "File[]", "reference": "File"}
 
-    result = _write_and_sink(process, connections, params, tmp_path, emit_name="result")
+    result = _write_and_sink(process, connections, params, types, tmp_path, emit_name="result")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     gathered = (tmp_path / "gathered.txt").read_text(encoding="utf-8").split("\x01")
     assert gathered == ["firstA\nsecondA\nshared\n", "firstB\nsecondB\nshared\n"]
@@ -303,7 +310,8 @@ def _scatter_with_file_array(method: str, sources: list[str]) -> ExecutableNextf
         NfWorkflowOutputConnection("PAIR", "line", "result"),
     ]
     params = {"items": ["a", "b"], "tags": ["x", "y"], "sources": sources}
-    return ExecutableNextflowWorkflow("PIPELINE", [process], connections, params)
+    types = {"items": "string[]", "tags": "string[]", "sources": "File[]"}
+    return ExecutableNextflowWorkflow("PIPELINE", [process], connections, params, types)
 
 
 @pytest.mark.fast

@@ -270,7 +270,7 @@ def test_two_gathered_arrays_on_an_unscattered_step_stage_under_separate_prefixe
             NfProcessConnection("PAIR", "h", "NEXT", "y", "gather"),
             NfWorkflowOutputConnection("NEXT", "g", "result"),
         ],
-        {"avals": ["x"], "bvals": ["y"]},
+        {"avals": ["x"], "bvals": ["y"]}, {"avals": "string[]", "bvals": "string[]"},
     )
     rendered = render_nextflow(workflow)
     assert (
@@ -315,7 +315,8 @@ def test_per_combination_when_keeps_null_at_skipped_positions(tmp_path: Path) ->
         NfWorkflowOutputConnection("PAIR", "line", "result"),
     ]
     params = {"items": ["a", "b", "c"], "tags": ["2", "1", "0"]}
-    result = _write_and_sink(process, connections, params, tmp_path, emit_name="result")
+    types = {"items": "string[]", "tags": "string[]"}
+    result = _write_and_sink(process, connections, params, types, tmp_path, emit_name="result")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert (tmp_path / "gathered.txt").read_text(encoding="utf-8").split("\x01") == ["a-2", "[]", "c-0"]
 
@@ -338,7 +339,8 @@ def test_per_combination_when_reads_a_scattered_and_a_broadcast_port(tmp_path: P
         NfWorkflowOutputConnection("PAIR", "line", "result"),
     ]
     params = {"items": ["a", "b", "c"], "tags": ["2", "1", "0"], "skipped": "1"}
-    result = _write_and_sink(process, connections, params, tmp_path, emit_name="result")
+    types = {"items": "string[]", "tags": "string[]", "skipped": "string"}
+    result = _write_and_sink(process, connections, params, types, tmp_path, emit_name="result")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert (tmp_path / "gathered.txt").read_text(encoding="utf-8").split("\x01") == ["a-2", "[]", "c-0"]
 
@@ -361,7 +363,7 @@ def test_a_condition_on_a_broadcast_port_branches_the_indexed_scatter_and_indexe
             NfWorkflowInputConnection("c", "PAIR", "c"),
             NfWorkflowOutputConnection("PAIR", "f", "result"),
         ],
-        {"avals": ["x"], "bvals": ["y"], "c": "go"},
+        {"avals": ["x"], "bvals": ["y"], "c": "go"}, {"avals": "string[]", "bvals": "string[]", "c": "string"},
     )
     rendered = render_nextflow(workflow)
     # One closure parameter per tuple element: index, two scattered, one broadcast.
@@ -394,7 +396,7 @@ def test_one_output_of_a_scattered_step_gathers_into_a_step_while_another_reache
             NfWorkflowOutputConnection("PAIR", "f", "pairs"),
             NfWorkflowOutputConnection("NEXT", "g", "result"),
         ],
-        {"avals": ["x"], "bvals": ["y"]},
+        {"avals": ["x"], "bvals": ["y"]}, {"avals": "string[]", "bvals": "string[]"},
     )
     rendered = render_nextflow(workflow)
     assert "NEXT(PAIR.out.h.toSortedList { it[0] }.map { it.collect { row -> row[1] } })" in rendered

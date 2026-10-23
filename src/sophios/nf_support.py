@@ -95,7 +95,8 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'loadListing': _LOAD_LISTING,
         'secondaryFiles': _SECONDARY_FILES,
         'streamable': _STREAMABLE,
-        'type': Row(_L, "the parameter's channel: `path` for `File` and `Directory`, `val` otherwise"),
+        'type': Row(_L, "the parameter's channel, `path` for `File` and `Directory` and `val` otherwise, "
+                    'and the type its value is checked against when the pipeline starts'),
     }),
     'InputArraySchema': MappingProxyType({
         'doc': _DOC,

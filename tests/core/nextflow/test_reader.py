@@ -93,7 +93,7 @@ def test_basename_artifacts_parse_and_promote(tmp_path: Path) -> None:
             NfWorkflowInputConnection("source", "COPY", "source"),
             NfWorkflowOutputConnection("COPY", "result", "copied"),
         ],
-        {"source": "lines.txt"},
+        {"source": "lines.txt"}, {"source": "File"},
     )
     write_nextflow_artifacts(expected, tmp_path)
 
@@ -150,7 +150,7 @@ def test_reader_rejects_tampered_source_or_parameters(tmp_path: Path) -> None:
 
 @pytest.mark.fast
 def test_array_params_preserve_generated_provenance(tmp_path: Path) -> None:
-    workflow = ExecutableNextflowWorkflow("PIPELINE", (), (), {"values": [1, 2, 3]})
+    workflow = ExecutableNextflowWorkflow("PIPELINE", (), (), {"values": [1, 2, 3]}, {"values": "int[]"})
     write_nextflow_artifacts(workflow, tmp_path)
 
     parsed = parse_nf_file(tmp_path / "workflow.nf")
@@ -254,7 +254,7 @@ def test_reader_extracts_ports_container_and_resources() -> None:
             NfWorkflowInputConnection("source", "TASK", "source"),
             NfWorkflowOutputConnection("TASK", "result", "result"),
         ],
-        {"source": "input.txt"},
+        {"source": "input.txt"}, {"source": "File"},
     ))
     parsed = parse_nf_text(source, params={"source": "input.txt"})
     process = parsed.processes[0]
@@ -281,7 +281,7 @@ def _container_workflow(container: str) -> ExecutableNextflowWorkflow:
             NfWorkflowInputConnection("source", "TASK", "source"),
             NfWorkflowOutputConnection("TASK", "result", "result"),
         ],
-        {"source": "input.txt"},
+        {"source": "input.txt"}, {"source": "File"},
     )
 
 
@@ -360,7 +360,7 @@ def test_reader_decodes_generated_literal_glob_escapes(target: str) -> None:
             NfWorkflowInputConnection("name", "TASK", "name"),
             NfWorkflowOutputConnection("TASK", "result", "result"),
         ],
-        {"name": "report"},
+        {"name": "report"}, {"name": "string"},
     )
 
     mixed_parsed = parse_nf_text(render_nextflow(mixed_workflow))
@@ -487,7 +487,7 @@ def _captured_workflow() -> ExecutableNextflowWorkflow:
             NfWorkflowInputConnection("message", "MAKE", "message"),
             NfWorkflowOutputConnection("MAKE", "result", "result"),
         ],
-        {"message": "hi"},
+        {"message": "hi"}, {"message": "string"},
     )
 
 
@@ -562,7 +562,7 @@ def _array_of_paths_workflow() -> ExecutableNextflowWorkflow:
             NfWorkflowInputConnection("sources", "CAT", "sources"),
             NfWorkflowOutputConnection("CAT", "result", "result"),
         ],
-        {"sources": ["a.txt"]},
+        {"sources": ["a.txt"]}, {"sources": "File[]"},
     )
 
 
@@ -594,7 +594,7 @@ def _text_capture_workflow() -> ExecutableNextflowWorkflow:
             NfWorkflowInputConnection("message", "READ", "message"),
             NfWorkflowOutputConnection("READ", "text", "captured"),
         ],
-        {"message": "hi"},
+        {"message": "hi"}, {"message": "string"},
     )
 
 

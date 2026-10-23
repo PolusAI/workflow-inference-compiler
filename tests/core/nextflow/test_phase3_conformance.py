@@ -22,7 +22,7 @@ def test_a_dotproduct_length_mismatch_fails_the_run_naming_each_input(tmp_path: 
     """S3: the run fails, naming each scattered input and its length; nothing runs truncated."""
     workflow = _scattered("dotproduct")
     params = {"items": ["a", "b"], "tags": ["0"]}
-    workflow = type(workflow)(workflow.name, workflow.processes, workflow.connections, params)
+    workflow = type(workflow)(workflow.name, workflow.processes, workflow.connections, params, workflow.param_types)
     write_nextflow_artifacts(workflow, tmp_path)
     result = execute_nextflow(tmp_path)
     assert result.returncode != 0
