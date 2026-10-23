@@ -904,15 +904,6 @@ def param_channel(param_type: str) -> NfChannel:
     return NfChannel(_PATH_KINDS.get(item), base != item)
 
 
-def channel_construction(port: NfPort, adapter: str | None) -> NfChannel:
-    """The channel a workflow parameter needs for one sink; the graph validator holds it to the declared one.
-
-    The adapter belongs to the scattered process, not to the parameter, so
-    it counts only as taking the whole array.
-    """
-    return NfChannel(port.path_kind, port.is_array or adapter is not None)
-
-
 @dataclass(frozen=True, slots=True)
 class NfWorkflowInputConnection:
     """Connect one workflow parameter to one process input.
@@ -1324,7 +1315,10 @@ class ExecutableNextflowWorkflow:
                         if merge is not None:
                             self._check_merged(merge, f"workflow input {from_port!r}", declared, destination)
                             continue
-                        if (channel := channel_construction(destination, adapter)) != declared:
+                        # The adapter belongs to the scattered process, not to the
+                        # parameter, so it only means the whole array is taken.
+                        channel = NfChannel(destination.path_kind, destination.is_array or adapter is not None)
+                        if channel != declared:
                             raise ValueError(
                                 f"workflow input {from_port!r} of type {self.param_types[from_port]!r} cannot feed "
                                 f"{to_process}.{to_port}: incompatible channel qualifiers "

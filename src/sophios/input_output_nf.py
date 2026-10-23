@@ -619,21 +619,6 @@ def _source_expression(
             return f"{process.name}.out.{emit}"
 
 
-def _broadcast(
-    connection: NfWorkflowInputConnection | NfProcessConnection,
-    processes: Mapping[str, NfProcess],
-    methods: Mapping[str, str],
-) -> str:
-    """An unscattered input of a scattered process, as one value every task reads.
-
-    An unscattered process emits one element per output; taken as it is, that
-    queue would pair with the first invocation only.
-    """
-    expression = _source_expression(connection, processes)
-    unscattered_source = isinstance(connection, NfProcessConnection) and connection.from_process not in methods
-    return f"{expression}.first()" if unscattered_source else expression
-
-
 def _step_input_expression(workflow: ExecutableNextflowWorkflow, connection: NfStepInputConnection) -> str:
     """The idioms over a step input's values: one value, as every source is (design §6, Topology, Step inputs).
 
@@ -664,14 +649,17 @@ def _argument(
     """The channel a process input is called with.
 
     ``methods`` maps every multi-input-scattered process to its method when
-    the input broadcasts to the tasks of a scattered one.
+    the input broadcasts to the tasks of a scattered one. An unscattered
+    process emits one element per output; taken as it is, that queue would
+    pair with the first invocation only, so it is taken as one value
+    (design §6, Topology, Collection cardinality).
     """
     if isinstance(connection, NfStepInputConnection):
         return _step_input_expression(workflow, connection)
-    processes = _process_map(workflow)
-    if methods is None:
-        return _source_expression(connection, processes)
-    return _broadcast(connection, processes, methods)
+    expression = _source_expression(connection, _process_map(workflow))
+    if methods is not None and isinstance(connection, NfProcessConnection) and connection.from_process not in methods:
+        return f"{expression}.first()"
+    return expression
 
 
 def _ordered_processes(workflow: ExecutableNextflowWorkflow) -> list[NfProcess]:
