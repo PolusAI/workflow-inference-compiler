@@ -17,10 +17,21 @@ NF_SHELL_QUOTE_HELPER = "__sophios_shell_quote_9f72e"
 NF_LOAD_CONTENTS_HELPER = "__sophios_load_contents_9f72e"
 NF_SCATTER_INDEX_NAME = "__sophios_scatter_index_9f72e"
 NF_NEST_HELPER = "__sophios_nest_9f72e"
+NF_INPUT_HELPER = "__sophios_input_9f72e"
 NF_INTERNAL_IDENTIFIERS = frozenset({
     NF_SHELL_QUOTE_HELPER, NF_LOAD_CONTENTS_HELPER, NF_FINITE_HELPER, NF_ROUND_HELPER,
-    NF_SCATTER_INDEX_NAME, NF_NEST_HELPER,
+    NF_SCATTER_INDEX_NAME, NF_NEST_HELPER, NF_INPUT_HELPER,
 })
+_PATH_KINDS = {"File": "file", "Directory": "directory"}
+# A workflow parameter's declared type, which the generated pipeline checks
+# its value against when it starts: an item type, `[]` for an array of it,
+# and `?` when the parameter is optional.
+PARAM_TYPES = frozenset(
+    f"{item}{array}{optional}"
+    for item in ("boolean", "int", "float", "string", *_PATH_KINDS)
+    for array in ("", "[]")
+    for optional in ("", "?")
+)
 # CWL v1.2 requires a loadContents file to be a UTF-8 text file of this many
 # bytes or fewer, read entirely, with a fatal error above the limit.
 NF_LOAD_CONTENTS_LIMIT = 64 * 1024
@@ -885,6 +896,13 @@ class NfChannel:
         return ("val" if self.path_kind is None else f"path[{self.path_kind}]") + ("[]" if self.carries_list else "")
 
 
+def param_channel(param_type: str) -> NfChannel:
+    """The channel a workflow parameter of ``param_type`` is built as."""
+    base = param_type.removesuffix("?")
+    item = base.removesuffix("[]")
+    return NfChannel(_PATH_KINDS.get(item), base != item)
+
+
 def channel_construction(port: NfPort, adapter: str | None) -> NfChannel:
     """The channel a workflow parameter needs for one sink; the graph validator compares it and the renderer builds it.
 
@@ -1106,16 +1124,21 @@ def _connection_from_dict(value: Mapping[str, Any]) -> NfConnection:
 
 @dataclass(frozen=True, slots=True)
 class ExecutableNextflowWorkflow:
-    """Closed, immutable, versioned executable representation of a DSL2 workflow."""
+    """Closed, immutable, versioned executable representation of a DSL2 workflow.
+
+    ``param_types`` gives every parameter in ``params`` its declared type,
+    one of ``PARAM_TYPES``.
+    """
 
     # Hydration reads this version only; any change to the payload bumps it (design §5.3).
-    SCHEMA_VERSION: ClassVar[int] = 16
+    SCHEMA_VERSION: ClassVar[int] = 17
     REPRESENTATION_KIND: ClassVar[str] = "executable"
 
     name: str
     processes: Sequence[NfProcess]
     connections: Sequence[NfConnection]
     params: Mapping[str, Any]
+    param_types: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _validate_ir_declaration(self.name, field_name="workflow name")
@@ -1140,7 +1163,19 @@ class ExecutableNextflowWorkflow:
             )
         if not isinstance(self.params, Mapping):
             raise TypeError("workflow params must be a mapping")
-        object.__setattr__(self, "params", _freeze_json(self.params))
+        frozen_params = _freeze_json(self.params)
+        object.__setattr__(self, "params", frozen_params)
+        if not isinstance(self.param_types, Mapping):
+            raise TypeError("workflow param_types must be a mapping")
+        _validate_string_mapping(self.param_types, field_name="workflow param_types")
+        if self.param_types.keys() != frozen_params.keys():
+            raise ValueError(
+                "workflow param_types must give a type to exactly the parameters in params: "
+                f"{', '.join(sorted(self.param_types.keys() ^ frozen_params.keys()))}"
+            )
+        if unknown := sorted(set(self.param_types.values()) - PARAM_TYPES):
+            raise ValueError(f"workflow param_types must be one of PARAM_TYPES, not {', '.join(map(repr, unknown))}")
+        object.__setattr__(self, "param_types", FrozenMapping(self.param_types))
         self._validate_graph()
 
     @property
@@ -1163,8 +1198,6 @@ class ExecutableNextflowWorkflow:
             raise ValueError("workflow contains a duplicate connection")
 
         incoming: set[tuple[str, str]] = set()
-        channels: dict[str, NfChannel] = {}
-        param_destinations: dict[str, tuple[bool, str, str]] = {}
         workflow_outputs: set[str] = set()
         adapters_by_process: dict[str, set[str]] = {}
         multi_scattered = {
@@ -1189,16 +1222,16 @@ class ExecutableNextflowWorkflow:
                             f"channel adapter {adapter!r} cannot target the array-marked port "
                             f"{to_process}.{to_port}"
                         )
-                    # The renderer builds one channel per parameter, so every
-                    # sink must need the same one: connection order never picks it.
+                    # The renderer builds one channel per parameter, from its
+                    # declared type, so every sink must need that one channel:
+                    # connection order never picks it.
                     channel = channel_construction(destination, adapter)
-                    previous = channels.setdefault(from_port, channel)
-                    if previous != channel:
+                    declared = self.param_types[from_port]
+                    if channel != param_channel(declared):
                         raise ValueError(
-                            f"workflow input {from_port!r} feeds incompatible channel qualifiers "
-                            f"{str(previous)!r} and {str(channel)!r}"
+                            f"workflow input {from_port!r} of type {declared!r} cannot feed {to_process}.{to_port}: "
+                            f"incompatible channel qualifiers {str(param_channel(declared))!r} and {str(channel)!r}"
                         )
-                    param_destinations.setdefault(from_port, (channel.carries_list, to_process, to_port))
                     if adapter is not None:
                         adapters_by_process.setdefault(to_process, set()).add(adapter)
                     self._record_incoming(incoming, to_process, to_port)
@@ -1284,23 +1317,6 @@ class ExecutableNextflowWorkflow:
                     f"{', '.join(sorted(adapters))}; a process may use only one scatter shape"
                 )
 
-        # Checked after the loop: a parameter feeding inconsistent shapes is
-        # reported as inconsistent above, so by here every destination agrees
-        # and the value itself is what remains to verify. This is the only
-        # edge type that can reach an array port today. An empty sequence is
-        # the absent-optional sentinel on a scalar port and a real empty
-        # array on an array port, so it is legal either way.
-        for from_port, (is_array, to_process, to_port) in param_destinations.items():
-            value = self.params[from_port]
-            # params is frozen, so a JSON array arrives as a tuple.
-            sequence = isinstance(value, (list, tuple))
-            if not (sequence and not value) and sequence != is_array:
-                raise ValueError(
-                    f"workflow input {from_port!r} delivers a "
-                    f"{'list' if sequence else 'scalar'} to {to_process}.{to_port}, "
-                    f"which expects {'an array' if is_array else 'a scalar'}"
-                )
-
         topological_order(
             process_dependencies(process_by_name, self.connections), error="workflow connections contain a cycle"
         )
@@ -1353,7 +1369,7 @@ class ExecutableNextflowWorkflow:
 
         Returns:
             dict[str, Any]: Schema version, representation kind, name,
-                processes, connections, and params.
+                processes, connections, params, and param types.
         """
         return {
             "schema_version": self.SCHEMA_VERSION,
@@ -1362,6 +1378,7 @@ class ExecutableNextflowWorkflow:
             "processes": [process.to_dict() for process in self.processes],
             "connections": [connection.to_dict() for connection in self.connections],
             "params": _thaw_json(self.params),
+            "param_types": dict(self.param_types),
         }
 
     def to_json(self) -> str:
@@ -1398,6 +1415,7 @@ class ExecutableNextflowWorkflow:
                 "processes",
                 "connections",
                 "params",
+                "param_types",
             },
         )
         if item["schema_version"] != cls.SCHEMA_VERSION:
@@ -1416,6 +1434,7 @@ class ExecutableNextflowWorkflow:
                     processes=tuple(NfProcess.from_dict(process) for process in processes),
                     connections=tuple(_connection_from_dict(connection) for connection in connections),
                     params=_mapping(item["params"], type_name="workflow params"),
+                    param_types=_mapping(item["param_types"], type_name="workflow param_types"),
                 )
             case _:
                 raise TypeError(

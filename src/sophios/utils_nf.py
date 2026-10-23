@@ -2628,7 +2628,7 @@ def _default_bindings(
     tools: tuple[Mapping[str, Any], ...],
     processes: list[NfProcess],
     workflow_inputs: Iterable[str],
-) -> tuple[list[NfWorkflowInputConnection], dict[str, Any]]:
+) -> tuple[list[NfWorkflowInputConnection], dict[str, Any], dict[str, str]]:
     """Synthesize workflow-input connections for every unwired process input.
 
     Covers two cases: a declared CWL default, and an unwired optional input
@@ -2640,7 +2640,7 @@ def _default_bindings(
     normalized; one that normalizes like another or like a workflow input is
     rejected, naming both.
     """
-    made: list[tuple[str, str, str, Any]] = []
+    made: list[tuple[str, str, str, Any, str]] = []
     for step, tool, process in zip(steps, tools, processes, strict=True):
         bound = _as_mapping(step.get("in", {}), error="compiled step inputs must be a mapping")
         inputs = _as_mapping(tool.get("inputs", {}), error="tool inputs must be a mapping")
@@ -2658,12 +2658,21 @@ def _default_bindings(
             else:
                 continue
             port_name = _identifier(raw_name, context="defaulted process input")
-            made.append((f"{step['id']}~{raw_name}", process.name, port_name, value))
+            param_type = _param_type(definition.get("type"))
+            made.append((f"{step['id']}~{raw_name}", process.name, port_name, value, param_type))
     names = _normalized_identifiers([*workflow_inputs, *(name for name, *_ in made)], context="workflow parameter")
     return (
-        [NfWorkflowInputConnection(names[name], process, port) for name, process, port, _value in made],
-        {names[name]: value for name, _process, _port, value in made},
+        [NfWorkflowInputConnection(names[name], process, port) for name, process, port, *_ in made],
+        {names[name]: value for name, _process, _port, value, _type in made},
+        {names[name]: param_type for name, *_, param_type in made},
     )
+
+
+def _param_type(cwl_type: Any) -> str:
+    """The declared type the generated pipeline checks a parameter's value against, as `PARAM_TYPES` spells it."""
+    required = _required_type(cwl_type)
+    base = f"{_required_type(_array_item_type(required))}[]" if _is_array_type(required) else required
+    return f"{base}?" if _is_optional(cwl_type) else str(base)
 
 
 def _json_value(value: Any) -> Any:
@@ -2711,6 +2720,16 @@ def _workflow_params(
             value = None
         params[normalized_names[name]] = _json_value(value)
     return params
+
+
+def _workflow_param_types(workflow: Mapping[str, Any]) -> dict[str, str]:
+    """Each workflow input's declared type, by parameter name."""
+    workflow_inputs = _as_mapping(workflow.get("inputs", {}), error="compiled CWL Workflow inputs must be a mapping")
+    names = _normalized_identifiers(workflow_inputs, context="workflow input")
+    return {
+        names[name]: _param_type(definition.get("type") if isinstance(definition, Mapping) else definition)
+        for name, definition in workflow_inputs.items()
+    }
 
 
 def _apply_absent_sentinel(params: Mapping[str, Any]) -> dict[str, Any]:
@@ -2807,7 +2826,9 @@ def compiled_source_to_nextflow(
     _raise_capability_findings(findings)
     try:
         params = _workflow_params(workflow, compiled.params)
-        default_connections, default_params = _default_bindings(steps, tools, processes, workflow.get("inputs", {}))
+        default_connections, default_params, default_types = _default_bindings(
+            steps, tools, processes, workflow.get("inputs", {})
+        )
         params.update(default_params)
         name = _identifier(compiled.name, context="workflow name", variable=False)
         while name in {process.name for process in processes}:  # a step may share the workflow's name
@@ -2817,6 +2838,7 @@ def compiled_source_to_nextflow(
             processes=processes,
             connections=[*_connections(workflow, list(steps), processes), *default_connections],
             params=_apply_absent_sentinel(params),
+            param_types={**_workflow_param_types(workflow), **default_types},
         )
     except ValueError as error:
         raise _capability_error([f"workflow: {error}"]) from None

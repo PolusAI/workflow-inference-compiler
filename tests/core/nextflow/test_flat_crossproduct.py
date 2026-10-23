@@ -40,6 +40,10 @@ def _connections(names: list[str], emits: list[str]) -> list[NfConnection]:
     return connections
 
 
+def _string_arrays(names: list[str]) -> dict[str, str]:
+    return {f"{name}s": "string[]" for name in names}
+
+
 def _gathered(directory: Path, name: str = "gathered.txt") -> list[str]:
     return (directory / name).read_text(encoding="utf-8").split("\x01")
 
@@ -75,7 +79,9 @@ def test_two_input_flat_crossproduct_values_and_cwl_order(tmp_path: Path) -> Non
     """S5: first declared input outermost, gathered in that order despite reverse finishing."""
     names = ["item", "delay"]
     params = {"items": ["a", "b"], "delays": ["1", "0"]}
-    result = _write_and_sink(_flat(names), _connections(names, ["line"]), params, tmp_path, emit_name="line")
+    result = _write_and_sink(
+        _flat(names), _connections(names, ["line"]), params, _string_arrays(names), tmp_path, emit_name="line"
+    )
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert _gathered(tmp_path) == ["a-1", "a-0", "b-1", "b-0"]
 
@@ -86,13 +92,17 @@ def test_three_input_flat_crossproduct_cardinality_order_and_empty(tmp_path: Pat
     """S6: N-input cardinality is the product of lengths; an empty input yields zero invocations."""
     names = ["item", "tag", "delay"]
     params = {"items": ["a", "b"], "tags": ["x", "y", "z"], "delays": ["0"]}
-    result = _write_and_sink(_flat(names), _connections(names, ["line"]), params, tmp_path, emit_name="line")
+    result = _write_and_sink(
+        _flat(names), _connections(names, ["line"]), params, _string_arrays(names), tmp_path, emit_name="line"
+    )
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert _gathered(tmp_path) == [f"{i}-{t}-0" for i in "ab" for t in "xyz"]
 
     empty = tmp_path / "empty"
     params = {"items": ["a"], "tags": [], "delays": ["0"]}
-    result = _write_and_sink(_flat(names), _connections(names, ["line"]), params, empty, emit_name="line")
+    result = _write_and_sink(
+        _flat(names), _connections(names, ["line"]), params, _string_arrays(names), empty, emit_name="line"
+    )
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert not list((empty / "work").glob("*/*"))
 
@@ -104,6 +114,8 @@ def test_flat_crossproduct_keeps_per_invocation_cardinality_for_every_output(tmp
     names = ["item", "delay"]
     process = _flat(names, [_text_port("line"), _text_port("copy")])
     params = {"items": ["a", "b"], "delays": ["1", "0"]}
-    result = _write_and_sink(process, _connections(names, ["line", "copy"]), params, tmp_path, emit_name="copy")
+    result = _write_and_sink(
+        process, _connections(names, ["line", "copy"]), params, _string_arrays(names), tmp_path, emit_name="copy"
+    )
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert _gathered(tmp_path) == ["a-1", "a-0", "b-1", "b-0"]

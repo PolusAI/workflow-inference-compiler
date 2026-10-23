@@ -386,7 +386,40 @@ def test_applies_unwired_scalar_default_before_lowering() -> None:
     workflow = compiled_source_to_nextflow(rose)
     assert workflow.params == {"_DEFAULT_message": "hello default"}
     assert NfWorkflowInputConnection("_DEFAULT_message", "_DEFAULT", "message") in workflow.connections
-    assert "Channel.value(params._DEFAULT_message)" in render_nextflow(workflow)
+    assert "Channel.value(__sophios_input_9f72e('_DEFAULT_message', params._DEFAULT_message, 'string'))" in (
+        render_nextflow(workflow)
+    )
+
+
+@pytest.mark.fast
+def test_every_parameter_records_its_declared_type() -> None:
+    """Workflow inputs carry their own declarations; a tool default carries its tool input's."""
+    take = tool(
+        "TAKE",
+        inputs={
+            "name": {"type": "string", "inputBinding": {"position": 1}},
+            "count": {"type": ["null", "int"]},
+            "files": {"type": {"type": "array", "items": "File"}, "inputBinding": {"position": 2}},
+            "dirs": {"type": ["null", {"type": "array", "items": "Directory"}], "inputBinding": {"position": 3}},
+            "ratio": {"type": "float", "default": 0.5},
+        },
+        outputs={"result": {"type": "File", "outputBinding": {"glob": "result.txt"}}},
+    )
+    declared = {"name": "string", "count": ["null", "int"], "files": {"type": "array", "items": "File"},
+                "dirs": ["null", {"type": "array", "items": "Directory"}], "unread": "boolean"}
+    rose = synthetic_source(
+        workflow_doc(
+            [step("TAKE", **{"in": {name: name for name in ("name", "count", "files", "dirs")}, "out": ["result"]})],
+            inputs={name: {"type": cwl_type} for name, cwl_type in declared.items()},
+            outputs={"result": {"type": "File", "outputSource": "TAKE/result"}},
+        ),
+        [take],
+        workflow_inputs={"name": "n", "count": 1, "files": [], "dirs": [], "unread": True},
+    )
+    assert compiled_source_to_nextflow(rose).param_types == {
+        "name": "string", "count": "int?", "files": "File[]", "dirs": "Directory[]?", "unread": "boolean",
+        "_TAKE_ratio": "float",
+    }
 
 
 @pytest.mark.fast

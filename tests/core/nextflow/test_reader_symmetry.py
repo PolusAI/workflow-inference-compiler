@@ -41,8 +41,9 @@ def _scattered(
     )
     connections = [NfWorkflowInputConnection(f"{name}s", "STEP", name, method) for name in names]
     params = {f"{name}s": ["0", "1"] for name in names}
+    types = {f"{name}s": "string[]" for name in names}
     return ExecutableNextflowWorkflow(
-        "PIPELINE", [process], [*connections, NfWorkflowOutputConnection("STEP", "line", "line")], params
+        "PIPELINE", [process], [*connections, NfWorkflowOutputConnection("STEP", "line", "line")], params, types
     )
 
 

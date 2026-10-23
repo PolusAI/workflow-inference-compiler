@@ -160,7 +160,7 @@ def runtime_workflow() -> ExecutableNextflowWorkflow:
             NfProcessConnection("PRODUCE", "result", "COPY", "source"),
             NfWorkflowOutputConnection("COPY", "copy", "result"),
         ],
-        {"message": "hello from Sophios"},
+        {"message": "hello from Sophios"}, {"message": "string"},
     )
 
 
@@ -187,7 +187,7 @@ def flag_workflow() -> ExecutableNextflowWorkflow:
             NfWorkflowInputConnection("source", "SORT", "source"),
             NfWorkflowOutputConnection("SORT", "result", "result"),
         ],
-        {"reverse": True, "source": "lines.txt"},
+        {"reverse": True, "source": "lines.txt"}, {"reverse": "boolean", "source": "File"},
     )
 
 
@@ -195,6 +195,7 @@ def single_process_workflow(
     process: NfProcess,
     *,
     params: dict[str, Any],
+    param_types: dict[str, str],
     output_port_name: str,
 ) -> ExecutableNextflowWorkflow:
     """Wire every process input to a same-named workflow input plus one emit."""
@@ -204,7 +205,7 @@ def single_process_workflow(
     ]
     output_connection = NfWorkflowOutputConnection(process.name, output_port_name, "result")
     return ExecutableNextflowWorkflow(
-        "PIPELINE", [process], [*connections, output_connection], params
+        "PIPELINE", [process], [*connections, output_connection], params, param_types
     )
 
 

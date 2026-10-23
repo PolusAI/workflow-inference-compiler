@@ -7,6 +7,7 @@ Topology; §7 for the stub every process carries.
 # pylint: disable=missing-function-docstring
 
 from dataclasses import replace
+import json
 from pathlib import Path
 import subprocess
 from typing import Any
@@ -16,25 +17,34 @@ import pytest
 from sophios.api.python._workflow_runtime import compile_workflow_result
 from sophios.api.python.tool_builder import CommandLineTool, Input, Inputs, Output, Outputs, cwl
 from sophios.api.python.workflow import Step, Workflow
-from sophios.input_output_nf import NF_STUB_MESSAGE, write_nextflow_artifacts
+from sophios.input_output_nf import NF_INPUT_FUNCTION, NF_STUB_MESSAGE, write_nextflow_artifacts
+from sophios.nf_types import (
+    NF_INPUT_HELPER, ExecutableNextflowWorkflow, NfWorkflowInputConnection, NfWorkflowOutputConnection,
+)
 from sophios.utils_nf import compilation_result_source, compiled_source_to_nextflow
 
 from .testkit import execute_nextflow, runtime_workflow
 
 
+def _lower(flow: Workflow, params: dict[str, Any] | None = None) -> ExecutableNextflowWorkflow:
+    """Lower ``flow``, with ``params`` as its workflow input values when given."""
+    source = compilation_result_source(compile_workflow_result(flow))
+    return compiled_source_to_nextflow(source if params is None else replace(source, params=params))
+
+
 def _run(
-    flow: Workflow, directory: Path, *arguments: str, params: dict[str, Any] | None = None
+    flow: Workflow | ExecutableNextflowWorkflow, directory: Path, *arguments: str, params: dict[str, Any] | None = None
 ) -> tuple["subprocess.CompletedProcess[str]", dict[str, list[str]]]:
     """Lower ``flow`` with ``params`` as its workflow input values, run it, and read each workflow output.
 
     Each output is the text of every value it emits, a file's contents for a path.
     """
-    source = compilation_result_source(compile_workflow_result(flow))
-    workflow = compiled_source_to_nextflow(source if params is None else replace(source, params=params))
+    workflow = flow if isinstance(flow, ExecutableNextflowWorkflow) else _lower(flow, params)
     write_nextflow_artifacts(workflow, directory)
     script = directory / "workflow.nf"
-    emits = [connection.to_port for connection in workflow.connections if hasattr(connection, "to_port")
-             and not hasattr(connection, "to_process")]
+    emits = [
+        connection.to_port for connection in workflow.connections if isinstance(connection, NfWorkflowOutputConnection)
+    ]
     sinks = "".join(
         f"\n    {workflow.name}.out.{emit}.toList().subscribe {{ list -> new File('{emit}.sink').text = "
         f"list.collect {{ it instanceof java.nio.file.Path ? it.text : it.toString() }}.join('\\u0001') }}\n"
@@ -99,3 +109,121 @@ def test_one_file_array_is_scattered_at_one_step_and_taken_whole_at_another(tmp_
     assert result.returncode == 0, result.stdout + result.stderr
     assert observed["each"] == ["a.txt\n", "b.txt\n"]
     assert observed["whole"] == ["a.txt\nb.txt\n"]
+
+
+# (value, declared type, the checked value, or None when the check stops the run)
+_ENTRY_CASES: list[tuple[Any, str, Any]] = [
+    (True, "boolean", True), ("true", "boolean", True), ("false", "boolean", False),
+    ("yes", "boolean", None), ("False", "boolean", None), (1, "boolean", None),
+    (7, "int", 7), ("10", "int", 10), ("-3", "int", -3), ("2147483647", "int", 2147483647),
+    ("2147483648", "int", None), (2147483648, "int", None), ("1.0", "int", None), ("1e1", "int", None),
+    (" 1", "int", None), (1.5, "int", None), (True, "int", None),
+    (1.5, "float", 1.5), (3, "float", 3), ("1.5e3", "float", 1500.0), (".5", "float", 0.5), ("-2", "float", -2.0),
+    ("NaN", "float", None), ("Infinity", "float", None), ("1e400", "float", None), ("0x10", "float", None),
+    ("1d", "float", None), (True, "float", None),
+    ("x", "string", "x"), ("10", "string", "10"), (5, "string", None), (False, "string", None),
+    ([], "int?", []), ([], "string?", []), ([], "int", None), ([], "File?", None), (None, "int?", None),
+    (["1", 2], "int[]", [1, 2]), ([], "string[]", []), ([], "string[]?", []), ("a", "string[]", None),
+    ([1], "string[]", None), (["true"], "boolean[]", [True]),
+    ("f.txt", "File", "f.txt"), ({"class": "File", "path": "f.txt"}, "File", "f.txt"), ("d", "File", None),
+    ("missing", "File", None), (5, "File", None), ("d", "Directory", "d"), ({"path": "d"}, "Directory", "d"),
+    ("f.txt", "Directory", None), (["f.txt"], "File[]", ["f.txt"]), (["d", "f.txt"], "Directory[]", None),
+]
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+def test_the_entry_check_passes_exact_values_and_stops_every_other(tmp_path: Path) -> None:
+    """Every case runs through the generated check under the pinned Nextflow, its value read from JSON."""
+    (tmp_path / "f.txt").write_text("f", encoding="utf-8")
+    (tmp_path / "d").mkdir()
+    (tmp_path / "workflow.nf").write_text(
+        f"""{NF_INPUT_FUNCTION}
+
+workflow {{
+    new File('checked.json').text = groovy.json.JsonOutput.toJson(params.cases.withIndex().collect {{ c, i ->
+        try {{
+            return [true, {NF_INPUT_HELPER}('c' + i, c[0], c[1])]
+        }}
+        catch( Exception e ) {{
+            return [false, (e.cause ?: e).message]
+        }}
+    }})
+}}
+""",
+        encoding="utf-8",
+    )
+    cases = [[value, declared] for value, declared, _ in _ENTRY_CASES]
+    (tmp_path / "nextflow_params.json").write_text(json.dumps({"cases": cases}), encoding="utf-8")
+    (tmp_path / "nextflow.config").write_text("", encoding="utf-8")
+    result = execute_nextflow(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    checked = json.loads((tmp_path / "checked.json").read_text(encoding="utf-8"))
+    for index, ((value, declared, expected), outcome) in enumerate(zip(_ENTRY_CASES, checked, strict=True)):
+        if expected is None:
+            # A list's elements are checked one by one, and the message names the one that fails.
+            failed = declared.split("[]")[0] if isinstance(value, list) and "[]" in declared else declared
+            assert outcome[0] is False, (value, declared)
+            assert outcome[1].startswith(f"Sophios workflow input 'c{index}' must be {failed}, not "), outcome
+        else:
+            assert outcome == [True, expected], (value, declared)
+
+
+def _echo_flow(when: str | None = None) -> Workflow:
+    """``echo`` with a ``-n`` flag, a message and an int ``n`` a ``when`` may read."""
+    tool = CommandLineTool(
+        "say",
+        Inputs(trim=Input(cwl.boolean, position=1, flag="-n"), message=Input(cwl.string, position=2), n=Input(cwl.int)),
+        Outputs(line=Output(cwl.file, glob="said.txt")),
+    ).base_command("echo").stdout("said.txt")
+    say = Step(tool, step_name="say")
+    say.inputs.trim, say.inputs.message, say.inputs.n = True, "hi", 3
+    if when is not None:
+        say.when = when
+    flow = Workflow([say], "entry")
+    flow.outputs.line = say.outputs.line
+    return flow
+
+
+def _param(workflow: ExecutableNextflowWorkflow, port: str) -> str:
+    return next(
+        connection.from_port for connection in workflow.connections
+        if isinstance(connection, NfWorkflowInputConnection) and connection.to_port == port
+    )
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+def test_a_command_line_false_drops_a_flag(tmp_path: Path) -> None:
+    workflow = _lower(_echo_flow())
+    result, observed = _run(workflow, tmp_path / "default")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert observed["line"] == ["hi"]
+    result, observed = _run(workflow, tmp_path / "false", f"--{_param(workflow, 'trim')}", "false")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert observed["line"] == ["hi\n"]
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+def test_a_command_line_int_satisfies_a_when_that_compares_it(tmp_path: Path) -> None:
+    workflow = _lower(_echo_flow("$(inputs.n == 10)"))
+    n = _param(workflow, "n")
+    result, observed = _run(workflow, tmp_path / "default")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert observed["line"] == ["[]"]
+    result, observed = _run(workflow, tmp_path / "ten", f"--{n}", "10")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert observed["line"] == ["hi"]
+
+
+@pytest.mark.nextflow
+@pytest.mark.serial
+@pytest.mark.parametrize("value", ["ten", "1e1"])
+def test_a_mistyped_value_stops_the_run_naming_the_parameter(value: str, tmp_path: Path) -> None:
+    workflow = _lower(_echo_flow("$(inputs.n == 10)"))
+    n = _param(workflow, "n")
+    result, _ = _run(workflow, tmp_path, f"--{n}", value)
+    assert result.returncode != 0
+    assert f"Sophios workflow input '{n}' must be int, not '{value}'" in result.stdout + result.stderr
+    assert not (tmp_path / "work").exists() or not list((tmp_path / "work").glob("*/*"))

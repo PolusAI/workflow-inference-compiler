@@ -64,14 +64,14 @@ def test_workflow_dict_roundtrip() -> None:
         name="wf",
         processes=[NfProcess("ECHO", [], [output_port("out")], command("echo", "hi"))],
         connections=[NfWorkflowOutputConnection("ECHO", "out", "result")],
-        params={"message": "hello"},
+        params={"message": "hello"}, param_types={"message": "string"},
     )
     assert ExecutableNextflowWorkflow.from_dict(workflow.to_dict()) == workflow
 
 
 @pytest.mark.fast
 def test_json_roundtrip_is_deterministic() -> None:
-    workflow = ExecutableNextflowWorkflow("wf", [], [], {"b": 2, "a": 1})
+    workflow = ExecutableNextflowWorkflow("wf", [], [], {"b": 2, "a": 1}, {"b": "int", "a": "int"})
     serialized = workflow.to_json()
     assert serialized == workflow.to_json()
     assert ExecutableNextflowWorkflow.from_json(serialized) == workflow
@@ -114,7 +114,7 @@ def test_executable_values_are_deeply_immutable_and_hashable() -> None:
             NfWorkflowInputConnection("message", "P", "message"),
             NfWorkflowOutputConnection("P", "result", "result"),
         ],
-        {"message": {"nested": ["hello"]}},
+        {"message": {"nested": ["hello"]}}, {"message": "string"},
     )
 
     assert hash(process)
@@ -299,45 +299,20 @@ def test_array_binding_rejects_a_blank_prefix(prefix: str) -> None:
 
 
 @pytest.mark.fast
-def test_workflow_input_value_must_match_destination_cardinality() -> None:
-    # The live path: a workflow input is the only edge that can reach an
-    # array port today. A scalar param there renders params.values.collect{},
-    # which in Groovy iterates a String's characters.
-    array_process = NfProcess(
-        "JOIN",
-        [NfPort("values", "val", is_array=True)],
-        [],
-        NfCommand((NfTemplate((NfLiteral("echo"),)), NfArrayBinding("values"))),
-    )
-    with pytest.raises(ValueError, match="delivers a scalar to JOIN.values, which expects an array"):
-        ExecutableNextflowWorkflow(
-            "WF",
-            [array_process],
-            [NfWorkflowInputConnection("values", "JOIN", "values")],
-            {"values": "abc"},
-        )
-    scalar_process = NfProcess("ONE", [NfPort("value", "val")], [], command("true"))
-    with pytest.raises(ValueError, match="delivers a list to ONE.value, which expects a scalar"):
-        ExecutableNextflowWorkflow(
-            "WF",
-            [scalar_process],
-            [NfWorkflowInputConnection("value", "ONE", "value")],
-            {"value": ["a", "b"]},
-        )
-    # An empty sequence stays legal on both sides: it is the absent-optional
-    # sentinel on a scalar port and a real empty array on an array port.
-    cases: tuple[tuple[NfProcess, dict[str, Any]], ...] = (
-        (array_process, {"values": []}),
-        (scalar_process, {"value": []}),
-    )
-    for process, params in cases:
-        port = process.inputs[0].name
-        ExecutableNextflowWorkflow(
-            "WF",
-            [process],
-            [NfWorkflowInputConnection(port, process.name, port)],
-            params,
-        )
+def test_every_parameter_has_one_declared_type_its_sinks_agree_with() -> None:
+    process = NfProcess("ONE", [NfPort("value", "val")], [], command("true"))
+    connections = [NfWorkflowInputConnection("value", "ONE", "value")]
+    with pytest.raises(ValueError, match="give a type to exactly the parameters in params: value"):
+        ExecutableNextflowWorkflow("WF", [process], connections, {"value": "a"})
+    with pytest.raises(ValueError, match="give a type to exactly the parameters in params: extra"):
+        ExecutableNextflowWorkflow("WF", [process], connections, {"value": "a"}, {"value": "string", "extra": "int"})
+    with pytest.raises(ValueError, match="must be one of PARAM_TYPES, not 'long'"):
+        ExecutableNextflowWorkflow("WF", [process], connections, {"value": 1}, {"value": "long"})
+    for declared in ("string[]", "File"):
+        with pytest.raises(ValueError, match=re.escape(f"'value' of type '{declared}' cannot feed ONE.value")):
+            ExecutableNextflowWorkflow("WF", [process], connections, {"value": "a"}, {"value": declared})
+    for declared in ("boolean", "int", "float", "string", "string?"):
+        ExecutableNextflowWorkflow("WF", [process], connections, {"value": "a"}, {"value": declared})
 
 
 @pytest.mark.fast
@@ -406,7 +381,7 @@ def test_array_marker_participates_in_channel_qualifier_consistency() -> None:
                 NfWorkflowInputConnection("shared", "SCALAR", "shared"),
                 NfWorkflowInputConnection("shared", "ARRAY", "shared"),
             ],
-            {"shared": ["a", "b"]},
+            {"shared": ["a", "b"]}, {"shared": "string"},
         )
 
 
@@ -511,7 +486,7 @@ def test_rejects_connection_to_unknown_process() -> None:
             "wf",
             [],
             [NfWorkflowInputConnection("message", "MISSING", "message")],
-            {"message": "hi"},
+            {"message": "hi"}, {"message": "string"},
         )
 
 
@@ -546,7 +521,7 @@ def test_rejects_mixed_channel_semantics_for_one_parameter() -> None:
                 NfWorkflowInputConnection("shared", "VALUE", "shared"),
                 NfWorkflowInputConnection("shared", "PATH", "shared"),
             ],
-            {"shared": "input.txt"},
+            {"shared": "input.txt"}, {"shared": "string"},
         )
 
 
@@ -567,7 +542,7 @@ def test_rejects_mixed_path_kinds_for_one_parameter() -> None:
                 NfWorkflowInputConnection("shared", "READ_FILE", "shared"),
                 NfWorkflowInputConnection("shared", "READ_DIRECTORY", "shared"),
             ],
-            {"shared": "input"},
+            {"shared": "input"}, {"shared": "File"},
         )
 
 
@@ -612,7 +587,7 @@ def test_rejects_cyclic_or_multiply_connected_dags() -> None:
                 NfWorkflowInputConnection("first", "A", "value"),
                 NfWorkflowInputConnection("second", "A", "value"),
             ],
-            {"first": 1, "second": 2},
+            {"first": 1, "second": 2}, {"first": "File", "second": "File"},
         )
 
 
@@ -637,6 +612,7 @@ def _adapted_workflow(
         [NfProcess("SCATTER", [destination], [], command("true"))],
         [NfWorkflowInputConnection("items", "SCATTER", "item", adapter)],
         {"items": ["a", "b"] if array_valued else "a"},
+        {"items": "string[]" if array_valued else "string"},
     )
 
 
@@ -678,7 +654,7 @@ def test_rejects_a_gathered_output_rescattered_into_an_array_marked_port(method:
                 NfWorkflowInputConnection("ys", "NEXT", "y", method),
                 NfWorkflowOutputConnection("NEXT", "g", "result"),
             ],
-            {"avals": ["x"], "bvals": ["y"], "ys": ["z"]},
+            {"avals": ["x"], "bvals": ["y"], "ys": ["z"]}, {"avals": "string[]", "bvals": "string[]", "ys": "string[]"},
         )
 
 
@@ -695,7 +671,7 @@ def test_rejects_one_parameter_scattered_at_one_sink_and_taken_as_a_scalar_at_an
                 NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct"),
                 NfWorkflowInputConnection("items", "WHOLE", "item"),
             ],
-            {"items": ["a", "b"]},
+            {"items": ["a", "b"]}, {"items": "string[]"},
         )
 
 
@@ -717,7 +693,7 @@ def test_one_array_parameter_may_be_scattered_differently_and_taken_whole() -> N
             NfWorkflowInputConnection("items", "EACH", "item", "dotproduct"),
             NfWorkflowInputConnection("items", "WHOLE", "items"),
         ],
-        {"items": ["a", "b"], "tags": ["t"]},
+        {"items": ["a", "b"], "tags": ["t"]}, {"items": "string[]", "tags": "string[]"},
     )
 
 
@@ -733,7 +709,7 @@ def test_accepts_one_parameter_adapted_at_every_sink() -> None:
             NfWorkflowInputConnection("items", "FIRST", "item", "dotproduct"),
             NfWorkflowInputConnection("items", "SECOND", "item", "dotproduct"),
         ],
-        {"items": ["a", "b"]},
+        {"items": ["a", "b"]}, {"items": "string[]"},
     )
 
     assert workflow.connections == (
@@ -755,7 +731,7 @@ def test_rejects_a_process_mixing_scatter_methods() -> None:
                 NfWorkflowInputConnection("firsts", "PAIR", "first", "flat_crossproduct"),
                 NfWorkflowInputConnection("seconds", "PAIR", "second", "dotproduct"),
             ],
-            {"firsts": ["a"], "seconds": ["b"]},
+            {"firsts": ["a"], "seconds": ["b"]}, {"firsts": "string[]", "seconds": "string[]"},
         )
 
 
@@ -780,7 +756,7 @@ def test_rejects_an_ungathered_process_connection_out_of_a_multi_input_scattered
             "wf",
             [pair, following],
             [*connections, NfWorkflowOutputConnection("NEXT", "g", "result")],
-            {"avals": ["x"], "bvals": ["y"]},
+            {"avals": ["x"], "bvals": ["y"]}, {"avals": "string[]", "bvals": "string[]"},
         )
 
 
@@ -809,7 +785,7 @@ def test_rejects_gathering_the_skipped_positions_of_a_conditional_multi_input_pr
             "wf",
             [pair, following],
             [*connections, NfWorkflowOutputConnection("NEXT", "g", "result")],
-            {"avals": ["x"], "bvals": ["y"]},
+            {"avals": ["x"], "bvals": ["y"]}, {"avals": "string[]", "bvals": "string[]"},
         )
 
 
@@ -904,7 +880,7 @@ def test_a_captured_value_cannot_feed_a_process_input() -> None:
                 NfProcessConnection("PRODUCE", "text", "CONSUME", "text"),
                 NfWorkflowOutputConnection("CONSUME", "result", "result"),
             ],
-            {"message": "hi"},
+            {"message": "hi"}, {"message": "string"},
         )
 
 
@@ -919,7 +895,7 @@ def test_a_captured_value_reaches_a_workflow_output() -> None:
             NfWorkflowInputConnection("message", "PRODUCE", "message"),
             NfWorkflowOutputConnection("PRODUCE", "text", "captured"),
         ],
-        {"message": "hi"},
+        {"message": "hi"}, {"message": "string"},
     )
 
     assert ExecutableNextflowWorkflow.from_json(workflow.to_json()) == workflow
@@ -933,7 +909,9 @@ def _conditional_payload() -> dict[str, Any]:
         command("true"),
         condition=parse("$(inputs.a > 1)"),
     )
-    workflow = ExecutableNextflowWorkflow("WF", [process], [NfWorkflowInputConnection("a", "TASK", "a")], {"a": 2})
+    workflow = ExecutableNextflowWorkflow(
+        "WF", [process], [NfWorkflowInputConnection("a", "TASK", "a")], {"a": 2}, {"a": "int"}
+    )
     assert ExecutableNextflowWorkflow.from_json(workflow.to_json()) == workflow
     return cast(dict[str, Any], json.loads(workflow.to_json()))
 
@@ -992,7 +970,7 @@ def test_an_optional_output_round_trips_and_reads_back() -> None:
         "WF",
         [_optional_producer()],
         [NfWorkflowInputConnection("x", "MAYBE", "x"), NfWorkflowOutputConnection("MAYBE", "o", "o")],
-        {"x": 1},
+        {"x": 1}, {"x": "int"},
     )
     assert ExecutableNextflowWorkflow.from_json(workflow.to_json()) == workflow
     assert parse_nf_text(render_nextflow(workflow), params={"x": 1}).processes[0].outputs[0].optional
@@ -1015,4 +993,4 @@ def test_an_optional_output_reaches_only_an_unscattered_workflow_output(adapter:
                        else NfWorkflowOutputConnection("MAYBE", "o", "o"))
     with pytest.raises(ValueError, match="optional output"):
         ExecutableNextflowWorkflow("WF", [_optional_producer(), consume], connections,
-                                   {"xs": [1]} if adapter else {"x": 1})
+                                   {"xs": [1]} if adapter else {"x": 1}, {"xs": "int[]"} if adapter else {"x": "int"})

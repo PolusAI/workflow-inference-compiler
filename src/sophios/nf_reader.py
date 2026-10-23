@@ -29,6 +29,7 @@ from .input_output_nf import (
     NEXTFLOW_PARAMS,
     NEXTFLOW_SCRIPT,
     NF_ARRAY_PATH_ARITY,
+    NF_INPUT_FUNCTION,
     NF_LOAD_CONTENTS_FUNCTION,
     NF_NEST_FUNCTION,
     NF_SHELL_QUOTE_FUNCTION,
@@ -463,7 +464,9 @@ def parse_nf_text(text: str, *, params: Mapping[str, Any] | None = None) -> Next
     covered: set[int] = set()
     for _name, block_start, block_end in [*process_blocks, *workflow_blocks]:
         covered.update(range(block_start, block_end + 1))
-    for helper in (NF_SHELL_QUOTE_FUNCTION, NF_LOAD_CONTENTS_FUNCTION, NF_EXPRESSION_FUNCTIONS, NF_NEST_FUNCTION):
+    for helper in (
+        NF_SHELL_QUOTE_FUNCTION, NF_INPUT_FUNCTION, NF_LOAD_CONTENTS_FUNCTION, NF_EXPRESSION_FUNCTIONS, NF_NEST_FUNCTION,
+    ):
         helper_lines = _lines(helper)
         for helper_start in range(len(lines) - len(helper_lines) + 1):
             if lines[helper_start:helper_start + len(helper_lines)] == helper_lines:

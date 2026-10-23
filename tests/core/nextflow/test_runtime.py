@@ -211,6 +211,7 @@ def test_file_object_parameter_executes_with_runtime_shape_dispatch(
         [copy_process],
         [NfWorkflowInputConnection("source", "COPY", "source")],
         {"source": {"class": "File", "path": str(source)}},
+        {"source": "File"},
     )
 
     result = run_nextflow(workflow, tmp_path / "run")
@@ -236,6 +237,7 @@ def test_directory_staging_and_command_quoting(tmp_path: Path) -> None:
     workflow = single_process_workflow(
         process,
         params={"source": str(source)},
+        param_types={"source": "Directory"},
         output_port_name="result",
     )
     result = run_nextflow(workflow, tmp_path / "run")
@@ -271,6 +273,7 @@ def test_literal_dollar_and_mixed_backtick_globs_execute(tmp_path: Path) -> None
             NfWorkflowOutputConnection("MIXED", "result", "mixed"),
         ],
         {"name": "report"},
+        {"name": "string"},
     )
 
     rendered = render_nextflow(workflow)
@@ -768,7 +771,9 @@ def test_array_of_files_stages_every_element_for_one_process_call(
             stdout=template("combined.txt"),
         ),
     )
-    workflow = single_process_workflow(process, params={"sources": sources}, output_port_name="result")
+    workflow = single_process_workflow(
+        process, params={"sources": sources}, param_types={"sources": "File[]"}, output_port_name="result"
+    )
     result = run_nextflow(workflow, tmp_path / "run")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     outputs = list((tmp_path / "run" / "work").rglob("combined.txt"))
@@ -794,7 +799,9 @@ def test_array_of_directories_stages_every_element_for_one_process_call(count: i
             stdout=template("names.txt"),
         ),
     )
-    workflow = single_process_workflow(process, params={"sources": sources}, output_port_name="result")
+    workflow = single_process_workflow(
+        process, params={"sources": sources}, param_types={"sources": "Directory[]"}, output_port_name="result"
+    )
     result = run_nextflow(workflow, tmp_path / "run")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     outputs = list((tmp_path / "run" / "work").rglob("names.txt"))
@@ -816,7 +823,9 @@ def test_empty_array_of_files_contributes_no_arguments(tmp_path: Path) -> None:
             stdout=template("names.txt"),
         ),
     )
-    workflow = single_process_workflow(process, params={"sources": []}, output_port_name="result")
+    workflow = single_process_workflow(
+        process, params={"sources": []}, param_types={"sources": "File[]"}, output_port_name="result"
+    )
     result = run_nextflow(workflow, tmp_path / "run")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     outputs = list((tmp_path / "run" / "work").rglob("names.txt"))
@@ -1034,7 +1043,7 @@ def test_docker_container_behavior(tmp_path: Path) -> None:
         command("touch", "result.txt"),
         container="debian:bookworm-slim",
     )
-    workflow = single_process_workflow(process, params={}, output_port_name="result")
+    workflow = single_process_workflow(process, params={}, param_types={}, output_port_name="result")
     result = run_nextflow(workflow, tmp_path)
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 
@@ -1145,6 +1154,7 @@ def test_scatter_over_files_stages_one_element_per_task(tmp_path: Path) -> None:
                 {"class": "File", "path": str(second)},
             ]
         },
+        {"sources": "File[]"},
     )
 
     result = run_nextflow(workflow, tmp_path / "run")
@@ -1221,6 +1231,7 @@ def test_one_scattered_parameter_feeds_two_processes_independently(tmp_path: Pat
             NfWorkflowOutputConnection("SECOND", "result", "second"),
         ],
         {"items": ["alpha", "beta"]},
+        {"items": "string[]"},
     )
 
     result = run_nextflow(workflow, tmp_path)
@@ -1290,6 +1301,7 @@ def test_a_scattered_step_broadcasts_an_unscattered_file_input(tmp_path: Path) -
             "items": ["alpha", "beta"],
             "reference": {"class": "File", "path": str(reference)},
         },
+        {"items": "string[]", "reference": "File"},
     )
 
     result = run_nextflow(workflow, tmp_path)
@@ -1524,7 +1536,8 @@ def test_file_text_capture_fails_on_malformed_utf8(tmp_path: Path) -> None:
 def test_a_wildcard_file_output_names_exactly_one_file(names: list[str], succeeds: bool, tmp_path: Path) -> None:
     """A scalar File output whose glob matches several files fails, as cwltool does."""
     process = NfProcess("MAKE", [], [output_port("result", "*.txt")], command("touch", *names))
-    result = run_nextflow(single_process_workflow(process, params={}, output_port_name="result"), tmp_path)
+    workflow = single_process_workflow(process, params={}, param_types={}, output_port_name="result")
+    result = run_nextflow(workflow, tmp_path)
     assert (result.returncode == 0) is succeeds, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 
 
@@ -1579,7 +1592,8 @@ def test_a_brace_in_an_output_glob_is_literal(tmp_path: Path) -> None:
         [output_port("result", "a{b,c}.txt")],
         command("sh", "-c", "echo literal > 'a{b,c}.txt'; echo decoy > ab.txt"),
     )
-    write_nextflow_artifacts(single_process_workflow(produce, params={}, output_port_name="result"), tmp_path)
+    workflow = single_process_workflow(produce, params={}, param_types={}, output_port_name="result")
+    write_nextflow_artifacts(workflow, tmp_path)
     script = tmp_path / "workflow.nf"
     sink = "\n    PIPELINE.out.result.subscribe { new File('result.sink').text = it.text }\n}\n"
     script.write_text(script.read_text(encoding="utf-8")[:-2] + sink, encoding="utf-8")
