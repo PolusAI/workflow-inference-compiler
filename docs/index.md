@@ -1,5 +1,14 @@
 # Sophios
 
+Sophios is a workflow compiler. You write a workflow in Python, or in
+`.wic`, a short YAML format. Sophios holds it in a workflow model of its
+own, checks all of it before anything runs, and compiles it for a backend.
+Today that backend is the [Common Workflow
+Language](https://www.commonwl.org) (CWL), so what it writes runs under any
+CWL runner, with or without Sophios installed: cwltool on your machine, or
+Toil, which sends the steps to a cloud or to Slurm, LSF and other cluster
+schedulers.
+
 An analysis is rarely one program. You clean the raw data; then several
 things happen to the clean data at once, one program fitting a model while
 another computes summary statistics; and a last program puts both results
@@ -11,11 +20,12 @@ files at once, or on a colleague's computer that has none of your programs
 installed.
 
 Sophios is for that moment. You describe each step, which program it runs,
-what you give it and which earlier results it reads, in a short YAML file or
-a Python script. Sophios checks the whole graph before anything runs, runs
-every program in the container it asks for, and writes the result out as a
-standard workflow that you, a colleague or a cluster can run again, with or
-without Sophios.
+what you give it and which earlier results it reads, in a Python script or a
+`.wic` file. Sophios fills in the connections you leave out and tells you
+what it chose, stops on a value of the wrong type, a missing input file or a
+container engine that is not running, and runs every program in the
+container it asks for. You, a colleague or a cluster can run what it writes
+again.
 
 ## A first look
 
