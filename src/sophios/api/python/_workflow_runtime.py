@@ -11,6 +11,7 @@ Python-facing workflow authoring.
 
 import asyncio
 import logging
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePath
@@ -39,7 +40,7 @@ from sophios.cli import default_compilation_settings, get_known_and_unknown_args
 from sophios.runtime_inputs import normalize_artifact_cwl, normalize_artifact_job_inputs
 from sophios.utils import convert_args_dict_to_args_list
 from sophios.utils_cwl import tool_process
-from sophios.utils_nf import compiled_source_to_nextflow
+from sophios.utils_nf import compiled_source_to_nextflow_with_notes
 from sophios.wic_types import DEFAULT_BASEPATH, CompilerOptions, GraphSettings, StepId, Tool, Tools
 
 from ._inference import Inference
@@ -569,15 +570,22 @@ def nextflow_workflow(
     tool_registry: Tools | None = None,
     lang_version: str | None = None,
     inference: Inference = Inference(),
+    stacklevel: int = 3,
 ) -> ExecutableNextflowWorkflow:
-    """Compile once through the core semantic pipeline and lower to Nextflow."""
+    """Compile once through the core semantic pipeline and lower to Nextflow; each note is a `UserWarning`.
+
+    `stacklevel` makes each warning point at the public method's caller.
+    """
     result = compile_workflow_result(
         workflow,
         tool_registry=tool_registry,
         lang_version=lang_version,
         inference=inference,
     )
-    return compiled_source_to_nextflow(result)
+    executable, notes = compiled_source_to_nextflow_with_notes(result)
+    for note in notes:
+        warnings.warn(str(note), UserWarning, stacklevel=stacklevel)
+    return executable
 
 
 def write_nextflow_workflow(
@@ -596,6 +604,7 @@ def write_nextflow_workflow(
             tool_registry=tool_registry,
             lang_version=lang_version,
             inference=inference,
+            stacklevel=4,
         ),
         outdir,
     )

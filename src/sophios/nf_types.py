@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from graphlib import CycleError, TopologicalSorter
 import json
 import math
+import re
 from types import MappingProxyType
 from typing import Any, ClassVar, Generic, Self, TypeVar, cast, get_args
 
@@ -19,9 +20,10 @@ NF_SCATTER_INDEX_NAME = "__sophios_scatter_index_9f72e"
 NF_NEST_HELPER = "__sophios_nest_9f72e"
 NF_INPUT_HELPER = "__sophios_input_9f72e"
 NF_STEP_INPUT_HELPER = "__sophios_step_input_9f72e"
+NF_FLOAT_TEXT_HELPER = "__sophios_float_text_9f72e"
 NF_INTERNAL_IDENTIFIERS = frozenset({
     NF_SHELL_QUOTE_HELPER, NF_LOAD_CONTENTS_HELPER, NF_FINITE_HELPER, NF_ROUND_HELPER,
-    NF_SCATTER_INDEX_NAME, NF_NEST_HELPER, NF_INPUT_HELPER, NF_STEP_INPUT_HELPER,
+    NF_SCATTER_INDEX_NAME, NF_NEST_HELPER, NF_INPUT_HELPER, NF_STEP_INPUT_HELPER, NF_FLOAT_TEXT_HELPER,
 })
 _PATH_KINDS = {"File": "file", "Directory": "directory"}
 # A workflow parameter's declared type, which the generated pipeline checks
@@ -33,6 +35,13 @@ PARAM_TYPES = frozenset(
     for array in ("", "[]")
     for optional in ("", "?")
 )
+# An InitialWorkDirRequirement entry's input is staged under this prefix and
+# its port name, and the task makes the entry from it (design §6).
+NF_ENTRY_STAGING_PREFIX = ".sophios_entry_"
+# The file a containerized task reads its image's ENTRYPOINT from: under the
+# reserved prefix, and not an identifier, so no entry's staging directory and
+# no literal entryname can take its name.
+NF_ENTRYPOINT_FILE = f"{NF_ENTRY_STAGING_PREFIX}.entrypoint"
 # CWL v1.2 requires a loadContents file to be a UTF-8 text file of this many
 # bytes or fewer, read entirely, with a fatal error above the limit.
 NF_LOAD_CONTENTS_LIMIT = 64 * 1024
@@ -191,7 +200,8 @@ class NfBasenameReference:
     """Reference to the staged file name of one path input.
 
     Nextflow stages an input under its original file name, so the staged
-    path's name is exactly the CWL ``basename``.
+    path's name is exactly the CWL ``basename``. An entry's input renders the
+    name of its entry instead (:class:`NfEntry`).
     """
 
     name: str
@@ -332,6 +342,40 @@ class NfArrayBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class NfOptionalBinding:
+    """Command-line binding of an optional string, int or float input.
+
+    Renders nothing at all when the input holds the ``[]`` sentinel of an
+    absent value. Otherwise contributes the optional prefix and the value as
+    two argv words, or as one when ``separate`` is false, as the same binding
+    of a required input does. Valid only in command token position, and
+    only against val ports that are not array-marked.
+    """
+
+    name: str
+    prefix: str | None = None
+    separate: bool = True
+
+    def __post_init__(self) -> None:
+        _validate_ir_identifier(self.name, field_name="optional binding input reference")
+        if self.prefix is not None and (not isinstance(self.prefix, str) or not self.prefix.strip()):
+            raise ValueError("optional binding prefix must be a non-empty string or None")
+        if not isinstance(self.separate, bool):
+            raise TypeError("optional binding separate must be a bool")
+        if not self.separate and self.prefix is None:
+            raise ValueError("an optional binding with separate false needs a prefix")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible representation.
+
+        Returns:
+            dict[str, Any]: The token as
+                ``{"kind": "optional_binding", "name": ..., "prefix": ..., "separate": ...}``.
+        """
+        return {"kind": "optional_binding", "name": self.name, "prefix": self.prefix, "separate": self.separate}
+
+
+@dataclass(frozen=True, slots=True)
 class NfShellLiteral:
     """Raw, unquoted shell text from an approved ``shellQuote: false`` binding.
 
@@ -359,7 +403,7 @@ class NfShellLiteral:
         return {"kind": "shell_literal", "text": self.text}
 
 
-NfCommandToken = NfTemplate | NfFlag | NfArrayBinding | NfShellLiteral
+NfCommandToken = NfTemplate | NfFlag | NfArrayBinding | NfOptionalBinding | NfShellLiteral
 
 
 def _command_token_from_dict(value: Mapping[str, Any]) -> NfCommandToken:
@@ -371,6 +415,9 @@ def _command_token_from_dict(value: Mapping[str, Any]) -> NfCommandToken:
         case "array":
             _fields(item, type_name="NfArrayBinding", required={"kind", "name", "prefix"})
             return NfArrayBinding(item["name"], item["prefix"])
+        case "optional_binding":
+            _fields(item, type_name="NfOptionalBinding", required={"kind", "name", "prefix", "separate"})
+            return NfOptionalBinding(item["name"], item["prefix"], item["separate"])
         case "shell_literal":
             _fields(item, type_name="NfShellLiteral", required={"kind", "text"})
             return NfShellLiteral(item["text"])
@@ -378,19 +425,70 @@ def _command_token_from_dict(value: Mapping[str, Any]) -> NfCommandToken:
             return NfTemplate.from_dict(item)
 
 
+_SHELL_VARIABLE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+@dataclass(frozen=True, slots=True)
+class NfEnvVar:
+    """One environment variable the task exports before its command.
+
+    The value is literal text or one input's value, as an
+    ``EnvVarRequirement`` entry lowers (design §6, Resources and containers).
+    """
+
+    name: str
+    value: NfTemplate
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not _SHELL_VARIABLE.fullmatch(self.name):
+            raise ValueError(f"environment variable name must be a shell variable name, got {self.name!r}")
+        match self.value:
+            case NfTemplate(segments=[NfLiteral() | NfInputReference()]):
+                pass
+            case _:
+                raise ValueError(f"environment variable {self.name!r} must be literal text or one input reference")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible representation.
+
+        Returns:
+            dict[str, Any]: The variable's name and value template.
+        """
+        return {"name": self.name, "value": self.value.to_dict()}
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> Self:
+        """Hydrate and validate an environment variable from a mapping.
+
+        Args:
+            value (Mapping[str, Any]): Serialized variable produced by
+                :meth:`to_dict`.
+
+        Raises:
+            TypeError: If the value is not a mapping.
+            ValueError: If fields are missing, unknown or invalid.
+
+        Returns:
+            Self: The validated variable.
+        """
+        item = _fields(value, type_name=cls.__name__, required={"name", "value"})
+        return cls(item["name"], NfTemplate.from_dict(item["value"]))
+
+
 @dataclass(frozen=True, slots=True)
 class NfCommand:
-    """Typed argv and approved stream redirections for one process."""
+    """Typed argv, approved stream redirections, and the variables exported before it, for one process."""
 
     tokens: Sequence[NfCommandToken]
     stdin: NfTemplate | None = None
     stdout: NfTemplate | None = None
     stderr: NfTemplate | None = None
+    env: Sequence[NfEnvVar] = ()
 
     def __post_init__(self) -> None:
         tokens = tuple(self.tokens)
         if not tokens or not all(
-            isinstance(token, (NfTemplate, NfFlag, NfArrayBinding, NfShellLiteral)) for token in tokens
+            isinstance(token, get_args(NfCommandToken)) for token in tokens
         ):
             raise ValueError("command must contain at least one typed token")
         object.__setattr__(self, "tokens", tokens)
@@ -398,18 +496,35 @@ class NfCommand:
             value = getattr(self, name)
             if value is not None and not isinstance(value, NfTemplate):
                 raise TypeError(f"command {name} must be an NfTemplate or None")
+        env = tuple(self.env)
+        if not all(isinstance(variable, NfEnvVar) for variable in env):
+            raise TypeError("command env must contain only NfEnvVar values")
+        names = [variable.name for variable in env]
+        if len(names) != len(set(names)):
+            raise ValueError("command env sets one variable more than once")
+        object.__setattr__(self, "env", env)
+
+    @property
+    def templates(self) -> tuple[NfTemplate, ...]:
+        """Every template the command renders a value into: template tokens, redirections and variables."""
+        return (
+            *(token for token in self.tokens if isinstance(token, NfTemplate)),
+            *(stream for stream in (self.stdin, self.stdout, self.stderr) if stream is not None),
+            *(variable.value for variable in self.env),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible representation.
 
         Returns:
-            dict[str, Any]: Serialized argv tokens and stream redirections.
+            dict[str, Any]: Serialized argv tokens, stream redirections and exported variables.
         """
         return {
             "tokens": [token.to_dict() for token in self.tokens],
             "stdin": self.stdin.to_dict() if self.stdin else None,
             "stdout": self.stdout.to_dict() if self.stdout else None,
             "stderr": self.stderr.to_dict() if self.stderr else None,
+            "env": [variable.to_dict() for variable in self.env],
         }
 
     @classmethod
@@ -427,9 +542,9 @@ class NfCommand:
         Returns:
             Self: The validated command.
         """
-        item = _fields(value, type_name=cls.__name__, required={"tokens", "stdin", "stdout", "stderr"})
-        if not isinstance(item["tokens"], list):
-            raise TypeError("NfCommand tokens must be a list")
+        item = _fields(value, type_name=cls.__name__, required={"tokens", "stdin", "stdout", "stderr", "env"})
+        if not isinstance(item["tokens"], list) or not isinstance(item["env"], list):
+            raise TypeError("NfCommand tokens and env must be lists")
 
         def hydrate(raw: Any) -> NfTemplate | None:
             return None if raw is None else NfTemplate.from_dict(raw)
@@ -437,24 +552,23 @@ class NfCommand:
         return cls(
             tuple(_command_token_from_dict(token) for token in item["tokens"]),
             hydrate(item["stdin"]), hydrate(item["stdout"]), hydrate(item["stderr"]),
+            tuple(NfEnvVar.from_dict(variable) for variable in item["env"]),
         )
 
 
 @dataclass(frozen=True, slots=True)
 class NfResources:
-    """Typed supported process resources."""
+    """Typed supported process resources; ``accelerator`` is a GPU count."""
 
     cpus: int | None = None
     memory_mb: int | float | None = None
+    accelerator: int | None = None
 
     def __post_init__(self) -> None:
-        cpus = self.cpus
-        if (
-            isinstance(cpus, bool)
-            or (cpus is not None and not isinstance(cpus, int))
-            or (isinstance(cpus, int) and cpus <= 0)
-        ):
-            raise ValueError("cpus must be a positive integer or None")
+        for name in ("cpus", "accelerator"):
+            value = getattr(self, name)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
+                raise ValueError(f"{name} must be a positive integer or None")
         memory = self.memory_mb
         if memory is not None and (
             isinstance(memory, bool) or not isinstance(memory, (int, float)) or not 0 < memory < math.inf
@@ -465,9 +579,9 @@ class NfResources:
         """Return a JSON-compatible representation.
 
         Returns:
-            dict[str, Any]: The ``cpus`` and ``memory_mb`` values.
+            dict[str, Any]: The ``cpus``, ``memory_mb`` and ``accelerator`` values.
         """
-        return {"cpus": self.cpus, "memory_mb": self.memory_mb}
+        return {"cpus": self.cpus, "memory_mb": self.memory_mb, "accelerator": self.accelerator}
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> Self:
@@ -484,8 +598,8 @@ class NfResources:
         Returns:
             Self: The validated resources.
         """
-        item = _fields(value, type_name=cls.__name__, required={"cpus", "memory_mb"})
-        return cls(item["cpus"], item["memory_mb"])
+        item = _fields(value, type_name=cls.__name__, required={"cpus", "memory_mb", "accelerator"})
+        return cls(item["cpus"], item["memory_mb"], item["accelerator"])
 
 
 GLOB_WILDCARDS = frozenset("*?[")
@@ -525,8 +639,62 @@ def _glob_names_one_file(template: NfTemplate) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
+class NfEntry:
+    """An ``InitialWorkDirRequirement`` entry the task makes from its input before the command runs.
+
+    The input is staged under a hidden name. ``name`` is the entry's literal
+    CWL name, or None for the input's own basename; ``copy`` makes the entry a
+    copy the command may change, and otherwise it is a symlink (design §6,
+    Inputs and channels).
+    """
+
+    name: str | None = None
+    copy: bool = False
+
+    def __post_init__(self) -> None:
+        if self.name is not None:
+            if not isinstance(self.name, str) or not self.name.strip():
+                raise ValueError("entryname must be a non-empty string")
+            if "/" in self.name or "\x00" in self.name:
+                raise ValueError("entryname must not contain a path separator or NUL byte")
+            if self.name in {".", ".."}:
+                raise ValueError(f"entryname must not be {self.name!r}, which names a directory, not an entry")
+            if self.name.startswith(NF_ENTRY_STAGING_PREFIX):
+                raise ValueError(f"entryname must not begin with {NF_ENTRY_STAGING_PREFIX!r}, which Sophios reserves")
+        if not isinstance(self.copy, bool):
+            raise TypeError("entry copy must be a bool")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible representation.
+
+        Returns:
+            dict[str, Any]: The entry's literal name, or None, and whether it is a copy.
+        """
+        return {"name": self.name, "copy": self.copy}
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> Self:
+        """Hydrate and validate an entry from a mapping.
+
+        Args:
+            value (Mapping[str, Any]): Serialized entry produced by :meth:`to_dict`.
+
+        Raises:
+            TypeError: If the value is not a mapping.
+            ValueError: If fields are missing, unknown or invalid.
+
+        Returns:
+            Self: The validated entry.
+        """
+        item = _fields(value, type_name=cls.__name__, required={"name", "copy"})
+        return cls(item["name"], item["copy"])
+
+
+@dataclass(frozen=True, slots=True)
 class NfPort:
     """A typed Nextflow process port.
+
+    ``entry`` marks a path input made an ``InitialWorkDirRequirement`` entry.
 
     ``optional`` marks a File or Directory output CWL declares optional: no
     match yields null rather than failing the task.
@@ -552,7 +720,7 @@ class NfPort:
     glob: NfTemplate | None = None
     path_kind: str | None = None
     is_array: bool = False
-    stage_as: str | None = None
+    entry: NfEntry | None = None
     capture: str | None = None
     optional: bool = False
 
@@ -578,17 +746,11 @@ class NfPort:
             raise TypeError("port optional must be a bool")
         if self.optional and (self.qualifier != "path" or self.glob is None):
             raise ValueError("only a path output may be optional")
-        if self.stage_as is not None:
-            if self.qualifier != "path":
-                raise ValueError("only path ports may declare a stage_as rename")
-            if self.is_array:
-                raise ValueError("array-marked ports cannot declare a stage_as rename")
-            if not isinstance(self.stage_as, str) or not self.stage_as.strip():
-                raise ValueError("stage_as must be a non-empty string or None")
-            if "/" in self.stage_as or "\x00" in self.stage_as:
-                raise ValueError("stage_as must not contain a path separator or NUL byte")
-            if "*" in self.stage_as or "?" in self.stage_as:
-                raise ValueError("stage_as must not contain a Nextflow wildcard ('*' or '?')")
+        if self.entry is not None:
+            if not isinstance(self.entry, NfEntry):
+                raise TypeError("port entry must be an NfEntry or None")
+            if self.qualifier != "path" or self.is_array or self.glob is not None:
+                raise ValueError("only a path input that is not array-marked may be an InitialWorkDirRequirement entry")
         if self.capture is not None:
             if self.capture not in self.CAPTURE_QUALIFIERS:
                 allowed = ", ".join(sorted(self.CAPTURE_QUALIFIERS))
@@ -601,10 +763,8 @@ class NfPort:
                     f"capture {self.capture!r} requires a {required} port, "
                     f"got {self.qualifier!r}"
                 )
-            if self.is_array or self.stage_as is not None:
-                raise ValueError(
-                    "a capture marker cannot combine with an array marker or a stage_as rename"
-                )
+            if self.is_array:
+                raise ValueError("a capture marker cannot combine with an array marker")
             match self.glob:
                 case NfTemplate(segments=[NfLiteral() as literal]):
                     pass
@@ -621,11 +781,6 @@ class NfPort:
                     "a capture marker requires a glob with no wildcard character; "
                     f"found {', '.join(repr(character) for character in wildcards)}"
                 )
-        if self.optional and self.one_file:
-            raise ValueError(
-                "an optional output cannot require exactly one file (a pattern glob or a $(self[0]) "
-                "capture): Nextflow fails that output when nothing matches"
-            )
 
     @property
     def literal_glob(self) -> bool:
@@ -634,7 +789,7 @@ class NfPort:
 
     @property
     def one_file(self) -> bool:
-        """Whether the output must match exactly one file (``arity: '1'``), as cwltool enforces."""
+        """Whether the output must match one file, or at most one when optional, as cwltool enforces."""
         return self.capture == "single" or (self.glob is not None and not self.literal_glob and any(
             not isinstance(segment, NfLiteral) or _GLOB_METACHARACTERS & set(segment.value)
             for segment in self.glob.segments
@@ -645,8 +800,8 @@ class NfPort:
 
         Returns:
             dict[str, Any]: The port's name, qualifier, emit, glob, path
-                kind, array marker, staged-name override, capture marker,
-                and optional marker.
+                kind, array marker, entry marker, capture marker, and
+                optional marker.
         """
         return {
             "name": self.name,
@@ -655,7 +810,7 @@ class NfPort:
             "glob": self.glob.to_dict() if self.glob else None,
             "path_kind": self.path_kind,
             "is_array": self.is_array,
-            "stage_as": self.stage_as,
+            "entry": self.entry.to_dict() if self.entry else None,
             "capture": self.capture,
             "optional": self.optional,
         }
@@ -678,7 +833,7 @@ class NfPort:
         item = _fields(
             value,
             type_name=cls.__name__,
-            required={"name", "qualifier", "emit", "glob", "path_kind", "is_array", "stage_as", "capture", "optional"},
+            required={"name", "qualifier", "emit", "glob", "path_kind", "is_array", "entry", "capture", "optional"},
         )
         glob = None if item["glob"] is None else NfTemplate.from_dict(item["glob"])
         return cls(
@@ -688,7 +843,7 @@ class NfPort:
             glob=glob,
             path_kind=item["path_kind"],
             is_array=item["is_array"],
-            stage_as=item["stage_as"],
+            entry=None if item["entry"] is None else NfEntry.from_dict(item["entry"]),
             capture=item["capture"],
             optional=item["optional"],
         )
@@ -744,11 +899,10 @@ class NfProcess:
         array_binding_names = {
             token.name for token in self.command.tokens if isinstance(token, NfArrayBinding)
         }
-        templates = [
-            *(token for token in self.command.tokens if isinstance(token, NfTemplate)),
-            *(template for template in (self.command.stdin, self.command.stdout, self.command.stderr) if template),
-            *(port.glob for port in outputs if port.glob),
-        ]
+        optional_binding_names = {
+            token.name for token in self.command.tokens if isinstance(token, NfOptionalBinding)
+        }
+        templates = [*self.command.templates, *(port.glob for port in outputs if port.glob)]
         segments = [segment for template in templates for segment in template.segments]
         basename_names = {
             segment.name for segment in segments if isinstance(segment, NfBasenameReference)
@@ -756,14 +910,25 @@ class NfProcess:
         plain_reference_names = {
             segment.name for segment in segments if isinstance(segment, NfInputReference)
         }
-        referenced_names = flag_names | array_binding_names | basename_names | plain_reference_names
+        referenced_names = (
+            flag_names | array_binding_names | optional_binding_names | basename_names | plain_reference_names
+        )
         if unknown := referenced_names - input_names:
             raise ValueError(
                 f"process {self.name!r} templates reference unknown inputs: {', '.join(sorted(unknown))}"
             )
         input_ports = {port.name: port for port in inputs}
+        env_names = {
+            segment.name for variable in self.command.env for segment in variable.value.segments
+            if isinstance(segment, NfInputReference)
+        }
         rules: tuple[tuple[set[str], Callable[[NfPort], bool], str], ...] = (
             (flag_names, lambda port: port.qualifier == "val", "flag tokens must reference val inputs"),
+            (
+                optional_binding_names, lambda port: port.qualifier == "val",
+                "optional bindings must reference val inputs",
+            ),
+            (env_names, lambda port: port.qualifier == "val", "environment variables must reference val inputs"),
             (basename_names, lambda port: port.qualifier == "path", "basename references must target path inputs"),
             (array_binding_names, lambda port: port.is_array, "array bindings must reference array-marked inputs"),
             # The converse direction: every reference to an array-marked input
@@ -771,7 +936,7 @@ class NfProcess:
             # collection as a Groovy list, while a flag lets list truthiness decide
             # whether its prefix appears.
             (
-                plain_reference_names | basename_names | flag_names,
+                plain_reference_names | basename_names | flag_names | optional_binding_names,
                 lambda port: not port.is_array,
                 "array-marked inputs may only be referenced by array bindings",
             ),
@@ -779,17 +944,28 @@ class NfProcess:
         for referencing, admits, rule in rules:
             if invalid := sorted(name for name in referencing if not admits(input_ports[name])):
                 raise ValueError(f"process {self.name!r} {rule}: {', '.join(invalid)}")
-        stage_as_names = {port.name for port in inputs if port.stage_as is not None}
-        if overlap := stage_as_names & referenced_names:
+        entry_names = [port.entry.name for port in inputs if port.entry is not None and port.entry.name is not None]
+        renamed = {port.name for port in inputs if port.entry is not None and port.entry.name is not None}
+        if overlap := renamed & referenced_names:
             raise ValueError(
-                f"process {self.name!r} references a renamed IWDR input elsewhere in its "
-                f"command, stream targets, or output globs: {', '.join(sorted(overlap))}"
+                f"process {self.name!r} references an input whose InitialWorkDirRequirement entry has a literal "
+                f"name in its command, stream targets, or output globs: {', '.join(sorted(overlap))}"
             )
-        stage_as_values = [port.stage_as for port in inputs if port.stage_as is not None]
-        if len(stage_as_values) != len(set(stage_as_values)):
-            raise ValueError(
-                f"process {self.name!r} stages more than one input under the same literal name"
-            )
+        if len(entry_names) != len(set(entry_names)):
+            raise ValueError(f"process {self.name!r} makes two InitialWorkDirRequirement entries with one literal name")
+        # A glob that is one reference to a staged input names that input, which
+        # a CWL glob does not match; the task makes an entry's own file.
+        staged = {port.name for port in inputs if port.qualifier == "path" and port.entry is None}
+        for port in outputs:
+            match port.glob:
+                case NfTemplate(segments=[NfInputReference(name=name) | NfBasenameReference(name=name)]) if (
+                    name in staged
+                ):
+                    raise ValueError(
+                        f"process {self.name!r} output {port.name!r} globs only the staged input {name!r}, which a "
+                        "CWL glob does not match: derive a new name from it, or make the input an "
+                        "InitialWorkDirRequirement entry"
+                    )
         match self.container:
             case None:
                 pass
@@ -1198,7 +1374,7 @@ class ExecutableNextflowWorkflow:
     """
 
     # Hydration reads this version only; any change to the payload bumps it (design §5.3).
-    SCHEMA_VERSION: ClassVar[int] = 17
+    SCHEMA_VERSION: ClassVar[int] = 19
     REPRESENTATION_KIND: ClassVar[str] = "executable"
 
     name: str
@@ -1223,12 +1399,6 @@ class ExecutableNextflowWorkflow:
             raise TypeError("workflow connections must use a typed connection variant")
         object.__setattr__(self, "processes", processes)
         object.__setattr__(self, "connections", connections)
-        container_modes = {process.container is not None for process in processes}
-        if len(container_modes) > 1:
-            raise ValueError(
-                "mixed container execution is not supported; "
-                "every process must declare a container or no process may declare one"
-            )
         if not isinstance(self.params, Mapping):
             raise TypeError("workflow params must be a mapping")
         frozen_params = _freeze_json(self.params)
@@ -1254,13 +1424,13 @@ class ExecutableNextflowWorkflow:
 
     @property
     def containers_enabled(self) -> bool:
-        """Return the validated workflow-wide container execution policy.
+        """Whether Docker is enabled: some process declares a container.
 
         Returns:
-            bool: True when every process declares a container; construction
-                rejects mixed policies, so this is uniform by invariant.
+            bool: True when any process declares a container. Nextflow runs a
+                process with no container directive on the host either way.
         """
-        return bool(self.processes) and self.processes[0].container is not None
+        return any(process.container is not None for process in self.processes)
 
     def _validate_graph(self) -> None:
         process_by_name = {process.name: process for process in self.processes}
@@ -1284,6 +1454,20 @@ class ExecutableNextflowWorkflow:
             if optional := [port.name for port in process_by_name[name].outputs if port.optional]:
                 # A gather would drop the absent positions instead of keeping null there.
                 raise ValueError(f"scattered process {name!r} cannot have the optional outputs {', '.join(optional)}")
+        checked = {
+            (connection.from_process, connection.from_port)
+            for connection in self.connections if isinstance(connection, NfWorkflowOutputConnection)
+        }
+        for process in self.processes:
+            # The workflow output is where at most one match is checked (design §6, Outputs and globs).
+            if unchecked := [
+                port.name for port in process.outputs
+                if port.optional and port.one_file and (process.name, port.name) not in checked
+            ]:
+                raise ValueError(
+                    f"process {process.name!r} optional outputs {', '.join(unchecked)} must match at most one "
+                    "file and must reach a workflow output, where that is checked"
+                )
 
         for connection in self.connections:
             merge = connection if isinstance(connection, NfStepInputConnection) else None

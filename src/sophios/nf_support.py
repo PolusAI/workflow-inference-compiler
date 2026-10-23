@@ -7,10 +7,11 @@ LOWERED: a lowering consumes it.
 COMPILE_TIME: Sophios uses it while compiling; the Nextflow output carries nothing for it.
 REJECTED: a finding at the field, whose message is the row's note, and no artifacts.
 
-`FIELDS` is keyed by the `cwl_utils.parser.cwl_v1_2` class whose fields each part classifies.
+`FIELDS` is keyed by the `cwl_utils.parser.cwl_v1_2` class whose fields each part classifies, or by
+cwltool's extension class as a tool names it, such as `cwltool:CUDARequirement`.
 Capability analysis (`sophios.utils_nf`) consumes exactly the fields that are not rejected, and
 docs/nextflow.md renders this table (docs/conf.py). `tests/core/nextflow/test_support_table.py`
-holds `FIELDS` to the fields cwl_utils declares and to Sophios's own `SUPPORT_MATRIX`.
+holds `FIELDS` to the fields cwl_utils or cwltool declares and to Sophios's own `SUPPORT_MATRIX`.
 """
 from dataclasses import dataclass
 from enum import StrEnum
@@ -150,7 +151,7 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'doc': _DOC,
         'format': _FORMAT,
         'id': Row(_L, 'names the port'),
-        'inputBinding': Row(_L, 'command tokens'),
+        'inputBinding': Row(_L, "command tokens; a `boolean` array's is rejected"),
         'label': _DOC,
         'loadContents': Row(_R, "loadContents on an input is not supported: an input's contents would have to "
                                 'become a value channel read at staging time'),
@@ -174,7 +175,7 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'position': Row(_L, 'orders the tokens'),
         'prefix': Row(_L, "literal text before the value, or a `boolean`'s flag"),
         'separate': Row(_L, '`false` joins the prefix and the value into one word'),
-        'shellQuote': Row(_L, '`false` only on literal text under `ShellCommandRequirement`'),
+        'shellQuote': Row(_L, '`false` only on literal text with no `$` under `ShellCommandRequirement`'),
         'valueFrom': Row(_L, 'literal text or `$(inputs.<name>)`, and on a `boolean` only its bare '
                              'self-reference; a computed `valueFrom` is rejected'),
     }),
@@ -195,7 +196,8 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'outputEval': Row(_L, '`$(self[0])`, or `$(self[0].contents)` beside `loadContents`, over a literal glob'),
     }),
     'DockerRequirement': MappingProxyType({
-        'class': Row(_L, 'the `container` directive'),
+        'class': Row(_L, "the `container` directive; the command runs after the image's ENTRYPOINT, and a tool "
+                         'without one runs on the host'),
         'dockerFile': Row(_R, 'dockerFile is not supported: use dockerPull'),
         'dockerImageId': Row(_L, 'the image'),
         'dockerImport': Row(_R, 'dockerImport is not supported: use dockerPull'),
@@ -203,14 +205,23 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'dockerOutputDirectory': Row(_R, 'dockerOutputDirectory is not supported: a task writes to its work directory'),
         'dockerPull': Row(_L, 'the image'),
     }),
+    'EnvVarRequirement': MappingProxyType({
+        'class': Row(_L, 'each variable is exported before the command'),
+        'envDef': Row(_L, 'the variables, in list or map form'),
+    }),
+    'EnvironmentDef': MappingProxyType({
+        'envName': Row(_L, 'a shell variable name'),
+        'envValue': Row(_L, 'literal text, or exactly `$(inputs.<name>)` of a `string` input'),
+    }),
     'InitialWorkDirRequirement': MappingProxyType({
-        'class': Row(_L, "stages the inputs a listing names"),
-        'listing': Row(_L, 'entries naming one `File` or `Directory` input, under its basename or a literal name'),
+        'class': Row(_L, 'the task makes each entry before the command runs'),
+        'listing': Row(_L, 'entries naming one `File` or `Directory` input, under its basename or a literal name; '
+                           'a symlink, or a copy when `writable: true`'),
     }),
     'Dirent': MappingProxyType({
         'entry': Row(_L, '`$(inputs.<name>)` of one `File` or `Directory` input'),
         'entryname': Row(_L, "the input's own basename, or literal text"),
-        'writable': Row(_L, 'the literal `false` only; `true` is rejected'),
+        'writable': Row(_L, 'a literal boolean: a copy when `true`, a symlink otherwise'),
     }),
     'InlineJavascriptRequirement': MappingProxyType({
         'class': Row(_L, 'a declaration only; each expression is judged where it appears'),
@@ -238,10 +249,17 @@ FIELDS: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'class': Row(_L, 'a declaration only; each scatter is lowered at its step'),
     }),
     'ShellCommandRequirement': MappingProxyType({
-        'class': Row(_L, 'admits `shellQuote: false` on literal text'),
+        'class': Row(_L, 'admits `shellQuote: false` on literal text; not beside a `DockerRequirement`'),
     }),
     'SubworkflowFeatureRequirement': MappingProxyType({
         'class': Row(_L, 'a declaration only; each nested workflow is inlined'),
+    }),
+    'cwltool:CUDARequirement': MappingProxyType({
+        'class': Row(_L, 'the `accelerator` directive; 1 GPU when neither count is given'),
+        'cudaComputeCapability': Row(_C, 'not checked by the generated pipeline; a note (`wic046`) says so'),
+        'cudaDeviceCountMax': Row(_L, 'the `accelerator` count when `cudaDeviceCountMin` is absent; a whole number'),
+        'cudaDeviceCountMin': Row(_L, 'the `accelerator` count; a whole number'),
+        'cudaVersionMin': Row(_C, 'not checked by the generated pipeline; a note (`wic046`) says so'),
     }),
 })
 
@@ -253,7 +271,8 @@ _WORKFLOW_FEATURE = 'is a workflow requirement: declare it on the workflow'
 REQUIREMENT_CLASSES: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
     'CommandLineTool': MappingProxyType({
         'DockerRequirement': Row(_L, 'the `container` directive'),
-        'InitialWorkDirRequirement': Row(_L, 'input staging'),
+        'EnvVarRequirement': Row(_L, 'variables exported before the command'),
+        'InitialWorkDirRequirement': Row(_L, 'entries the task makes before the command runs'),
         'InlineJavascriptRequirement': Row(_L, 'a declaration only'),
         'LoadListingRequirement': Row(_R, 'LoadListingRequirement is not supported: a Directory is staged whole'),
         'MultipleInputFeatureRequirement': Row(_R, f'MultipleInputFeatureRequirement {_WORKFLOW_FEATURE}'),
@@ -263,6 +282,7 @@ REQUIREMENT_CLASSES: Final[Mapping[str, Mapping[str, Row]]] = MappingProxyType({
         'ShellCommandRequirement': Row(_L, 'admits `shellQuote: false` on literal text'),
         'SoftwareRequirement': Row(_R, 'SoftwareRequirement is not supported: use DockerRequirement'),
         'SubworkflowFeatureRequirement': Row(_R, f'SubworkflowFeatureRequirement {_WORKFLOW_FEATURE}'),
+        'cwltool:CUDARequirement': Row(_L, 'the `accelerator` directive'),
     }),
     'Workflow': MappingProxyType({
         'InlineJavascriptRequirement': Row(_L, 'a declaration only; Sophios adds it for every `when`'),
