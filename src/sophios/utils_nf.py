@@ -2160,8 +2160,7 @@ def _step_input_findings(
     scattered = _scattered_names_by_index(steps)
 
     def producer(source: str) -> int | None:
-        raw_process = source.rsplit("/", maxsplit=1)[0]
-        return indices.get(raw_process, indices.get(raw_process.rsplit("#", maxsplit=1)[-1]))
+        return indices.get(source.rsplit("/", maxsplit=1)[0])
 
     def is_array(source: str) -> bool:
         if "/" in source:
@@ -2174,65 +2173,58 @@ def _step_input_findings(
             return index is not None and "when" in steps[index]
         return _is_optional(source_types.get(source))
 
-    for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True)):
-        step_inputs, tool_inputs = step.get("in", {}), tool.get("inputs", {})
-        if not isinstance(step_inputs, Mapping) or not isinstance(tool_inputs, Mapping):
+    for step_index, raw_name, definition, sources in _wired_inputs(steps):
+        tool_inputs = tools[step_index].get("inputs", {})
+        if not isinstance(definition, Mapping) or not isinstance(tool_inputs, Mapping):
             continue
-        for raw_name, definition in step_inputs.items():
-            path = f"steps[{step_index}].in.{raw_name}"
-            if not isinstance(definition, Mapping):
-                continue
-            try:
-                sources = _source_values(definition, context=path)
-            except ValueError:
-                continue  # reported by the unconsumed-fields pass
-            link_merge, pick_value = definition.get("linkMerge"), definition.get("pickValue")
-            if len(sources) < 2 and not _STEP_INPUT_IDIOM_FIELDS & set(definition):
-                continue
-            if raw_name in scattered.get(step_index, set()):
-                findings.append(f"{path}: a scattered input takes its one source as it is")
-                continue
-            merges = link_merge if link_merge is not None else ("merge_nested" if len(sources) > 1 else None)
-            if link_merge is not None and link_merge not in LINK_MERGES:
-                findings.append(f"{path}.linkMerge: unsupported linkMerge {link_merge!r}")
-                continue
-            if pick_value is not None and pick_value not in PICK_VALUES:
-                findings.append(f"{path}.pickValue: unsupported pickValue {pick_value!r}")
-                continue
-            if pick_value is not None and merges is None:
-                findings.append(
-                    f"{path}.pickValue: pickValue picks from a list; one source with no linkMerge is not one"
-                )
-            declared = tool_inputs.get(raw_name)
-            declared_type = declared.get("type") if isinstance(declared, Mapping) else declared
-            if "default" in definition:
-                default = definition["default"]
-                if sources and merges is not None:
-                    findings.append(f"{path}.default: a default never applies beside a linkMerge or a pickValue: "
-                                    "the joined value is not null")
-                elif _required_type(declared_type) in ("File", "Directory"):
-                    findings.append(f"{path}.default: a step-input default of a File or Directory input is not "
-                                    "supported; give the path as a workflow input")
-                elif default is None or isinstance(default, (Mapping, list)) or not _phase1_value_matches(
-                    declared_type, default
-                ):
-                    findings.append(f"{path}.default: the Nextflow target supports a JSON scalar default of "
-                                    "the tool input's type")
-            # A default is a JSON scalar, so it never sits beside an array source of its type.
-            arrays = [source for source in sources if is_array(source)]
-            if arrays and pick_value is not None:
-                findings.append(f"{path}: {arrays[0]!r} is an array, and [] stands for both a null and an empty "
-                                "array, so pickValue cannot take it")
-            elif arrays and merges == "merge_nested":
-                findings.append(f"{path}: merge_nested over the array {arrays[0]!r} makes a nested array, which is "
-                                "not supported")
-            if merges is not None and pick_value is None and (nullable := [s for s in sources if may_be_null(s)]):
-                findings.append(f"{path}: {nullable[0]!r} may be null, and a joined list has no lowering of a null "
-                                "element; pick from it with pickValue")
-            gives_list = pick_value not in _PICKS_ONE
-            if merges is not None and gives_list != _is_array_type(_required_type(declared_type)):
-                findings.append(f"{path}: the step input gives {'a list' if gives_list else 'one value'}, but its "
-                                f"tool input declares {declared_type!r}")
+        path = f"steps[{step_index}].in.{raw_name}"
+        link_merge, pick_value = definition.get("linkMerge"), definition.get("pickValue")
+        if len(sources) < 2 and not _STEP_INPUT_IDIOM_FIELDS & set(definition):
+            continue
+        if raw_name in scattered.get(step_index, set()):
+            findings.append(f"{path}: a scattered input takes its one source as it is")
+            continue
+        merges = link_merge if link_merge is not None else ("merge_nested" if len(sources) > 1 else None)
+        if link_merge is not None and link_merge not in LINK_MERGES:
+            findings.append(f"{path}.linkMerge: unsupported linkMerge {link_merge!r}")
+            continue
+        if pick_value is not None and pick_value not in PICK_VALUES:
+            findings.append(f"{path}.pickValue: unsupported pickValue {pick_value!r}")
+            continue
+        if pick_value is not None and merges is None:
+            findings.append(
+                f"{path}.pickValue: pickValue picks from a list; one source with no linkMerge is not one"
+            )
+        declared = tool_inputs.get(raw_name)
+        declared_type = declared.get("type") if isinstance(declared, Mapping) else declared
+        if "default" in definition:
+            default = definition["default"]
+            if sources and merges is not None:
+                findings.append(f"{path}.default: a default never applies beside a linkMerge or a pickValue: "
+                                "the joined value is not null")
+            elif _required_type(declared_type) in ("File", "Directory"):
+                findings.append(f"{path}.default: a step-input default of a File or Directory input is not "
+                                "supported; give the path as a workflow input")
+            elif default is None or isinstance(default, (Mapping, list)) or not _phase1_value_matches(
+                declared_type, default
+            ):
+                findings.append(f"{path}.default: the Nextflow target supports a JSON scalar default of "
+                                "the tool input's type")
+        # A default is a JSON scalar, so it never sits beside an array source of its type.
+        arrays = [source for source in sources if is_array(source)]
+        if arrays and pick_value is not None:
+            findings.append(f"{path}: {arrays[0]!r} is an array, and [] stands for both a null and an empty "
+                            "array, so pickValue cannot take it")
+        elif arrays and merges == "merge_nested":
+            findings.append(f"{path}: merge_nested over the array {arrays[0]!r} makes a nested array, which is "
+                            "not supported")
+        if merges is not None and pick_value is None and (nullable := [s for s in sources if may_be_null(s)]):
+            findings.append(f"{path}: {nullable[0]!r} may be null, and a joined list has no lowering of a null "
+                            "element; pick from it with pickValue")
+        gives_list = pick_value not in _PICKS_ONE
+        if merges is not None and gives_list != _is_array_type(_required_type(declared_type)):
+            findings.append(f"{path}: the step input gives {'a list' if gives_list else 'one value'}, but its "
+                            f"tool input declares {declared_type!r}")
     return findings
 
 
