@@ -309,18 +309,16 @@ Run it again:
 ```text
 Failed to compile greeting.wic
 greeting.wic:4:15: error [wic011] Did you forget to use !ii before greeting.txt? (step 1 'touch', port 'filename')
-greeting.wic:4:15: error [wic011] If you want to compile the workflow anyway, use --allow_raw_cwl (step 1 'touch', port 'filename')
 ```
 
-Sophios stopped before running anything. Each line starts with where the
+Sophios stopped before running anything. The line starts with where the
 problem is, as file, line and column, then says how serious it is (`error`
 means the compile stopped), gives a code, `wic011`, and ends with the step
 and the input it is about. Without the tag, Sophios reads `greeting.txt` as
 the name of a value to be supplied when the workflow runs, a **workflow
 input**, which [Inputs and values](inputs-and-values.md) introduces. This
-workflow declares no such input, so Sophios asks whether you meant `!ii`.
-The second line offers a way to compile the file anyway, which is not what
-you want here: put the `!ii` back.
+workflow declares no such input, so Sophios asks whether you meant `!ii`:
+put it back.
 
 Every code has a short explanation, which `--explain` prints:
 
