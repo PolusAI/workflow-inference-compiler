@@ -4,6 +4,7 @@ Builders are deliberately thin: they remove repetition, never behavior. Tests
 that exercise validation failure construct invalid values directly.
 """
 
+from collections.abc import Sequence
 import os
 import subprocess
 from pathlib import Path
@@ -69,10 +70,8 @@ def synthetic_source(
     tools: list[Yaml],
     *,
     workflow_inputs: Yaml | None = None,
-    source_yml: Yaml | None = None,
 ) -> CompiledNextflowSource:
     """Construct the backend's compiled-document seam for capability tests."""
-    del source_yml
     return CompiledNextflowSource(
         str(workflow_cwl.get("id", "workflow")),
         workflow_cwl,
@@ -120,6 +119,23 @@ def workflow_doc(
         "outputs": outputs or {},
         "steps": steps,
     }
+
+
+def one_step(run: Yaml, out: Sequence[str] = (), **values: Any) -> CompiledNextflowSource:
+    """The tool `run` as a workflow's only step, each input wired from a same-named workflow input.
+
+    Each name in `out` is forwarded as a same-named workflow output, and `values` are the workflow's inputs.
+    """
+    name = run["id"]
+    return synthetic_source(
+        workflow_doc(
+            [step(name, **{"in": {port: port for port in run["inputs"]}, "out": list(out)})],
+            inputs={port: {"type": definition["type"]} for port, definition in run["inputs"].items()},
+            outputs={port: {"type": run["outputs"][port]["type"], "outputSource": f"{name}/{port}"} for port in out},
+        ),
+        [run],
+        workflow_inputs=values,
+    )
 
 
 def runtime_workflow() -> ExecutableNextflowWorkflow:
