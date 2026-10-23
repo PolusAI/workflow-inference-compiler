@@ -12,6 +12,8 @@ from typing import Any
 from .ir.artifacts import CompilationArtifact, CompilationResult
 from .ir.names import Names
 from .ir.types import Direction, Edge, PortId, SourceList, StepNode, WorkflowGraph
+from .lang.diagnostics import Diagnostic, Locator, Severity
+from .lang.error_codes import SophiosErrorCode
 from .nf_expr import (
     Expr, check as check_safe_subset, is_safe_subset_text, parse as parse_safe_subset, references,
 )
@@ -28,6 +30,8 @@ from .nf_types import (
     NfCommand,
     NfCommandToken,
     NfConnection,
+    NfEntry,
+    NfEnvVar,
     NfFlag,
     NfInputReference,
     NfLiteral,
@@ -265,7 +269,7 @@ def _ports(
     raw_ports: Any,
     *,
     outputs: bool,
-    stage_as: Mapping[str, str] | None = None,
+    entries: Mapping[str, NfEntry] | None = None,
 ) -> list[NfPort]:
     port_definitions = _as_mapping(raw_ports, error="CommandLineTool ports must be a mapping")
     ports: list[NfPort] = []
@@ -286,7 +290,7 @@ def _ports(
                         glob=_output_template(raw_name, raw_definition) if outputs else None,
                         path_kind=path_kind,
                         is_array=is_array,
-                        stage_as=None if outputs or stage_as is None else stage_as.get(name),
+                        entry=None if outputs or entries is None else entries.get(name),
                         capture=_output_capture(raw_name, raw_definition) if outputs else None,
                         optional=outputs and qualifier == "path" and _is_optional(cwl_type),
                     )
@@ -301,6 +305,7 @@ _INPUT_EXPRESSION = re.compile(
 )
 # One token of a string CWL interpolates: an escape it rewrites (`\$(`, `\${`, `\\`), or a reference.
 _INTERPOLATION = re.compile(rf"\\(?P<escaped>\$[({{]|\\)|{_INPUT_EXPRESSION.pattern}")
+_EXPRESSION_START = re.compile(r"\$[({]")
 
 
 def _template(value: Any, *, context: str) -> NfTemplate:
@@ -327,7 +332,8 @@ def _template(value: Any, *, context: str) -> NfTemplate:
             segments.append(NfBasenameReference(name) if match["suffix"] == "basename" else NfInputReference(name))
         offset = match.end()
     segments.append(NfLiteral(text[offset:]))
-    if "$" in (_INTERPOLATION.sub("", text) if interpolated else text):
+    # A `$` not followed by `(` or `{` is plain text, as in CWL.
+    if interpolated and _EXPRESSION_START.search(_INTERPOLATION.sub("", text)):
         raise ValueError(
             f"{context} contains an unsupported CWL expression; the supported forms are $(inputs.<name>) "
             "and, on a File or Directory input, $(inputs.<name>.path) and $(inputs.<name>.basename)"
@@ -380,7 +386,8 @@ def _shell_literal_value(
     whose valueFrom is a CWL-author literal with no input reference: the
     input's own runtime value must never be rendered unquoted, so a binding
     with no valueFrom, a prefix, or an input-referencing valueFrom is
-    rejected here rather than silently losing its quoting.
+    rejected here rather than silently losing its quoting. A `$` is rejected
+    too: no helper quotes it, and the task's shell is not CWL's.
     """
     if not shell_mode:
         raise ValueError(
@@ -409,7 +416,13 @@ def _shell_literal_value(
                 "CWL-author literal with no input reference may be rendered unquoted"
             )
         literal_parts.append(segment.value)
-    return NfShellLiteral("".join(literal_parts))
+    text = "".join(literal_parts)
+    if "$" in text:
+        raise ValueError(
+            f"shellQuote false for {raw_name!r} holds a '$', which the task's shell would expand "
+            "in its own environment, not CWL's"
+        )
+    return NfShellLiteral(text)
 
 
 def _boolean_value_from(value_from: Any, tool: Mapping[str, Any]) -> str | None:
@@ -534,13 +547,11 @@ def _iwdr_entry_reference(value: Any) -> str:
 
 
 def _iwdr_entryname(value: Any, *, raw_name: str) -> str | None:
-    """Classify an IWDR entryname: None for a same-basename no-op, else a literal rename.
+    """An entry's literal name, or None for the input's own basename.
 
     Absent, or the exact self-referencing $(inputs.<name>.basename), both
-    mean "stage under the input's own basename" -- already Nextflow's
-    default, so neither needs a stage_as override. A plain literal with no
-    reference is the one supported rename shape; any other reference has no
-    runtime-proven representation.
+    name the entry after the input. A plain literal with no reference is the
+    one supported rename shape; NfEntry validates it.
     """
     if value is None:
         return None
@@ -555,35 +566,29 @@ def _iwdr_entryname(value: Any, *, raw_name: str) -> str | None:
             raise ValueError(
                 "entryname is supported only as a literal string or the input's own "
                 f"$(inputs.{raw_name}.basename); a computed or differently-referencing "
-                "entryname is deferred"
+                "entryname is not supported"
             )
         literal_parts.append(segment.value)
-    literal = "".join(literal_parts)
-    if not literal.strip():
-        raise ValueError("entryname must be a non-empty string")
-    if "/" in literal:
-        raise ValueError("entryname must not contain a path separator")
-    if "*" in literal or "?" in literal:
-        raise ValueError("entryname must not contain a Nextflow stageAs wildcard ('*' or '?')")
-    return literal
+    return "".join(literal_parts)
 
 
-def _iwdr_listing_item(item: Any, *, tool_inputs: Mapping[str, Any]) -> tuple[str, str | None]:
+def _iwdr_listing_item(item: Any, *, tool_inputs: Mapping[str, Any]) -> tuple[str, NfEntry]:
     """Validate one InitialWorkDirRequirement listing entry.
 
-    Returns (normalized_input_name, literal_rename_or_None). Approved
-    shapes: a bare $(inputs.<name>) string, or a Dirent {entry:
-    $(inputs.<name>), entryname: ..., writable: false} whose entryname is
-    absent, the input's own basename self-reference, or a literal with no
-    path separator.
+    Returns the normalized input name and its entry. Approved shapes: a bare
+    $(inputs.<name>) string, or a Dirent {entry: $(inputs.<name>), entryname:
+    ..., writable: ...} whose entryname is absent, the input's own basename
+    self-reference, or a literal with no path separator, and whose writable
+    is a literal boolean.
     """
     match item:
         case str() as bare:
             raw_name = _iwdr_entry_reference(bare)
-            rename = None
+            rename, writable = None, False
         case Mapping() as dirent:
-            if dirent.get("writable") is True:
-                raise ValueError("writable: true is deferred; copy-and-mutate staging is not supported")
+            writable = dirent.get("writable", False)
+            if not isinstance(writable, bool):
+                raise ValueError("writable must be a literal boolean")
             raw_name = _iwdr_entry_reference(dirent.get("entry"))
             rename = _iwdr_entryname(dirent.get("entryname"), raw_name=raw_name)
         case _:
@@ -594,7 +599,7 @@ def _iwdr_listing_item(item: Any, *, tool_inputs: Mapping[str, Any]) -> tuple[st
     required = _required_type(definition.get("type"))
     if _is_array_type(required):
         raise ValueError(
-            f"references array-typed input {raw_name!r}; staging an array of files is deferred"
+            f"references array-typed input {raw_name!r}; staging an array of files is not supported"
         )
     try:
         qualifier = cwl_type_to_nf_qualifier(required)
@@ -604,7 +609,7 @@ def _iwdr_listing_item(item: Any, *, tool_inputs: Mapping[str, Any]) -> tuple[st
         raise ValueError(
             f"references non-path input {raw_name!r}; only File/Directory inputs can be staged"
         )
-    return _identifier(raw_name, context="IWDR listing target"), rename
+    return _identifier(raw_name, context="IWDR listing target"), NfEntry(rename, writable)
 
 
 def _iwdr_listing_findings(
@@ -630,7 +635,7 @@ def _iwdr_listing_findings(
             findings.extend(dirent_findings)
             continue
         try:
-            name, rename = _iwdr_listing_item(item, tool_inputs=tool_inputs)
+            name, entry = _iwdr_listing_item(item, tool_inputs=tool_inputs)
         except ValueError as exc:
             findings.append(f"{path}.listing[{index}]: {exc}")
             continue
@@ -641,8 +646,8 @@ def _iwdr_listing_findings(
             )
             continue
         listed_at[name] = index
-        if rename is not None:
-            renamed_by.setdefault(rename, set()).add(name)
+        if entry.name is not None:
+            renamed_by.setdefault(entry.name, set()).add(name)
     for rename, names in renamed_by.items():
         if len(names) > 1:
             findings.append(
@@ -652,13 +657,8 @@ def _iwdr_listing_findings(
     return findings
 
 
-def _iwdr_stage_as(tool: Mapping[str, Any]) -> dict[str, str]:
-    """Return {input_name: literal_rename} for every approved IWDR rename entry.
-
-    Only rename entries are represented: a self-basename entry needs no
-    stage_as override, since Nextflow already stages a path input under its
-    own basename by default.
-    """
+def _iwdr_entries(tool: Mapping[str, Any]) -> dict[str, NfEntry]:
+    """Each input an InitialWorkDirRequirement listing names, with its entry; the task makes every one."""
     requirement = _requirement(tool, "InitialWorkDirRequirement")
     if requirement is None:
         return {}
@@ -666,23 +666,13 @@ def _iwdr_stage_as(tool: Mapping[str, Any]) -> dict[str, str]:
     if not isinstance(listing, list):
         raise ValueError("InitialWorkDirRequirement listing must be a list")
     tool_inputs = _as_mapping(tool.get("inputs", {}), error="CommandLineTool inputs must be a mapping")
-    stage_as: dict[str, str] = {}
-    by_rename: dict[str, set[str]] = {}
-    listed_names: set[str] = set()
+    entries: dict[str, NfEntry] = {}
     for item in listing:
-        name, rename = _iwdr_listing_item(item, tool_inputs=tool_inputs)
-        if name in listed_names:
+        name, entry = _iwdr_listing_item(item, tool_inputs=tool_inputs)
+        if name in entries:
             raise ValueError(f"input {name!r} appears more than once in the IWDR listing")
-        listed_names.add(name)
-        if rename is not None:
-            stage_as[name] = rename
-            by_rename.setdefault(rename, set()).add(name)
-    for rename, names in by_rename.items():
-        if len(names) > 1:
-            raise ValueError(
-                f"inputs {sorted(names)} are all staged under the same literal name {rename!r}"
-            )
-    return stage_as
+        entries[name] = entry
+    return entries
 
 
 def _iwdr_rename_reference_findings(
@@ -691,20 +681,19 @@ def _iwdr_rename_reference_findings(
     *,
     path: str,
 ) -> list[str]:
-    """Reject any other reference to an input IWDR stages under a different name.
+    """Reject any reference to an input whose entry has a literal name.
 
-    A renamed port's own .name reports the staged name, not the original
-    CWL basename (runtime-proven), so resolving what a plain or basename
-    reference to it would mean is out of scope; the supported pattern is
-    for the command to hard-code the literal staged name directly.
+    What such a reference means is out of scope (design §6, Inputs and
+    channels); the supported pattern is for the command to name the entry by
+    its literal. An entry under the input's own basename is referenced freely.
     """
     if not renamed_names:
         return []
     referenced = (_referenced_names(tool) or set()) & renamed_names
     return [
-        f"{path}.run.requirements.InitialWorkDirRequirement: input {name!r} is staged under "
-        "an explicit rename and cannot also be referenced elsewhere in the command, stream "
-        "targets, or output globs"
+        f"{path}.run.requirements.InitialWorkDirRequirement: input {name!r} has an InitialWorkDirRequirement "
+        "entry with a literal name and cannot also be referenced in the command, stream targets, or output "
+        "globs; name the entry by its literal"
         for name in sorted(referenced)
     ]
 
@@ -808,7 +797,72 @@ def _command(tool: Mapping[str, Any]) -> NfCommand:
     def stream(name: str) -> NfTemplate | None:
         return None if tool.get(name) is None else _template(tool[name], context=f"CWL {name}")
 
-    return NfCommand(tuple(tokens), stream("stdin"), stream("stdout"), stream("stderr"))
+    return NfCommand(tuple(tokens), stream("stdin"), stream("stdout"), stream("stderr"), _environment(tool))
+
+
+def _env_entries(requirement: Mapping[str, Any]) -> list[tuple[str, Any]]:
+    """Each `envDef` entry with the suffix of its path; CWL's map form keys an entry by its `envName`."""
+    match requirement.get("envDef"):
+        case list() as entries:
+            return [(f"envDef[{index}]", entry) for index, entry in enumerate(entries)]
+        case Mapping() as entries:
+            return [
+                (f"envDef.{name}", {**(value if isinstance(value, Mapping) else {"envValue": value}), "envName": name})
+                for name, value in entries.items()
+            ]
+        case _:
+            raise ValueError("EnvVarRequirement envDef must be a list or a mapping")
+
+
+def _env_var(entry: Any, tool: Mapping[str, Any]) -> NfEnvVar:
+    """Lower one `envDef` entry: literal text, or exactly `$(inputs.<name>)` of a `string` input (design §6)."""
+    match entry:
+        case {"envName": str() as name, "envValue": str() as value}:
+            pass
+        case _:
+            raise ValueError("an envDef entry needs a string envName and a string envValue")
+    if whole := _INPUT_EXPRESSION.fullmatch(value.strip()):
+        definition = _as_mapping(tool.get("inputs", {}), error="").get(whole["name"])
+        declared = definition.get("type") if isinstance(definition, Mapping) else None
+        if whole["suffix"] or _required_type(declared) != "string":
+            raise ValueError(
+                f"envValue {value!r} needs a string input, read whole as $(inputs.<name>); "
+                f"{whole['name']} is declared {declared!r}"
+            )
+        return NfEnvVar(name, NfTemplate((NfInputReference(_identifier(whole["name"], context="input reference")),)))
+    try:
+        segments = _template(value, context="envValue").segments
+    except ValueError:
+        segments = ()  # an expression the template reader refuses
+    if not segments or not all(isinstance(segment, NfLiteral) for segment in segments):
+        raise ValueError(
+            f"envValue {value!r} is not supported: write literal text or exactly $(inputs.<name>) of a string input"
+        )
+    return NfEnvVar(name, NfTemplate(segments))
+
+
+def _environment(tool: Mapping[str, Any]) -> tuple[NfEnvVar, ...]:
+    requirement = _requirement(tool, "EnvVarRequirement")
+    if requirement is None:
+        return ()
+    return tuple(_env_var(entry, tool) for _suffix, entry in _env_entries(requirement))
+
+
+def _env_var_findings(tool: Mapping[str, Any], requirement: Mapping[str, Any], *, path: str) -> list[str]:
+    """Report every `envDef` entry the lowering cannot take, each at its own path."""
+    try:
+        entries = _env_entries(requirement)
+    except ValueError as exc:
+        return [f"{path}.envDef: {exc}"]
+    findings: list[str] = []
+    for suffix, entry in entries:
+        if isinstance(entry, Mapping):
+            findings.extend(_unconsumed_field_findings(entry, "EnvironmentDef", path=f"{path}.{suffix}"))
+        try:
+            _env_var(entry, tool)
+        except ValueError as exc:
+            findings.append(f"{path}.{suffix}: {exc}")
+    return findings
 
 
 def _requirement(tool: Mapping[str, Any], class_name: str) -> Mapping[str, Any] | None:
@@ -873,6 +927,29 @@ def _cpu_resource(value: Any) -> int:
     return number
 
 
+_CUDA_REQUIREMENT = "cwltool:CUDARequirement"
+# The CUDA fields with no Nextflow counterpart: each one present is reported with a note.
+_UNCHECKED_CUDA_FIELDS = ("cudaVersionMin", "cudaComputeCapability")
+
+
+def _device_count(value: Any) -> int:
+    match value:
+        case bool():
+            pass
+        case int() as count if count > 0:
+            return count
+    raise ValueError(f"a CUDA device count must be a positive whole number, got {value!r}")
+
+
+def _gpu_count(tool: Mapping[str, Any]) -> int | None:
+    """cwltool's device count: the minimum, else the maximum, else 1 (design §6, Resources and containers)."""
+    cuda = _requirement(tool, _CUDA_REQUIREMENT)
+    if cuda is None:
+        return None
+    count = _resource_value(cuda, "cudaDeviceCountMin", "cudaDeviceCountMax")
+    return 1 if count is None else _device_count(count)
+
+
 def _memory(value: Any) -> int | float:
     return _resource_number(value, name="memory")
 
@@ -880,18 +957,31 @@ def _memory(value: Any) -> int | float:
 # The value checks of a requirement's fields, in the order findings report them.
 _REQUIREMENT_VALUES: Mapping[str, Mapping[str, Callable[[Any], Any]]] = {
     "ResourceRequirement": {"coresMin": _cpu_resource, "coresMax": _cpu_resource, "ramMin": _memory, "ramMax": _memory},
+    _CUDA_REQUIREMENT: {"cudaDeviceCountMin": _device_count, "cudaDeviceCountMax": _device_count},
 }
 
 
 def _resources(tool: Mapping[str, Any]) -> NfResources:
-    resource = _requirement(tool, "ResourceRequirement")
-    if resource is None:
-        return NfResources()
+    resource = _requirement(tool, "ResourceRequirement") or {}
     cpus = _resource_value(resource, "coresMin", "coresMax")
     memory = _resource_value(resource, "ramMin", "ramMax")
     rendered_cpus = None if cpus is None else _cpu_resource(cpus)
     rendered_memory = None if memory is None else _memory(memory)
-    return NfResources(rendered_cpus, rendered_memory)
+    return NfResources(rendered_cpus, rendered_memory, _gpu_count(tool))
+
+
+def _cuda_notes(step: Mapping[str, Any], tool: Mapping[str, Any]) -> list[Diagnostic]:
+    """A note for each CUDA field the generated pipeline does not check."""
+    cuda = _requirement(tool, _CUDA_REQUIREMENT) or {}
+    return [
+        Diagnostic(
+            Severity.NOTE, SophiosErrorCode.UNCHECKED_CUDA_FIELD,
+            f"{_CUDA_REQUIREMENT} {name} {cuda[name]!r} is not checked: the Nextflow accelerator directive "
+            "asks only for a number of GPUs",
+            locator=Locator(step=str(step.get("id"))),
+        )
+        for name in _UNCHECKED_CUDA_FIELDS if name in cuda
+    ]
 
 
 def _output_template(raw_name: Any, definition: Any) -> NfTemplate:
@@ -1269,6 +1359,8 @@ def _requirement_findings(
                         check(payload[field_name])
                     except ValueError as exc:
                         findings.append(f"{requirement_path}.{field_name}: {exc}")
+            if class_name == "EnvVarRequirement" and tool is not None:
+                findings.extend(_env_var_findings(tool, payload, path=requirement_path))
             if class_name == "InitialWorkDirRequirement" and tool is not None:
                 findings.extend(_iwdr_listing_findings(tool, payload, path=requirement_path))
     return findings
@@ -1731,7 +1823,7 @@ def _tool_capability_findings(
             )
         )
     try:
-        renamed_names = set(_iwdr_stage_as(tool))
+        renamed_names = {name for name, entry in _iwdr_entries(tool).items() if entry.name is not None}
     except ValueError:
         renamed_names = set()
     findings.extend(_iwdr_rename_reference_findings(tool, renamed_names, path=path))
@@ -2229,7 +2321,7 @@ def _step_input_findings(
 
 
 def _referenced_names(tool: Mapping[str, Any]) -> set[str] | None:
-    """The input names a plain or basename reference reads in the command, a stream target or an output glob.
+    """The input names a plain or basename reference reads in a command template or an output glob.
 
     None when the tool's command or outputs cannot be lowered; lowering reports why.
     """
@@ -2238,11 +2330,7 @@ def _referenced_names(tool: Mapping[str, Any]) -> set[str] | None:
         outputs = _ports(tool.get("outputs", {}), outputs=True)
     except (ValueError, TypeError):
         return None
-    templates = [
-        *(token for token in command.tokens if isinstance(token, NfTemplate)),
-        *(stream for stream in (command.stdin, command.stdout, command.stderr) if stream),
-        *(port.glob for port in outputs if port.glob),
-    ]
+    templates = [*command.templates, *(port.glob for port in outputs if port.glob)]
     return {
         segment.name
         for template in templates
@@ -2632,7 +2720,7 @@ def _process(step: Mapping[str, Any], tool: Mapping[str, Any]) -> NfProcess:
     when = step.get("when")
     return NfProcess(
         name=_identifier(step.get("id"), context="workflow step id", variable=False),
-        inputs=_ports(tool.get("inputs", {}), outputs=False, stage_as=_iwdr_stage_as(tool)),
+        inputs=_ports(tool.get("inputs", {}), outputs=False, entries=_iwdr_entries(tool)),
         outputs=_ports(tool.get("outputs", {}), outputs=True),
         command=_command(tool),
         container=_container(tool),
@@ -2970,6 +3058,21 @@ def _container_policy_findings(tools: tuple[Mapping[str, Any], ...]) -> list[str
 def compiled_source_to_nextflow(
     source: CompilationResult | CompiledNextflowSource,
 ) -> ExecutableNextflowWorkflow:
+    """Lower a completed Sophios compilation, leaving out the notes the lowering makes.
+
+    Args:
+        source (CompilationResult | CompiledNextflowSource): As
+            :func:`compiled_source_to_nextflow_with_notes` takes it.
+
+    Returns:
+        ExecutableNextflowWorkflow: The validated executable representation.
+    """
+    return compiled_source_to_nextflow_with_notes(source)[0]
+
+
+def compiled_source_to_nextflow_with_notes(
+    source: CompilationResult | CompiledNextflowSource,
+) -> tuple[ExecutableNextflowWorkflow, tuple[Diagnostic, ...]]:
     """Lower a completed Sophios compilation without repeating core semantics.
 
     Every unsupported source semantic, including one that only lowering or
@@ -2987,7 +3090,9 @@ def compiled_source_to_nextflow(
             lowering/validation rejects the workflow.
 
     Returns:
-        ExecutableNextflowWorkflow: The validated executable representation.
+        tuple[ExecutableNextflowWorkflow, tuple[Diagnostic, ...]]: The
+            validated executable representation, and the notes the lowering
+            made, such as a CUDA field it does not check.
     """
     if isinstance(source, CompilationResult):
         nested_findings = _nested_workflow_capability_findings(
@@ -3009,6 +3114,7 @@ def compiled_source_to_nextflow(
     tools = compiled.tools
     steps = _workflow_steps(workflow)
     findings = list(nested_findings)
+    notes: list[Diagnostic] = []
     processes: list[NfProcess] = []
     for step_index, (step, tool) in enumerate(zip(steps, tools, strict=True)):
         if step_findings := _tool_capability_findings(step, tool, step_index=step_index):
@@ -3018,6 +3124,7 @@ def compiled_source_to_nextflow(
             processes.append(_process(step, tool))
         except ValueError as error:  # lowering and the model reject what no source pass can see
             findings.append(f"steps[{step_index}]: {error}")
+        notes.extend(_cuda_notes(step, tool))
     findings.extend(_workflow_capability_findings(workflow, compiled.params, steps))
     findings.extend(_absent_optional_findings(workflow, compiled.params, steps, tools))
     findings.extend(_conditional_consumer_findings(list(steps), tools))
@@ -3042,6 +3149,6 @@ def compiled_source_to_nextflow(
             connections=_connections(workflow, list(steps), processes, default_connections),
             params=_apply_absent_sentinel(params),
             param_types={**_workflow_param_types(workflow), **default_types},
-        )
+        ), tuple(notes)
     except ValueError as error:
         raise _capability_error([f"workflow: {error}"]) from None

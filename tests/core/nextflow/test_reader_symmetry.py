@@ -12,15 +12,20 @@ from typing import Callable, Sequence
 
 import pytest
 
-from sophios.input_output_nf import write_nextflow_artifacts
+from sophios.input_output_nf import render_nextflow, write_nextflow_artifacts
 from sophios.nf_expr import parse
-from sophios.nf_reader import nextflow_to_cwl, parse_nf_file, promote_nextflow_document
+from sophios.nf_reader import NextflowPort, nextflow_to_cwl, parse_nf_file, parse_nf_text, promote_nextflow_document
 from sophios.nf_types import (
     ExecutableNextflowWorkflow,
+    NfBasenameReference,
+    NfCommand,
+    NfEntry,
+    NfEnvVar,
     NfPort,
     NfProcess,
     NfProcessConnection,
     NfResources,
+    NfTemplate,
     NfWorkflowInputConnection,
     NfWorkflowOutputConnection,
 )
@@ -29,7 +34,7 @@ from .test_composition import _PAIR_THEN_USE_PARAMS, _composed, _pair_then_use
 from .test_conditions import _when_workflow
 from .test_dotproduct import _scatter_with_file_array, _sleep_then_pair, _text_port
 from .test_step_inputs import _GATHERED, _ONE, _XS, _merged
-from .testkit import command, output_port
+from .testkit import command, output_port, ref, single_process_workflow, template
 
 
 def _scattered(
@@ -50,7 +55,35 @@ def _scattered(
     )
 
 
+def _tool_shapes() -> ExecutableNextflowWorkflow:
+    process = NfProcess(
+        "STEP",
+        [NfPort("s", "val")],
+        [output_port("out", "out.txt")],
+        NfCommand((template("printenv"),), stdout=template("out.txt"),
+                  env=(NfEnvVar("A", template("a $b")), NfEnvVar("B", template(ref("s"))))),
+        resources=NfResources(accelerator=2),
+    )
+    return single_process_workflow(process, params={"s": "v"}, param_types={"s": "string"}, output_port_name="out")
+
+
+def _entries() -> ExecutableNextflowWorkflow:
+    process = NfProcess(
+        "STEP",
+        [NfPort("src", "path", entry=NfEntry("renamed.txt")),
+         NfPort("out", "path", path_kind="directory", entry=NfEntry(copy=True))],
+        [NfPort("result", "path", "result", NfTemplate((NfBasenameReference("out"),)), "directory")],
+        NfCommand((template("cat"), template("renamed.txt"), template(ref("out")))),
+    )
+    return single_process_workflow(
+        process, params={"src": "/tmp/s.txt", "out": "/tmp/o"}, param_types={"src": "File", "out": "Directory"},
+        output_port_name="result",
+    )
+
+
 BUILDERS: dict[str, Callable[[], ExecutableNextflowWorkflow]] = {
+    "InitialWorkDirRequirement entries": _entries,
+    "exported environment variables and a GPU count": _tool_shapes,
     "single-input dotproduct": lambda: _scattered("dotproduct", names=("item",)),
     "conditional step": lambda: _when_workflow("$(inputs.a > 0)", {"a": 1}, second_step=True, a="int"),
     "dotproduct": lambda: _scattered("dotproduct"),
@@ -81,6 +114,26 @@ def test_every_generated_pattern_reads_back_and_promotes(name: str, tmp_path: Pa
     assert parsed.connections == tuple(workflow.connections)
     assert [process.name for process in parsed.processes] == [process.name for process in workflow.processes]
     assert promote_nextflow_document(parsed) == workflow
+
+
+@pytest.mark.fast
+def test_a_source_read_alone_reads_each_entry_input_as_a_path() -> None:
+    workflow = _entries()
+    parsed = parse_nf_text(render_nextflow(workflow), params=dict(workflow.params))
+    assert parsed.processes[0].inputs == (NextflowPort("src", "path"), NextflowPort("out", "path"))
+    assert parsed.connections == tuple(workflow.connections)
+
+
+@pytest.mark.fast
+def test_a_model_derived_document_reads_the_accelerator(tmp_path: Path) -> None:
+    workflow = BUILDERS["dotproduct"]()
+    resources = NfResources(accelerator=2)
+    workflow = replace(workflow, processes=[replace(process, resources=resources) for process in workflow.processes])
+    write_nextflow_artifacts(workflow, tmp_path)
+    parsed = parse_nf_file(tmp_path / "workflow.nf")
+    assert [process.accelerator for process in parsed.processes] == ["2"]
+    _, [tool] = nextflow_to_cwl(parsed)
+    assert "hints" not in tool
 
 
 @pytest.mark.fast

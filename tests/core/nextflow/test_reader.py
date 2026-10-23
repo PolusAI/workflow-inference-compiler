@@ -248,7 +248,7 @@ def test_reader_extracts_ports_container_and_resources() -> None:
             [output_port("result", "result.txt")],
             command("cp", template(ref("source")), "result.txt"),
             container="ubuntu:24.04",
-            resources=NfResources(cpus=2, memory_mb=512),
+            resources=NfResources(cpus=2, memory_mb=512, accelerator=3),
         )],
         [
             NfWorkflowInputConnection("source", "TASK", "source"),
@@ -261,6 +261,10 @@ def test_reader_extracts_ports_container_and_resources() -> None:
     assert process.container == "ubuntu:24.04"
     assert process.cpus == "2"
     assert process.memory == "512 MB"
+    assert process.accelerator == "3"
+    _workflow_cwl, [cwl_tool] = nextflow_to_cwl(parsed)
+    # cwltool's CUDARequirement requires two fields the directive does not give.
+    assert "hints" not in cwl_tool
     assert process.inputs == (NextflowPort("source", "path"),)
     assert process.outputs == (
         NextflowPort("result", "path", "result", "result.txt"),
@@ -374,6 +378,7 @@ def test_reader_retains_dynamic_or_unmapped_resources_as_opaque() -> None:
 process TASK {
     cpus params.threads
     memory "4 GB"
+    accelerator params.gpus
     output:
     path 'result.txt', emit: result
     script:
@@ -394,8 +399,10 @@ workflow { PIPELINE() }
     opaque = "\n".join(parsed.opaque_regions)
     assert "cpus params.threads" in opaque
     assert 'memory "4 GB"' in opaque
+    assert "accelerator params.gpus" in opaque
     _workflow_cwl, tools = nextflow_to_cwl(parsed)
     assert "ResourceRequirement" not in tools[0]["requirements"]
+    assert "hints" not in tools[0]
     assert render_nextflow_document(parsed) == source
 
 
@@ -577,6 +584,9 @@ def test_array_of_paths_artifacts_parse_and_promote(tmp_path: Path) -> None:
     assert parsed.opaque_regions == ()
     assert [(port.name, port.qualifier) for port in parsed.processes[0].inputs] == [("sources", "path")]
     assert promote_nextflow_document(parsed) == expected
+    # Without the adjacent model, the text alone reads the same port.
+    text = parse_nf_text((tmp_path / "workflow.nf").read_text(encoding="utf-8"))
+    assert [(port.name, port.qualifier) for port in text.processes[0].inputs] == [("sources", "path")]
 
 
 def _text_capture_workflow() -> ExecutableNextflowWorkflow:

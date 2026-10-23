@@ -184,11 +184,14 @@ object as JSON, so it is rejected; write `$(inputs.f.path)` there instead.
 A string holding a `$(…)` reference is interpolated as cwltool does: it is
 stripped of surrounding whitespace, `\$(` writes a literal `$(`, and `\\`
 writes one backslash. A string with no reference is used exactly as written.
+A `$` that is not followed by `(` or `{` is plain text, so a literal argument
+such as `mv a "$1"` reaches the command as written.
 
 The `.copy` suffix above is load-bearing: a basename glob must derive a **new**
-name. A Nextflow output declaration does not capture staged inputs, so a glob
-naming only the input itself compiles cleanly and then fails at run time with
-`Missing output file(s)`.
+name. A glob that is only a reference to a `File` or `Directory` input names
+the staged input, which a CWL glob does not match, so it is rejected. The
+exception is an input made an `InitialWorkDirRequirement` entry under its own
+name, below: the glob then names the entry.
 
 A glob built only from basename references is matched literally, so a staged
 name containing `*`, `?`, `[`, `{` or `}` still finds the file. A `*`, `?` or
@@ -212,7 +215,9 @@ items is supported. It carries the same qualifier its item type would carry
 alone (`path` for File/Directory, `val` for scalars); a `path` array stages
 every element for one process call rather than fanning the channel out, and
 renders as `path <name>, arity: '0..*'` so the process always receives a list,
-whether the array holds no file, one, or many. The one supported command-line
+whether the array holds no file, one, or many. Each file is staged in its own
+numbered directory, so same-named files from different directories never
+collide. The one supported command-line
 binding shape (no `itemSeparator`) contributes its optional prefix once,
 followed by each element as its own argument, and contributes nothing at all
 when the array is empty. An empty array is a present, valid value — distinct
@@ -247,23 +252,79 @@ arguments:
 whose `valueFrom` references any input — directly, or via a `.path`/
 `.basename` suffix — is rejected: unquoting a runtime-supplied value would
 let workflow input data or a chosen file name be interpreted as shell
-syntax, which is exactly the boundary this lowering must not cross.
+syntax, which is exactly the boundary this lowering must not cross. A `$` in
+the literal is rejected too: the task's shell would expand it in its own
+environment, not CWL's.
+
+## Environment variables
+
+`EnvVarRequirement` sets variables for the command, in list or map form:
+
+```yaml
+requirements:
+  EnvVarRequirement:
+    envDef:
+      RDKIT_ERROR_LOGGING: $(inputs.rdkit_error_logging)
+      CONDA_PREFIX: /opt/conda/
+```
+
+A value is literal text, or exactly `$(inputs.<name>)` of a `string` input.
+The task exports each variable, its value shell-quoted, before the command
+runs, so the command sees the value byte for byte. In literal text a `$` that
+is not followed by `(` or `{` is plain text. A referenced optional input
+needs a value. Any other value is rejected by name: a reference to an input
+of another type, `.path` or `.basename`, a reference inside other text, or any
+other expression. So is a name that is not a shell variable name.
+
+## GPUs
+
+`cwltool:CUDARequirement`, as a requirement or a hint, becomes the
+`accelerator` directive. The count is `cudaDeviceCountMin`, else
+`cudaDeviceCountMax`, else 1, the count cwltool asks for. A count is a whole
+number; an expression is rejected. `cudaVersionMin` and
+`cudaComputeCapability` have no Nextflow counterpart. The generated pipeline
+does not check them, and compiling reports each one with the note
+[`wic046`](error_codes.md). The command line prints the note with the other
+diagnostics; the Python API gives it as a `UserWarning`. Where a task runs is
+the executor's choice: the local executor accepts the directive and runs the
+task on the machine as it is. Structural import does not write the count back:
+cwltool's `CUDARequirement` requires `cudaVersionMin` and
+`cudaComputeCapability`, which the directive does not hold.
 
 ## Staging with InitialWorkDirRequirement
 
-Nextflow already stages every `File`/`Directory` input under its own
-original name, so a `listing` entry that only asks for that — the bare
-`$(inputs.<name>)` shorthand, or a `Dirent` whose `entryname` is absent or
-`$(inputs.<name>.basename)` — is a no-op and is accepted:
+A `listing` entry names one `File` or `Directory` input: the bare
+`$(inputs.<name>)` shorthand, or a `Dirent` whose `entry` is that reference.
+The entry keeps the input's own name when `entryname` is absent or
+`$(inputs.<name>.basename)`, and takes a literal `entryname` otherwise.
+Nextflow stages the input in a hidden directory, and the task makes the entry
+before the command runs: a copy when `writable: true`, so the command may
+change it without touching the input, and a symlink otherwise. Because the
+task makes the entry, an output glob matches it as a CWL glob does.
+
+An entry under the input's own name is what the input names: a reference to
+the input, plain, `.path` or `.basename`, names the entry. This is how a tool
+writes into an output directory it is given:
 
 ```yaml
 requirements:
   InitialWorkDirRequirement:
     listing:
-    - $(inputs.source)
+    - entry: $(inputs.outDir)
+      writable: true
+inputs:
+  outDir:
+    type: Directory
+    inputBinding:
+      prefix: --outDir
+outputs:
+  outDir:
+    type: Directory
+    outputBinding:
+      glob: $(inputs.outDir.basename)
 ```
 
-Staging under a different, literal name is supported too:
+An entry with a literal name is named by that literal:
 
 ```yaml
 requirements:
@@ -276,17 +337,19 @@ arguments:
 - renamed.txt
 ```
 
-The renamed port stays bound to its own variable but stages under the
-literal name via Nextflow's `stageAs` option. A renamed input's own `.name`
-reports the staged name, not its original CWL basename, so the same input
-cannot also be referenced elsewhere in that tool's command, stream targets,
-or output globs — the command must address the staged file by the literal
-name directly, as above.
+Such an input cannot also be referenced in that tool's command, stream
+targets, or output globs; the command names the entry by its literal, as
+above.
 
-`writable: true`, an `entry` that isn't a bare reference to one File or
-Directory input (inline content construction), an `entryname` that is any
-other expression, a listing entry naming a `val`-qualifier or array-typed
-input, and two inputs staged under the same literal name are all rejected.
+Rejected: an `entry` that is not a bare reference to one `File` or
+`Directory` input (inline content construction), an `entryname` that is any
+other expression, holds a `/`, or is `.` or `..`, an `entryname` that begins with
+`.sophios_entry_` (the hidden directory's prefix), a `writable` that is not a
+literal boolean, a listing entry naming a `val`-qualifier or array-typed
+input, an input listed twice, and two entries with one literal name. A name
+that collides only when the task runs, such as two entries of inputs with one
+basename, or an entry and a staged input with one basename, stops the task
+with an error naming the entry.
 
 ## Scatter
 
