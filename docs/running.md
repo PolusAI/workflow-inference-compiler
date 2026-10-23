@@ -4,7 +4,7 @@ This page is about running a workflow the way you need: checking first,
 choosing where the results go, using another container engine or runner,
 running on a cluster, reusing results from an earlier run, following a run
 from Python, and preparing a run to start later. The machine you run Sophios on can be your laptop, a
-cloud instance or the login node of an HPC cluster.
+cloud instance or a lead compute node of an HPC cluster, never its login node.
 Every task works the same for a `.wic` file and a Python workflow; each one
 shows both.
 
