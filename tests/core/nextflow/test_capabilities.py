@@ -1558,6 +1558,13 @@ FINDINGS = [
         "workflow: connection _MAYBE.o -> _CONSUME.source consumes an optional output, which may be null; "
         "only a workflow output can take it"
     ], id="a_step_consuming_an_optional_output_is_a_finding"),
+    # The type's finding names a long; its default is not judged against it.
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([step("N")]), [tool("N", inputs={"n": {"type": "long", "default": 1}})]
+    ), [
+        "steps[0].run.inputs.n.type: long is not supported: the Nextflow target lowers int and float; "
+        "declare one of those"
+    ], id="a_long_input_with_a_default_has_only_the_type_finding"),
 ]
 
 

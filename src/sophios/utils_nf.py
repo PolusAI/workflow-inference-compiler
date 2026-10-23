@@ -1066,8 +1066,11 @@ _OUTPUT_CAPTURE_FIELDS = frozenset({"loadContents", "outputEval"})
 
 
 def _default_value_findings(definition: Mapping[str, Any], *, path: str) -> list[str]:
-    """Validate a declared scalar default against the supported value subset."""
-    if "default" not in definition:
+    """Validate a declared scalar default against the supported value subset.
+
+    A long or double type already has its own finding, so its default is not judged against it.
+    """
+    if "default" not in definition or _type_names(definition) & _UNSUPPORTED_NUMBER_TYPES:
         return []
     default = definition["default"]
     if default is None or isinstance(default, (Mapping, list)):
