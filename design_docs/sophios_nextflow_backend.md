@@ -145,6 +145,8 @@ Serialized IR declares a schema version and representation kind. Hydration valid
 
 The schema is not stable until it meets users, so it promises no compatibility yet. Any change to the serialized form bumps the schema version, serialization always writes the current version, and hydration accepts the current version only: a payload declaring any other version is refused with one diagnostic naming both, and its artifacts are regenerated rather than migrated. A kind, field or value the current model does not have is refused like any other unknown content. A source generated from a refused model is read by the supported DSL2 reader alone (§4.2).
 
+The model records each workflow parameter's declared type, which the entry check (§6, Inputs and channels) reads.
+
 ---
 
 ## 6. Semantic lowering contracts
