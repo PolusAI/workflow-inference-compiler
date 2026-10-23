@@ -207,10 +207,10 @@ Sophios cannot find the `docker` program. Install Docker (step 1), or, if
 you use Podman or Singularity, name it with `--container_engine podman` or
 `--container_engine singularity`.
 
-### `error [wic037] docker could not pull docker.io/bash:4.4 (...)`
+### `error [wic037] docker could not pull docker.io/library/debian:bookworm-slim (...)`
 
 ```text
-error [wic037] docker could not pull docker.io/bash:4.4 (cwl-docker-extract exited with status 1: Error response from daemon: Get "https://registry-1.docker.io/v2/": dial tcp: lookup registry-1.docker.io: no such host): check the image name or source, the network and your registry login, then run again.
+error [wic037] docker could not pull docker.io/library/debian:bookworm-slim (cwl-docker-extract exited with status 1: Error response from daemon: Get "https://registry-1.docker.io/v2/": dial tcp: lookup registry-1.docker.io: no such host): check the image name or source, the network and your registry login, then run again.
 ```
 
 Sophios fetches each tool's image before every run, and this time it could
