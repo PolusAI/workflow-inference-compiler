@@ -47,7 +47,6 @@ def _scattered(
 
 
 BUILDERS: dict[str, Callable[[], ExecutableNextflowWorkflow]] = {
-    "single-input scatter adapter": lambda: _scattered("scatter", names=("item",)),
     "single-input dotproduct": lambda: _scattered("dotproduct", names=("item",)),
     "conditional step": lambda: _when_workflow("$(inputs.a > 0)", {"a": 1}, second_step=True, a="int"),
     "dotproduct": lambda: _scattered("dotproduct"),

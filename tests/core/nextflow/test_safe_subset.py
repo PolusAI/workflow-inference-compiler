@@ -136,18 +136,6 @@ def test_two_projections_in_one_field_stay_a_template(value_from: str) -> None:
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize("version", [10, ExecutableNextflowWorkflow.SCHEMA_VERSION])
-def test_a_payload_carrying_the_removed_computed_token_is_refused_by_name(version: int) -> None:
-    payload = _calc_workflow([{"valueFrom": "$(inputs.a)"}], {"a": 3}, a="int").to_dict()
-    payload["schema_version"] = version
-    payload["processes"][0]["command"]["tokens"].append(
-        {"kind": "computed", "expression": {"op": "number", "value": "1"}, "where": "CALC", "integral": False}
-    )
-    with pytest.raises(ValueError, match="the 'computed' command token is removed"):
-        ExecutableNextflowWorkflow.from_dict(payload)
-
-
-@pytest.mark.fast
 @pytest.mark.parametrize(("node", "message"), [
     ({"op": "Runtime.getRuntime().exec", "args": [{"op": "ref", "value": "a"}]},
      "unsupported construct 'Runtime.getRuntime\\(\\)\\.exec'"),

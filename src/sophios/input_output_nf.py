@@ -406,9 +406,6 @@ def _incoming_connections(workflow: ExecutableNextflowWorkflow) -> dict[tuple[st
     }
 
 
-_ADAPTER_OPERATORS = {"scatter": ".flatten()"}
-
-
 def _shape_channel(process_name: str) -> str:
     return f"ch_{process_name}_shape"
 
@@ -530,10 +527,8 @@ def _render_multi_input_channel(
 
 def _source_expression(connection: NfConnection, processes: Mapping[str, NfProcess]) -> str:
     match connection:
-        case NfWorkflowInputConnection(from_port, _, _, adapter):
-            # The adapter is applied per consumption site, so each scattered
-            # sink derives its own queue channel from the shared parameter.
-            return from_port + (_ADAPTER_OPERATORS[adapter] if adapter else "")
+        case NfWorkflowInputConnection(from_port, _, _, _):
+            return from_port
         case NfProcessConnection(from_process, from_port, _, _, "gather"):
             return _gathered(_source_expression(replace(connection, adapter=None), processes))
         case NfProcessConnection(from_process, from_port, _, _, _) | NfWorkflowOutputConnection(
@@ -653,10 +648,9 @@ def _workflow_input_sink(
 
 def _parameter_expression(workflow: ExecutableNextflowWorkflow, name: str) -> str:
     connection, port = _workflow_input_sink(workflow, name)
-    # A scatter- or multi-input-adapted parameter carries the whole source
-    # array; the graph validator keeps every sink of one parameter in
+    # A scattered parameter carries the whole source array; the graph validator keeps every sink of one parameter in
     # agreement, so one sink decides the construction for all of them.
-    carries_list = port.is_array or connection.adapter in ("scatter", *MULTI_INPUT_ADAPTERS)
+    carries_list = port.is_array or connection.adapter is not None
     if port.qualifier == "path":
         path_type = "dir" if port.path_kind == "directory" else "file"
         if carries_list:

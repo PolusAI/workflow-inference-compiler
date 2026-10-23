@@ -452,11 +452,10 @@ def test_config_uses_validated_workflow_container_policy() -> None:
     ],
     ids=["val", "path"],
 )
-def test_renders_the_scatter_adapter_at_the_consumption_site(
+def test_a_scattered_parameter_carries_its_whole_array(
     port: NfPort,
     construction: str,
 ) -> None:
-    """The adapted parameter carries the whole list; each sink derives its own queue."""
     process = NfProcess(
         "SCATTER",
         [port],
@@ -466,11 +465,10 @@ def test_renders_the_scatter_adapter_at_the_consumption_site(
     rendered = render_nextflow(ExecutableNextflowWorkflow(
         "WF",
         [process],
-        [NfWorkflowInputConnection("items", "SCATTER", "item", "scatter")],
+        [NfWorkflowInputConnection("items", "SCATTER", "item", "dotproduct")],
         {"items": ["a", "b"]},
     ))
 
-    assert "    SCATTER(items.flatten())" in rendered
     assert construction in rendered
 
 
@@ -490,7 +488,6 @@ def test_renders_an_unadapted_workflow_input_without_an_operator() -> None:
     ))
 
     assert "    TASK(items)" in rendered
-    assert ".flatten()" not in rendered
 
 
 @pytest.mark.fast

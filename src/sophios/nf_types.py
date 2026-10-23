@@ -125,9 +125,7 @@ def _fields(
 ) -> Mapping[str, Any]:
     """The mapping `value`, holding every `required` field and no field but those and the `optional` ones.
 
-    An optional field is one earlier schema versions never wrote, so its
-    absence in an older payload is a valid, unambiguous default rather than
-    a hydration error.
+    An optional field is one serialization omits when it holds no value.
     """
     item = _mapping(value, type_name=type_name)
     if missing := required - set(item):
@@ -364,9 +362,6 @@ def _command_token_from_dict(value: Mapping[str, Any]) -> NfCommandToken:
         case "shell_literal":
             _fields(item, type_name="NfShellLiteral", required={"kind", "text"})
             return NfShellLiteral(item["text"])
-        case "computed":
-            # A removed kind is refused in a payload of any version (design §5.3).
-            raise ValueError("the 'computed' command token is removed: a computed valueFrom is not supported")
         case _:
             return NfTemplate.from_dict(item)
 
@@ -657,11 +652,6 @@ class NfPort:
     def from_dict(cls, value: Mapping[str, Any]) -> Self:
         """Hydrate and validate a port from a mapping.
 
-        ``is_array``, ``stage_as``, ``capture`` and ``optional`` are optional on
-        hydration: every schema version before each was introduced never
-        wrote it, and its absence there always means False/None, so
-        accepting a missing key keeps those payloads hydrating unchanged.
-
         Args:
             value (Mapping[str, Any]): Serialized port produced by
                 :meth:`to_dict`.
@@ -676,8 +666,7 @@ class NfPort:
         item = _fields(
             value,
             type_name=cls.__name__,
-            required={"name", "qualifier", "emit", "glob", "path_kind"},
-            optional={"is_array", "stage_as", "capture", "optional"},
+            required={"name", "qualifier", "emit", "glob", "path_kind", "is_array", "stage_as", "capture", "optional"},
         )
         glob = None if item["glob"] is None else NfTemplate.from_dict(item["glob"])
         return cls(
@@ -686,10 +675,10 @@ class NfPort:
             emit=item["emit"],
             glob=glob,
             path_kind=item["path_kind"],
-            is_array=item.get("is_array", False),
-            stage_as=item.get("stage_as"),
-            capture=item.get("capture"),
-            optional=item.get("optional", False),
+            is_array=item["is_array"],
+            stage_as=item["stage_as"],
+            capture=item["capture"],
+            optional=item["optional"],
         )
 
 
@@ -884,18 +873,16 @@ MULTI_INPUT_ADAPTERS = frozenset({"dotproduct", "flat_crossproduct", "nested_cro
 class NfWorkflowInputConnection:
     """Connect one workflow parameter to one process input.
 
-    ``adapter`` names the one approved channel adaptation applied at the
-    consumption site. The approved set is closed: ``"scatter"`` fans a
-    list-carrying value channel out into one element per task, one input at a
-    time. ``"dotproduct"``, ``"flat_crossproduct"`` and ``"nested_crossproduct"``
-    each mark one of two or more inputs whose whole arrays are combined into
-    one invocation per shared index (dotproduct) or per combination (the
-    crossproducts) (design §6, Topology); every input in the group carries
-    this same adapter, which is validated below. Every other adaptation a
-    topology might require is rejected before lowering.
+    ``adapter`` marks a scattered input: ``"dotproduct"``,
+    ``"flat_crossproduct"`` or ``"nested_crossproduct"`` names how the whole
+    arrays of the process's scattered inputs combine into one invocation per
+    shared index (dotproduct) or per combination (the crossproducts) (design
+    §6, Topology); every scattered input of one process carries the same one,
+    which is validated below. A single-input scatter is a dotproduct. Every
+    other adaptation a topology might require is rejected before lowering.
     """
 
-    ALLOWED_ADAPTERS: ClassVar[frozenset[str]] = frozenset({"scatter", *MULTI_INPUT_ADAPTERS})
+    ALLOWED_ADAPTERS: ClassVar[frozenset[str]] = MULTI_INPUT_ADAPTERS
 
     from_port: str
     to_process: str
@@ -1065,21 +1052,12 @@ def _connection_from_dict(value: Mapping[str, Any]) -> NfConnection:
     item = _mapping(value, type_name="NfConnection")
     match item.get("kind"):
         case "workflow_input":
-            # adapter is optional on hydration: every schema version before it
-            # was introduced never wrote it, and its absence there always
-            # means an unadapted connection.
             _fields(
                 item,
                 type_name="NfWorkflowInputConnection",
-                required={"kind", "from_port", "to_process", "to_port"},
-                optional={"adapter"},
+                required={"kind", "from_port", "to_process", "to_port", "adapter"},
             )
-            return NfWorkflowInputConnection(
-                item["from_port"],
-                item["to_process"],
-                item["to_port"],
-                item.get("adapter"),
-            )
+            return NfWorkflowInputConnection(item["from_port"], item["to_process"], item["to_port"], item["adapter"])
         case "process":
             _fields(
                 item,
@@ -1105,36 +1083,8 @@ def _connection_from_dict(value: Mapping[str, Any]) -> NfConnection:
 class ExecutableNextflowWorkflow:
     """Closed, immutable, versioned executable representation of a DSL2 workflow."""
 
+    # Hydration reads this version only; any change to the payload bumps it (design §5.3).
     SCHEMA_VERSION: ClassVar[int] = 16
-    # Earlier versions whose value space is a strict subset of the current
-    # model hydrate unchanged; serialization always writes SCHEMA_VERSION.
-    SUPPORTED_SCHEMA_VERSIONS: ClassVar[frozenset[int]] = frozenset(range(2, 17))
-    # The version each additive part of the payload was introduced in, so the
-    # subset property is enforced rather than assumed. (field, value) gates a
-    # field holding that value, and (field, None) a field holding any truthy
-    # value. A token or segment kind is the value of its "kind" tag. is_array,
-    # stage_as and capture predate a "kind" tag on NfPort, and adapter is
-    # additive on an existing connection kind, so each is gated as a field.
-    # "dotproduct", "flat_crossproduct", "gather" and "nested_crossproduct"
-    # are values of the existing "adapter" field, introduced after it.
-    SCHEMA_GATES: ClassVar[Mapping[tuple[str, str | None], int]] = MappingProxyType(
-        {
-            ("kind", "flag"): 3,
-            ("kind", "basename"): 4,
-            ("kind", "array"): 5,
-            ("kind", "shell_literal"): 6,
-            ("is_array", None): 5,
-            ("stage_as", None): 7,
-            ("adapter", None): 8,
-            ("capture", None): 9,
-            ("condition", None): 11,
-            ("optional", None): 16,
-            ("adapter", "dotproduct"): 12,
-            ("adapter", "flat_crossproduct"): 13,
-            ("adapter", "gather"): 14,
-            ("adapter", "nested_crossproduct"): 15,
-        }
-    )
     REPRESENTATION_KIND: ClassVar[str] = "executable"
 
     name: str
@@ -1198,14 +1148,7 @@ class ExecutableNextflowWorkflow:
             if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection))
             and connection.adapter in MULTI_INPUT_ADAPTERS
         }
-
-        scattered = {
-            connection.to_process
-            for connection in self.connections
-            if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection))
-            and connection.adapter in ("scatter", *MULTI_INPUT_ADAPTERS)
-        }
-        for name in scattered:
+        for name in multi_scattered:
             if optional := [port.name for port in process_by_name[name].outputs if port.optional]:
                 # A gather would drop the absent positions instead of keeping null there.
                 raise ValueError(f"scattered process {name!r} cannot have the optional outputs {', '.join(optional)}")
@@ -1238,9 +1181,9 @@ class ExecutableNextflowWorkflow:
                     # An adapter exists to change cardinality between the
                     # parameter and the port, so the value is judged against
                     # what the adapter consumes rather than what the port
-                    # declares: scatter takes the whole array and feeds one
-                    # element per task.
-                    expects_array = destination.is_array or connection.adapter in ("scatter", *MULTI_INPUT_ADAPTERS)
+                    # declares: a scatter takes the whole array and feeds one
+                    # element per invocation.
+                    expects_array = destination.is_array or adapter is not None
                     param_destinations.setdefault(
                         from_port, (expects_array, to_process, to_port)
                     )
@@ -1445,12 +1388,11 @@ class ExecutableNextflowWorkflow:
                 "params",
             },
         )
-        if item["schema_version"] not in cls.SUPPORTED_SCHEMA_VERSIONS:
+        if item["schema_version"] != cls.SCHEMA_VERSION:
             raise ValueError(
-                f"unsupported executable Nextflow schema version {item['schema_version']!r}"
+                f"executable Nextflow schema version {item['schema_version']!r} is not the current version "
+                f"{cls.SCHEMA_VERSION}; regenerate the artifacts"
             )
-        for executable_subtree in (item["processes"], item["connections"]):
-            cls._reject_newer_kinds(executable_subtree, declared=item["schema_version"])
         if item["representation_kind"] != cls.REPRESENTATION_KIND:
             raise ValueError(
                 f"unsupported Nextflow representation kind {item['representation_kind']!r}"
@@ -1467,27 +1409,6 @@ class ExecutableNextflowWorkflow:
                 raise TypeError(
                     "ExecutableNextflowWorkflow processes and connections must be lists"
                 )
-
-    @classmethod
-    def _reject_newer_kinds(cls, value: Any, *, declared: int) -> None:
-        """Reject a payload carrying a kind or field newer than its declared version."""
-        match value:
-            case Mapping() as mapping:
-                for (name, gated), introduced in cls.SCHEMA_GATES.items():
-                    found = mapping.get(name)
-                    if (found == gated if gated is not None else found) and declared < introduced:
-                        label = repr(gated) if name == "kind" else repr(name) if gated is None else f"{name}={gated!r}"
-                        raise ValueError(
-                            f"{label} requires executable Nextflow schema version {introduced}, "
-                            f"but the payload declares schema version {declared}"
-                        )
-                for item in mapping.values():
-                    cls._reject_newer_kinds(item, declared=declared)
-            case list() as items:
-                for item in items:
-                    cls._reject_newer_kinds(item, declared=declared)
-            case _:
-                pass
 
     @classmethod
     def from_json(cls, value: str) -> Self:

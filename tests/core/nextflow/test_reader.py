@@ -13,7 +13,6 @@ import pytest
 from sophios.api.python.workflow import CompiledWorkflow, Step, Workflow
 from sophios.input_output_nf import (
     render_nextflow,
-    render_nextflow_params,
     write_nextflow_artifacts,
 )
 from sophios.nf_reader import (
@@ -102,25 +101,6 @@ def test_basename_artifacts_parse_and_promote(tmp_path: Path) -> None:
 
     assert parsed.opaque_regions == ()
     assert promote_nextflow_document(parsed) == expected
-
-
-@pytest.mark.fast
-def test_prior_schema_version_artifacts_still_promote(tmp_path: Path) -> None:
-    """A v2-era artifact pair keeps promoting; renderer output is the contract."""
-    workflow = runtime_workflow()
-    payload = workflow.to_dict()
-    payload["schema_version"] = 2
-    (tmp_path / "nextflow_workflow.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    (tmp_path / "workflow.nf").write_text(render_nextflow(workflow), encoding="utf-8")
-    (tmp_path / "nextflow_params.json").write_text(
-        render_nextflow_params(workflow), encoding="utf-8"
-    )
-
-    parsed = parse_nf_file(tmp_path / "workflow.nf")
-
-    assert promote_nextflow_document(parsed) == workflow
 
 
 @pytest.mark.fast
@@ -481,29 +461,6 @@ def test_concrete_public_module_exports_importer() -> None:
     assert nextflow.NextflowDocument is NextflowDocument
     assert nextflow.promote_nextflow_document is promote_nextflow_document
     assert nextflow.render_nextflow_document is render_nextflow_document
-
-
-@pytest.mark.fast
-def test_a_scattered_call_is_retained_as_an_opaque_region() -> None:
-    """The adapter operator is outside the recognized subset, so it stays loss-aware."""
-    source = render_nextflow(ExecutableNextflowWorkflow(
-        "PIPELINE",
-        [NfProcess(
-            "SCATTER",
-            [NfPort("item", "val")],
-            [NfPort("result", "path", "result", NfTemplate((NfLiteral("out.txt"),)))],
-            NfCommand((NfTemplate((NfLiteral("echo"),)), NfTemplate((NfInputReference("item"),)))),
-        )],
-        [NfWorkflowInputConnection("items", "SCATTER", "item", "scatter")],
-        {"items": ["a", "b"]},
-    ))
-
-    parsed = parse_nf_text(source)
-
-    assert parsed.connections == ()
-    assert "SCATTER(items.flatten())" in "\n".join(parsed.opaque_regions)
-    with pytest.raises(ValueError, match="opaque regions"):
-        promote_nextflow_document(parsed)
 
 
 def _captured_workflow() -> ExecutableNextflowWorkflow:
