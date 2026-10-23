@@ -6,7 +6,8 @@ The features: multi-input dotproduct and flat_crossproduct scatters over lists
 built in Python; a scatter over an empty list, gathered downstream; an
 unscattered step's output read by every task of a scattered step; same-named
 files from several steps merged by linkMerge merge_flattened into one input;
-and a boolean parameter set in the params file and cleared on the command line.
+same-named files from different directories in one File[] workflow input; and a
+boolean parameter set in the params file and cleared on the command line.
 
 Every task list is enumerated in Python when the workflow is built, and every
 dependency is data that a task reads.
@@ -149,7 +150,7 @@ gamma 0
 @pytest.mark.nextflow
 @pytest.mark.serial
 def test_one_step_per_lane_runs_one_task_per_month(tmp_path: Path) -> None:
-    """Each lane's step is a dotproduct over (year, month) pairs written in Python."""
+    """Each lane's step is a dotproduct over (year, month) pairs written in Python; the report reads lane headers."""
     per_month = _sh("per_month", 'printf "%s %04d-%02d\\n" "$1" "$2" "$3"', "piece",
                     lane=Input(cwl.string, position=1), year=Input(cwl.int, position=2),
                     month=Input(cwl.int, position=3))
@@ -161,8 +162,17 @@ def test_one_step_per_lane_runs_one_task_per_month(tmp_path: Path) -> None:
         step.inputs.year = [year for year, _ in pairs]
         step.inputs.month = [month for _, month in pairs]
         step.scatter_on(step.inputs.year, step.inputs.month)
-    report = _report(**{name: step.outputs.piece for name, step in steps.items()})
+    # One workflow input holds each lane's header, every one named header.txt.
+    headers = []
+    for lane in lanes:
+        header = tmp_path / lane / "header.txt"
+        header.parent.mkdir()
+        header.write_text(f"{lane} header\n", encoding="utf-8")
+        headers.append({"class": "File", "path": str(header)})
+    report = _report(headers=headers, **{name: step.outputs.piece for name, step in steps.items()})
     assert _run_report(Workflow([*steps.values(), report], "months"), tmp_path) == """\
+lane_a header
+lane_b header
 lane_a 2001-11
 lane_a 2001-12
 lane_a 2002-01
