@@ -1154,8 +1154,7 @@ def test_a_capture_marker_survives_serialization_unchanged() -> None:
 @pytest.mark.fast
 def test_the_port_capture_set_is_closed() -> None:
     """A capture marker is closed data, so it can never hold expression text."""
-    assert NfPort.ALLOWED_CAPTURES == frozenset({"single", "text"})
-    assert set(NfPort.CAPTURE_QUALIFIERS) == set(NfPort.ALLOWED_CAPTURES)
+    assert frozenset(NfPort.CAPTURE_QUALIFIERS) == frozenset({"single", "text"})
 
     for rejected in ("$(self[0])", "$(self[0].contents)", "single_path", "contents", ""):
         with pytest.raises(ValueError, match="port capture must be one of"):

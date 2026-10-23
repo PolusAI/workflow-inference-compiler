@@ -12,15 +12,6 @@ NEXTFLOW_GRAMMAR_VERSION = "26.04.2"
 # - modules/nf-lang/src/main/antlr/ScriptParser.g4, identifier
 # - modules/nf-lang/src/main/java/nextflow/script/parser/ScriptAstBuilder.java,
 #   checkInvalidVarName and GROOVY_KEYWORDS
-_NEXTFLOW_GRAMMAR_ROOT = (
-    "https://github.com/nextflow-io/nextflow/blob/v26.04.2/"
-    "modules/nf-lang/src/main"
-)
-NEXTFLOW_LEXER_SOURCE = f"{_NEXTFLOW_GRAMMAR_ROOT}/antlr/ScriptLexer.g4"
-NEXTFLOW_PARSER_SOURCE = f"{_NEXTFLOW_GRAMMAR_ROOT}/antlr/ScriptParser.g4"
-NEXTFLOW_SEMANTICS_SOURCE = (
-    f"{_NEXTFLOW_GRAMMAR_ROOT}/java/nextflow/script/parser/ScriptAstBuilder.java"
-)
 
 # ScriptParser.identifier explicitly admits these keyword tokens as symbols.
 NEXTFLOW_IDENTIFIER_KEYWORDS = frozenset(
@@ -51,12 +42,12 @@ NEXTFLOW_IDENTIFIER_KEYWORDS = frozenset(
     }
 )
 
-# Word-shaped tokens declared before Identifier in ScriptLexer.
-_NEXTFLOW_LEXER_WORDS = frozenset(
+# Word-shaped tokens declared before Identifier in ScriptLexer that
+# ScriptParser.identifier does not admit as symbols.
+_NEXTFLOW_LEXER_ONLY_WORDS = frozenset(
     {
         "as",
         "def",
-        "in",
         "assert",
         "boolean",
         "byte",
@@ -72,33 +63,11 @@ _NEXTFLOW_LEXER_WORDS = frozenset(
         "int",
         "long",
         "new",
-        "record",
         "return",
         "short",
         "throw",
         "try",
-        "nextflow",
-        "params",
         "include",
-        "from",
-        "process",
-        "exec",
-        "input",
-        "output",
-        "script",
-        "shell",
-        "stage",
-        "stub",
-        "topic",
-        "tuple",
-        "when",
-        "workflow",
-        "emit",
-        "main",
-        "onComplete",
-        "onError",
-        "publish",
-        "take",
     }
 )
 
@@ -139,11 +108,7 @@ _GROOVY_KEYWORDS = frozenset(
     }
 )
 
-NEXTFLOW_RESERVED_WORDS = (
-    _NEXTFLOW_LEXER_WORDS
-    | _GROOVY_KEYWORDS
-    | {"true", "false", "null", "_"}
-) - NEXTFLOW_IDENTIFIER_KEYWORDS
+NEXTFLOW_RESERVED_WORDS = _NEXTFLOW_LEXER_ONLY_WORDS | _GROOVY_KEYWORDS | {"true", "false", "null", "_"}
 
 # Names a process script resolves before a declared input of the same name: the task
 # context, the logger and the channel factory. A capitalized name resolves to a

@@ -2,7 +2,6 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from decimal import Decimal, InvalidOperation
 import json
 import math
 from pathlib import Path
@@ -206,17 +205,9 @@ def _static_cpu_value(value: str) -> int | None:
 def _static_memory_mb_value(value: str) -> int | float | None:
     if _STATIC_MEMORY_MB.fullmatch(value) is None:
         return None
-    raw_number = value.removesuffix(" MB")
-    try:
-        decimal = Decimal(raw_number)
-    except InvalidOperation:
-        return None
-    if decimal <= 0:
-        return None
-    if "." not in raw_number:
-        return int(decimal)
-    number = float(decimal)
-    return number if math.isfinite(number) else None
+    raw = value.removesuffix(" MB")
+    number = float(raw) if "." in raw else int(raw)
+    return number if 0 < number < math.inf else None
 
 
 def _parse_process(name: str, body: list[str]) -> tuple[NextflowProcess, tuple[str, ...]]:
@@ -563,10 +554,7 @@ def _process_scripts(source_text: str) -> dict[str, str]:
     lines = _lines(source_text)
     scripts: dict[str, str] = {}
     for name, start, end in _blocks(lines, _PROCESS):
-        try:
-            process, _opaque = _parse_process(name or "", lines[start + 1:end])
-        except ValueError:
-            continue
+        process, _opaque = _parse_process(name or "", lines[start + 1:end])
         scripts[process.name] = process.script
     return scripts
 
@@ -589,7 +577,7 @@ def _document_from_model(executable: ExecutableNextflowWorkflow, source_text: st
                 )
                 for port in process.outputs
             ),
-            scripts.get(process.name, ""),
+            scripts[process.name],
             process.container,
             None if process.resources.cpus is None else str(process.resources.cpus),
             None if process.resources.memory_mb is None else f"{render_number(process.resources.memory_mb)} MB",
