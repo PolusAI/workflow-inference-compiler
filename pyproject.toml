@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 name = "sophios"
 dynamic = ["version"]
 authors = [{name = "Jake Fennick", email = "jake.fennick@axleinfo.com"}]
-description = "DSL for inferring the edges of a CWL workflow DAG"
+description = "A workflow compiler: write workflows in Python or YAML, check them before they run, and compile them to CWL"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
