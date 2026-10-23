@@ -298,28 +298,60 @@ def _conditional_channel_name(process_name: str, port_name: str) -> str:
     return f"ch_{process_name}_{port_name}"
 
 
+def _render_branch(
+    process: NfProcess, combined: str, params: str, rename: Mapping[str, str], calls: list[str], skip: str
+) -> list[str]:
+    """Branch each invocation on the process's ``when``, call the process on the run branch, mix in the skip branch.
+
+    Each item of ``combined`` binds the closure parameters ``params``, and
+    ``rename`` names the parameter each input port is bound to. The predicate
+    is wrapped so a non-finite subexpression fails via the finite helper. The
+    process is called with one run-branch map per expression of ``calls``, and
+    each output mixes in the skip branch mapped by ``{ skip }``, so every
+    output carries one element per invocation.
+    """
+    assert process.condition is not None
+    inputs_map = "[" + ", ".join(f"{name}: {rename[name]}" for name in sorted(references(process.condition))) + "]"
+    predicate = render_groovy(
+        process.condition,
+        where=f"{process.name} when {source_text(process.condition)}",
+        inputs=inputs_map if inputs_map != "[]" else "[:]",
+        variables=rename,
+    )
+    branch = f"ch_{process.name}_branch"
+    lines = [
+        f"    {branch} = {combined}.branch {{ {params} ->",
+        f"        run: {predicate}",
+        "        skip: true",
+        "    }",
+    ]
+    call_args = ", ".join(f"{branch}.run.map {{ {params} -> {call} }}" for call in calls)
+    lines.append(f"    {process.name}({call_args})")
+    for port in process.outputs:
+        emit = port.emit or port.name
+        lines.append(
+            f"    {_conditional_channel_name(process.name, emit)} = {process.name}.out.{emit}"
+            f".mix({branch}.skip.map {{ {skip} }})"
+        )
+    return lines
+
+
 def _render_conditional_invocation(process: NfProcess, arguments: list[str]) -> list[str]:
-    """Lower a conditional process call: branch on the predicate, mix in the sentinel.
+    """Lower a conditional process call: branch on the predicate, mix in the ``[]`` sentinel.
 
     Combines the process's bound input channels into one tuple channel by
     merging them two at a time (the n-ary ``merge`` with a closure is not
     callable once a later argument is a queue channel, as a process output
-    is), branches it on the rendered predicate (wrapped so a non-finite
-    subexpression fails via the finite helper), calls the process with the
-    run branch's per-input maps, and mixes each output with the skip branch
-    mapped to the ``[]`` sentinel — one element per output per invocation.
+    is), then branches it (:func:`_render_branch`).
 
     Closure parameters use synthetic names rather than the port names
     themselves: Groovy rejects a closure parameter that shadows an
     already-declared script variable, and every port name here is also the
     name of an outer take:/channel variable.
     """
-    assert process.condition is not None
     ports = process.inputs
     synthetic = [f"__w{index}" for index in range(len(ports))]
-    params = ", ".join(synthetic)
     in_channel = f"ch_{process.name}_in"
-    branch_channel = f"ch_{process.name}_branch"
     lines: list[str] = []
     if len(ports) == 1:
         # A single-element channel needs no tuple: Nextflow only auto-spreads
@@ -337,29 +369,7 @@ def _render_conditional_invocation(process: NfProcess, arguments: list[str]) -> 
                 f"{{ __merged, {synthetic[index]} -> tuple({carried}, {synthetic[index]}) }}"
             )
     rename = dict(zip((port.name for port in ports), synthetic, strict=True))
-    inputs_map = "[" + ", ".join(f"{name}: {rename[name]}" for name in sorted(references(process.condition))) + "]"
-    predicate = render_groovy(
-        process.condition,
-        where=f"{process.name} when {source_text(process.condition)}",
-        inputs=inputs_map if inputs_map != "[]" else "[:]",
-        variables=rename,
-    )
-    lines.append(f"    {branch_channel} = {in_channel}.branch {{ {params} ->")
-    lines.append(f"        run: {predicate}")
-    lines.append("        skip: true")
-    lines.append("    }")
-    call_args = ", ".join(
-        f"{branch_channel}.run.map {{ {params} -> {synthetic[index]} }}"
-        for index in range(len(ports))
-    )
-    lines.append(f"    {process.name}({call_args})")
-    for port in process.outputs:
-        emit = port.emit or port.name
-        channel_name = _conditional_channel_name(process.name, emit)
-        lines.append(
-            f"    {channel_name} = {process.name}.out.{emit}.mix({branch_channel}.skip.map {{ [] }})"
-        )
-    return lines
+    return lines + _render_branch(process, in_channel, ", ".join(synthetic), rename, synthetic, "[]")
 
 
 def _render_conditional_scatter(
@@ -373,37 +383,14 @@ def _render_conditional_scatter(
     position. Broadcasts are boxed before ``combine`` so a list-valued one is
     carried whole rather than spliced into the item.
     """
-    assert process.condition is not None
     index = "__i"
     elements = [f"__w{position}" for position in range(len(scattered))]
     broadcasts = [f"__b{position}" for position in range(len(others))]
     params = ", ".join([index, *elements, *broadcasts])
     combined = scatter_channel + "".join(f".combine({arg}.map {{ [it] }})" for arg in other_args)
     rename = dict(zip([*scattered, *(port.name for port in others)], [*elements, *broadcasts], strict=True))
-    inputs_map = "[" + ", ".join(f"{name}: {rename[name]}" for name in sorted(references(process.condition))) + "]"
-    predicate = render_groovy(
-        process.condition,
-        where=f"{process.name} when {source_text(process.condition)}",
-        inputs=inputs_map if inputs_map != "[]" else "[:]",
-        variables=rename,
-    )
-    branch = f"ch_{process.name}_branch"
-    lines = [
-        f"    {branch} = {combined}.branch {{ {params} ->",
-        f"        run: {predicate}",
-        "        skip: true",
-        "    }",
-    ]
-    call_args = [f"{branch}.run.map {{ {params} -> tuple({', '.join([index, *elements])}) }}"]
-    call_args.extend(f"{branch}.run.map {{ {params} -> {name} }}" for name in broadcasts)
-    lines.append(f"    {process.name}({', '.join(call_args)})")
-    for port in process.outputs:
-        emit = port.emit or port.name
-        lines.append(
-            f"    {_conditional_channel_name(process.name, emit)} = {process.name}.out.{emit}"
-            f".mix({branch}.skip.map {{ {params} -> tuple({index}, []) }})"
-        )
-    return lines
+    calls = [f"tuple({', '.join([index, *elements])})", *broadcasts]
+    return _render_branch(process, combined, params, rename, calls, f"{params} -> tuple({index}, [])")
 
 
 def _process_map(workflow: ExecutableNextflowWorkflow) -> dict[str, NfProcess]:
@@ -467,25 +454,14 @@ def _multi_input_sources(
     return [(port.name, *by_port[port.name]) for port in process.inputs if port.name in by_port]
 
 
-def _nested_process_names(workflow: ExecutableNextflowWorkflow) -> set[str]:
-    """Names of the processes whose scattered inputs, workflow inputs or gathered arrays, nest."""
+def _multi_input_methods(workflow: ExecutableNextflowWorkflow) -> dict[str, str]:
+    """The multi-input scatter method of each process that has one; the model admits one per process."""
     return {
-        connection.to_process
+        connection.to_process: connection.adapter
         for connection in workflow.connections
         if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection))
-        and connection.adapter == "nested_crossproduct"
-    }
-
-
-def _multi_input_method(workflow: ExecutableNextflowWorkflow, process: NfProcess) -> str:
-    """The one multi-input scatter method a process's adapted inputs share."""
-    return next(
-        connection.adapter
-        for connection in workflow.connections
-        if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection))
-        and connection.to_process == process.name
         and connection.adapter in MULTI_INPUT_ADAPTERS
-    )
+    }
 
 
 def _render_multi_input_channel(
@@ -599,15 +575,7 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
         lines.append("    take:")
         lines.extend(f"    {name}" for name in workflow_inputs)
 
-    multi_input_process_names = {
-        connection.to_process
-        for connection in workflow.connections
-        if isinstance(connection, (NfWorkflowInputConnection, NfProcessConnection))
-        and connection.adapter in MULTI_INPUT_ADAPTERS
-    }
-
-    nested_process_names = _nested_process_names(workflow)
-
+    methods = _multi_input_methods(workflow)
     lines.append("    main:")
     for process in _ordered_processes(workflow):
         multi_input_sources = _multi_input_sources(workflow, process)
@@ -615,7 +583,7 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
             multi_input_names = {name for name, _, _ in multi_input_sources}
             channel_name = f"ch_{process.name}_scatter"
             lines.append(_render_multi_input_channel(
-                channel_name, process.name, multi_input_sources, _multi_input_method(workflow, process)
+                channel_name, process.name, multi_input_sources, methods[process.name]
             ))
             other_ports = [port for port in process.inputs if port.name not in multi_input_names]
             arguments = [channel_name] + [
@@ -646,7 +614,7 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
         lines.append("    emit:")
         for connection in workflow_outputs:
             expression = _source_expression(connection, processes)
-            if connection.from_process in nested_process_names:
+            if methods.get(connection.from_process) == "nested_crossproduct":
                 # Regroup the index-sorted results by the recorded input
                 # lengths: one array dimension per scattered input.
                 expression = (
@@ -657,7 +625,7 @@ def _render_named_workflow(workflow: ExecutableNextflowWorkflow) -> str:
             elif any(port.optional for port in processes[connection.from_process].outputs if port.name == connection.from_port):
                 # An optional output that matched nothing emits nothing: report CWL null.
                 expression = f"{expression}.ifEmpty([])"
-            elif connection.from_process in multi_input_process_names:
+            elif connection.from_process in methods:
                 # Sort by the hidden invocation index before stripping it, so
                 # the gathered workflow output never depends on task
                 # completion order (design §6, Topology, Gather).
@@ -738,7 +706,7 @@ def render_nextflow(workflow: ExecutableNextflowWorkflow) -> str:
         sections.append(NF_LOAD_CONTENTS_FUNCTION)
     if any(process.condition is not None for process in workflow.processes):
         sections.append(NF_EXPRESSION_FUNCTIONS)
-    if _nested_process_names(workflow):
+    if "nested_crossproduct" in _multi_input_methods(workflow).values():
         sections.append(NF_NEST_FUNCTION)
     sections.extend(
         _render_process(
