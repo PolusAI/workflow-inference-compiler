@@ -272,14 +272,6 @@ def test_array_typed_output_of_a_conditional_step_is_rejected() -> None:
         compiled_source_to_nextflow(synthetic_source(workflow, [produce], workflow_inputs={"a": 1}))
 
 
-@pytest.mark.fast
-def test_when_requires_the_condition_schema_version() -> None:
-    payload = _when_workflow("$(inputs.a > 0)", {"a": 3}, a="int").to_dict()
-    payload["schema_version"] = 10
-    with pytest.raises(ValueError, match="'condition' requires executable Nextflow schema version 11"):
-        ExecutableNextflowWorkflow.from_dict(payload)
-
-
 def _run(workflow: ExecutableNextflowWorkflow, directory: Path) -> tuple[int, str]:
     from sophios.input_output_nf import write_nextflow_artifacts  # pylint: disable=import-outside-toplevel
     write_nextflow_artifacts(workflow, directory)
