@@ -406,26 +406,6 @@ def _producer() -> Yaml:
 
 
 @pytest.mark.fast
-def test_rejects_scatter_over_an_unscattered_steps_output() -> None:
-    """An unscattered step's output is one value, and no tool output is an array to scatter over."""
-    rose = synthetic_source(
-        workflow_doc([
-            step("PRODUCER", out=["out"]),
-            step(
-                "SCATTER",
-                **{"in": {"item": "PRODUCER/out"}, "out": ["result"], "scatter": ["item"]},
-            ),
-        ]),
-        [_producer(), _scattered_tool("File")],
-    )
-
-    assert _findings(rose) == [
-        "steps[1].in.item: a scattered input needs an array-typed source; "
-        "'PRODUCER/out', from a step that is not scattered, is one value"
-    ]
-
-
-@pytest.mark.fast
 def test_an_unscattered_steps_output_reaches_a_scattered_steps_other_input_as_one_value() -> None:
     scatter_tool = _scattered_tool(
         extra={"type": "File", "inputBinding": {"position": 2}},
@@ -1480,6 +1460,16 @@ FINDINGS = [
     ), [
         "steps[0].in.item: a scattered input needs an array-typed source; 'items' declares 'string'"
     ], id="scatter_over_a_non_array_workflow_input"),
+    # An unscattered step's output is one value, and no tool output is an array to scatter over.
+    pytest.param(lambda: synthetic_source(
+        workflow_doc([
+            step("PRODUCER", out=["out"]), step("SCATTER", **{**_SCATTER_ITEM, "in": {"item": "PRODUCER/out"}}),
+        ]),
+        [_producer(), _scattered_tool("File")],
+    ), [
+        "steps[1].in.item: a scattered input needs an array-typed source; "
+        "'PRODUCER/out', from a step that is not scattered, is one value"
+    ], id="scatter_over_an_unscattered_steps_output"),
     pytest.param(lambda: _scatter_rose(port_type=_STRING_ARRAY), [
         "steps[0].scatter: scattered input 'item' is array-typed; scattering over an "
         "array of arrays is deferred beyond this lowering"
